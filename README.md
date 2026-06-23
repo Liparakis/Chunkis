@@ -1,40 +1,50 @@
-<img src="core/src/main/resources/assets/logo.png" width="150" alt="Chunkis Logo" style="border-radius: 50%;">
+<div align="center">
+  <img src="core/src/main/resources/assets/logo.png" width="150" alt="Chunkis Logo" style="border-radius: 50%;">
 
-# Chunkis
+  # Chunkis
 
-Chunkis replaces Minecraft's Anvil (`.mca`) chunk storage with a custom CIS format built around modified-chunk persistence, migration control, and safer save/load behavior.
+  ![Loader](https://img.shields.io/badge/Loader-Fabric-brightgreen)
+  ![Status](https://img.shields.io/badge/Status-Beta-orange)
+  ![Version](https://img.shields.io/badge/Version-3.0.0-blue)
 
-This is a disk I/O and persistence-layer optimization. It has no direct effect on FPS, TPS, or gameplay.
+  Chunkis replaces Minecraft's Anvil (`.mca`) chunk storage with a custom CIS format built around modified-chunk persistence, migration control, and safer save/load behavior.
 
-`3.0.0` focuses on persistence safety, migration robustness, and overall runtime stability. It significantly reduces corruption-prone edge cases compared to older baseless-delta behavior. The tradeoff is that storage usage can increase in worlds where many modified chunks now persist safer restoration data.
-
-## At a Glance
-
-|                     |                                                             |
-|:--------------------|:------------------------------------------------------------|
-| Primary goal        | Safer custom chunk persistence and migration                |
-| File size           | Often smaller than vanilla, but depends on world history    |
-| Performance impact  | Lower save/load overhead with stability-focused safeguards  |
-| Compatibility       | Fabric only                                                 |
-| Reversibility       | **Not reversible** - always back up before installing       |
-| Maturity            | Beta; tested on single-player and multiplayer servers       |
+  *This is a disk I/O and persistence-layer optimization. It has no direct effect on FPS, TPS, or gameplay.*
+</div>
 
 ---
 
-## Is This For You?
+`3.0.0` focuses on persistence safety, migration robustness, and overall runtime stability. It significantly reduces corruption-prone edge cases compared to older baseless-delta behavior. The tradeoff is that storage usage can increase in worlds where many modified chunks now persist safer restoration data.
+
+---
+
+## At a Glance
+
+|                        |                                                              |
+|:-----------------------|:-------------------------------------------------------------|
+| **Primary goal**       | Safer custom chunk persistence and migration                 |
+| **File size**          | Often smaller than vanilla, but depends on world history     |
+| **Performance impact** | Lower save/load overhead with stability-focused safeguards   |
+| **Compatibility**      | Fabric only                                                  |
+| **Reversibility**      | ⚠️ **Not reversible** — always back up before installing     |
+| **Maturity**           | Beta; tested on single-player and multiplayer servers        |
+
+---
+
+## ✅ Is This For You?
 
 **Good fit if:**
-- You want Chunkis-specific persistence behavior instead of vanilla chunk storage
-- You care about migration control and safer chunk restore behavior
-- You run a modpack server where world storage still matters and you are willing to test
-- Your modpack does not include mods that read `.mca` region files directly
-- You are able to test on a backup world before committing
+- ✅ You want Chunkis-specific persistence behavior instead of vanilla chunk storage
+- ✅ You care about migration control and safer chunk restore behavior
+- ✅ You run a modpack server where world storage still matters and you are willing to test
+- ✅ Your modpack does not include mods that read `.mca` region files directly
+- ✅ You are able to test on a backup world before committing
 
 **Not a good fit if:**
-- You are looking only for FPS or TPS improvements
-- You need guaranteed smaller storage than vanilla in every world
-- Your modpack includes mods listed under Known Incompatibilities
-- You do not have a backup strategy in place
+- ❌ You are looking only for FPS or TPS improvements
+- ❌ You need guaranteed smaller storage than vanilla in every world
+- ❌ Your modpack includes mods listed under Known Incompatibilities
+- ❌ You do not have a backup strategy in place
 
 ---
 
@@ -45,6 +55,7 @@ Vanilla Minecraft writes full chunk data to disk. Chunkis intercepts the save/lo
 Older versions leaned heavily on sparse delta replay. In `3.0.0`, the format is more safety-oriented: when needed, Chunkis persists enough restoration data to avoid terrain-regeneration and data-loss problems that could happen with baseless sparse deltas.
 
 Depending on the chunk, CIS data may include:
+
 - palette-compressed block delta data
 - block entity and entity NBT
 - structure and Chunkis-owned metadata
@@ -77,13 +88,7 @@ For non-overworld dimensions, Chunkis stores data under `world/dimensions/<names
 - Fixes several portal and restore edge cases
 - May increase storage usage in worlds where many modified chunks now store safer restoration data
 
-For `1.21.11`, versions `3.0.0+` currently have a known storage regression. Stability and correctness improved, but storage efficiency can be worse than older Chunkis releases in some worlds. Storage efficiency work is still planned, but the exact compression or baseline redesign path is not final yet.
-
----
-
-## Contact
-
-If you want to contact me directly about Chunkis, you can reach me on Discord: `Liparakis`
+> **Known regression for `1.21.11`:** Versions `3.0.0+` currently have a known storage regression. Stability and correctness improved, but storage efficiency can be worse than older Chunkis releases in some worlds. Storage efficiency work is still planned, but the exact compression or baseline redesign path is not final yet.
 
 ---
 
@@ -91,12 +96,12 @@ If you want to contact me directly about Chunkis, you can reach me on Discord: `
 
 The following are incompatible with Chunkis:
 
-- **WorldEdit** - reads and writes `.mca` region files directly
+- **WorldEdit** — reads and writes `.mca` region files directly
 - Any mod that directly manipulates region files
 - Mods that apply chunk post-processing after world generation
 - Custom world managers with their own chunk serialization
 
-If you are unsure about a mod in your list, test on a backup world. Look for mods that mention "region files", "world editing", or "chunk serialization".
+> If you are unsure about a mod in your list, test on a backup world. Look for mods that mention "region files", "world editing", or "chunk serialization".
 
 ---
 
@@ -139,14 +144,14 @@ Before opening an issue:
 - Make sure you are on the latest Chunkis version
 - State whether the problem is about correctness, performance, or storage growth
 
-If you prefer direct contact first, Discord is `Liparakis`.
-
 When opening an issue, include:
 - Minecraft version, Fabric Loader version, and full modlist
 - `latest.log` or crash report
 - Steps to reproduce
 
-Issues missing this information may be closed without response.
+> Issues missing this information may be closed without response.
+
+If you prefer direct contact first, Discord is `Liparakis`.
 
 ---
 
@@ -177,3 +182,9 @@ cd chunkis
 ./gradlew build
 # Output: fabric/build/libs/chunkis-<version>.jar
 ```
+
+---
+
+## Contact
+
+If you want to contact me directly about Chunkis, you can reach me on Discord: `Liparakis`
