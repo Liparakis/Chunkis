@@ -36,18 +36,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CisStorageMigratorTest {
 
-    /** Shared inflate/deflate buffer size; large enough to avoid repeated grows. */
+    /**
+     * Shared inflate/deflate buffer size; large enough to avoid repeated grows.
+     */
     private static final int IO_BUFFER_SIZE = 8192;
 
-    /** Number of chunk slots per region file (32 × 32). */
+    /**
+     * Number of chunk slots per region file (32 × 32).
+     */
     private static final int REGION_SLOTS = 1024;
     private static final int CURRENT_VERSION = CisConstants.VERSION;
     private static final int LEGACY_VERSION = 8;
-
-    /** Bytes per chunk header entry (offset int + length int). */
+    /**
+     * Bytes per chunk header entry (offset int + length int).
+     */
     private static final int HEADER_ENTRY_BYTES = 8;
 
-    /** Temporary directory used to create isolated fixture environments. */
+    /**
+     * Temporary directory used to create isolated fixture environments.
+     */
     @TempDir
     Path tempDir;
 
@@ -135,7 +142,8 @@ class CisStorageMigratorTest {
         assertEquals(1, report.failedChunks());
         assertTrue(
                 harness.chunkEntryExists(legacyPos),
-                "Migration must preserve the original chunk bytes when decode fails.");
+                "Migration must preserve the original chunk bytes when decode fails."
+        );
 
         harness.close();
     }
@@ -154,7 +162,8 @@ class CisStorageMigratorTest {
         return new CisStorageMigrator<>(
                 harness.storage(),
                 LoggerFactory.getLogger(CisStorageMigratorTest.class),
-                CURRENT_VERSION);
+                CURRENT_VERSION
+        );
     }
 
     /**
@@ -192,7 +201,8 @@ class CisStorageMigratorTest {
                 storageRoot.resolve("global_ids.json"),
                 new TestBlockRegistryAdapter(),
                 stateAdapter,
-                new PropertyPacker<>(stateAdapter));
+                new PropertyPacker<>(stateAdapter)
+        );
 
         return new CisStorage<>(regionsDir, mapping, stateAdapter, new TestNbtAdapter(), "air");
     }
@@ -222,12 +232,16 @@ class CisStorageMigratorTest {
             this.storage = storage;
         }
 
-        /** @return the path to the directory containing {@code .cis} region files. */
+        /**
+         * @return the path to the directory containing {@code .cis} region files.
+         */
         Path regionsDir() {
             return regionsDir;
         }
 
-        /** @return the underlying {@link CisStorage} instance. */
+        /**
+         * @return the underlying {@link CisStorage} instance.
+         */
         CisStorage<String, String, String, String> storage() {
             return storage;
         }
@@ -254,6 +268,10 @@ class CisStorageMigratorTest {
          * @param pos chunk whose version field should be overwritten
          */
         void rewriteChunkVersionToLegacy(final CisChunkPos pos) throws Exception {
+            rewriteChunkVersion(pos);
+        }
+
+        void rewriteChunkVersion(final CisChunkPos pos) throws Exception {
             storage.close();
 
             final Path regionFile = regionsDir.resolve(
@@ -269,7 +287,7 @@ class CisStorageMigratorTest {
             System.arraycopy(regionBytes, chunkOffset, compressed, 0, chunkLength);
 
             final byte[] raw = inflate(compressed);
-            writeInt(raw, 4, LEGACY_VERSION);
+            writeInt(raw, 4, CisStorageMigratorTest.LEGACY_VERSION);
 
             final byte[] rewritten = deflate(raw);
             final boolean fits = rewritten.length <= chunkLength;
@@ -380,10 +398,10 @@ class CisStorageMigratorTest {
         }
 
         private static void writeInt(final byte[] data, final int offset, final int value) {
-            data[offset]     = (byte) (value >>> 24);
+            data[offset] = (byte) (value >>> 24);
             data[offset + 1] = (byte) (value >>> 16);
             data[offset + 2] = (byte) (value >>> 8);
-            data[offset + 3] = (byte)  value;
+            data[offset + 3] = (byte) value;
         }
     }
 
@@ -391,28 +409,58 @@ class CisStorageMigratorTest {
     // SPI stubs
     // -------------------------------------------------------------------------
 
-    /** Stub implementation of {@link BlockRegistryAdapter} for testing. */
+    /**
+     * Stub implementation of {@link BlockRegistryAdapter} for testing.
+     */
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
-        @Override public String getId(final String block)    { return block; }
-        @Override public String getBlock(final String id)    { return id; }
-        @Override public String getAir()                     { return "air"; }
-        @Override public Collection<String> getRegisteredBlocks() { return List.of("air", "stone", "dirt"); }
+        @Override
+        public String getId(final String block) {return block;}
+
+        @Override
+        public String getBlock(final String id) {return id;}
+
+        @Override
+        public String getAir() {return "air";}
+
+        @Override
+        public Collection<String> getRegisteredBlocks() {return List.of("air", "stone", "dirt");}
     }
 
-    /** Stub implementation of {@link BlockStateAdapter} for testing. */
+    /**
+     * Stub implementation of {@link BlockStateAdapter} for testing.
+     */
     private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
-        @Override public String getDefaultState(final String block)                                  { return block; }
-        @Override public String getBlock(final String state)                                         { return state; }
-        @Override public List<String> getProperties(final String block)                              { return List.of(); }
-        @Override public String getPropertyName(final String property)                               { return property; }
-        @Override public List<Object> getPropertyValues(final String property)                       { return List.of(); }
-        @Override public int getValueIndex(final String state, final String property)                { return 0; }
-        @Override public String withProperty(final String state, final String property, final int i) { return state; }
+        @Override
+        public String getDefaultState(final String block) {return block;}
+
+        @Override
+        public String getBlock(final String state) {return state;}
+
+        @Override
+        public List<String> getProperties(final String block) {return List.of();}
+
+        @Override
+        public String getPropertyName(final String property) {return property;}
+
+        @Override
+        public List<Object> getPropertyValues(final String property) {return List.of();}
+
+        @Override
+        public int getValueIndex(final String state, final String property) {return 0;}
+
+        @Override
+        public String withProperty(final String state, final String property, final int i) {return state;}
     }
 
-    /** Stub implementation of {@link NbtAdapter} for testing. */
+    /**
+     * Stub implementation of {@link NbtAdapter} for testing.
+     */
     private static final class TestNbtAdapter implements NbtAdapter<String> {
-        @Override public void write(final String tag, final DataOutput output) throws IOException { output.writeUTF(tag); }
-        @Override public String read(final DataInput input) throws IOException                    { return input.readUTF(); }
+        @Override
+        public void write(final String tag, final DataOutput output) throws IOException {output.writeUTF(tag);}
+
+        @Override
+        public String read(final DataInput input) throws IOException {return input.readUTF();}
     }
+
 }

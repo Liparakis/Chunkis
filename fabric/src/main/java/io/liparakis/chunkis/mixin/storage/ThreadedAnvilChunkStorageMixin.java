@@ -7,13 +7,12 @@ import io.liparakis.chunkis.core.CisChunkPos;
 
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
-import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.storage.CisNbtUtil;
+import io.liparakis.chunkis.storage.CisSnapshotCapture;
 import io.liparakis.chunkis.storage.DeltaPersistenceGuard;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.StructureMetadataExtractor;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.ChunkBlockEntityCapture;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import net.minecraft.SharedConstants;
 import net.minecraft.block.Block;
@@ -21,7 +20,6 @@ import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ChunkHolder;
 import net.minecraft.server.world.ServerChunkLoadingManager;
 import net.minecraft.server.world.ServerWorld;
@@ -57,8 +55,8 @@ import java.util.concurrent.CompletableFuture;
  * {@link net.minecraft.world.chunk.ProtoChunk}.</p>
  *
  * <h3>Save path</h3>
- * <p>{@link #chunkis$onSave} captures structure metadata and, when needed, a
- * vanilla-compatible serialized base chunk, then flushes dirty deltas to CIS storage.</p>
+ * <p>{@link #chunkis$onSave} captures an authoritative compact chunk snapshot and
+ * flushes it to CIS storage.</p>
  *
  * <h3>Shutdown path</h3>
  * <p>{@link #chunkis$onClose} force-saves dirty deltas still present in the global
@@ -91,19 +89,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     @Unique
     private static final int GAME_DATA_VERSION =
             SharedConstants.getGameVersion().dataVersion().id();
-
-    @Unique
-    private static final int IMMEDIATE_BASE_CAPTURES_PER_TICK =
-            Integer.getInteger(
-                    "chunkis.baseCapture.immediatePerTick",
-                    Integer.getInteger("chunkis.baseCapture.perTick", 4)
-            );
-
-    @Unique
-    private int chunkis$lastImmediateCaptureTick = -1;
-
-    @Unique
-    private int chunkis$immediateCapturesThisTick = 0;
 
     /**
      * The server world that owns this chunk loading manager.
@@ -205,9 +190,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             delta = chunkis$getChunkDelta(chunk);
         }
 
+        delta = chunkis$captureSnapshot(chunk, delta);
         delta = chunkis$captureStructureMetadata(chunk, delta);
-        delta = chunkis$captureSerializedBaseChunk(chunk, delta);
-        delta = chunkis$captureLiveBlockEntities(chunk, delta);
         delta = chunkis$captureLiveEntities(chunk, delta);
 
 
@@ -215,7 +199,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             if (chunk instanceof ChunkisDeltaDuck duck) {
                 duck.chunkis$setDelta(delta);
             }
-            delta = chunkis$ensureBaseBeforePersistence(chunk, pos, delta);
             chunkis$queueDirtyDelta(chunkis$getStorage(), pos, delta);
         }
 
@@ -327,24 +310,16 @@ public abstract class ThreadedAnvilChunkStorageMixin {
 
         delta.setSuppressInitialRepopulation(true);
 
-        final NbtCompound existingMeta = delta.getChunkMetadata();
-
-        // A persisted base chunk already carries structure metadata; re-extracting
-        // on every later save is wasted work.
-        if (CisNbtUtil.hasPersistedBaseChunkNbt(existingMeta)) {
-            return delta;
-        }
-
-        if (!hasStructures && !CisNbtUtil.hasPersistedStructureMetadata(existingMeta)) {
+        if (!hasStructures) {
             return delta;
         }
 
         final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
-                hasStructures ? structureData : null,
+                structureData,
                 true,
-                CisNbtUtil.hasFullBlockBaseline(existingMeta),
-                CisNbtUtil.extractPersistedBaseChunkNbt(existingMeta),
-                CisNbtUtil.hasPersistedPortalChunk(existingMeta)
+                false,
+                null,
+                chunk instanceof WorldChunk worldChunk && io.liparakis.chunkis.storage.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
         );
 
         chunkis$updateDeltaMetadata(delta, metadata, chunk.getPos());
@@ -352,19 +327,10 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     }
 
     /**
-     * Captures a vanilla-compatible serialized base chunk into the delta when one
-     * is missing.
-     *
-     * <p>This prevents reloads, version upgrades, or generator changes from
-     * rerolling feature placement. The expensive {@link SerializedChunk#fromChunk}
-     * call is guarded to run only for full chunks without existing base NBT.</p>
-     *
-     * @param chunk         the chunk being saved; may be {@code null}
-     * @param existingDelta the existing delta; may be {@code null}
-     * @return the updated delta, the original delta, or {@code null}
+     * Captures an authoritative CIS snapshot from the live chunk.
      */
     @Unique
-    private ChunkDelta<BlockState, NbtCompound> chunkis$captureSerializedBaseChunk(
+    private ChunkDelta<BlockState, NbtCompound> chunkis$captureSnapshot(
             final Chunk chunk,
             final ChunkDelta<BlockState, NbtCompound> existingDelta) {
         if (!(chunk instanceof WorldChunk worldChunk)
@@ -372,72 +338,10 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             return existingDelta;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> delta =
-                existingDelta != null ? existingDelta : new ChunkDelta<>();
-
-        if (CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata())) {
-            return delta;
-        }
-
-        if (!chunkis$tryAcquireCaptureQuota()) {
-            BaseChunkCaptureScheduler.schedule(world, worldChunk);
-            return delta;
-        }
-
-        return BaseChunkCaptureUtil.captureBaseChunk(world, worldChunk, delta);
-    }
-
-    @Unique
-    private boolean chunkis$tryAcquireCaptureQuota() {
-        if (IMMEDIATE_BASE_CAPTURES_PER_TICK <= 0) {
-            return false;
-        }
-
-        final MinecraftServer server = world.getServer();
-        final int currentTick = Objects.requireNonNull(server).getTicks();
-
-        if (currentTick != chunkis$lastImmediateCaptureTick) {
-            chunkis$lastImmediateCaptureTick = currentTick;
-            chunkis$immediateCapturesThisTick = 0;
-        }
-
-        if (chunkis$immediateCapturesThisTick < IMMEDIATE_BASE_CAPTURES_PER_TICK) {
-            chunkis$immediateCapturesThisTick++;
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Captures all live block entities immediately before persistence.
-     *
-     * <p>The proactive {@code BlockEntity#markDirty} hook catches normal changes,
-     * but the save path must not rely on every vanilla or modded block entity using
-     * that hook correctly.</p>
-     *
-     * @param chunk         the chunk being saved; may be {@code null}
-     * @param existingDelta the existing delta; may be {@code null}
-     * @return the updated delta, the original delta, or {@code null}
-     */
-    @Unique
-    private ChunkDelta<BlockState, NbtCompound> chunkis$captureLiveBlockEntities(
-            final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> existingDelta) {
-        if (!(chunk instanceof WorldChunk worldChunk)) {
-            return existingDelta;
-        }
-
-        final ChunkDelta<BlockState, NbtCompound> delta =
-                existingDelta != null ? existingDelta : new ChunkDelta<>();
-
-        if (!worldChunk.getBlockEntities().isEmpty()) {
-            delta.clearBlockEntityPayloads(false);
-            ChunkBlockEntityCapture.captureBlockEntities(
-                    worldChunk, world.getRegistryManager(), delta);
-        }
-
-        return delta;
+        final ChunkDelta<BlockState, NbtCompound> delta = existingDelta != null
+                ? existingDelta
+                : new ChunkDelta<>(BlockState::isAir);
+        return CisSnapshotCapture.capture(worldChunk, delta);
     }
 
     /**
@@ -485,36 +389,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     }
 
     /**
-     * Ensures a sparse replay payload never reaches persistence without a base.
-     *
-     * <p>The earlier base-capture step can be quota-deferred before live block
-     * entities and entities are added. Once those payloads exist, persistence
-     * must either own a base snapshot or be rejected by the guard.</p>
-     */
-    @Unique
-    private ChunkDelta<BlockState, NbtCompound> chunkis$ensureBaseBeforePersistence(
-            final Chunk chunk,
-            final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
-        if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
-            return delta;
-        }
-
-        if (!(chunk instanceof WorldChunk worldChunk)
-                || !ChunkStatus.FULL.equals(chunk.getStatus())) {
-            return delta;
-        }
-
-        Chunkis.LOGGER.warn(
-                "Chunkis [BASE]: Forcing base capture before persistence for {} in {}",
-                pos,
-                world.getRegistryKey().getValue()
-        );
-
-        return BaseChunkCaptureUtil.captureBaseChunk(world, worldChunk, delta);
-    }
-
-    /**
      * Saves {@code delta} synchronously if it is dirty and passes the persistence
      * guard.
      *
@@ -533,7 +407,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         if (delta == null || !delta.isDirty()) {
             return;
         }
-        if (chunkis$rejectSparse(pos, delta, "load-path-sync", "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta")) {
+        if (chunkis$rejectSparse(pos, delta, "load-path-sync", "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta"
+        )) {
             return;
         }
 
@@ -561,7 +436,10 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         if (delta == null || !delta.isDirty()) {
             return;
         }
-        if (chunkis$rejectSparse(pos, delta, "save-hook-async", "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta")) {
+        if (chunkis$rejectSparse(
+                pos, delta, "save-hook-async", "ThreadedAnvilChunkStorageMixin" +
+                        "#chunkis$queueDirtyDelta"
+        )) {
             return;
         }
 
@@ -574,9 +452,9 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      * <p>Extracted to eliminate the identical guard + log pair in both
      * {@link #chunkis$saveDirtyDelta} and {@link #chunkis$queueDirtyDelta}.</p>
      *
-     * @param pos   the chunk position
-     * @param delta the delta under evaluation
-     * @param path  save path label
+     * @param pos    the chunk position
+     * @param delta  the delta under evaluation
+     * @param path   save path label
      * @param caller caller label
      * @return {@code true} if the save should be rejected
      */
@@ -642,17 +520,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     private static NbtCompound chunkis$buildChunkNbt(
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
-        final NbtCompound baseNbt = delta != null
-                ? CisNbtUtil.extractPersistedBaseChunkNbt(delta.getChunkMetadata())
-                : null;
-
-        if (baseNbt != null) {
-            CisNbtUtil.replaceChunkBlockEntitiesFromDelta(baseNbt, delta);
-            CisNbtUtil.replaceChunkEntitiesFromDelta(baseNbt, delta);
-            CisNbtUtil.putDelta(baseNbt, delta);
-            return baseNbt;
-        }
-
         final NbtCompound nbt = CisNbtUtil.createBaseNbt(pos, GAME_DATA_VERSION);
         CisNbtUtil.putChunkMetadata(nbt, delta);
         CisNbtUtil.putDelta(nbt, delta);
@@ -760,13 +627,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     @Unique
     private static boolean chunkis$shouldBypassTrackedDelta(
             final ChunkDelta<BlockState, NbtCompound> delta) {
-        if (delta == null) {
-            return true;
-        }
-        final Object meta = delta.getChunkMetadata();
-        if (!CisNbtUtil.hasPersistedBaseChunkNbt(meta) && !CisNbtUtil.hasFullBlockBaseline(meta)) {
-            return true;
-        }
-        return !delta.isDirty() && delta.isEmpty();
+        return delta == null || (!delta.isDirty() && delta.isEmpty());
     }
 }

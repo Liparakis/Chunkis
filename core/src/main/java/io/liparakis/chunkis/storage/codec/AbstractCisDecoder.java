@@ -22,9 +22,8 @@ import java.util.List;
  *
  * @param <S> The BlockState type
  * @param <N> The NBT type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public abstract class AbstractCisDecoder<S, N> {
 
@@ -78,11 +77,17 @@ public abstract class AbstractCisDecoder<S, N> {
      */
     protected List<S> globalPalette;
 
-    /** Adapter used to rebuild concrete block states from decoded palette and property data. */
+    /**
+     * Adapter used to rebuild concrete block states from decoded palette and property data.
+     */
     protected final BlockStateAdapter<?, S, ?> stateAdapter;
-    /** Adapter used to decode block entities, entities, and chunk metadata payloads. */
+    /**
+     * Adapter used to decode block entities, entities, and chunk metadata payloads.
+     */
     protected final NbtAdapter<N> nbtAdapter;
-    /** Fallback state returned when the payload refers to an invalid palette entry. */
+    /**
+     * Fallback state returned when the payload refers to an invalid palette entry.
+     */
     protected final S airState;
 
     /**
@@ -131,14 +136,16 @@ public abstract class AbstractCisDecoder<S, N> {
         if (magic != CisConstants.MAGIC) {
             throw new IOException(String.format(
                     "Invalid CIS magic number: 0x%08X (expected: 0x%08X)",
-                    magic, CisConstants.MAGIC));
+                    magic, CisConstants.MAGIC
+            ));
         }
 
         this.decodedVersion = readIntBE(data, 4);
         if (decodedVersion < 7 || decodedVersion > CisConstants.VERSION) {
             throw new IOException(String.format(
                     "Unsupported CIS version: %d (expected 7 or %d)",
-                    decodedVersion, CisConstants.VERSION));
+                    decodedVersion, CisConstants.VERSION
+            ));
         }
 
         return HEADER_SIZE;
@@ -214,7 +221,8 @@ public abstract class AbstractCisDecoder<S, N> {
                         (byte) x,
                         (sectionY << BITS_PER_NIBBLE) + y,
                         (byte) z,
-                        state);
+                        state
+                );
             }
         }
     }
@@ -282,7 +290,8 @@ public abstract class AbstractCisDecoder<S, N> {
                             x,
                             (sectionY << BITS_PER_NIBBLE) + y,
                             z,
-                            globalIndex);
+                            globalIndex
+                    );
                 }
             }
         }

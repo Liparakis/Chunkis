@@ -6,7 +6,6 @@ import io.liparakis.chunkis.storage.CisNbtUtil;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.ChunkRestorer;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -74,8 +73,7 @@ public final class LegacyEntityStorageHandoffGameTest {
                 world,
                 chunk,
                 persistedLegacyDelta,
-                runtimeDelta,
-                new Long2ObjectOpenHashMap<>());
+                runtimeDelta);
 
         context.assertTrue(
                 countEntitiesWithUuid(world, chunkPos, legacyEntity.uuid()) == 1,
@@ -100,8 +98,7 @@ public final class LegacyEntityStorageHandoffGameTest {
                 world,
                 chunk,
                 rewrittenDelta,
-                new ChunkDelta<>(),
-                new Long2ObjectOpenHashMap<>());
+                new ChunkDelta<>());
 
         context.assertTrue(
                 countEntitiesWithUuid(world, chunkPos, legacyEntity.uuid()) == entitiesBeforeSecondRestore,

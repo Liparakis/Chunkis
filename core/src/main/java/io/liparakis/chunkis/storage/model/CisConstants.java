@@ -25,9 +25,12 @@ public final class CisConstants {
      * so deterministic structure worldgen remains idempotent across reloads.
      * V10: Stores NBT payloads raw inside the CIS blob instead of individually
      * compressing them, so the outer chunk compression is the only compression pass.
+     * V11: Stores authoritative chunk snapshots in the CIS block payload. Missing
+     * block entries now mean air at restore time; old formats must migrate forward
+     * before normal runtime load.
      * Increment when making breaking changes to the serialization format.
      */
-    public static final int VERSION = 10;
+    public static final int VERSION = 11;
 
     /**
      * Size of one dimension of a chunk section (16 blocks).

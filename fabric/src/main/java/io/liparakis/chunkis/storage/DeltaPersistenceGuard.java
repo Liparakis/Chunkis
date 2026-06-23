@@ -41,6 +41,9 @@ public final class DeltaPersistenceGuard {
         if (delta == null) {
             return false;
         }
+        if (delta.getSourceVersion() >= io.liparakis.chunkis.storage.model.CisConstants.VERSION) {
+            return false;
+        }
         final Object meta = delta.getChunkMetadata();
         return hasReplayPayload(delta)
                 && !CisNbtUtil.hasPersistedBaseChunkNbt(meta)
@@ -79,6 +82,10 @@ public final class DeltaPersistenceGuard {
         );
     }
 
+    /**
+     * Returns whether the delta still depends on replay payloads rather than a
+     * fully authoritative snapshot baseline.
+     */
     private static boolean hasReplayPayload(final ChunkDelta<?, ?> delta) {
         return !delta.getBlockInstructions().isEmpty()
                 || !delta.getBlockEntities().isEmpty()

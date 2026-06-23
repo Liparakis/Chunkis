@@ -1,10 +1,8 @@
 package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
-import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
@@ -12,9 +10,7 @@ import io.liparakis.chunkis.world.GlobalChunkTracker;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.ProtoChunk;
 import net.minecraft.world.chunk.SerializedChunk;
@@ -39,9 +35,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * reset to {@link ChunkStatus#EMPTY} so vanilla worldgen can regenerate terrain
  * and Chunkis can replay the delta on top of fresh terrain later.</p>
  *
- * <p>For chunks with a persisted vanilla-compatible base chunk NBT, that NBT
- * represents stable generated terrain. Sparse block and block-entity edits are
- * replayed immediately and the status is left intact.</p>
+ * <p>Snapshot deltas are attached to the proto chunk and the status is reset to
+ * {@link ChunkStatus#EMPTY} so vanilla generation runs before Chunkis restores the
+ * authoritative saved snapshot into the promoted world chunk.</p>
  *
  * @author Liparakis
  * @version 1.2
@@ -88,11 +84,9 @@ public class ChunkSerializerMixin {
      *   <li>Load delta (memory → disk).</li>
      *   <li>Trace log.</li>
      *   <li>Set suppression flag from persisted metadata.</li>
-     *   <li>If a base chunk is persisted, replay block and block-entity edits
-     *       immediately so player changes survive status-intact loads.</li>
      *   <li>Attach delta to chunk via {@link ChunkisDeltaDuck}.</li>
-     *   <li>If no base chunk, reset status to {@link ChunkStatus#EMPTY} so vanilla
-     *       worldgen regenerates terrain before delta replay.</li>
+     *   <li>Reset status to {@link ChunkStatus#EMPTY} so vanilla worldgen regenerates
+     *       terrain before snapshot replay.</li>
      * </ol>
      *
      * @param world the server world
@@ -113,18 +107,8 @@ public class ChunkSerializerMixin {
 
         delta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(delta));
 
-        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
-
-        if (hasBase) {
-            chunkis$replayBaseChunkBlockDelta(chunk, delta);
-            chunkis$replayBaseChunkBlockEntityDelta(chunk, delta);
-        }
-
         chunkis$attachDeltaToChunk(chunk, delta);
-
-        if (!hasBase) {
-            chunk.setStatus(ChunkStatus.EMPTY);
-        }
+        chunk.setStatus(ChunkStatus.EMPTY);
     }
 
     /**
@@ -183,78 +167,6 @@ public class ChunkSerializerMixin {
         if (chunk instanceof ChunkisDeltaDuck deltaDuck) {
             deltaDuck.chunkis$setDelta(delta);
         }
-    }
-
-    /**
-     * Replays sparse block edits directly into the chunk sections of a proto chunk
-     * loaded from a persisted base chunk.
-     *
-     * <p>Full-status base chunks may not go through the same regeneration replay
-     * path as synthetic empty chunks, so block edits are applied here to prevent
-     * restored player changes from being skipped.</p>
-     *
-     * <p>Writes directly into {@link ChunkSection} instances for speed, bypassing
-     * higher-level chunk mutation code. Block-entity NBT and other delta payloads
-     * remain on the delta and are handled by the later restore path.</p>
-     *
-     * @param chunk the proto chunk to mutate
-     * @param delta the loaded block delta
-     */
-    @Unique
-    private static void chunkis$replayBaseChunkBlockDelta(
-            final ProtoChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
-        final int bottomY = chunk.getBottomY();
-        final int topY = chunk.getTopYInclusive();
-        final ChunkSection[] sections = chunk.getSectionArray();
-
-        delta.forEachBlock((localX, localY, localZ, state) -> {
-            if (state == null || localY < bottomY || localY > topY) {
-                return;
-            }
-            final int sectionIndex = chunk.getSectionIndex(localY);
-            if (sectionIndex < 0 || sectionIndex >= sections.length) {
-                return;
-            }
-            final ChunkSection section = sections[sectionIndex];
-            if (section == null) {
-                return;
-            }
-            section.setBlockState(localX, localY & 15, localZ, state);
-        });
-    }
-
-    /**
-     * Installs sparse block-entity NBT from {@code delta} into {@code chunk}'s
-     * pending block-entity map.
-     *
-     * <p>Delta block entities are newer than the base chunk NBT and must win,
-     * particularly for inventories modified after the base chunk was captured.</p>
-     *
-     * @param chunk the proto chunk to mutate
-     * @param delta the loaded block/NBT delta
-     */
-    @Unique
-    private static void chunkis$replayBaseChunkBlockEntityDelta(
-            final ProtoChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
-        final ChunkPos chunkPos = chunk.getPos();
-        final var pendingBlockEntities =
-                ((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts();
-
-        delta.getBlockEntities().long2ObjectEntrySet().forEach(entry -> {
-            final NbtCompound nbt = entry.getValue();
-            if (nbt == null) {
-                return;
-            }
-            final long packed = entry.getLongKey();
-            final BlockPos worldPos = chunkPos.getBlockPos(
-                    BlockInstruction.unpackX(packed),
-                    BlockInstruction.unpackY(packed),
-                    BlockInstruction.unpackZ(packed)
-            );
-            pendingBlockEntities.put(worldPos, nbt.copy());
-        });
     }
 
     /**

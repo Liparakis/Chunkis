@@ -14,19 +14,21 @@ import java.io.IOException;
  *
  * @param <S> The BlockState type
  * @param <N> The NBT type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class CisDecoder<S, N> extends AbstractCisDecoder<S, N> {
 
-    /** Palette adapter that knows how to decode one block-state entry from the CIS palette stream. */
+    /**
+     * Palette adapter that knows how to decode one block-state entry from the CIS palette stream.
+     */
     private final CisAdapter<S> cisAdapter;
 
     /**
      * Constructs a new CisDecoder.
      */
-    public CisDecoder(CisAdapter<S> cisAdapter, BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter,
+    public CisDecoder(
+            CisAdapter<S> cisAdapter, BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter,
             S airState) {
         super(stateAdapter, nbtAdapter, airState);
         this.cisAdapter = cisAdapter;

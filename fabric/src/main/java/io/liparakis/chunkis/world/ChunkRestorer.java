@@ -1,12 +1,11 @@
 package io.liparakis.chunkis.world;
 
 import io.liparakis.chunkis.Chunkis;
-import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
 import io.liparakis.chunkis.storage.CisNbtUtil;
-import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.entity.Entity;
@@ -35,14 +34,13 @@ import java.util.UUID;
 /**
  * Utility for restoring chunks from Chunkis delta data.
  *
- * <p>Restoration applies saved player modifications from a {@link ChunkDelta} to
- * a freshly generated {@link WorldChunk}. This is the core step that makes Chunkis
- * preserve edits while still allowing the vanilla generator to recreate untouched
- * terrain.</p>
+ * <p>Restoration applies an authoritative CIS snapshot from a {@link ChunkDelta} to
+ * a freshly generated {@link WorldChunk}. Missing block entries mean air.</p>
  *
  * <h2>Restoration process</h2>
  * <ol>
- *   <li>record the generated vanilla block state as a sparse baseline</li>
+ *   <li>clear the target chunk block grid to air</li>
+ *   <li>remove stale block-entity state</li>
  *   <li>apply saved block changes directly to chunk sections</li>
  *   <li>restore compatible block entities from NBT</li>
  *   <li>replay legacy entity payloads only when the delta still owns entity persistence</li>
@@ -90,19 +88,16 @@ public final class ChunkRestorer {
      * change across Minecraft versions, datapacks, and worldgen changes, so pruning
      * here would make persistence depend on a moving target.</p>
      *
-     * @param world            server world context
-     * @param chunk            chunk to restore into
-     * @param protoDelta       source delta loaded from disk/proto state
-     * @param runtimeDelta     runtime delta to populate with validated changes
-     * @param vanillaBaselines sparse generated baseline map used for later reversion detection
-     * @return {@code false}; restore does not currently optimize/prune source entries
+     * @param world        server world context
+     * @param chunk        chunk to restore into
+     * @param protoDelta   source delta loaded from disk/proto state
+     * @param runtimeDelta runtime delta to populate with validated changes
      */
-    public static boolean restore(
+    public static void restore(
             final ServerWorld world,
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> protoDelta,
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
-            final Long2ObjectMap<BlockState> vanillaBaselines
+            final ChunkDelta<BlockState, NbtCompound> runtimeDelta
     ) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(chunk, "chunk");
@@ -112,15 +107,44 @@ public final class ChunkRestorer {
                 world,
                 chunk,
                 protoDelta,
-                runtimeDelta,
-                vanillaBaselines
+                runtimeDelta
         );
 
+        clearChunkToAir(chunk);
         visitor.cleanupReplayedEntities(protoDelta);
         protoDelta.accept(visitor);
         visitor.finishRestoration();
 
-        return false;
+    }
+
+    /**
+     * Clears every non-empty section in the target chunk back to air before snapshot replay.
+     *
+     * <p>This enforces the authoritative snapshot rule: missing CIS block entries
+     * mean air, not "keep whatever terrain is currently in the chunk". Block-entity
+     * maps are cleared afterward so stale serialized or live block-entity state
+     * cannot survive the reset.</p>
+     */
+    private static void clearChunkToAir(final WorldChunk chunk) {
+        final ChunkSection[] sections = chunk.getSectionArray();
+        for (final ChunkSection section : sections) {
+            if (section == null || section.isEmpty()) {
+                continue;
+            }
+
+            for (int y = 0; y < 16; y++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        section.setBlockState(x, y, z, Blocks.AIR.getDefaultState());
+                    }
+                }
+            }
+        }
+
+        for (final BlockPos pos : Set.copyOf(chunk.getBlockEntities().keySet())) {
+            removeStaleBlockEntityData(chunk, pos);
+        }
+        ((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts().clear();
     }
 
     /**
@@ -271,21 +295,18 @@ public final class ChunkRestorer {
         private final WorldChunk chunk;
         private final ChunkPos chunkPosition;
         private final ChunkDelta<BlockState, NbtCompound> runtimeDelta;
-        private final Long2ObjectMap<BlockState> vanillaBaselines;
         private final boolean replayLegacyEntities;
 
         private RestorationVisitor(
                 final ServerWorld world,
                 final WorldChunk chunk,
                 final ChunkDelta<BlockState, NbtCompound> sourceDelta,
-                final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
-                final Long2ObjectMap<BlockState> vanillaBaselines
+                final ChunkDelta<BlockState, NbtCompound> runtimeDelta
         ) {
             this.world = world;
             this.chunk = chunk;
             this.chunkPosition = chunk.getPos();
             this.runtimeDelta = runtimeDelta;
-            this.vanillaBaselines = vanillaBaselines;
             this.replayLegacyEntities = shouldReplayLegacyEntities(sourceDelta);
         }
 
@@ -374,9 +395,6 @@ public final class ChunkRestorer {
             }
 
             final BlockPos worldPos = chunkPosition.getBlockPos(localX, localY, localZ);
-            final BlockState vanillaState = chunk.getBlockState(worldPos);
-
-            recordVanillaBaseline(localX, localY, localZ, vanillaState);
 
             if (!applyBlockChange(
                     chunk,
@@ -435,9 +453,10 @@ public final class ChunkRestorer {
          * entity persistence through Chunkis.</p>
          */
         private void finishRestoration() {
-            if (replayLegacyEntities && runtimeDelta != null) {
+            if (replayLegacyEntities && runtimeDelta != null)
                 runtimeDelta.clearPendingEntities();
-            }
+            if (runtimeDelta != null)
+                runtimeDelta.markSaved();
         }
 
         /**
@@ -457,34 +476,6 @@ public final class ChunkRestorer {
             if (runtimeDelta != null) {
                 runtimeDelta.addBlockChange(localX, localY, localZ, state, false);
             }
-        }
-
-        /**
-         * Records the generated baseline state before replaying a saved edit.
-         *
-         * <p>This sparse baseline lets later runtime edits detect when a player has
-         * reverted a restored block back to generated terrain without needing a full
-         * chunk snapshot.</p>
-         *
-         * @param localX       local chunk X coordinate
-         * @param localY       absolute world Y coordinate
-         * @param localZ       local chunk Z coordinate
-         * @param vanillaState generated state before restoration
-         */
-        private void recordVanillaBaseline(
-                final int localX,
-                final int localY,
-                final int localZ,
-                final BlockState vanillaState
-        ) {
-            if (vanillaBaselines == null || vanillaState == null) {
-                return;
-            }
-
-            vanillaBaselines.putIfAbsent(
-                    BlockInstruction.packPos(localX, localY, localZ),
-                    vanillaState
-            );
         }
 
         /**
