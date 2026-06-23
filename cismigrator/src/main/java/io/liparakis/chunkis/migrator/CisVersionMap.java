@@ -34,7 +34,8 @@ public final class CisVersionMap {
             new CisVersionEdge(8, 9, "Added chunk-level metadata storage for structure starts and references."),
             new CisVersionEdge(9, 10, "Replaced per-payload compressed NBT blobs with raw length-prefixed NBT inside " +
                     "the outer CIS compression stream."),
-            new CisVersionEdge(10, 11, "Promoted CIS payloads to authoritative compact chunk snapshots.")
+            new CisVersionEdge(10, 11, "Promoted CIS payloads to authoritative compact chunk snapshots and finalized " +
+                    "the unreleased v11 section codec.")
     );
 
     private CisVersionMap() {

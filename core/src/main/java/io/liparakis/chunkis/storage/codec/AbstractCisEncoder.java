@@ -19,6 +19,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Base class for CIS (Chunk Incremental Storage) encoders containing shared
@@ -275,11 +276,29 @@ public abstract class AbstractCisEncoder<S, N> {
             return;
         }
 
+        final S uniformState = uniformSectionState(section);
+        if (uniformState != null) {
+            encodeUniformSection(ctx, uniformState);
+            return;
+        }
+
         if (section.mode == CisSection.MODE_SPARSE) {
             encodeSparseSection(ctx, section);
         } else {
             encodeDenseSection(ctx, section);
         }
+    }
+
+    /**
+     * Encodes a full single-state section using the sparse-mode sentinel layout.
+     */
+    private void encodeUniformSection(final EncoderContext<S> ctx, final S state) {
+        ctx.bitWriter.write(CisConstants.SECTION_ENCODING_SPARSE, 1);
+        ctx.bitWriter.write(CisConstants.UNIFORM_SECTION_SENTINEL, CisConstants.BLOCK_COUNT_BITS);
+
+        final int globalBits = calculateBitsNeeded(ctx.globalIdMap.size());
+        final int globalIdx = ctx.globalIdMap.getInt(state);
+        ctx.bitWriter.write(globalIdx != -1 ? globalIdx : 0, globalBits);
     }
 
 
@@ -386,6 +405,29 @@ public abstract class AbstractCisEncoder<S, N> {
 
             ctx.bitWriter.write(localIdx, bitsPerBlock);
         }
+    }
+
+    /**
+     * Returns the repeated state when the section is fully filled with one state.
+     */
+    @SuppressWarnings("unchecked")
+    private S uniformSectionState(final CisSection<S> section) {
+        if (section.mode != CisSection.MODE_DENSE || section.denseBlocks == null) {
+            return null;
+        }
+
+        final Object first = section.denseBlocks[0];
+        if (first == null) {
+            return null;
+        }
+
+        for (int i = 1; i < SECTION_VOLUME; i++) {
+            if (!Objects.equals(first, section.denseBlocks[i])) {
+                return null;
+            }
+        }
+
+        return (S) first;
     }
 
     /**

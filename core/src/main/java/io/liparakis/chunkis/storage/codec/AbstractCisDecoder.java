@@ -206,6 +206,11 @@ public abstract class AbstractCisDecoder<S, N> {
     private void decodeSparseSection(BitReader reader, ChunkDelta<S, N> delta, int sectionY, int globalBits) {
         int blockCount = (int) reader.read(CisConstants.BLOCK_COUNT_BITS);
 
+        if (blockCount == CisConstants.UNIFORM_SECTION_SENTINEL) {
+            decodeUniformSection(reader, delta, sectionY, globalBits);
+            return;
+        }
+
         for (int i = 0; i < blockCount; i++) {
             int packedPos = (int) reader.read(12);
             int globalIdx = (int) reader.read(globalBits);
@@ -223,6 +228,35 @@ public abstract class AbstractCisDecoder<S, N> {
                         (byte) z,
                         state
                 );
+            }
+        }
+    }
+
+    /**
+     * Decodes a full single-state section encoded through the sparse sentinel path.
+     */
+    private void decodeUniformSection(
+            final BitReader reader,
+            final ChunkDelta<S, N> delta,
+            final int sectionY,
+            final int globalBits
+    ) {
+        final int globalIdx = (int) reader.read(globalBits);
+        final S state = getStateFromPalette(globalIdx);
+        if (state == null) {
+            return;
+        }
+
+        for (int y = 0; y < SECTION_SIZE; y++) {
+            for (int z = 0; z < SECTION_SIZE; z++) {
+                for (int x = 0; x < SECTION_SIZE; x++) {
+                    delta.addBlockChange(
+                            (byte) x,
+                            (sectionY << BITS_PER_NIBBLE) + y,
+                            (byte) z,
+                            state
+                    );
+                }
             }
         }
     }

@@ -114,6 +114,11 @@ public final class CisConstants {
     public static final int BLOCK_COUNT_BITS = 13;
 
     /**
+     * Sentinel block-count value used by uniform v11 sections.
+     */
+    public static final int UNIFORM_SECTION_SENTINEL = SECTION_SIZE * SECTION_SIZE * SECTION_SIZE;
+
+    /**
      * Encoding type flag indicating that a section uses sparse storage,
      * where only non-air blocks are explicitly stored.
      */
