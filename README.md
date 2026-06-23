@@ -1,8 +1,6 @@
 <div align="center">
   <img src="core/src/main/resources/assets/logo.png" width="150" alt="Chunkis Logo" style="border-radius: 50%;">
 
-  # Chunkis
-
   ![Loader](https://img.shields.io/badge/Loader-Fabric-brightgreen)
   ![Status](https://img.shields.io/badge/Status-Beta-orange)
   ![Version](https://img.shields.io/badge/Version-3.0.0-blue)
