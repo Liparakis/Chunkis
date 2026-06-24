@@ -95,7 +95,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/mixin/world/NetherPortalBlockMixin.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Portal subsystem, not primary disappearance path. |
 | `fabric/src/main/java/io/liparakis/chunkis/mixin/world/PortalForcerMixin.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Portal search diagnostics already use logging. |
 | `fabric/src/main/java/io/liparakis/chunkis/mixin/world/SpawnHelperMixin.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Entity population cancellation path. |
-| `fabric/src/main/java/io/liparakis/chunkis/mixin/world/WorldChunkMixin.java` | `CORE_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Live mutation capture, restore, server-thread guard, portal POI resync. |
+| `fabric/src/main/java/io/liparakis/chunkis/mixin/world/WorldChunkMixin.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Restore operation-id threading and off-thread mutation assertion now exist; live mutation origin tracing still remains. |
 | `fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Compression decisions and payload sizing. |
 | `fabric/src/main/java/io/liparakis/chunkis/network/ChunkisNetworking.java` | `CORE_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Server-side encode/send/drop path for client sync. |
 | `fabric/src/main/java/io/liparakis/chunkis/network/FabricNetworkCodecFactory.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Factory/singleton wiring only. |
@@ -113,7 +113,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/storage/StructureMetadataExtractor.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Structure metadata capture and fallback branch. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/ChunkBlockEntityCapture.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Block-entity capture/remove semantics. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/ChunkRestorer.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Restore start/completion/failure and aggregate applied counts now emit structured events. |
-| `fabric/src/main/java/io/liparakis/chunkis/world/GlobalChunkTracker.java` | `CORE_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Dirty map, unload cache, async completion rules. |
+| `fabric/src/main/java/io/liparakis/chunkis/world/GlobalChunkTracker.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Dirty-map transitions, unload-cache hit/miss, and stale async completion are now traced. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/LeafTickContext.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Noise-filter context only. |
 
 ## Source Audit Table: Validation / Test Support
@@ -1689,11 +1689,11 @@ Captures live block/block-entity mutations and restores proto-attached snapshots
 
 ### Status
 
-`REVIEWED_NEEDS_HOOKS`
+`PHASE_2_PARTIAL`
 
 ### Next action
 
-Instrument mutation-origin and restore summary events here.
+Restore operation-id threading and off-thread assertion are implemented. Future work is mutation-origin tracing without event spam.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java`
 
@@ -2197,11 +2197,11 @@ Owns dirty delta map and unload-gap LRU cache.
 
 ### Status
 
-`REVIEWED_NEEDS_HOOKS`
+`PHASE_2_PARTIAL`
 
 ### Next action
 
-Instrument state transitions and cache source selection summaries.
+State transitions and unload-cache lookup summaries are implemented. Future work is true unload-hook correlation.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/world/LeafTickContext.java`
 

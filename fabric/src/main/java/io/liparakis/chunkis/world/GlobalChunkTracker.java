@@ -2,6 +2,12 @@ package io.liparakis.chunkis.world;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.ChunkPos;
@@ -38,6 +44,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  */
 public final class GlobalChunkTracker {
+
+    private static final String SOURCE = "GlobalChunkTracker";
 
     /**
      * Maximum number of recently unloaded deltas retained in {@link #unloadCache}.
@@ -132,7 +140,15 @@ public final class GlobalChunkTracker {
      * @param position the chunk position that was saved
      */
     public static void markSaved(final World world, final ChunkPos position) {
-        dirtyDeltas.remove(keyOf(world.getRegistryKey(), position));
+        final DimensionChunkKey key = keyOf(world.getRegistryKey(), position);
+        if (dirtyDeltas.remove(key) != null) {
+            traceTracker(
+                    world.getRegistryKey(),
+                    position,
+                    ChunkTraceReason.TRACKER_MARK_SAVED,
+                    "removed dirty delta after save"
+            );
+        }
     }
 
     /**
@@ -162,9 +178,30 @@ public final class GlobalChunkTracker {
         dirtyDeltas.computeIfPresent(
                 keyOf(world.getRegistryKey(), position), (ignored, active) -> {
                     if (active != liveDelta) {
+                        traceTracker(
+                                world.getRegistryKey(),
+                                position,
+                                ChunkTraceReason.STALE_GENERATION_IGNORED,
+                                "ignored async save completion for replaced delta"
+                        );
                         return active;
                     }
-                    return liveDelta.markSavedIfGeneration(generation) ? null : active;
+                    if (liveDelta.markSavedIfGeneration(generation)) {
+                        traceTracker(
+                                world.getRegistryKey(),
+                                position,
+                                ChunkTraceReason.TRACKER_MARK_SAVED,
+                                "removed dirty delta after unchanged async save"
+                        );
+                        return null;
+                    }
+                    traceTracker(
+                            world.getRegistryKey(),
+                            position,
+                            ChunkTraceReason.STALE_GENERATION_IGNORED,
+                            "ignored async save completion for advanced generation " + generation
+                    );
+                    return active;
                 }
         );
     }
@@ -197,7 +234,21 @@ public final class GlobalChunkTracker {
     public static ChunkDelta<?, ?> getDelta(final World world, final ChunkPos position) {
         final DimensionChunkKey key = keyOf(world.getRegistryKey(), position);
         final ChunkDelta<?, ?> active = dirtyDeltas.get(key);
-        return active != null ? active : getFromUnloadCache(key);
+        if (active != null) {
+            return active;
+        }
+        final ChunkDelta<?, ?> cached = getFromUnloadCache(key);
+        traceTracker(
+                world.getRegistryKey(),
+                position,
+                cached != null
+                        ? ChunkTraceReason.TRACKER_UNLOAD_CACHE_HIT
+                        : ChunkTraceReason.TRACKER_UNLOAD_CACHE_MISS,
+                cached != null
+                        ? "resolved delta from unload cache"
+                        : "no delta in unload cache"
+        );
+        return cached;
     }
 
     /**
@@ -276,7 +327,35 @@ public final class GlobalChunkTracker {
         }
 
         dirtyDeltas.put(key, delta);
+        traceTracker(
+                key.dimension,
+                new ChunkPos(key.chunkKey),
+                ChunkTraceReason.TRACKER_DIRTY_MAP_PUT,
+                "registered dirty delta"
+        );
         putInUnloadCache(key, delta);
+    }
+
+    private static void traceTracker(
+            final RegistryKey<World> dimension,
+            final ChunkPos pos,
+            final ChunkTraceReason reason,
+            final String message
+    ) {
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.DIRTY_TRACKING,
+                ChunkTraceEventType.TRACKER_STATE_UPDATED,
+                ChunkTraceSeverity.INFO,
+                reason,
+                SOURCE,
+                message,
+                dimension.getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     /**

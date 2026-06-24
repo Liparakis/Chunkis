@@ -45,16 +45,16 @@
 
 ## Phase 2 still remaining
 
-- [ ] Instrument `GlobalChunkTracker` and unload-adjacent lifecycle paths
+- [ ] Finish `GlobalChunkTracker` and unload-adjacent lifecycle coverage
   - Goal:
     make dirty chunk disappearance across unload/cache transitions visible
-- [ ] Instrument `WorldChunkMixin`
+- [ ] Finish `WorldChunkMixin`
   - Goal:
     tie live mutation and restore-to-live-chunk boundaries into the same trace story
 - [ ] Add transaction correlation ids if the timeline becomes ambiguous
   - Goal:
-    support stronger invariants such as cancelled-vanilla-save without Chunkis flush
-- [ ] Add decoder/mapping failure events
+    extend the new save/load/restore operation ids across the remaining lifecycle edges
+  - [ ] Add decoder/mapping failure events
   - Goal:
     distinguish persistence loss from decode corruption
 - [ ] Add client-sync instrumentation
@@ -77,6 +77,19 @@
 - [x] No broad command surface beyond `on/off/latest/clear`
 - [x] No large watchpoint/export system
 - [x] No forced `BOTH` load-source classification
+
+## Small Phase 2 improvement completed in this pass
+
+- [x] Added operation ids to the current traced save/load/restore path
+  - Files:
+    `ChunkTraceStore`, `CisStorage`, `RegionFile`, `AsyncCisSaveManager`, `ThreadedAnvilChunkStorageMixin`, `ChunkSerializerMixin`, `ChunkRestorer`, `WorldChunkMixin`
+  - Goal:
+    keep one timeline coherent across hook, queue, storage, and region-file boundaries
+- [x] Added first tracker and lifecycle-boundary evidence
+  - Files:
+    `GlobalChunkTracker`, `WorldChunkMixin`, `ChunkDebugCommand`
+  - Goal:
+    make dirty-map transitions visible, expose unload-cache hit/miss, surface stale async completions, and show `op=` in command timelines
 
 ## Verification completed for this pass
 

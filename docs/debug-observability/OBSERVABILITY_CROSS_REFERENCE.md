@@ -102,6 +102,42 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   `/chunkis debug latest <count>`
   `/chunkis debug clear`
 
+### Operation ids for traced timelines
+
+- Decision: `IMPLEMENTED`
+- Files:
+  `ChunkTraceStore`
+  `CisStorage`
+  `RegionFile`
+  `AsyncCisSaveManager`
+  `ThreadedAnvilChunkStorageMixin`
+  `ChunkSerializerMixin`
+  `ChunkRestorer`
+  `WorldChunkMixin`
+- Notes:
+  The current save/load/restore path now carries operation ids through the traced boundaries that actually participate in the first flight recorder.
+
+### Dirty tracker state visibility
+
+- Decision: `PARTIALLY_IMPLEMENTED`
+- Evidence:
+  `TRACKER_STATE_UPDATED`
+- Files:
+  `GlobalChunkTracker`
+- Notes:
+  Dirty-map put/remove, unload-cache hit/miss, and stale async completion are now visible.
+  Full unload-hook correlation is still deferred.
+
+### Off-thread world mutation rejection
+
+- Decision: `IMPLEMENTED`
+- Evidence:
+  `ASSERTION_FAILED reason=OFF_THREAD_MUTATION_REJECTED`
+- Files:
+  `WorldChunkMixin`
+- Notes:
+  This is a real assertion, but intentionally limited to the cheapest unambiguous case.
+
 ## Deferred intentionally
 
 ### `BOTH` load-source resolution
@@ -114,7 +150,7 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 
 - Decision: `DEFERRED`
 - Reason:
-  This pass focuses on capturing reliable evidence first. `ASSERTION_FAILED` wiring comes after transaction correlation is stronger.
+  This still comes after lifecycle correlation is stronger beyond the currently traced save/load/restore path.
 
 ### Client-sync ordering
 

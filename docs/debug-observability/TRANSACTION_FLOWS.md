@@ -2,6 +2,11 @@
 
 This file reflects the Phase 2 implementation as it exists now, not the larger future design.
 
+Current note:
+
+- The traced save/load/restore path now carries operation ids across the participating events below.
+- `/chunkis debug latest <count>` now prints `op=...` so those timelines are visible in command output.
+
 ## Normal async save
 
 1. `SAVE_TX_START`
@@ -40,6 +45,18 @@ Notes:
 
 - This is recorded at the region-write cancellation hook.
 - Correlating it to a specific queued/flushed Chunkis save is still a future transaction-correlation step.
+
+## Dirty tracker activity
+
+1. `DELTA_MARKED_DIRTY`
+2. `TRACKER_STATE_UPDATED reason=TRACKER_DIRTY_MAP_PUT`
+3. optional later `TRACKER_STATE_UPDATED reason=TRACKER_MARK_SAVED`
+4. optional `TRACKER_STATE_UPDATED reason=STALE_GENERATION_IGNORED`
+
+## Unload-cache lookup
+
+1. active dirty delta missing
+2. `TRACKER_STATE_UPDATED reason=TRACKER_UNLOAD_CACHE_HIT|TRACKER_UNLOAD_CACHE_MISS`
 
 ## Load from tracker memory
 

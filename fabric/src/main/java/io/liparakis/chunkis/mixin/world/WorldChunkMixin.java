@@ -3,6 +3,12 @@ package io.liparakis.chunkis.mixin.world;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import io.liparakis.chunkis.world.ChunkBlockEntityCapture;
 import io.liparakis.chunkis.world.ChunkRestorer;
@@ -38,6 +44,9 @@ import java.util.function.Predicate;
  */
 @Mixin(WorldChunk.class)
 public class WorldChunkMixin {
+
+    @Unique
+    private static final String SOURCE = "WorldChunkMixin";
 
     /**
      * Matches Nether portal POI entries already known to vanilla's POI storage.
@@ -231,6 +240,20 @@ public class WorldChunkMixin {
         }
 
         if (!chunkis$isOnServerThread(world)) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.OFF_THREAD_MUTATION_REJECTED,
+                    SOURCE + "#chunkis$shouldNotTrackChunkMutation",
+                    "rejected mutation outside server thread",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                    null,
+                    null,
+                    null,
+                    null
+            );
             Chunkis.LOGGER.warn(
                     "Chunkis: Block change rejected outside server thread for chunk {} on thread {}",
                     chunk.getPos(),
@@ -300,7 +323,13 @@ public class WorldChunkMixin {
 
         try {
             chunkis$isRestoring = true;
-            ChunkRestorer.restore(world, chunk, protoDelta, selfDelta);
+            ChunkRestorer.restore(
+                    world,
+                    chunk,
+                    protoDelta,
+                    selfDelta,
+                    ChunkTraceStore.nextOperationId("restore")
+            );
             chunkis$resyncPortalPointOfInterestStorage(world, chunk);
             io.liparakis.chunkis.portal.PortalChunkIndexManager.updateChunk(world, chunk);
         } catch (final Exception e) {

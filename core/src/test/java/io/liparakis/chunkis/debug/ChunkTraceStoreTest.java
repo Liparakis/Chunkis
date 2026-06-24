@@ -69,4 +69,11 @@ class ChunkTraceStoreTest {
         assertThat(latest).extracting(ChunkTraceEvent::eventId)
                 .containsExactly(4L, 3L, 2L);
     }
+
+    @Test
+    void createsMonotonicOperationIds() {
+        assertThat(ChunkTraceStore.nextOperationId("save")).isEqualTo("save-1");
+        assertThat(ChunkTraceStore.nextOperationId("save")).isEqualTo("save-2");
+        assertThat(ChunkTraceStore.nextOperationId("load")).isEqualTo("load-3");
+    }
 }

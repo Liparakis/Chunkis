@@ -106,6 +106,22 @@ public final class ChunkRestorer {
             final ChunkDelta<BlockState, NbtCompound> protoDelta,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta
     ) {
+        restore(
+                world,
+                chunk,
+                protoDelta,
+                runtimeDelta,
+                null
+        );
+    }
+
+    public static void restore(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> protoDelta,
+            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
+            final String operationId
+    ) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(chunk, "chunk");
         Objects.requireNonNull(protoDelta, "protoDelta");
@@ -128,7 +144,7 @@ public final class ChunkRestorer {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(chunkPos.x, chunkPos.z),
                 null,
-                null,
+                operationId,
                 protoDelta.isDirty(),
                 null
         );
@@ -149,7 +165,7 @@ public final class ChunkRestorer {
                     world.getRegistryKey().getValue().toString(),
                     new DebugChunkKey(chunkPos.x, chunkPos.z),
                     null,
-                    null,
+                    operationId,
                     null,
                     null
             );
@@ -173,11 +189,10 @@ public final class ChunkRestorer {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(chunkPos.x, chunkPos.z),
                 null,
-                null,
+                operationId,
                 runtimeDelta != null && runtimeDelta.isDirty(),
                 null
         );
-
     }
 
     /**

@@ -161,6 +161,10 @@ public final class CisStorage<B, S, P, N> {
      * @return {@code true} if the save or clear succeeded
      */
     public boolean save(final CisChunkPos pos, final ChunkDelta<S, N> delta) {
+        return save(pos, delta, ChunkTraceStore.nextOperationId("save"));
+    }
+
+    public boolean save(final CisChunkPos pos, final ChunkDelta<S, N> delta, final String operationId) {
         Objects.requireNonNull(pos, "pos");
         Objects.requireNonNull(delta, "delta");
 
@@ -174,7 +178,7 @@ public final class CisStorage<B, S, P, N> {
                 null,
                 toChunkKey(pos),
                 toRegionKey(pos),
-                null,
+                operationId,
                 delta.isDirty(),
                 null
         );
@@ -182,7 +186,7 @@ public final class CisStorage<B, S, P, N> {
         try {
             final PreparedSave preparedSave = prepareSave(pos, delta);
 
-            if (!writePrepared(pos, preparedSave)) {
+            if (!writePrepared(pos, preparedSave, operationId)) {
                 return false;
             }
 
@@ -200,7 +204,7 @@ public final class CisStorage<B, S, P, N> {
                     null,
                     toChunkKey(pos),
                     toRegionKey(pos),
-                    null,
+                    operationId,
                     delta.isDirty(),
                     null
             );
@@ -244,6 +248,14 @@ public final class CisStorage<B, S, P, N> {
      */
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public boolean writePrepared(final CisChunkPos pos, final PreparedSave preparedSave) throws IOException {
+        return writePrepared(pos, preparedSave, ChunkTraceStore.nextOperationId("flush"));
+    }
+
+    public boolean writePrepared(
+            final CisChunkPos pos,
+            final PreparedSave preparedSave,
+            final String operationId
+    ) throws IOException {
         Objects.requireNonNull(pos, "pos");
         Objects.requireNonNull(preparedSave, "preparedSave");
 
@@ -261,7 +273,7 @@ public final class CisStorage<B, S, P, N> {
                 null,
                 toChunkKey(pos),
                 toRegionKey(pos),
-                null,
+                operationId,
                 null,
                 preparedSave.rawData().length
         );
@@ -273,7 +285,7 @@ public final class CisStorage<B, S, P, N> {
             return false;
         }
 
-        regionFile.write(pos, compressedData);
+        regionFile.write(pos, compressedData, operationId);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE,
                 ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
@@ -284,7 +296,7 @@ public final class CisStorage<B, S, P, N> {
                 null,
                 toChunkKey(pos),
                 toRegionKey(pos),
-                null,
+                operationId,
                 null,
                 compressedData.length
         );
@@ -301,6 +313,10 @@ public final class CisStorage<B, S, P, N> {
      * @return loaded chunk delta, or an empty delta if missing or corrupt
      */
     public ChunkDelta<S, N> load(final CisChunkPos pos) {
+        return load(pos, ChunkTraceStore.nextOperationId("load"));
+    }
+
+    public ChunkDelta<S, N> load(final CisChunkPos pos, final String operationId) {
         Objects.requireNonNull(pos, "pos");
 
         ChunkTraceStore.trace(
@@ -313,13 +329,13 @@ public final class CisStorage<B, S, P, N> {
                 null,
                 toChunkKey(pos),
                 toRegionKey(pos),
-                null,
+                operationId,
                 null,
                 null
         );
 
         try {
-            final ChunkDelta<S, N> delta = loadUnchecked(pos);
+            final ChunkDelta<S, N> delta = loadUnchecked(pos, operationId);
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     ChunkTraceEventType.LOAD_TX_END,
@@ -330,7 +346,7 @@ public final class CisStorage<B, S, P, N> {
                     null,
                     toChunkKey(pos),
                     toRegionKey(pos),
-                    null,
+                    operationId,
                     delta.isDirty(),
                     null
             );
@@ -346,7 +362,7 @@ public final class CisStorage<B, S, P, N> {
                     null,
                     toChunkKey(pos),
                     toRegionKey(pos),
-                    null,
+                    operationId,
                     null,
                     null
             );
@@ -373,7 +389,7 @@ public final class CisStorage<B, S, P, N> {
      */
     public ChunkDelta<S, N> loadWithoutClearing(final CisChunkPos pos) throws IOException {
         Objects.requireNonNull(pos, "pos");
-        return loadUnchecked(pos);
+        return loadUnchecked(pos, null);
     }
 
     /**
@@ -426,14 +442,14 @@ public final class CisStorage<B, S, P, N> {
      *
      * @throws IOException if region I/O, decompression, or decode fails
      */
-    private ChunkDelta<S, N> loadUnchecked(final CisChunkPos pos) throws IOException {
+    private ChunkDelta<S, N> loadUnchecked(final CisChunkPos pos, final String operationId) throws IOException {
         final RegionFile regionFile = getRegionFile(pos, false);
 
         if (regionFile == null) {
             return newEmptyDelta();
         }
 
-        final byte[] compressedData = regionFile.read(pos);
+        final byte[] compressedData = regionFile.read(pos, operationId);
 
         if (compressedData == null) {
             return newEmptyDelta();

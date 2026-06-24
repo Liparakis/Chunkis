@@ -85,6 +85,16 @@ public final class AsyncCisSaveManager {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> liveDelta
     ) {
+        submit(world, storage, pos, liveDelta, "save-" + pos.x + '-' + pos.z + '-' + liveDelta.getMutationGeneration());
+    }
+
+    public static void submit(
+            final ServerWorld world,
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> liveDelta,
+            final String operationId
+    ) {
         if (!liveDelta.isDirty()) {
             return;
         }
@@ -103,12 +113,12 @@ public final class AsyncCisSaveManager {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
-                null,
+                operationId,
                 liveDelta.isDirty(),
                 null
         );
 
-        workerFor(world).submit(new PendingSave(storage, pos, cisPos, liveDelta, snapshot, generation));
+        workerFor(world).submit(new PendingSave(storage, pos, cisPos, liveDelta, snapshot, generation, operationId));
     }
 
     /**
@@ -318,7 +328,7 @@ public final class AsyncCisSaveManager {
                 //Encode on the background thread!
                 final CisStorage.PreparedSave preparedSave = save.storage().prepareSave(save.cisPos(), save.snapshot());
 
-                if (!save.storage().writePrepared(save.cisPos(), preparedSave)) {
+                if (!save.storage().writePrepared(save.cisPos(), preparedSave, save.operationId())) {
                     return;
                 }
 
@@ -345,7 +355,7 @@ public final class AsyncCisSaveManager {
                     world.getRegistryKey().getValue().toString(),
                     new DebugChunkKey(save.pos().x, save.pos().z),
                     null,
-                    null,
+                    save.operationId(),
                     save.liveDelta().isDirty(),
                     null
             );
@@ -366,6 +376,7 @@ public final class AsyncCisSaveManager {
             ChunkDelta<BlockState, NbtCompound> liveDelta,
             ChunkDelta<BlockState, NbtCompound> snapshot,
             long generation,
+            String operationId,
             long posKey
     ) {
         /**
@@ -377,9 +388,10 @@ public final class AsyncCisSaveManager {
                 final CisChunkPos cisPos,
                 final ChunkDelta<BlockState, NbtCompound> liveDelta,
                 final ChunkDelta<BlockState, NbtCompound> snapshot,
-                final long generation
+                final long generation,
+                final String operationId
         ) {
-            this(storage, pos, cisPos, liveDelta, snapshot, generation, pos.toLong());
+            this(storage, pos, cisPos, liveDelta, snapshot, generation, operationId, pos.toLong());
         }
     }
 }

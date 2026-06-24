@@ -10,6 +10,7 @@ public final class ChunkTraceStore {
     private static final int DEFAULT_CAPACITY = 50_000;
 
     private static final AtomicLong EVENT_IDS = new AtomicLong();
+    private static final AtomicLong OPERATION_IDS = new AtomicLong();
 
     private static final Object MONITOR = new Object();
 
@@ -38,6 +39,11 @@ public final class ChunkTraceStore {
         }
 
         return stored;
+    }
+
+    public static String nextOperationId(final String prefix) {
+        Objects.requireNonNull(prefix, "prefix");
+        return prefix + '-' + OPERATION_IDS.incrementAndGet();
     }
 
     public static void trace(
@@ -115,6 +121,7 @@ public final class ChunkTraceStore {
             size = 0;
             writeIndex = 0;
             EVENT_IDS.set(0L);
+            OPERATION_IDS.set(0L);
         }
     }
 

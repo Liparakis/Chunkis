@@ -68,9 +68,14 @@ This file separates Phase 2 invariants into three buckets:
 
 ## `UNLOAD_DIRTY_CHUNK_NOT_SILENT`
 
-- Status: `NOT_IMPLEMENTED_YET`
-- Why not enforced yet:
-  `GlobalChunkTracker` and unload-adjacent lifecycle hooks are not instrumented in this pass.
+- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Evidence now available:
+  `TRACKER_STATE_UPDATED`
+- Current hook points:
+  `GlobalChunkTracker`
+- Notes:
+  Dirty-map insert/remove, unload-cache hit/miss, and stale async completion are now visible.
+  True unload-hook correlation is still deferred.
 
 ## `PALETTE_LOOKUP_FAILURE_IDENTIFIED`
 
@@ -95,3 +100,13 @@ This file separates Phase 2 invariants into three buckets:
 - Status: `NOT_IMPLEMENTED_YET`
 - Why not enforced yet:
   Client-sync instrumentation is intentionally outside this Phase 2 slice.
+
+## `OFF_THREAD_MUTATION_REJECTED`
+
+- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Evidence now available:
+  `ASSERTION_FAILED` with reason `OFF_THREAD_MUTATION_REJECTED`
+- Current hook points:
+  `WorldChunkMixin`
+- Notes:
+  This is the first actual assertion event implemented because it is cheap and unambiguous.

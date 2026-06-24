@@ -232,12 +232,26 @@ public final class BaseChunkCaptureScheduler {
             final ServerWorld world,
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
-        if (rejectSparse(world, pos, delta, "scheduler-async", "BaseChunkCaptureScheduler#submitAsync")) {
+        final String operationId = "save-" + pos.x + '-' + pos.z + '-' + delta.getMutationGeneration();
+        if (rejectSparse(
+                world,
+                pos,
+                delta,
+                "scheduler-async",
+                "BaseChunkCaptureScheduler#submitAsync",
+                operationId
+        )) {
             return;
         }
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
                 FabricCisStorageHelper.getStorage(world);
-        AsyncCisSaveManager.submit(world, storage, pos, delta);
+        AsyncCisSaveManager.submit(
+                world,
+                storage,
+                pos,
+                delta,
+                operationId
+        );
     }
 
     /**
@@ -255,12 +269,24 @@ public final class BaseChunkCaptureScheduler {
             final ServerWorld world,
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
-        if (rejectSparse(world, pos, delta, "scheduler-sync", "BaseChunkCaptureScheduler#saveSynchronously")) {
+        final String operationId = "save-" + pos.x + '-' + pos.z + '-' + delta.getMutationGeneration();
+        if (rejectSparse(
+                world,
+                pos,
+                delta,
+                "scheduler-sync",
+                "BaseChunkCaptureScheduler#saveSynchronously",
+                operationId
+        )) {
             return false;
         }
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
                 FabricCisStorageHelper.getStorage(world);
-        if (!storage.save(new CisChunkPos(pos.x, pos.z), delta)) {
+        if (!storage.save(
+                new CisChunkPos(pos.x, pos.z),
+                delta,
+                operationId
+        )) {
             return false;
         }
         GlobalChunkTracker.markSaved(world, pos);
@@ -286,7 +312,8 @@ public final class BaseChunkCaptureScheduler {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String context,
-            final String caller) {
+            final String caller,
+            final String operationId) {
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
             return false;
         }
@@ -300,7 +327,7 @@ public final class BaseChunkCaptureScheduler {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
-                null,
+                operationId,
                 delta.isDirty(),
                 null
         );

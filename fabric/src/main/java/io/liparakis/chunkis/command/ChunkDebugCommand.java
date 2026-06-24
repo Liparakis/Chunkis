@@ -90,6 +90,9 @@ public final class ChunkDebugCommand {
         if (event.byteSize() != null) {
             builder.append(" bytes=").append(event.byteSize());
         }
+        if (event.operationId() != null) {
+            builder.append(" op=").append(event.operationId());
+        }
 
         builder.append(" src=").append(event.source());
         builder.append(" thread=").append(event.threadName());

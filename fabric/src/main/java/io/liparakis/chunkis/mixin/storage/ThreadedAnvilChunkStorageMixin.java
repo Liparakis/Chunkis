@@ -193,6 +193,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final long currentTime,
             final CallbackInfoReturnable<Boolean> cir) {
         final ChunkPos pos = chunkHolder.getPos();
+        final String operationId = ChunkTraceStore.nextOperationId("save");
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.SAVE_TX_START,
@@ -203,7 +204,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
-                null,
+                operationId,
                 null,
                 null
         );
@@ -223,7 +224,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             if (chunk instanceof ChunkisDeltaDuck duck) {
                 duck.chunkis$setDelta(delta);
             }
-            chunkis$queueDirtyDelta(chunkis$getStorage(), pos, delta);
+            chunkis$queueDirtyDelta(chunkis$getStorage(), pos, delta, operationId);
         }
 
         if (chunk != null) {
@@ -428,15 +429,16 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
+        final String operationId = ChunkTraceStore.nextOperationId("save");
         if (delta == null || !delta.isDirty()) {
             return;
         }
         if (chunkis$rejectSparse(pos, delta, "load-path-sync", "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta"
-        )) {
+                , operationId)) {
             return;
         }
 
-        if (storage.save(new CisChunkPos(pos.x, pos.z), delta)) {
+        if (storage.save(new CisChunkPos(pos.x, pos.z), delta, operationId)) {
             GlobalChunkTracker.markSaved(world, pos);
         }
     }
@@ -456,18 +458,19 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     private void chunkis$queueDirtyDelta(
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId) {
         if (delta == null || !delta.isDirty()) {
             return;
         }
         if (chunkis$rejectSparse(
                 pos, delta, "save-hook-async", "ThreadedAnvilChunkStorageMixin" +
-                        "#chunkis$queueDirtyDelta"
+                        "#chunkis$queueDirtyDelta", operationId
         )) {
             return;
         }
 
-        AsyncCisSaveManager.submit(world, storage, pos, delta);
+        AsyncCisSaveManager.submit(world, storage, pos, delta, operationId);
     }
 
     /**
@@ -487,7 +490,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos pos,
             final ChunkDelta<?, ?> delta,
             final String path,
-            final String caller) {
+            final String caller,
+            final String operationId) {
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
             return false;
         }
@@ -501,7 +505,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
-                null,
+                operationId,
                 delta.isDirty(),
                 null
         );

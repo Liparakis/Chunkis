@@ -56,14 +56,15 @@ class CisStorageTraceTest {
         final CisChunkPos pos = new CisChunkPos(3, -2);
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
         delta.addBlockChange(1, 70, 1, "stone");
+        final String saveOperationId = "save-op-1";
+        final String loadOperationId = "load-op-1";
 
-        assertThat(storage.save(pos, delta)).isTrue();
-        storage.load(pos);
+        assertThat(storage.save(pos, delta, saveOperationId)).isTrue();
+        storage.load(pos, loadOperationId);
         storage.close();
 
-        final List<ChunkTraceEventType> eventTypes = ChunkTraceStore.latest(20).stream()
-                .map(ChunkTraceEvent::eventType)
-                .toList();
+        final List<ChunkTraceEvent> events = ChunkTraceStore.latest(20);
+        final List<ChunkTraceEventType> eventTypes = events.stream().map(ChunkTraceEvent::eventType).toList();
 
         assertThat(eventTypes).contains(
                 ChunkTraceEventType.SAVE_FLUSH_STARTED,
@@ -73,6 +74,25 @@ class CisStorageTraceTest {
                 ChunkTraceEventType.REGION_READ_TX_START,
                 ChunkTraceEventType.REGION_READ_TX_END
         );
+        assertThat(events)
+                .filteredOn(event -> saveOperationId.equals(event.operationId()))
+                .extracting(ChunkTraceEvent::eventType)
+                .contains(
+                        ChunkTraceEventType.SAVE_TX_START,
+                        ChunkTraceEventType.SAVE_FLUSH_STARTED,
+                        ChunkTraceEventType.REGION_WRITE_TX_START,
+                        ChunkTraceEventType.REGION_WRITE_TX_END,
+                        ChunkTraceEventType.SAVE_FLUSH_COMPLETED
+                );
+        assertThat(events)
+                .filteredOn(event -> loadOperationId.equals(event.operationId()))
+                .extracting(ChunkTraceEvent::eventType)
+                .contains(
+                        ChunkTraceEventType.LOAD_TX_START,
+                        ChunkTraceEventType.REGION_READ_TX_START,
+                        ChunkTraceEventType.REGION_READ_TX_END,
+                        ChunkTraceEventType.LOAD_TX_END
+                );
     }
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {

@@ -79,6 +79,7 @@ public class ChunkSerializerMixin {
         if (chunk == null) {
             return;
         }
+        final String operationId = ChunkTraceStore.nextOperationId("load");
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.LOAD_TX_START,
@@ -89,11 +90,11 @@ public class ChunkSerializerMixin {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(chunkPos.x, chunkPos.z),
                 null,
-                null,
+                operationId,
                 null,
                 null
         );
-        chunkis$restoreChunkDelta(world, chunkPos, chunk);
+        chunkis$restoreChunkDelta(world, chunkPos, chunk, operationId);
     }
 
     /**
@@ -120,8 +121,9 @@ public class ChunkSerializerMixin {
     private static void chunkis$restoreChunkDelta(
             final ServerWorld world,
             final ChunkPos pos,
-            final ProtoChunk chunk) {
-        final ResolvedDelta resolved = chunkis$loadDelta(world, pos);
+            final ProtoChunk chunk,
+            final String operationId) {
+        final ResolvedDelta resolved = chunkis$loadDelta(world, pos, operationId);
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -133,7 +135,7 @@ public class ChunkSerializerMixin {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
-                null,
+                operationId,
                 resolved.delta() != null && resolved.delta().isDirty(),
                 null
         );
@@ -149,7 +151,7 @@ public class ChunkSerializerMixin {
                     world.getRegistryKey().getValue().toString(),
                     new DebugChunkKey(pos.x, pos.z),
                     null,
-                    null,
+                    operationId,
                     null,
                     null
             );
@@ -171,7 +173,7 @@ public class ChunkSerializerMixin {
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
-                null,
+                operationId,
                 delta.isDirty(),
                 null
         );
@@ -191,7 +193,8 @@ public class ChunkSerializerMixin {
     @Unique
     private static ResolvedDelta chunkis$loadDelta(
             final ServerWorld world,
-            final ChunkPos pos) {
+            final ChunkPos pos,
+            final String operationId) {
         final ChunkDelta<?, ?> memoryDelta = GlobalChunkTracker.getDelta(world, pos);
         if (!chunkis$isDeltaAbsent(memoryDelta)) {
             return new ResolvedDelta(
@@ -199,7 +202,7 @@ public class ChunkSerializerMixin {
                     ChunkTraceReason.TRACKER_MEMORY
             );
         }
-        final ChunkDelta<BlockState, NbtCompound> diskDelta = chunkis$loadDeltaFromDisk(world, pos);
+        final ChunkDelta<BlockState, NbtCompound> diskDelta = chunkis$loadDeltaFromDisk(world, pos, operationId);
         return new ResolvedDelta(
                 diskDelta,
                 chunkis$isDeltaAbsent(diskDelta)
@@ -221,9 +224,10 @@ public class ChunkSerializerMixin {
     @Unique
     private static ChunkDelta<BlockState, NbtCompound> chunkis$loadDeltaFromDisk(
             final ServerWorld world,
-            final ChunkPos pos) {
+            final ChunkPos pos,
+            final String operationId) {
         return FabricCisStorageHelper.getStorage(world)
-                .load(new CisChunkPos(pos.x, pos.z));
+                .load(new CisChunkPos(pos.x, pos.z), operationId);
     }
 
     /**

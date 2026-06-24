@@ -179,6 +179,10 @@ final class RegionFile implements AutoCloseable {
      * @throws IOException if a read error occurs
      */
     synchronized byte[] read(CisChunkPos pos) throws IOException {
+        return read(pos, null);
+    }
+
+    synchronized byte[] read(CisChunkPos pos, String operationId) throws IOException {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE,
                 ChunkTraceEventType.REGION_READ_TX_START,
@@ -189,7 +193,7 @@ final class RegionFile implements AutoCloseable {
                 null,
                 new DebugChunkKey(pos.x(), pos.z()),
                 regionKey(),
-                null,
+                operationId,
                 null,
                 null
         );
@@ -207,7 +211,7 @@ final class RegionFile implements AutoCloseable {
                     null,
                     new DebugChunkKey(pos.x(), pos.z()),
                     regionKey(),
-                    null,
+                    operationId,
                     null,
                     null
             );
@@ -231,7 +235,7 @@ final class RegionFile implements AutoCloseable {
                 null,
                 new DebugChunkKey(pos.x(), pos.z()),
                 regionKey(),
-                null,
+                operationId,
                 null,
                 lengths[index]
         );
@@ -257,6 +261,10 @@ final class RegionFile implements AutoCloseable {
      * @throws IOException if a write error occurs
      */
     synchronized void write(CisChunkPos pos, byte[] data) throws IOException {
+        write(pos, data, null);
+    }
+
+    synchronized void write(CisChunkPos pos, byte[] data, String operationId) throws IOException {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE,
                 ChunkTraceEventType.REGION_WRITE_TX_START,
@@ -267,7 +275,7 @@ final class RegionFile implements AutoCloseable {
                 null,
                 new DebugChunkKey(pos.x(), pos.z()),
                 regionKey(),
-                null,
+                operationId,
                 null,
                 data == null ? 0 : data.length
         );
@@ -297,7 +305,7 @@ final class RegionFile implements AutoCloseable {
                     null,
                     new DebugChunkKey(pos.x(), pos.z()),
                     regionKey(),
-                    null,
+                    operationId,
                     null,
                     0
             );
@@ -323,7 +331,7 @@ final class RegionFile implements AutoCloseable {
                     null,
                     new DebugChunkKey(pos.x(), pos.z()),
                     regionKey(),
-                    null,
+                    operationId,
                     null,
                     dataLength
             );
@@ -349,7 +357,7 @@ final class RegionFile implements AutoCloseable {
                 null,
                 new DebugChunkKey(pos.x(), pos.z()),
                 regionKey(),
-                null,
+                operationId,
                 null,
                 dataLength
         );

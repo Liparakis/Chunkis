@@ -28,7 +28,7 @@ class ChunkDebugCommandTest {
                 "minecraft:overworld",
                 new DebugChunkKey(12, -8),
                 new DebugRegionKey(0, -1),
-                null,
+                "save-12--8-7",
                 Boolean.FALSE,
                 512
         );
@@ -43,6 +43,7 @@ class ChunkDebugCommandTest {
         assertTrue(formatted.contains("region=0,-1"));
         assertTrue(formatted.contains("dirty=false"));
         assertTrue(formatted.contains("bytes=512"));
+        assertTrue(formatted.contains("op=save-12--8-7"));
         assertTrue(formatted.contains("src=CisStorage#writePrepared"));
         assertTrue(formatted.contains("thread=Server thread"));
         assertTrue(formatted.contains("msg=flush completed"));

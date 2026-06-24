@@ -50,7 +50,7 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Meaning:
   The async save manager accepted a save submission.
 - Current fields:
-  world id, chunk key, source, dirty state
+  world id, chunk key, source, operation id, dirty state
 - Notes:
   Generation is currently encoded in the message, not a dedicated field.
 
@@ -62,6 +62,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `core/.../storage/io/CisStorage.java`
 - Meaning:
   Storage is beginning compression/write of a prepared payload.
+- Current fields:
+  chunk key, region key, source, operation id, byte size
 
 ### `SAVE_FLUSH_COMPLETED`
 
@@ -72,7 +74,7 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Meaning:
   Storage completed a prepared payload write successfully.
 - Current fields:
-  chunk key, region key, source, byte size
+  chunk key, region key, source, operation id, byte size
 
 ### `SAVE_FLUSH_FAILED`
 
@@ -85,6 +87,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   A synchronous or async save flush failed.
 - Current reason values:
   `IO_EXCEPTION`
+- Current fields:
+  chunk key, source, operation id
 
 ### `REGION_WRITE_TX_START`
 
@@ -94,6 +98,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `core/.../storage/io/RegionFile.java`
 - Meaning:
   Region-file write work started for one chunk slot.
+- Current fields:
+  chunk key, region key, source, operation id, byte size
 
 ### `REGION_WRITE_TX_END`
 
@@ -104,7 +110,7 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Meaning:
   Region-file write work completed for one chunk slot.
 - Current fields:
-  chunk key, region key, source, byte size
+  chunk key, region key, source, operation id, byte size
 
 ### `DELTA_MARKED_DIRTY`
 
@@ -128,6 +134,34 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Current reason values:
   `DELTA_MARKED_SAVED`
 
+### `TRACKER_STATE_UPDATED`
+
+- Domain: `DIRTY_TRACKING`
+- Severity: `INFO`
+- Implemented in:
+  `fabric/.../world/GlobalChunkTracker.java`
+- Meaning:
+  The dirty tracker changed meaningful state or answered an unload-cache lookup.
+- Current reason values:
+  `TRACKER_DIRTY_MAP_PUT`
+  `TRACKER_MARK_SAVED`
+  `TRACKER_UNLOAD_CACHE_HIT`
+  `TRACKER_UNLOAD_CACHE_MISS`
+  `STALE_GENERATION_IGNORED`
+
+### `ASSERTION_FAILED`
+
+- Domain: `ASSERTIONS`
+- Severity: `ERROR`
+- Implemented in:
+  `fabric/.../mixin/world/WorldChunkMixin.java`
+- Meaning:
+  A cheap, high-confidence invariant failed.
+- Current reason values:
+  `OFF_THREAD_MUTATION_REJECTED`
+- Notes:
+  This is intentionally narrow. General invariant enforcement is still deferred.
+
 ### `LOAD_TX_START`
 
 - Domain: `CHUNK_LIFECYCLE`
@@ -137,6 +171,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `fabric/.../mixin/storage/ChunkSerializerMixin.java`
 - Meaning:
   Load resolution started either at the storage boundary or at the Fabric proto-attach boundary.
+- Current fields:
+  chunk key, optional region key, source, operation id
 
 ### `REGION_READ_TX_START`
 
@@ -146,6 +182,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `core/.../storage/io/RegionFile.java`
 - Meaning:
   Region-file read work started for one chunk slot.
+- Current fields:
+  chunk key, region key, source, operation id
 
 ### `REGION_READ_TX_END`
 
@@ -157,6 +195,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   Region-file read work completed or returned no payload.
 - Current reason values:
   `STORAGE_READ`, `MISSING_ENTRY`
+- Current fields:
+  chunk key, region key, source, operation id, optional byte size
 
 ### `LOAD_SOURCE_RESOLVED`
 
@@ -170,6 +210,7 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `TRACKER_MEMORY`, `CHUNKIS_STORAGE`, `NEITHER`
 - Notes:
   `BOTH` is intentionally not emitted yet because current code does not observe both sources truthfully in one pass.
+  Current traced load paths now carry one shared operation id from serializer to storage read.
 
 ### `LOAD_TX_END`
 
@@ -180,6 +221,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `fabric/.../mixin/storage/ChunkSerializerMixin.java`
 - Meaning:
   Load resolution ended either with an empty result, a stored delta, or an attached delta.
+- Current fields:
+  chunk key, optional region key, source, operation id
 
 ### `RESTORE_TX_START`
 
@@ -189,6 +232,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `fabric/.../world/ChunkRestorer.java`
 - Meaning:
   Restore into a live `WorldChunk` started.
+- Current fields:
+  world id, chunk key, source, operation id
 
 ### `RESTORE_COMPLETED`
 
@@ -201,7 +246,7 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Current reason values:
   `NONE`, `RESTORE_EMPTY_RESULT`
 - Current fields:
-  world id, chunk key, source
+  world id, chunk key, source, operation id
 - Notes:
   Applied block/block-entity/entity counts are currently carried in the message.
 
@@ -215,10 +260,12 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   Restore failed with an exception that is rethrown after tracing.
 - Current reason values:
   `RESTORE_EXCEPTION`
+- Current fields:
+  world id, chunk key, source, operation id
 
 ## Not implemented yet
 
-- No operation/transaction id threading yet.
+- No cross-system transaction id threading for vanilla-cancel -> Chunkis-save correlation yet.
 - No `BOTH` load-source classification yet.
 - No palette/mapping failure events yet.
 - No client-sync events yet.
