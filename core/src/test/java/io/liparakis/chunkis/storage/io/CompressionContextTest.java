@@ -1,28 +1,18 @@
 package io.liparakis.chunkis.storage.io;
 
-import io.liparakis.chunkis.storage.model.CisConstants;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
-import java.util.zip.Deflater;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class CompressionContextTest {
 
     @Test
-    void usesUncompressedDeflateForSmallPayloads() {
-        assertThat(CompressionContext.compressionLevelFor(CisConstants.UNCOMPRESSED_DELTA_THRESHOLD))
-                .isEqualTo(Deflater.NO_COMPRESSION);
-        assertThat(CompressionContext.compressionLevelFor(CisConstants.UNCOMPRESSED_DELTA_THRESHOLD + 1))
-                .isEqualTo(CisConstants.COMPRESSION_LEVEL);
-    }
-
-    @Test
-    void roundTripsPayloadsAcrossAdaptiveCompressionLevels() throws Exception {
+    void roundTripsPayloadsWithZstdLevelThree() throws Exception {
         final CompressionContext context = new CompressionContext();
-        final byte[] smallPayload = new byte[CisConstants.UNCOMPRESSED_DELTA_THRESHOLD];
-        final byte[] largePayload = new byte[CisConstants.UNCOMPRESSED_DELTA_THRESHOLD + 1024];
+        final byte[] smallPayload = new byte[256];
+        final byte[] largePayload = new byte[16 * 1024];
 
         for (int i = 0; i < smallPayload.length; i++) {
             smallPayload[i] = (byte) i;

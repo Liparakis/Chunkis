@@ -29,7 +29,7 @@ repositories {
     mavenCentral()
     maven {
         name = 'Fabric'
-        url  = 'https://maven.fabricmc.net/'
+        url = 'https://maven.fabricmc.net/'
     }
 }
 
@@ -45,16 +45,19 @@ dependencies {
     implementation("io.liparakis.chunkis:chunkis-cismigrator:1.0.0")
     include("io.liparakis.chunkis:chunkis-cismigrator:1.0.0")
 
+    implementation("com.github.luben:zstd-jni:1.5.7-11")
+    include("com.github.luben:zstd-jni:1.5.7-11")
+
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 fabricApi {
     configureTests {
-        createSourceSet        = true
-        modId                  = "chunkis-gametest"
-        enableGameTests        = true
-        enableClientGameTests  = false
+        createSourceSet = true
+        modId = "chunkis-gametest"
+        enableGameTests = true
+        enableClientGameTests = false
     }
 }
 
@@ -72,9 +75,9 @@ processResources {
 
     filesMatching("fabric.mod.json") {
         expand([
-            version          : project.version,
-            minecraft_version: minecraftVersion,
-            loader_version   : loaderVersion,
+                version          : project.version,
+                minecraft_version: minecraftVersion,
+                loader_version   : loaderVersion,
         ])
     }
 }

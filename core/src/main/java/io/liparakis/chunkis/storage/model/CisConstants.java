@@ -65,21 +65,9 @@ public final class CisConstants {
     public static final int MAX_Y = (MAX_SECTION_Y + 1) * SECTION_SIZE - 1;
 
     /**
-     * Default compression level for chunk data.
-     * Uses BEST_SPEED (level 1) for fast compression with reasonable ratio.
+     * Zstd compression level used for CIS region payloads.
      */
-    public static final int COMPRESSION_LEVEL = 1; // Deflater.BEST_SPEED
-
-    /**
-     * Raw CIS payloads at or below this size are wrapped in a DEFLATE stream
-     * without compression.
-     * <p>
-     * Small deltas are common on the save hot path, and the CPU cost of
-     * compressing them is often higher than the disk cost of a few extra bytes.
-     * The payload remains inflater-compatible, so this does not change the CIS
-     * region format.
-     */
-    public static final int UNCOMPRESSED_DELTA_THRESHOLD = 8192;
+    public static final int COMPRESSION_LEVEL = 3;
 
     /**
      * Maximum cached region files (64 files).
@@ -117,6 +105,11 @@ public final class CisConstants {
      * Sentinel block-count value used by uniform v11 sections.
      */
     public static final int UNIFORM_SECTION_SENTINEL = SECTION_SIZE * SECTION_SIZE * SECTION_SIZE;
+
+    /**
+     * Sentinel block-count value used by default-sparse v11 sections.
+     */
+    public static final int DEFAULT_SPARSE_SECTION_SENTINEL = UNIFORM_SECTION_SENTINEL + 1;
 
     /**
      * Encoding type flag indicating that a section uses sparse storage,

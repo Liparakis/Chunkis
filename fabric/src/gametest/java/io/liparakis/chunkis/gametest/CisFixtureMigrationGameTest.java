@@ -113,10 +113,6 @@ public final class CisFixtureMigrationGameTest {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Fixture setup
-    // -------------------------------------------------------------------------
-
     /**
      * Copies the read-only V8 fixture set into the active GameTest world save.
      *
@@ -178,10 +174,6 @@ public final class CisFixtureMigrationGameTest {
             throw e;
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Chunk collection and snapshotting
-    // -------------------------------------------------------------------------
 
     /**
      * Reads region file headers and returns the absolute chunk positions for every
@@ -257,10 +249,6 @@ public final class CisFixtureMigrationGameTest {
         return snapshots;
     }
 
-    // -------------------------------------------------------------------------
-    // Utilities
-    // -------------------------------------------------------------------------
-
     /**
      * Reads one big-endian {@code int} from {@code bytes} at {@code offset}.
      *
@@ -289,10 +277,6 @@ public final class CisFixtureMigrationGameTest {
         return root;
     }
 
-    // -------------------------------------------------------------------------
-    // ChunkSnapshot record
-    // -------------------------------------------------------------------------
-
     /**
      * Stable logical representation of one decoded chunk delta, used for
      * before/after equality checks.
@@ -318,6 +302,9 @@ public final class CisFixtureMigrationGameTest {
             final List<String> blocks = new ArrayList<>();
             for (final BlockInstruction instruction : delta.getBlockInstructions()) {
                 final BlockState state = delta.getBlockPalette().get(instruction.paletteIndex());
+                if (state == null || state.isAir()) {
+                    continue;
+                }
                 blocks.add(instruction.x() + "," + instruction.y() + "," + instruction.z() + "=" + state);
             }
             blocks.sort(String::compareTo);

@@ -18,6 +18,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -25,29 +26,38 @@ import java.util.Objects;
  * Base class for CIS (Chunk Incremental Storage) encoders containing shared
  * encoding logic.
  *
+ * <p>Concrete subclasses supply {@link #writeGlobalPaletteEntry} for the
+ * version-specific block-state serialization format and {@link #getContext}
+ * to expose a per-instance reusable scratch context.</p>
+ *
  * @param <S> The BlockState type
  * @param <N> The NBT type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public abstract class AbstractCisEncoder<S, N> {
 
     /**
-     * Total number of blocks in a chunk section (16x16x16).
+     * Total number of blocks in a chunk section (16×16×16).
      */
     protected static final int SECTION_VOLUME = 4096;
 
-    /** Adapter used to inspect block-state structure during palette and section encoding. */
+    /**
+     * Adapter used to inspect block-state structure during palette and section encoding.
+     */
     protected final BlockStateAdapter<?, S, ?> stateAdapter;
-    /** Adapter used to serialize entity, block-entity, and chunk-metadata payloads. */
-    protected final NbtAdapter<N> nbtAdapter;
-    /** Canonical empty state used to guarantee stable air handling in local and global palettes. */
-    protected final S airState;
 
     /**
-     * Creates an encoder base configured with the adapters required by concrete codec variants.
+     * Adapter used to serialize entity, block-entity, and chunk-metadata payloads.
      */
+    protected final NbtAdapter<N> nbtAdapter;
+
+    /**
+     * Canonical empty state. Air is always assigned global palette index 0 so
+     * that absent (null) blocks in delta snapshots decode correctly.
+     */
+    protected final S airState;
+
     protected AbstractCisEncoder(BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter, S airState) {
         this.stateAdapter = stateAdapter;
         this.nbtAdapter = nbtAdapter;
@@ -55,24 +65,28 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
-     * Writes one global palette entry's block identity and properties.
+     * Writes one global palette entry's block identity and properties to {@code dos}.
+     * The bit-packed property data should be written to {@code ctx.bitWriter}; it is
+     * flushed and length-prefixed by {@link #writeGlobalPalette} after all entries.
      */
-    protected void writeGlobalPaletteEntry(
+    protected abstract void writeGlobalPaletteEntry(
             DataOutputStream dos,
             EncoderContext<S> ctx,
-            S state) throws IOException {
-        throw new UnsupportedOperationException("Subclasses must implement palette entry encoding");
-    }
+            S state) throws IOException;
 
     /**
-     * Internal method that orchestrates the complete encoding process.
+     * Returns the reusable encoding context owned by the concrete encoder implementation.
+     */
+    protected abstract EncoderContext<S> getContext();
+
+    /**
+     * Orchestrates the complete encoding process for one chunk delta.
      */
     protected byte[] encodeInternal(ChunkDelta<S, N> delta) throws IOException {
         EncoderContext<S> ctx = getContext();
         ctx.reset();
 
         DataOutputStream dos = new DataOutputStream(ctx.mainBuffer);
-
         EncodedChunkInput<S> input = fromDelta(delta);
 
         writeHeader(dos);
@@ -85,13 +99,17 @@ public abstract class AbstractCisEncoder<S, N> {
         return ctx.mainBuffer.toByteArray();
     }
 
-    /**
-     * Returns the reusable encoding context owned by the concrete encoder implementation.
-     */
-    protected abstract EncoderContext<S> getContext();
+    private static void writeHeader(DataOutputStream dos) throws IOException {
+        dos.writeInt(CisConstants.MAGIC);
+        dos.writeInt(CisConstants.VERSION);
+    }
 
     /**
-     * Writes the global block palette to the output stream.
+     * Writes the global block palette.
+     *
+     * <p>Air is always index 0. All bit-packed property data is accumulated in
+     * {@code ctx.bitWriter}, then length-prefixed and flushed once to avoid
+     * interleaving random-access seeking with the sequential stream.</p>
      */
     protected void writeGlobalPalette(
             DataOutputStream dos,
@@ -113,43 +131,6 @@ public abstract class AbstractCisEncoder<S, N> {
         dos.write(palettePropertyData);
     }
 
-    /**
-     * Converts a ChunkDelta to a CisChunk and collects states in the same pass.
-     */
-    private EncodedChunkInput<S> fromDelta(ChunkDelta<S, N> delta) {
-        final CisChunk<S> chunk = new CisChunk<>();
-        final EncoderContext<S> ctx = getContext();
-        final List<S> usedStates = ctx.seenStateList;
-        final Reference2IntMap<S> seenStates = ctx.seenStates;
-        usedStates.clear();
-        seenStates.clear();
-        seenStates.put(airState, 0);
-        usedStates.add(airState);
-
-        delta.forEachBlock((x, y, z, state) -> {
-            if (state != null) {
-                chunk.addUniqueBlock(x, y, z, state);
-                if (seenStates.getInt(state) == -1) {
-                    seenStates.put(state, usedStates.size());
-                    usedStates.add(state);
-                }
-            }
-        });
-
-        return new EncodedChunkInput<>(chunk, usedStates);
-    }
-
-    /**
-     * Writes the CIS file header.
-     */
-    private static void writeHeader(DataOutputStream dos) throws IOException {
-        dos.writeInt(CisConstants.MAGIC);
-        dos.writeInt(CisConstants.VERSION);
-    }
-
-    /**
-     * Writes all chunk sections.
-     */
     private void writeSections(DataOutputStream dos, EncoderContext<S> ctx, CisChunk<S> chunk)
             throws IOException {
         Int2ObjectMap<CisSection<S>> sections = chunk.getSections();
@@ -169,11 +150,11 @@ public abstract class AbstractCisEncoder<S, N> {
         dos.write(sectionData);
     }
 
-    /**
-     * Writes block entity data.
-     */
     private void writeBlockEntities(DataOutputStream dos, ChunkDelta<S, N> delta) throws IOException {
         Long2ObjectMap<N> bes = delta.getBlockEntities();
+
+        // Count non-null entries up front; null entries represent deletions and
+        // are omitted from the encoded payload.
         int nonNullCount = 0;
         for (Long2ObjectMap.Entry<N> entry : bes.long2ObjectEntrySet()) {
             if (entry.getValue() != null) {
@@ -193,15 +174,13 @@ public abstract class AbstractCisEncoder<S, N> {
             int packedPos = (int) BlockInstruction.packPos(
                     BlockInstruction.unpackX(p),
                     BlockInstruction.unpackY(p),
-                    BlockInstruction.unpackZ(p));
+                    BlockInstruction.unpackZ(p)
+            );
             dos.writeInt(packedPos);
             writeNbtPayload(blockEntityData, dos);
         }
     }
 
-    /**
-     * Writes entity data.
-     */
     private void writeEntities(DataOutputStream dos, ChunkDelta<S, N> delta) throws IOException {
         final int entityCount = delta.countNonNullEntities();
         dos.writeInt(entityCount);
@@ -225,7 +204,8 @@ public abstract class AbstractCisEncoder<S, N> {
 
     /**
      * Writes optional chunk-level metadata required to reproduce stable worldgen
-     * behavior, such as structure starts/references.
+     * behavior (structure starts/references). The payload is cached on the delta
+     * after first serialization to avoid re-encoding on repeated flushes.
      */
     private void writeChunkMetadata(DataOutputStream dos, ChunkDelta<S, N> delta) throws IOException {
         final N metadata = delta.getChunkMetadata();
@@ -253,8 +233,8 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
-     * Writes one NBT payload using the format appropriate for the current CIS
-     * version.
+     * Writes one NBT payload. Raw format is used for CIS v10+; earlier versions
+     * use zlib-compressed NBT to fit within legacy region-file size constraints.
      */
     private void writeNbtPayload(N payload, DataOutputStream dos) throws IOException {
         if (CisConstants.VERSION >= 10) {
@@ -265,7 +245,52 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
-     * Encodes a single section.
+     * Converts a ChunkDelta to a CisChunk and collects the global palette state
+     * list in the same pass to avoid a second traversal.
+     *
+     * <p>Air (or any state equal to {@link #airState}) is skipped during chunk
+     * population because absent positions decode as air implicitly. Air is still
+     * always added as index 0 in the palette so that local palette entries that
+     * map to "no explicit block" have a stable target.</p>
+     */
+    private EncodedChunkInput<S> fromDelta(ChunkDelta<S, N> delta) {
+        final CisChunk<S> chunk = new CisChunk<>();
+        final EncoderContext<S> ctx = getContext();
+        final List<S> usedStates = ctx.seenStateList;
+        final Reference2IntMap<S> seenStates = ctx.seenStates;
+        usedStates.clear();
+        seenStates.clear();
+        // Air is always palette index 0.
+        seenStates.put(airState, 0);
+        usedStates.add(airState);
+
+        delta.forEachBlock((x, y, z, state) -> {
+            if (state != null && !isImplicitAirState(state)) {
+                chunk.addUniqueBlock(x, y, z, state);
+                if (seenStates.getInt(state) == -1) {
+                    seenStates.put(state, usedStates.size());
+                    usedStates.add(state);
+                }
+            }
+        });
+
+        return new EncodedChunkInput<>(chunk, usedStates);
+    }
+
+    /**
+     * Selects and writes the most compact encoding for a single 16×16×16 section.
+     *
+     * <p>Four encodings are evaluated; the one with the lowest bit cost wins:
+     * <ul>
+     *   <li><b>UNIFORM</b> – all 4096 positions share one state.</li>
+     *   <li><b>DEFAULT_SPARSE</b> – one dominant state is implied; only differing
+     *       positions are emitted as (position, state) pairs.</li>
+     *   <li><b>SPARSE</b> – a flat list of (position, state) pairs for every
+     *       non-null block; efficient for sections with few changes.</li>
+     *   <li><b>DENSE</b> – a local palette plus a full 4096-slot bit-array;
+     *       efficient when most positions are occupied.</li>
+     * </ul>
+     * </p>
      */
     private void encodeSection(EncoderContext<S> ctx, int sectionY, CisSection<S> section) {
         ctx.bitWriter.writeZigZag(sectionY, CisConstants.SECTION_Y_BITS);
@@ -276,85 +301,146 @@ public abstract class AbstractCisEncoder<S, N> {
             return;
         }
 
+        // Pre-compute the one value that every cost function needs.
+        final int globalBits = calculateBitsNeeded(ctx.globalIdMap.size());
+
+        // Uniform check: free because denseStatesForSection may be needed by
+        // other candidates, but we avoid the full dense materialize if the
+        // section is already in dense mode - just check the array directly.
         final S uniformState = uniformSectionState(section);
-        if (uniformState != null) {
-            encodeUniformSection(ctx, uniformState);
-            return;
+        final DefaultSparseCandidate<S> defaultSparse = defaultSparseCandidate(ctx, section);
+        final int sparseBits = sparseEncodingBits(section, globalBits);
+        final int uniformBits = uniformState != null ? uniformEncodingBits(globalBits) : Integer.MAX_VALUE;
+        final int defaultSparseBits = defaultSparse != null
+                ? defaultSparseEncodingBits(defaultSparse.exceptionCount(), globalBits)
+                : Integer.MAX_VALUE;
+        // NOTE: denseEncodingBits mutates ctx palette scratch as a side-effect;
+        // always call it last so earlier candidates see a clean context.
+        final int denseBits = denseEncodingBits(ctx, section, globalBits);
+
+        SectionEncoding selected = SectionEncoding.DENSE;
+        int selectedBits = denseBits;
+
+        if (sparseBits <= selectedBits) {
+            selected = SectionEncoding.SPARSE;
+            selectedBits = sparseBits;
+        }
+        if (uniformBits <= selectedBits) {
+            selected = SectionEncoding.UNIFORM;
+            selectedBits = uniformBits;
+        }
+        if (defaultSparseBits < selectedBits) {
+            selected = SectionEncoding.DEFAULT_SPARSE;
         }
 
-        if (section.mode == CisSection.MODE_SPARSE) {
-            encodeSparseSection(ctx, section);
-        } else {
-            encodeDenseSection(ctx, section);
+        switch (selected) {
+            case UNIFORM -> encodeUniformSection(ctx, uniformState, globalBits);
+            case DEFAULT_SPARSE -> encodeDefaultSparseSection(ctx, section, defaultSparse, globalBits);
+            case SPARSE -> encodeSparseSectionAdaptive(ctx, section, globalBits);
+            case DENSE -> encodeDenseSectionAdaptive(ctx, section);
         }
     }
 
     /**
-     * Encodes a full single-state section using the sparse-mode sentinel layout.
+     * Emits a section that consists entirely of one repeated state.
+     * Uses the sparse-mode wire format with the uniform sentinel as the block count.
      */
-    private void encodeUniformSection(final EncoderContext<S> ctx, final S state) {
+    private void encodeUniformSection(final EncoderContext<S> ctx, final S state, final int globalBits) {
         ctx.bitWriter.write(CisConstants.SECTION_ENCODING_SPARSE, 1);
         ctx.bitWriter.write(CisConstants.UNIFORM_SECTION_SENTINEL, CisConstants.BLOCK_COUNT_BITS);
-
-        final int globalBits = calculateBitsNeeded(ctx.globalIdMap.size());
         final int globalIdx = ctx.globalIdMap.getInt(state);
         ctx.bitWriter.write(globalIdx != -1 ? globalIdx : 0, globalBits);
     }
 
-
     /**
-     * Encodes a sparse section as packed positions plus global palette indices.
+     * Emits a section using one implied dominant state plus explicit exception
+     * entries for every position that differs. Wire format: sparse header, then
+     * the default global index, then the exception count, then (pos, state) pairs.
      */
-    @SuppressWarnings("unchecked")
-    private void encodeSparseSection(EncoderContext<S> ctx, CisSection<S> section) {
+    private void encodeDefaultSparseSection(
+            final EncoderContext<S> ctx,
+            final CisSection<S> section,
+            final DefaultSparseCandidate<S> candidate,
+            final int globalBits
+    ) {
         ctx.bitWriter.write(CisConstants.SECTION_ENCODING_SPARSE, 1);
-        ctx.bitWriter.write(section.sparseSize, CisConstants.BLOCK_COUNT_BITS);
+        ctx.bitWriter.write(CisConstants.DEFAULT_SPARSE_SECTION_SENTINEL, CisConstants.BLOCK_COUNT_BITS);
 
-        if (section.sparseSize > 0) {
-            int globalBits = calculateBitsNeeded(ctx.globalIdMap.size());
-
-            for (int i = 0; i < section.sparseSize; i++) {
-                ctx.bitWriter.write(section.sparseKeys[i] & 0xFFFF, 12);
-
-                S state = (S) section.sparseValues[i];
-                int globalIdx = ctx.globalIdMap.getInt(state);
-                ctx.bitWriter.write(globalIdx != -1 ? globalIdx : 0, globalBits);
-            }
-        }
+        final int defaultGlobalIdx = ctx.globalIdMap.getInt(candidate.defaultState());
+        ctx.bitWriter.write(defaultGlobalIdx != -1 ? defaultGlobalIdx : 0, globalBits);
+        ctx.bitWriter.write(candidate.exceptionCount(), CisConstants.BLOCK_COUNT_BITS);
+        writeDefaultSparseExceptions(ctx, denseStatesForSection(ctx, section), candidate.defaultState(), globalBits);
     }
 
     /**
-     * Encodes a dense section.
+     * Emits a sparse section. If the section is stored in sparse-mode in memory,
+     * entries are written directly; otherwise the dense array is scanned for
+     * non-null positions.
      */
-    private void encodeDenseSection(EncoderContext<S> ctx, CisSection<S> section) {
+    private void encodeSparseSectionAdaptive(
+            final EncoderContext<S> ctx,
+            final CisSection<S> section,
+            final int globalBits
+    ) {
+        ctx.bitWriter.write(CisConstants.SECTION_ENCODING_SPARSE, 1);
+
+        if (section.mode == CisSection.MODE_SPARSE) {
+            ctx.bitWriter.write(section.sparseSize, CisConstants.BLOCK_COUNT_BITS);
+            if (section.sparseSize > 0) {
+                writeSparseEntriesFromSparse(ctx, section, globalBits);
+            }
+            return;
+        }
+
+        // Dense-mode section that is cheaper to encode as sparse.
+        ctx.bitWriter.write(sparseEntryCount(section), CisConstants.BLOCK_COUNT_BITS);
+        writeSparseEntriesFromDense(ctx, section.denseBlocks, globalBits);
+    }
+
+    /**
+     * Emits a dense section. Resolves the correct 4096-slot state array from
+     * either the native dense storage or a scratch expansion of a sparse section.
+     */
+    private void encodeDenseSectionAdaptive(final EncoderContext<S> ctx, final CisSection<S> section) {
+        encodeDenseSectionStates(ctx, denseStatesForSection(ctx, section));
+    }
+
+    /**
+     * Encodes one dense-section state array using a local palette.
+     *
+     * <p>Index 0 in the block stream is reserved for "no change" (null), so local
+     * palette indices are shifted by +1 when written. Air is always present in the
+     * local palette to guarantee a valid mapping for positions that were explicitly
+     * cleared to air.</p>
+     */
+    private void encodeDenseSectionStates(final EncoderContext<S> ctx, final Object[] states) {
         ctx.bitWriter.write(CisConstants.SECTION_ENCODING_DENSE, 1);
 
         ctx.fastLocalPaletteIndex.clear();
         ctx.fastLocalPaletteIndex.defaultReturnValue(-1);
         ctx.localPaletteIds.clear();
 
-        buildLocalPalette(ctx, section.denseBlocks);
-
+        buildLocalPalette(ctx, states);
         ensureAirInPalette(ctx);
-        int localSize = ctx.localPaletteIds.size();
 
+        final int localSize = ctx.localPaletteIds.size();
         ctx.bitWriter.write(localSize, CisConstants.PALETTE_SIZE_BITS);
 
-        int globalBits = calculateBitsNeeded(ctx.globalIdMap.size());
+        final int globalBits = calculateBitsNeeded(ctx.globalIdMap.size());
         for (int i = 0; i < localSize; i++) {
             ctx.bitWriter.write(ctx.localPaletteIds.getInt(i), globalBits);
         }
 
-        // Add +1 to localSize because index 0 is reserved for 'null' (no change)
-        int bitsPerBlock = calculateBitsNeeded(localSize + 1);
+        // +1 because index 0 is reserved for null (no change)
+        final int bitsPerBlock = calculateBitsNeeded(localSize + 1);
         if (bitsPerBlock > 0) {
-            writeBlockData(ctx, section.denseBlocks, bitsPerBlock);
+            writeBlockData(ctx, states, bitsPerBlock);
         }
     }
 
-
     /**
-     * Builds a dense-section local palette containing only states actually present in the section.
+     * Populates the dense-section local palette from the provided 4096-slot array.
+     * Only states with a valid global palette entry are included.
      */
     @SuppressWarnings("unchecked")
     protected void buildLocalPalette(EncoderContext<S> ctx, Object[] states) {
@@ -371,7 +457,9 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
-     * Ensures the dense-section local palette always contains a stable entry for {@link #airState}.
+     * Ensures the dense-section local palette always contains a stable entry for
+     * {@link #airState}. Air must be encodable even when no air block appears
+     * explicitly in the delta, because cleared positions decode as air.
      */
     protected void ensureAirInPalette(EncoderContext<S> ctx) {
         if (ctx.fastLocalPaletteIndex.containsKey(airState)) {
@@ -383,32 +471,117 @@ public abstract class AbstractCisEncoder<S, N> {
             airGlobalIdx = 0;
         }
 
-        int localAirIndex = ctx.localPaletteIds.size();
+        ctx.fastLocalPaletteIndex.put(airState, ctx.localPaletteIds.size());
         ctx.localPaletteIds.add(airGlobalIdx);
-        ctx.fastLocalPaletteIndex.put(airState, localAirIndex);
     }
 
     /**
-     * Writes the dense-section block stream using local palette indices plus one reserved null slot.
+     * Writes the dense-section block stream. Each position emits a local palette
+     * index shifted by 1 (0 = no change / null).
      */
     @SuppressWarnings("unchecked")
     private void writeBlockData(EncoderContext<S> ctx, Object[] states, int bitsPerBlock) {
         for (int i = 0; i < SECTION_VOLUME; i++) {
             S state = (S) states[i];
-
-            // local index 0 means "no change" (null)
-            // local index 1..N means the block was explicitly modified to the state in the
-            // palette
-            int localIdx = (state == null)
-                    ? 0
-                    : ctx.fastLocalPaletteIndex.getInt(state) + 1;
-
+            // 0 = no change; 1..N = local palette index (shifted by 1)
+            int localIdx = (state == null) ? 0 : ctx.fastLocalPaletteIndex.getInt(state) + 1;
             ctx.bitWriter.write(localIdx, bitsPerBlock);
         }
     }
 
     /**
-     * Returns the repeated state when the section is fully filled with one state.
+     * Writes sparse (position, state) pairs from a sparse-mode section directly.
+     */
+    @SuppressWarnings("unchecked")
+    private void writeSparseEntriesFromSparse(
+            final EncoderContext<S> ctx,
+            final CisSection<S> section,
+            final int globalBits
+    ) {
+        for (int i = 0; i < section.sparseSize; i++) {
+            ctx.bitWriter.write(section.sparseKeys[i] & 0xFFFF, 12);
+            final S state = (S) section.sparseValues[i];
+            final int globalIdx = ctx.globalIdMap.getInt(state);
+            ctx.bitWriter.write(globalIdx != -1 ? globalIdx : 0, globalBits);
+        }
+    }
+
+    /**
+     * Writes sparse (position, state) pairs by scanning a 4096-slot dense array.
+     */
+    @SuppressWarnings("unchecked")
+    private void writeSparseEntriesFromDense(final EncoderContext<S> ctx, final Object[] states, final int globalBits) {
+        for (int i = 0; i < SECTION_VOLUME; i++) {
+            final S state = (S) states[i];
+            if (state == null) {
+                continue;
+            }
+            ctx.bitWriter.write(i, 12);
+            final int globalIdx = ctx.globalIdMap.getInt(state);
+            ctx.bitWriter.write(globalIdx != -1 ? globalIdx : 0, globalBits);
+        }
+    }
+
+    /**
+     * Writes only the positions whose logical state differs from {@code defaultState}.
+     */
+    @SuppressWarnings("unchecked")
+    private void writeDefaultSparseExceptions(
+            final EncoderContext<S> ctx,
+            final Object[] states,
+            final S defaultState,
+            final int globalBits
+    ) {
+        for (int i = 0; i < SECTION_VOLUME; i++) {
+            final S state = logicalState((S) states[i]);
+            if (Objects.equals(state, defaultState)) {
+                continue;
+            }
+            ctx.bitWriter.write(i, 12);
+            final int globalIdx = ctx.globalIdMap.getInt(state);
+            ctx.bitWriter.write(globalIdx != -1 ? globalIdx : 0, globalBits);
+        }
+    }
+
+    private int sparseEncodingBits(final CisSection<S> section, final int globalBits) {
+        return 1 + CisConstants.BLOCK_COUNT_BITS + (sparseEntryCount(section) * (12 + globalBits));
+    }
+
+    private static int uniformEncodingBits(final int globalBits) {
+        return 1 + CisConstants.BLOCK_COUNT_BITS + globalBits;
+    }
+
+    private static int defaultSparseEncodingBits(final int exceptionCount, final int globalBits) {
+        return 1 + CisConstants.BLOCK_COUNT_BITS + globalBits + CisConstants.BLOCK_COUNT_BITS
+                + (exceptionCount * (12 + globalBits));
+    }
+
+    /**
+     * Computes the bit cost of dense encoding.
+     *
+     * <p><b>Side-effect:</b> populates {@code ctx.fastLocalPaletteIndex} and
+     * {@code ctx.localPaletteIds} as a by-product. This is intentional — the
+     * actual dense encoder reuses those structures immediately after this call.
+     * Do not call this method between cost evaluation and dense encoding.</p>
+     */
+    private int denseEncodingBits(final EncoderContext<S> ctx, final CisSection<S> section, final int globalBits) {
+        ctx.fastLocalPaletteIndex.clear();
+        ctx.fastLocalPaletteIndex.defaultReturnValue(-1);
+        ctx.localPaletteIds.clear();
+
+        buildLocalPalette(ctx, denseStatesForSection(ctx, section));
+        ensureAirInPalette(ctx);
+
+        final int localSize = ctx.localPaletteIds.size();
+        return 1
+                + CisConstants.PALETTE_SIZE_BITS
+                + (localSize * globalBits)
+                + (SECTION_VOLUME * calculateBitsNeeded(localSize + 1));
+    }
+
+    /**
+     * Returns the single repeated state if every slot in a dense section is
+     * identical, otherwise {@code null}.
      */
     @SuppressWarnings("unchecked")
     private S uniformSectionState(final CisSection<S> section) {
@@ -431,6 +604,88 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
+     * Returns the most-common logical state in the section and the number of
+     * exception positions, or {@code null} if the section is already uniform
+     * (which is handled by a dedicated cheaper path).
+     */
+    @SuppressWarnings("unchecked")
+    private DefaultSparseCandidate<S> defaultSparseCandidate(final EncoderContext<S> ctx, final CisSection<S> section) {
+        final Object[] states = denseStatesForSection(ctx, section);
+        ctx.sectionStateCounts.clear();
+
+        S defaultState = airState;
+        int defaultCount = 0;
+        for (int i = 0; i < SECTION_VOLUME; i++) {
+            final S state = logicalState((S) states[i]);
+            final int count = ctx.sectionStateCounts.getInt(state) + 1;
+            ctx.sectionStateCounts.put(state, count);
+            if (count > defaultCount) {
+                defaultCount = count;
+                defaultState = state;
+            }
+        }
+
+        final int exceptionCount = SECTION_VOLUME - defaultCount;
+        // If every position matches the default the section is uniform; let the
+        // uniform path handle it instead.
+        if (exceptionCount <= 0) {
+            return null;
+        }
+
+        return new DefaultSparseCandidate<>(defaultState, exceptionCount);
+    }
+
+    /**
+     * Returns a dense 4096-slot state array for the section. If the section is
+     * already in dense mode the array is returned directly. For sparse-mode
+     * sections a scratch buffer is populated and returned — callers must not
+     * retain a reference across subsequent calls.
+     */
+    private Object[] denseStatesForSection(final EncoderContext<S> ctx, final CisSection<S> section) {
+        if (section.mode == CisSection.MODE_DENSE) {
+            return section.denseBlocks;
+        }
+
+        Arrays.fill(ctx.denseScratch, null);
+        for (int i = 0; i < section.sparseSize; i++) {
+            ctx.denseScratch[section.sparseKeys[i] & 0xFFFF] = section.sparseValues[i];
+        }
+        return ctx.denseScratch;
+    }
+
+    /**
+     * Returns the non-null block count for the section regardless of in-memory mode.
+     */
+    private int sparseEntryCount(final CisSection<S> section) {
+        if (section.mode == CisSection.MODE_SPARSE) {
+            return section.sparseSize;
+        }
+
+        int count = 0;
+        for (int i = 0; i < SECTION_VOLUME; i++) {
+            if (section.denseBlocks[i] != null) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Maps a null state to {@link #airState} for logical position comparison.
+     */
+    private S logicalState(final S state) {
+        return state != null ? state : airState;
+    }
+
+    /**
+     * Returns true when {@code state} is the canonical air state. Such states
+     * are omitted from chunk storage and decoded implicitly as air on read.
+     */
+    private boolean isImplicitAirState(final S state) {
+        return Objects.equals(state, airState);
+    }
+
+    /**
      * Returns the minimum bit width needed to encode values in {@code [0, maxValue)}.
      */
     protected static int calculateBitsNeeded(int maxValue) {
@@ -438,44 +693,101 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
-     * Pair of the sparse chunk representation and the set of states that became part of the global palette.
+     * Pair of the CisChunk representation and the ordered global palette state list.
      */
-    private record EncodedChunkInput<S>(CisChunk<S> chunk, List<S> usedStates) {
-    }
+    private record EncodedChunkInput<S>(CisChunk<S> chunk, List<S> usedStates) {}
 
+    /**
+     * Reusable scratch state for one encoder instance.
+     *
+     * <p>All mutable members are kept here so the encoder itself is stateless
+     * apart from the context returned by {@link #getContext}. Backing buffers
+     * and maps are reused across encodes; only logical content is cleared on
+     * {@link #reset}.</p>
+     */
     public static class EncoderContext<S> {
-        /** Main byte sink for the full encoded chunk payload. */
+        /**
+         * Main byte sink for the full encoded chunk payload.
+         */
         public final ByteArrayOutputStream mainBuffer = new ByteArrayOutputStream(16384);
-        /** Scratch writer reused for section payloads and palette property payloads. */
-        public final BitWriter bitWriter = new BitWriter(8192);
-        /** Global palette reverse lookup from block state to encoded palette index. */
-        public final Reference2IntMap<S> globalIdMap = new Reference2IntOpenHashMap<>();
-        /** Dense-section local palette encoded as global palette ids. */
-        private final IntArrayList localPaletteIds = new IntArrayList(64);
-        /** Dense-section reverse lookup from block state identity to local palette index. */
-        public final Reference2IntMap<S> fastLocalPaletteIndex = new Reference2IntOpenHashMap<>();
-        /** Reusable set of states encountered while converting a delta into encoder input. */
-        private final Reference2IntMap<S> seenStates = new Reference2IntOpenHashMap<>();
-        /** Reusable ordered list of states encountered while converting a delta into encoder input. */
-        private final List<S> seenStateList = new ArrayList<>(16);
 
         /**
-         * Clears mutable per-encode state while keeping backing buffers and maps for reuse.
+         * Scratch writer reused for section payloads and palette property data.
+         */
+        public final BitWriter bitWriter = new BitWriter(8192);
+
+        /**
+         * Global palette reverse lookup: block state → encoded palette index.
+         */
+        public final Reference2IntMap<S> globalIdMap = new Reference2IntOpenHashMap<>();
+
+        /**
+         * Dense-section local palette encoded as global palette ids.
+         */
+        private final IntArrayList localPaletteIds = new IntArrayList(64);
+
+        /**
+         * Dense-section reverse lookup: block state identity → local palette index.
+         */
+        public final Reference2IntMap<S> fastLocalPaletteIndex = new Reference2IntOpenHashMap<>();
+
+        /**
+         * Reusable dense scratch array for expanding sparse sections during cost evaluation.
+         */
+        private final Object[] denseScratch = new Object[SECTION_VOLUME];
+
+        /**
+         * Reusable logical-state frequency table for default-sparse candidate selection.
+         */
+        private final Reference2IntMap<S> sectionStateCounts = new Reference2IntOpenHashMap<>();
+
+        /**
+         * Reverse-lookup used when collecting the global palette from a delta.
+         */
+        private final Reference2IntMap<S> seenStates = new Reference2IntOpenHashMap<>();
+
+        /**
+         * Ordered list of states collected while building the global palette.
+         */
+        private final List<S> seenStateList = new ArrayList<>(16);
+
+        {
+            // defaultReturnValue survives clear(); set once here rather than per-encode.
+            seenStates.defaultReturnValue(-1);
+        }
+
+        /**
+         * Clears mutable per-encode state while keeping backing buffers allocated for reuse.
          */
         public void reset() {
             mainBuffer.reset();
             globalIdMap.clear();
-            seenStates.defaultReturnValue(-1);
         }
     }
 
     /**
-     * Internal wrapper used to rethrow checked NBT write failures through a
-     * lambda-based entity loop without materializing a temporary list.
+     * Wraps an {@link IOException} thrown inside a lambda entity loop so it can
+     * cross the non-throwing functional interface boundary.
      */
     private static final class EntityEncodingException extends RuntimeException {
         EntityEncodingException(final IOException cause) {
             super(cause);
         }
     }
+
+    /**
+     * Section encodings considered by the adaptive cost selector.
+     */
+    private enum SectionEncoding {
+        UNIFORM,
+        DEFAULT_SPARSE,
+        SPARSE,
+        DENSE
+    }
+
+    /**
+     * The most-common logical state for a section and the number of positions
+     * that differ from it, used by the default-sparse encoder.
+     */
+    private record DefaultSparseCandidate<S>(S defaultState, int exceptionCount) {}
 }
