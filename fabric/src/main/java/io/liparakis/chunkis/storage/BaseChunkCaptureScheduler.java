@@ -4,7 +4,12 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import net.minecraft.block.Block;
@@ -38,6 +43,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  */
 public final class BaseChunkCaptureScheduler {
+
+    private static final String REJECT_SOURCE = "BaseChunkCaptureScheduler#rejectSparse";
 
     /**
      * Maximum number of deferred base captures processed per server tick.
@@ -283,6 +290,20 @@ public final class BaseChunkCaptureScheduler {
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
             return false;
         }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.SAVE_GUARDS,
+                ChunkTraceEventType.SAVE_REJECTED,
+                ChunkTraceSeverity.WARN,
+                ChunkTraceReason.SPARSE_DELTA_REJECTED,
+                REJECT_SOURCE,
+                "rejected sparse delta on " + context,
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                null,
+                delta.isDirty(),
+                null
+        );
         DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(world, pos, delta, context, caller);
         return true;
     }

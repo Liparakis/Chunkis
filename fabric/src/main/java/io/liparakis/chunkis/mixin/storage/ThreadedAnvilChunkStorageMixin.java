@@ -4,7 +4,12 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
 import io.liparakis.chunkis.storage.CisNbtUtil;
@@ -71,6 +76,11 @@ import java.util.concurrent.CompletableFuture;
  */
 @Mixin(ServerChunkLoadingManager.class)
 public abstract class ThreadedAnvilChunkStorageMixin {
+
+    @Unique
+    private static final String SAVE_SOURCE = "ThreadedAnvilChunkStorageMixin#chunkis$onSave";
+    @Unique
+    private static final String REJECT_SOURCE = "ThreadedAnvilChunkStorageMixin#chunkis$rejectSparse";
 
     /**
      * Stable comparator for sorting live entities by UUID before NBT capture.
@@ -183,6 +193,20 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final long currentTime,
             final CallbackInfoReturnable<Boolean> cir) {
         final ChunkPos pos = chunkHolder.getPos();
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SAVE_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                SAVE_SOURCE,
+                "save hook requested",
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                null,
+                null,
+                null
+        );
         final Chunk chunk = chunkis$resolveChunkForSaving(chunkHolder);
 
         ChunkDelta<BlockState, NbtCompound> delta = chunkis$getActiveDelta(pos);
@@ -467,6 +491,20 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
             return false;
         }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.SAVE_GUARDS,
+                ChunkTraceEventType.SAVE_REJECTED,
+                ChunkTraceSeverity.WARN,
+                ChunkTraceReason.SPARSE_DELTA_REJECTED,
+                REJECT_SOURCE,
+                "rejected sparse delta on " + path,
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                null,
+                delta.isDirty(),
+                null
+        );
         DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(
                 world,
                 pos,

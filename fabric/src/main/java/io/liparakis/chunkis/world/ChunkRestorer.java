@@ -2,6 +2,12 @@ package io.liparakis.chunkis.world;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import net.minecraft.block.BlockState;
@@ -56,6 +62,7 @@ import java.util.UUID;
 public final class ChunkRestorer {
 
     private static final Logger LOGGER = Chunkis.LOGGER;
+    private static final String RESTORE_SOURCE = "ChunkRestorer#restore";
 
     /**
      * Bitmask for local section Y coordinate.
@@ -109,11 +116,67 @@ public final class ChunkRestorer {
                 protoDelta,
                 runtimeDelta
         );
+        final ChunkPos chunkPos = chunk.getPos();
 
-        clearChunkToAir(chunk);
-        visitor.cleanupReplayedEntities(protoDelta);
-        protoDelta.accept(visitor);
-        visitor.finishRestoration();
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.RESTORE_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                RESTORE_SOURCE,
+                "starting restore",
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                protoDelta.isDirty(),
+                null
+        );
+
+        try {
+            clearChunkToAir(chunk);
+            visitor.cleanupReplayedEntities(protoDelta);
+            protoDelta.accept(visitor);
+            visitor.finishRestoration();
+        } catch (final RuntimeException e) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.RESTORE_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.RESTORE_EXCEPTION,
+                    RESTORE_SOURCE,
+                    "restore failed with exception",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    null,
+                    null,
+                    null
+            );
+            throw e;
+        }
+
+        final int appliedCount = visitor.appliedBlocksCount()
+                + visitor.restoredBlockEntitiesCount()
+                + visitor.restoredEntitiesCount();
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.RESTORE_COMPLETED,
+                ChunkTraceSeverity.INFO,
+                appliedCount > 0
+                        ? ChunkTraceReason.NONE
+                        : ChunkTraceReason.RESTORE_EMPTY_RESULT,
+                RESTORE_SOURCE,
+                "restore completed: blocks=" + visitor.appliedBlocksCount()
+                        + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
+                        + ", entities=" + visitor.restoredEntitiesCount(),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                runtimeDelta != null && runtimeDelta.isDirty(),
+                null
+        );
 
     }
 
@@ -296,6 +359,9 @@ public final class ChunkRestorer {
         private final ChunkPos chunkPosition;
         private final ChunkDelta<BlockState, NbtCompound> runtimeDelta;
         private final boolean replayLegacyEntities;
+        private int appliedBlocksCount;
+        private int restoredBlockEntitiesCount;
+        private int restoredEntitiesCount;
 
         private RestorationVisitor(
                 final ServerWorld world,
@@ -409,6 +475,7 @@ public final class ChunkRestorer {
             }
 
             copyBlockToRuntimeDelta(localX, localY, localZ, state);
+            appliedBlocksCount++;
         }
 
         /**
@@ -526,6 +593,7 @@ public final class ChunkRestorer {
             if (runtimeDelta != null) {
                 runtimeDelta.addBlockEntityData(localX, localY, localZ, nbt, false);
             }
+            restoredBlockEntitiesCount++;
         }
 
         /**
@@ -573,6 +641,7 @@ public final class ChunkRestorer {
                     entity -> {
                         if (!isEntityAlreadySpawned(entity.getUuid())) {
                             world.spawnEntity(entity);
+                            restoredEntitiesCount++;
                         }
 
                         return entity;
@@ -641,6 +710,18 @@ public final class ChunkRestorer {
             } catch (final RuntimeException ignored) {
                 return Optional.empty();
             }
+        }
+
+        private int appliedBlocksCount() {
+            return appliedBlocksCount;
+        }
+
+        private int restoredBlockEntitiesCount() {
+            return restoredBlockEntitiesCount;
+        }
+
+        private int restoredEntitiesCount() {
+            return restoredEntitiesCount;
         }
     }
 }

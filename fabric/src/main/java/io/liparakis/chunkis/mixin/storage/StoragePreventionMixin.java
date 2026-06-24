@@ -1,6 +1,12 @@
 package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.Chunkis;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.scanner.NbtScanner;
 import net.minecraft.util.math.ChunkPos;
@@ -47,6 +53,8 @@ public class StoragePreventionMixin {
 
     @Unique
     private static final Logger LOGGER = Chunkis.LOGGER;
+    @Unique
+    private static final String SOURCE = "StoragePreventionMixin";
 
     /**
      * Cancels vanilla chunk NBT writes to {@code .mca} region files.
@@ -68,6 +76,20 @@ public class StoragePreventionMixin {
             final ChunkPos pos,
             final NbtCompound nbt,
             final CallbackInfo ci) {
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.SAVE_GUARDS,
+                ChunkTraceEventType.VANILLA_SAVE_CANCELLED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.VANILLA_STORAGE_BLOCKED,
+                SOURCE + "#chunkis$blockWrite",
+                "cancelled vanilla region write",
+                null,
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                null,
+                null,
+                null
+        );
 
         logTrace("Blocking vanilla chunk write for {}", pos);
         ci.cancel();

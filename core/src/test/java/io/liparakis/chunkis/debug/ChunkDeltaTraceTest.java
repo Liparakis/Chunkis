@@ -1,0 +1,35 @@
+package io.liparakis.chunkis.debug;
+
+import io.liparakis.chunkis.core.ChunkDelta;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ChunkDeltaTraceTest {
+
+    @AfterEach
+    void tearDown() {
+        ChunkTraceStore.clear();
+        ChunkTraceStore.resetForTests();
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
+    }
+
+    @Test
+    void emitsDirtyAndCleanEventsWhenDebugLifecycleIsEnabled() {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+
+        delta.addBlockChange(1, 64, 2, "stone");
+        delta.markSaved();
+
+        final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(10);
+        assertThat(latest).extracting(ChunkTraceEvent::eventType)
+                .containsExactly(
+                        ChunkTraceEventType.DELTA_MARKED_CLEAN,
+                        ChunkTraceEventType.DELTA_MARKED_DIRTY
+                );
+    }
+}

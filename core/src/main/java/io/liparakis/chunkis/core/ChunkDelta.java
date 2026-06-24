@@ -1,5 +1,10 @@
 package io.liparakis.chunkis.core;
 
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
@@ -45,6 +50,8 @@ import java.util.function.UnaryOperator;
  * @version 1.1
  */
 public final class ChunkDelta<S, N> {
+
+    private static final String SOURCE = "ChunkDelta";
 
     /**
      * Initial block instruction capacity.
@@ -284,7 +291,24 @@ public final class ChunkDelta<S, N> {
      * Records one semantic mutation.
      */
     private void markDirtyInternal() {
+        final boolean wasDirty = isDirty();
         mutationGeneration++;
+        if (!wasDirty) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.DIRTY_TRACKING,
+                    ChunkTraceEventType.DELTA_MARKED_DIRTY,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.DELTA_BECAME_DIRTY,
+                    SOURCE,
+                    "delta became dirty",
+                    null,
+                    null,
+                    null,
+                    null,
+                    true,
+                    null
+            );
+        }
     }
 
     /**
@@ -1158,7 +1182,24 @@ public final class ChunkDelta<S, N> {
      * Marks this delta saved.
      */
     public void markSaved() {
+        final boolean wasDirty = isDirty();
         savedGeneration = mutationGeneration;
+        if (wasDirty) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.DIRTY_TRACKING,
+                    ChunkTraceEventType.DELTA_MARKED_CLEAN,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.DELTA_MARKED_SAVED,
+                    SOURCE,
+                    "delta marked clean",
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+            );
+        }
     }
 
     /**
@@ -1173,7 +1214,24 @@ public final class ChunkDelta<S, N> {
             return false;
         }
 
+        final boolean wasDirty = isDirty();
         savedGeneration = generation;
+        if (wasDirty) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.DIRTY_TRACKING,
+                    ChunkTraceEventType.DELTA_MARKED_CLEAN,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.DELTA_MARKED_SAVED,
+                    SOURCE,
+                    "delta marked clean",
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+            );
+        }
         return true;
     }
 

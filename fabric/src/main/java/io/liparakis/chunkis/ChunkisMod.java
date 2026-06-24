@@ -1,6 +1,7 @@
 package io.liparakis.chunkis;
 
 import io.liparakis.chunkis.command.DurabilityTestCommand;
+import io.liparakis.chunkis.command.ChunkDebugCommand;
 import io.liparakis.chunkis.command.StorageReportCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
@@ -82,6 +83,10 @@ public final class ChunkisMod implements ModInitializer {
         CommandRegistrationCallback.EVENT.register(
                 (dispatcher, registryAccess, environment) ->
                         DurabilityTestCommand.register(dispatcher)
+        );
+        CommandRegistrationCallback.EVENT.register(
+                (dispatcher, registryAccess, environment) ->
+                        ChunkDebugCommand.register(dispatcher)
         );
         CommandRegistrationCallback.EVENT.register(
                 (dispatcher, registryAccess, environment) ->

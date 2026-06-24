@@ -1,0 +1,118 @@
+# Transaction Flows
+
+This file reflects the Phase 2 implementation as it exists now, not the larger future design.
+
+## Normal async save
+
+1. `SAVE_TX_START`
+2. optional `SAVE_REJECTED`
+3. `SAVE_QUEUED`
+4. `SAVE_FLUSH_STARTED`
+5. `REGION_WRITE_TX_START`
+6. `REGION_WRITE_TX_END`
+7. `SAVE_FLUSH_COMPLETED`
+8. `DELTA_MARKED_CLEAN`
+
+## Synchronous save path
+
+1. `SAVE_TX_START`
+2. `SAVE_FLUSH_STARTED`
+3. `REGION_WRITE_TX_START`
+4. `REGION_WRITE_TX_END`
+5. `SAVE_FLUSH_COMPLETED`
+6. `DELTA_MARKED_CLEAN`
+
+## Save rejected by sparse guard
+
+1. `SAVE_TX_START`
+2. `SAVE_REJECTED`
+
+Notes:
+
+- This can currently happen from `ThreadedAnvilChunkStorageMixin` or `BaseChunkCaptureScheduler`.
+- There is not yet a linked hard assertion that cancelled vanilla save plus rejection equals data-loss proof.
+
+## Vanilla save cancellation
+
+1. `VANILLA_SAVE_CANCELLED`
+
+Notes:
+
+- This is recorded at the region-write cancellation hook.
+- Correlating it to a specific queued/flushed Chunkis save is still a future transaction-correlation step.
+
+## Load from tracker memory
+
+1. `LOAD_TX_START`
+2. `LOAD_SOURCE_RESOLVED reason=TRACKER_MEMORY`
+3. `LOAD_TX_END`
+4. `RESTORE_TX_START`
+5. `RESTORE_COMPLETED` or `RESTORE_FAILED`
+
+## Load from Chunkis storage
+
+1. `LOAD_TX_START`
+2. `REGION_READ_TX_START`
+3. `REGION_READ_TX_END`
+4. `LOAD_SOURCE_RESOLVED reason=CHUNKIS_STORAGE`
+5. `LOAD_TX_END`
+6. `RESTORE_TX_START`
+7. `RESTORE_COMPLETED` or `RESTORE_FAILED`
+
+## Load with no meaningful Chunkis data
+
+1. `LOAD_TX_START`
+2. optional `REGION_READ_TX_START`
+3. optional `REGION_READ_TX_END reason=MISSING_ENTRY`
+4. `LOAD_SOURCE_RESOLVED reason=NEITHER`
+5. `LOAD_TX_END`
+
+Notes:
+
+- `BOTH` is not emitted in the current implementation.
+
+## Restore result interpretation
+
+1. `RESTORE_TX_START`
+2. `RESTORE_COMPLETED`
+
+Meaning of `RESTORE_COMPLETED` right now:
+
+- reason `NONE`
+  some meaningful block, block-entity, or entity application happened
+- reason `RESTORE_EMPTY_RESULT`
+  restore ran but aggregate applied counts were zero
+
+## Region read
+
+1. `REGION_READ_TX_START`
+2. `REGION_READ_TX_END`
+
+Current outcomes:
+
+- payload found
+- missing entry
+
+## Region write
+
+1. `REGION_WRITE_TX_START`
+2. `REGION_WRITE_TX_END`
+
+Current outcomes:
+
+- normal write completion
+- clear/overwrite path still ends as one region-write transaction
+
+## Durability timeline usage
+
+For the current disappearing-chunk investigation, the minimum useful timeline is:
+
+1. `SAVE_TX_START`
+2. `VANILLA_SAVE_CANCELLED` if it happened
+3. `SAVE_REJECTED` or `SAVE_QUEUED`
+4. `SAVE_FLUSH_*`
+5. `DELTA_MARKED_CLEAN`
+6. `LOAD_SOURCE_RESOLVED`
+7. `RESTORE_COMPLETED`
+
+The new `/chunkis debug latest <count>` command is sufficient to inspect this timeline in-memory during a durability run.

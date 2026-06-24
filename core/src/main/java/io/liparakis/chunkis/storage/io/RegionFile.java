@@ -2,6 +2,13 @@ package io.liparakis.chunkis.storage.io;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.DebugRegionKey;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -33,6 +40,9 @@ import java.util.List;
  * @version 2.0
  */
 final class RegionFile implements AutoCloseable {
+
+    private static final String READ_SOURCE = "RegionFile#read";
+    private static final String WRITE_SOURCE = "RegionFile#write";
 
     private static final int REGION_MASK = 31;
     private static final int CHUNKS_PER_REGION = 1024;
@@ -169,9 +179,38 @@ final class RegionFile implements AutoCloseable {
      * @throws IOException if a read error occurs
      */
     synchronized byte[] read(CisChunkPos pos) throws IOException {
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.REGION_STORAGE,
+                ChunkTraceEventType.REGION_READ_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.STORAGE_READ,
+                READ_SOURCE,
+                "region file read started",
+                null,
+                new DebugChunkKey(pos.x(), pos.z()),
+                regionKey(),
+                null,
+                null,
+                null
+        );
+
         final int index = getChunkIndex(pos);
 
         if (offsets[index] == 0) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.REGION_STORAGE,
+                    ChunkTraceEventType.REGION_READ_TX_END,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.MISSING_ENTRY,
+                    READ_SOURCE,
+                    "region file entry missing",
+                    null,
+                    new DebugChunkKey(pos.x(), pos.z()),
+                    regionKey(),
+                    null,
+                    null,
+                    null
+            );
             return null;
         }
 
@@ -182,6 +221,20 @@ final class RegionFile implements AutoCloseable {
 
         final ByteBuffer buffer = ByteBuffer.allocate(lengths[index]);
         readFully(channel, buffer, offsets[index]);
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.REGION_STORAGE,
+                ChunkTraceEventType.REGION_READ_TX_END,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.STORAGE_READ,
+                READ_SOURCE,
+                "region file read completed",
+                null,
+                new DebugChunkKey(pos.x(), pos.z()),
+                regionKey(),
+                null,
+                null,
+                lengths[index]
+        );
         return buffer.array();
     }
 
@@ -204,6 +257,21 @@ final class RegionFile implements AutoCloseable {
      * @throws IOException if a write error occurs
      */
     synchronized void write(CisChunkPos pos, byte[] data) throws IOException {
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.REGION_STORAGE,
+                ChunkTraceEventType.REGION_WRITE_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.STORAGE_WRITE,
+                WRITE_SOURCE,
+                "region write started",
+                null,
+                new DebugChunkKey(pos.x(), pos.z()),
+                regionKey(),
+                null,
+                null,
+                data == null ? 0 : data.length
+        );
+
         final int index = getChunkIndex(pos);
         final int oldOffset = offsets[index];
         final int oldLength = lengths[index];
@@ -219,6 +287,20 @@ final class RegionFile implements AutoCloseable {
             }
             writeMetadata();
             dirty = true;
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.REGION_STORAGE,
+                    ChunkTraceEventType.REGION_WRITE_TX_END,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.STORAGE_WRITE,
+                    WRITE_SOURCE,
+                    "region clear completed",
+                    null,
+                    new DebugChunkKey(pos.x(), pos.z()),
+                    regionKey(),
+                    null,
+                    null,
+                    0
+            );
             return;
         }
 
@@ -231,6 +313,20 @@ final class RegionFile implements AutoCloseable {
             }
             writeMetadata();
             dirty = true;
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.REGION_STORAGE,
+                    ChunkTraceEventType.REGION_WRITE_TX_END,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.STORAGE_WRITE,
+                    WRITE_SOURCE,
+                    "region write completed",
+                    null,
+                    new DebugChunkKey(pos.x(), pos.z()),
+                    regionKey(),
+                    null,
+                    null,
+                    dataLength
+            );
             return;
         }
 
@@ -243,6 +339,20 @@ final class RegionFile implements AutoCloseable {
         }
         writeMetadata();
         dirty = true;
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.REGION_STORAGE,
+                ChunkTraceEventType.REGION_WRITE_TX_END,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.STORAGE_WRITE,
+                WRITE_SOURCE,
+                "region write completed",
+                null,
+                new DebugChunkKey(pos.x(), pos.z()),
+                regionKey(),
+                null,
+                null,
+                dataLength
+        );
     }
 
     /**
@@ -863,6 +973,12 @@ final class RegionFile implements AutoCloseable {
                 path, StandardOpenOption.READ, StandardOpenOption.WRITE,
                 StandardOpenOption.CREATE
         );
+    }
+
+    private DebugRegionKey regionKey() {
+        final String fileName = path.getFileName().toString();
+        final String[] parts = fileName.substring(2, fileName.length() - 4).split("\\.");
+        return new DebugRegionKey(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
 
     /**

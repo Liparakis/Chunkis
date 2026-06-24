@@ -3,6 +3,12 @@ package io.liparakis.chunkis.storage;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
@@ -42,6 +48,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  */
 public final class AsyncCisSaveManager {
+
+    private static final String SUBMIT_SOURCE = "AsyncCisSaveManager#submit";
+    private static final String PROCESS_SOURCE = "AsyncCisSaveManager$SaveWorker#process";
 
     /**
      * One worker per registered world dimension, created lazily on first submit.
@@ -84,6 +93,20 @@ public final class AsyncCisSaveManager {
         final long generation = liveDelta.getMutationGeneration();
 
         final ChunkDelta<BlockState, NbtCompound> snapshot = liveDelta.snapshot(NbtCompound::copy);
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SAVE_QUEUED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                SUBMIT_SOURCE,
+                "queued async save generation " + generation,
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                null,
+                liveDelta.isDirty(),
+                null
+        );
 
         workerFor(world).submit(new PendingSave(storage, pos, cisPos, liveDelta, snapshot, generation));
     }
@@ -303,10 +326,29 @@ public final class AsyncCisSaveManager {
                 GlobalChunkTracker.markSavedIfUnchanged(world, save.pos(), save.liveDelta(), save.generation());
 
             } catch (final IOException e) {
+                traceAsyncFailure(save, "async save failed with I/O exception");
                 Chunkis.LOGGER.error("Chunkis: Failed async save for chunk {}", save.pos(), e);
             } catch (final Exception e) {
+                traceAsyncFailure(save, "async save failed unexpectedly");
                 Chunkis.LOGGER.error("Chunkis: Unexpected async save failure for chunk {}", save.pos(), e);
             }
+        }
+
+        private void traceAsyncFailure(final PendingSave save, final String message) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.REGION_STORAGE,
+                    ChunkTraceEventType.SAVE_FLUSH_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.IO_EXCEPTION,
+                    PROCESS_SOURCE,
+                    message,
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(save.pos().x, save.pos().z),
+                    null,
+                    null,
+                    save.liveDelta().isDirty(),
+                    null
+            );
         }
     }
 

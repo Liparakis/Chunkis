@@ -3,6 +3,13 @@ package io.liparakis.chunkis.storage.io;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.DebugRegionKey;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.codec.CisDecoder;
@@ -47,6 +54,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * @version 1.1
  */
 public final class CisStorage<B, S, P, N> {
+
+    private static final String SAVE_SOURCE = "CisStorage#save";
+    private static final String WRITE_SOURCE = "CisStorage#writePrepared";
+    private static final String LOAD_SOURCE = "CisStorage#load";
 
     /**
      * Bit shift used to convert chunk coordinates into 32×32 region coordinates.
@@ -153,6 +164,21 @@ public final class CisStorage<B, S, P, N> {
         Objects.requireNonNull(pos, "pos");
         Objects.requireNonNull(delta, "delta");
 
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SAVE_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                SAVE_SOURCE,
+                "save requested",
+                null,
+                toChunkKey(pos),
+                toRegionKey(pos),
+                null,
+                delta.isDirty(),
+                null
+        );
+
         try {
             final PreparedSave preparedSave = prepareSave(pos, delta);
 
@@ -164,6 +190,20 @@ public final class CisStorage<B, S, P, N> {
             delta.markSaved();
             return true;
         } catch (final IOException e) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.REGION_STORAGE,
+                    ChunkTraceEventType.SAVE_FLUSH_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.IO_EXCEPTION,
+                    SAVE_SOURCE,
+                    "save failed",
+                    null,
+                    toChunkKey(pos),
+                    toRegionKey(pos),
+                    null,
+                    delta.isDirty(),
+                    null
+            );
             Chunkis.LOGGER.error("Chunkis: Failed to save CIS chunk {}", pos, e);
             return false;
         }
@@ -211,6 +251,21 @@ public final class CisStorage<B, S, P, N> {
             return clearChunk(pos);
         }
 
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.REGION_STORAGE,
+                ChunkTraceEventType.SAVE_FLUSH_STARTED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.STORAGE_WRITE,
+                WRITE_SOURCE,
+                "flush started",
+                null,
+                toChunkKey(pos),
+                toRegionKey(pos),
+                null,
+                null,
+                preparedSave.rawData().length
+        );
+
         final byte[] compressedData = compressionContext.get().compress(preparedSave.rawData());
         final RegionFile regionFile = getRegionFile(pos, true);
 
@@ -219,6 +274,20 @@ public final class CisStorage<B, S, P, N> {
         }
 
         regionFile.write(pos, compressedData);
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.REGION_STORAGE,
+                ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.STORAGE_WRITE,
+                WRITE_SOURCE,
+                "flush completed",
+                null,
+                toChunkKey(pos),
+                toRegionKey(pos),
+                null,
+                null,
+                compressedData.length
+        );
         return true;
     }
 
@@ -234,9 +303,53 @@ public final class CisStorage<B, S, P, N> {
     public ChunkDelta<S, N> load(final CisChunkPos pos) {
         Objects.requireNonNull(pos, "pos");
 
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.LOAD_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                LOAD_SOURCE,
+                "load requested",
+                null,
+                toChunkKey(pos),
+                toRegionKey(pos),
+                null,
+                null,
+                null
+        );
+
         try {
-            return loadUnchecked(pos);
+            final ChunkDelta<S, N> delta = loadUnchecked(pos);
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.LOAD_TX_END,
+                    ChunkTraceSeverity.INFO,
+                    delta.isEmpty() ? ChunkTraceReason.NEITHER : ChunkTraceReason.CHUNKIS_STORAGE,
+                    LOAD_SOURCE,
+                    delta.isEmpty() ? "load returned empty delta" : "load returned stored delta",
+                    null,
+                    toChunkKey(pos),
+                    toRegionKey(pos),
+                    null,
+                    delta.isDirty(),
+                    null
+            );
+            return delta;
         } catch (final Exception e) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.LOAD_TX_END,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.IO_EXCEPTION,
+                    LOAD_SOURCE,
+                    "load failed and entry will be cleared",
+                    null,
+                    toChunkKey(pos),
+                    toRegionKey(pos),
+                    null,
+                    null,
+                    null
+            );
             Chunkis.LOGGER.error(
                     "Chunkis: Failed to decode CIS chunk at {}. Clearing corrupted data. Error: {}",
                     pos, e.getMessage()
@@ -453,6 +566,14 @@ public final class CisStorage<B, S, P, N> {
      */
     private static <S, N> ChunkDelta<S, N> newEmptyDelta() {
         return new ChunkDelta<>();
+    }
+
+    private static DebugChunkKey toChunkKey(final CisChunkPos pos) {
+        return new DebugChunkKey(pos.x(), pos.z());
+    }
+
+    private static DebugRegionKey toRegionKey(final CisChunkPos pos) {
+        return new DebugRegionKey(pos.x() >> REGION_SHIFT, pos.z() >> REGION_SHIFT);
     }
 
     /**
