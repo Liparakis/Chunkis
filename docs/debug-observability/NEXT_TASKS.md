@@ -37,6 +37,10 @@
   - `/chunkis debug off`
   - `/chunkis debug latest <count>`
   - `/chunkis debug clear`
+- [x] Added first client-sync timeline boundaries
+  - server send start/end/failure
+  - client apply start/end/failure
+  - payload byte size on traced sync events
 - [x] Added focused validation
   - `ChunkTraceStoreTest`
   - `ChunkDeltaTraceTest`
@@ -57,9 +61,9 @@
   - [ ] Add decoder/mapping failure events
   - Goal:
     distinguish persistence loss from decode corruption
-- [ ] Add client-sync instrumentation
+- [ ] Extend client-sync instrumentation beyond top-level boundaries
   - Goal:
-    rule out client-only ghost failures separately from persistence failures
+    add payload compression/ordering evidence only if the current send/apply timeline is insufficient
 
 ## Phase 3 candidates
 

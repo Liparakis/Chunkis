@@ -133,3 +133,15 @@ For the current disappearing-chunk investigation, the minimum useful timeline is
 7. `RESTORE_COMPLETED`
 
 The new `/chunkis debug latest <count>` command is sufficient to inspect this timeline in-memory during a durability run.
+
+## Client sync
+
+1. `CLIENT_SYNC_TX_START`
+2. `CLIENT_SYNC_TX_END` or `CLIENT_SYNC_FAILED`
+3. client-side `CLIENT_SYNC_TX_START`
+4. client-side `CLIENT_SYNC_TX_END` or `CLIENT_SYNC_FAILED`
+
+Notes:
+
+- Current client-sync operation ids are local to each side; they are not carried over the wire.
+- This is enough to separate "server sent nothing" from "client received/applied badly" without changing packet format.

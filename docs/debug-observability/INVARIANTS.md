@@ -97,9 +97,16 @@ This file separates Phase 2 invariants into three buckets:
 
 ## `CLIENT_DELTA_ORDER_VISIBLE`
 
-- Status: `NOT_IMPLEMENTED_YET`
-- Why not enforced yet:
-  Client-sync instrumentation is intentionally outside this Phase 2 slice.
+- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Evidence now available:
+  `CLIENT_SYNC_TX_START`
+  `CLIENT_SYNC_TX_END`
+  `CLIENT_SYNC_FAILED`
+- Current hook points:
+  `ChunkisNetworking`
+  `ClientDeltaNetworking`
+- Notes:
+  The top-level send/apply boundaries are now visible, but there is still no shared cross-wire transaction id.
 
 ## `OFF_THREAD_MUTATION_REJECTED`
 

@@ -3,9 +3,15 @@ package io.liparakis.chunkis.client;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
-import io.liparakis.chunkis.storage.codec.network.CisNetworkDecoder;
 import io.liparakis.chunkis.network.FabricNetworkCodecFactory;
+import io.liparakis.chunkis.storage.codec.network.CisNetworkDecoder;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -17,78 +23,54 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.state.property.Property;
 import net.minecraft.world.chunk.WorldChunk;
 
-/**
- * Registers the {@link ChunkDeltaPayload} receiver and owns the codec/visitor
- * thread-locals needed to decode and apply incoming deltas.
- *
- * <p>
- * Call {@link #register()} once during client initialisation. The receiver
- * schedules all world-mutation work on the main client thread; networking-thread
- * code is intentionally kept minimal (early validation and metrics recording only).
- *
- * <p>
- * No world, chunk, or block references are retained beyond the scope of
- * each method call.
- *
- * @author Liparakis
- * @version 1.1
- */
 @Environment(EnvType.CLIENT)
 public final class ClientDeltaNetworking {
 
-    /**
-     * Thread-local decoder — each thread gets its own instance with pre-allocated
-     * buffers, eliminating allocation overhead on the packet-receive hot path.
-     */
+    private static final String APPLY_SOURCE = "ClientDeltaNetworking#processChunkDelta";
+
     private static final ThreadLocal<CisNetworkDecoder<Block, BlockState, Property<?>, NbtCompound>> DECODER =
             ThreadLocal.withInitial(FabricNetworkCodecFactory::createDecoder);
 
-    /**
-     * Thread-local visitor — reused across packets to avoid the ~80-byte
-     * per-packet allocation of visitor state.
-     */
     private static final ThreadLocal<ClientDeltaVisitor> VISITOR =
             ThreadLocal.withInitial(ClientDeltaVisitor::new);
 
-    /**
-     * Guards the "chunk does not implement ChunkisDeltaDuck" warning so it is
-     * emitted at most once per session, preventing log flooding on broken chunks.
-     */
     private static volatile boolean typeWarningLogged = false;
 
     private ClientDeltaNetworking() {
         throw new AssertionError("Utility class");
     }
 
-    /**
-     * Registers the global {@link ChunkDeltaPayload} receiver and the disconnect
-     * cleanup hook. Must be called on the main thread during client initialisation.
-     */
     public static void register() {
         ClientPlayNetworking.registerGlobalReceiver(
                 ChunkDeltaPayload.ID,
                 ClientDeltaNetworking::handleIncomingPayload);
 
-        // Release thread-local decoder/visitor state on disconnect so Netty
-        // threads do not hold references to stale world or decoder state.
         ClientPlayConnectionEvents.DISCONNECT.register(
                 (handler, client) -> cleanupThreadLocals());
     }
 
-    /**
-     * Validates the incoming payload on the networking thread and, if valid,
-     * schedules delta processing on the main client thread.
-     *
-     * @param payload the raw incoming packet
-     * @param context the networking context providing the client instance
-     */
     private static void handleIncomingPayload(
             final ChunkDeltaPayload payload,
-            final ClientPlayNetworking.Context context) {
-
+            final ClientPlayNetworking.Context context
+    ) {
         final byte[] data = payload.data();
+        final String operationId = ChunkTraceStore.nextOperationId("client-sync");
 
         if (isInvalidPayload(data)) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_FAILED,
+                    ChunkTraceSeverity.WARN,
+                    ChunkTraceReason.INVALID_PAYLOAD,
+                    APPLY_SOURCE,
+                    "rejected incoming payload because it was null or empty",
+                    null,
+                    new DebugChunkKey(payload.chunkX(), payload.chunkZ()),
+                    null,
+                    operationId,
+                    null,
+                    data == null ? null : data.length
+            );
             ClientDeltaMetrics.logErrorThrottled(
                     () -> "Received invalid ChunkDeltaPayload: null or empty data");
             return;
@@ -99,175 +81,194 @@ public final class ClientDeltaNetworking {
         }
 
         final var client = context.client();
-        client.execute(() -> processChunkDelta(payload, client.world));
+        client.execute(() -> processChunkDelta(payload, client.world, operationId));
     }
 
-    /**
-     * Decodes the payload and applies its delta to the client world.
-     * Always runs on the main client thread.
-     *
-     * @param payload the incoming packet (data already validated on networking thread)
-     * @param world   the current client world; may be null during disconnect
-     */
-    private static void processChunkDelta(final ChunkDeltaPayload payload, final ClientWorld world) {
-        if (world == null) return;
+    private static void processChunkDelta(
+            final ChunkDeltaPayload payload,
+            final ClientWorld world,
+            final String operationId
+    ) {
+        if (world == null) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_FAILED,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.CLIENT_WORLD_UNAVAILABLE,
+                    APPLY_SOURCE,
+                    "skipped payload because client world was unavailable",
+                    null,
+                    new DebugChunkKey(payload.chunkX(), payload.chunkZ()),
+                    null,
+                    operationId,
+                    null,
+                    payload.data().length
+            );
+            return;
+        }
 
         final long startNanos = captureStartTime();
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CLIENT_SYNC,
+                ChunkTraceEventType.CLIENT_SYNC_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                APPLY_SOURCE,
+                "starting client delta apply",
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(payload.chunkX(), payload.chunkZ()),
+                null,
+                operationId,
+                null,
+                payload.data().length
+        );
 
         try {
-            applyPayloadToWorld(payload, world);
+            applyPayloadToWorld(payload, world, operationId);
             recordMetricsIfEnabled(payload, startNanos);
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_TX_END,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    APPLY_SOURCE,
+                    "completed client delta apply",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(payload.chunkX(), payload.chunkZ()),
+                    null,
+                    operationId,
+                    null,
+                    payload.data().length
+            );
 
-            Chunkis.LOGGER.debug("Applied ChunkDelta ({},{}) — {} bytes, {} blocks",
+            Chunkis.LOGGER.debug("Applied ChunkDelta ({},{}) - {} bytes, {} blocks",
                     payload.chunkX(), payload.chunkZ(),
                     payload.data().length,
                     DECODER.get().decode(payload.data()).getBlockInstructions().size());
 
         } catch (final Exception e) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.IO_EXCEPTION,
+                    APPLY_SOURCE,
+                    "client delta apply failed with exception",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(payload.chunkX(), payload.chunkZ()),
+                    null,
+                    operationId,
+                    null,
+                    payload.data().length
+            );
             ClientDeltaMetrics.logErrorThrottled(() -> String.format(
-                    "Decode/apply failed for chunk (%d,%d) — %d bytes",
+                    "Decode/apply failed for chunk (%d,%d) - %d bytes",
                     payload.chunkX(), payload.chunkZ(),
-                    payload.data() != null ? payload.data().length : 0), e);
+                    payload.data().length), e);
         }
     }
 
-    /**
-     * Resolves the target chunk, decodes the delta, and applies it.
-     *
-     * @param payload the incoming packet
-     * @param world   the current client world
-     * @throws Exception if decoding or application fails
-     */
     private static void applyPayloadToWorld(
             final ChunkDeltaPayload payload,
-            final ClientWorld world) throws Exception {
-
+            final ClientWorld world,
+            final String operationId
+    ) throws Exception {
         final int chunkX = payload.chunkX();
         final int chunkZ = payload.chunkZ();
 
         final WorldChunk chunk = world.getChunk(chunkX, chunkZ);
-        if (!isChunkisDuck(chunk, chunkX, chunkZ)) return;
+        if (!isChunkisDuck(chunk, chunkX, chunkZ)) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_FAILED,
+                    ChunkTraceSeverity.WARN,
+                    ChunkTraceReason.CHUNK_NOT_DELTA_CAPABLE,
+                    APPLY_SOURCE,
+                    "client chunk did not implement ChunkisDeltaDuck",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkX, chunkZ),
+                    null,
+                    operationId,
+                    null,
+                    payload.data().length
+            );
+            return;
+        }
 
         final ChunkDelta<BlockState, NbtCompound> receivedDelta = DECODER.get().decode(payload.data());
 
-        @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> clientDelta =
+        @SuppressWarnings("unchecked")
+        final ChunkDelta<BlockState, NbtCompound> clientDelta =
                 (ChunkDelta<BlockState, NbtCompound>) ((ChunkisDeltaDuck) chunk).chunkis$getDelta();
 
         applyDelta(clientDelta, receivedDelta, world, chunkX, chunkZ);
     }
 
-    /**
-     * Applies {@code receivedDelta} to the client world and delta tracker using
-     * the thread-local {@link ClientDeltaVisitor}.
-     *
-     * @param clientDelta   the client-side delta tracker to keep in sync
-     * @param receivedDelta the decoded delta received from the server
-     * @param world         the client world to mutate
-     * @param chunkX        chunk X coordinate
-     * @param chunkZ        chunk Z coordinate
-     */
     private static void applyDelta(
             final ChunkDelta<BlockState, NbtCompound> clientDelta,
             final ChunkDelta<BlockState, NbtCompound> receivedDelta,
             final ClientWorld world,
             final int chunkX,
-            final int chunkZ) {
-
+            final int chunkZ
+    ) {
         final ClientDeltaVisitor visitor = VISITOR.get();
         visitor.reset(clientDelta, world, chunkX, chunkZ);
         receivedDelta.accept(visitor);
     }
 
-    /**
-     * Returns the current nanosecond timestamp if metrics are enabled, otherwise 0.
-     * Avoids a {@link System#nanoTime()} call when metrics are disabled.
-     *
-     * @return nanosecond start time, or 0 if metrics are disabled
-     */
     private static long captureStartTime() {
         return ClientDeltaMetrics.ENABLED ? System.nanoTime() : 0L;
     }
 
-    /**
-     * Records decode time and block change counts, and emits a periodic summary
-     * every 1024 packets. No-ops when metrics are disabled.
-     *
-     * @param payload    the processed payload (used for block count lookup)
-     * @param startNanos the nanosecond timestamp captured before processing
-     */
     private static void recordMetricsIfEnabled(
             final ChunkDeltaPayload payload,
-            final long startNanos) throws Exception {
-
-        if (!ClientDeltaMetrics.ENABLED) return;
+            final long startNanos
+    ) throws Exception {
+        if (!ClientDeltaMetrics.ENABLED) {
+            return;
+        }
 
         ClientDeltaMetrics.recordDecode(System.nanoTime() - startNanos);
         ClientDeltaMetrics.recordBlocksChanged(
                 DECODER.get().decode(payload.data()).getBlockInstructions().size());
 
-        // Bit-mask avoids modulo overhead; emits summary every 1024 packets.
         if ((ClientDeltaMetrics.packetCount() & 0x3FF) == 0) {
             ClientDeltaMetrics.logSummary();
         }
     }
 
-    /**
-     * Returns true if the given data byte array is null or empty.
-     *
-     * @param data the payload data to check
-     * @return true if the payload should be rejected
-     */
     private static boolean isInvalidPayload(final byte[] data) {
         return data == null || data.length == 0;
     }
 
-    /**
-     * Returns true if the given chunk implements {@link ChunkisDeltaDuck}.
-     * Logs a one-time warning if it does not.
-     *
-     * @param chunk  the chunk to test
-     * @param chunkX chunk X coordinate (for the warning message)
-     * @param chunkZ chunk Z coordinate (for the warning message)
-     * @return true if the chunk can carry a delta
-     */
     private static boolean isChunkisDuck(
             final WorldChunk chunk,
             final int chunkX,
-            final int chunkZ) {
-
-        if (chunk instanceof ChunkisDeltaDuck) return true;
+            final int chunkZ
+    ) {
+        if (chunk instanceof ChunkisDeltaDuck) {
+            return true;
+        }
 
         logTypeWarningOnce(chunk, chunkX, chunkZ);
         return false;
     }
 
-    /**
-     * Emits the "chunk does not implement ChunkisDeltaDuck" warning at most once
-     * per session, guarded by the {@link #typeWarningLogged} volatile flag.
-     *
-     * @param chunk  the offending chunk
-     * @param chunkX chunk X coordinate
-     * @param chunkZ chunk Z coordinate
-     */
     private static void logTypeWarningOnce(
             final WorldChunk chunk,
             final int chunkX,
-            final int chunkZ) {
-
-        if (typeWarningLogged) return;
+            final int chunkZ
+    ) {
+        if (typeWarningLogged) {
+            return;
+        }
         typeWarningLogged = true;
 
         Chunkis.LOGGER.warn(
-                "Chunkis: Chunk at ({},{}) does not implement ChunkisDeltaDuck: {}. " +
-                        "(Warning shown once only.)",
+                "Chunkis: Chunk at ({},{}) does not implement ChunkisDeltaDuck: {}. (Warning shown once only.)",
                 chunkX, chunkZ, chunk.getClass().getName());
     }
 
-    /**
-     * Releases thread-local decoder and visitor resources.
-     * Called on client disconnect to prevent Netty thread-pool memory leaks
-     * from stale decoder/visitor instances holding world state references.
-     */
     private static void cleanupThreadLocals() {
         DECODER.remove();
         VISITOR.remove();

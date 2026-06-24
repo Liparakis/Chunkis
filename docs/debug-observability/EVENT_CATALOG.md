@@ -263,11 +263,52 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Current fields:
   world id, chunk key, source, operation id
 
+### `CLIENT_SYNC_TX_START`
+
+- Domain: `CLIENT_SYNC`
+- Severity: `INFO`
+- Implemented in:
+  `fabric/.../network/ChunkisNetworking.java`
+  `fabric/.../client/ClientDeltaNetworking.java`
+- Meaning:
+  A server-side delta send or client-side delta apply started.
+- Current fields:
+  chunk key, source, operation id, optional world id, optional dirty state, optional byte size
+
+### `CLIENT_SYNC_TX_END`
+
+- Domain: `CLIENT_SYNC`
+- Severity: `INFO`
+- Implemented in:
+  `fabric/.../network/ChunkisNetworking.java`
+  `fabric/.../client/ClientDeltaNetworking.java`
+- Meaning:
+  A server-side delta send or client-side delta apply completed.
+- Current fields:
+  chunk key, source, operation id, optional world id, optional dirty state, byte size
+
+### `CLIENT_SYNC_FAILED`
+
+- Domain: `CLIENT_SYNC`
+- Severity: `WARN` or `ERROR`
+- Implemented in:
+  `fabric/.../network/ChunkisNetworking.java`
+  `fabric/.../client/ClientDeltaNetworking.java`
+- Meaning:
+  The sync path was skipped or failed at a top-level boundary.
+- Current reason values:
+  `EMPTY_DELTA`
+  `PLAYER_UNAVAILABLE`
+  `PAYLOAD_TOO_LARGE`
+  `INVALID_PAYLOAD`
+  `CHUNK_NOT_DELTA_CAPABLE`
+  `CLIENT_WORLD_UNAVAILABLE`
+  `IO_EXCEPTION`
+
 ## Not implemented yet
 
 - No cross-system transaction id threading for vanilla-cancel -> Chunkis-save correlation yet.
 - No `BOTH` load-source classification yet.
 - No palette/mapping failure events yet.
-- No client-sync events yet.
 - No watchpoints/export/ImGUI events yet.
-- No invariant-failure events are emitted in this pass.
+- No broad invariant-failure enforcement yet beyond the implemented off-thread assertion.

@@ -3,6 +3,12 @@ package io.liparakis.chunkis.network;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkEncoder;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -35,11 +41,10 @@ import java.util.Objects;
  * optional
  * compression) and sent via {@link ServerPlayNetworking}.</li>
  * </ol>
- *
- * @author Liparakis
- * @version 1.2
  */
 public final class ChunkisNetworking {
+
+    private static final String SEND_SOURCE = "ChunkisNetworking#sendDelta";
 
     /**
      * Hard ceiling on outgoing delta size. Payloads larger than this are dropped.
@@ -47,7 +52,7 @@ public final class ChunkisNetworking {
     private static final int MAX_DELTA_SIZE = 1_024_000; // 1 MB
 
     /**
-     * Thread-local encoder — each thread reuses a single instance, eliminating
+     * Thread-local encoder - each thread reuses a single instance, eliminating
      * per-call allocation on the packet-send hot path.
      */
     @SuppressWarnings("rawtypes")
@@ -58,92 +63,151 @@ public final class ChunkisNetworking {
         throw new AssertionError("Utility class");
     }
 
-    /**
-     * Encodes the chunk's Chunkis delta and sends it to {@code player}.
-     *
-     * @param player the player to send to (must not be null)
-     * @param chunk  the chunk whose delta should be sent (must not be null)
-     */
     public static void sendDelta(final ServerPlayerEntity player, final WorldChunk chunk) {
         Objects.requireNonNull(player, "player must not be null");
         Objects.requireNonNull(chunk, "chunk must not be null");
 
+        final ChunkPos chunkPos = chunk.getPos();
+        final String worldId = chunk.getWorld().getRegistryKey().getValue().toString();
+        final String operationId = ChunkTraceStore.nextOperationId("sync");
         final ChunkDelta<?, ?> delta = extractDelta(chunk);
-        if (delta == null)
-            return;
-        if (isPlayerUnavailable(player))
-            return;
 
-        encodAndSend(player, chunk.getPos(), delta);
+        if (delta == null) {
+            traceSyncFailure(
+                    worldId,
+                    chunkPos,
+                    operationId,
+                    ChunkTraceReason.EMPTY_DELTA,
+                    "skipped delta send because chunk had no non-empty delta",
+                    null
+            );
+            return;
+        }
+        if (isPlayerUnavailable(player)) {
+            traceSyncFailure(
+                    worldId,
+                    chunkPos,
+                    operationId,
+                    ChunkTraceReason.PLAYER_UNAVAILABLE,
+                    "skipped delta send because player was unavailable",
+                    null
+            );
+            return;
+        }
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CLIENT_SYNC,
+                ChunkTraceEventType.CLIENT_SYNC_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                SEND_SOURCE,
+                "starting delta send to player " + player.getName().getString(),
+                worldId,
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                operationId,
+                delta.isDirty(),
+                null
+        );
+        encodeAndSend(player, chunkPos, worldId, delta, operationId);
     }
 
-    /**
-     * Returns the non-empty delta from the chunk's duck interface, or null if
-     * the chunk does not implement {@link ChunkisDeltaDuck} or its delta is absent.
-     *
-     * @param chunk the chunk to inspect
-     * @return the active delta, or null
-     */
     private static ChunkDelta<?, ?> extractDelta(final WorldChunk chunk) {
-        if (!(chunk instanceof ChunkisDeltaDuck deltaDuck))
+        if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)) {
             return null;
+        }
 
         final ChunkDelta<?, ?> delta = deltaDuck.chunkis$getDelta();
         return (delta == null || delta.isEmpty()) ? null : delta;
     }
 
-    /**
-     * Encodes the delta, enforces the size limit, creates a
-     * {@link ChunkDeltaPayload},
-     * and sends it to the player. Any exception during encoding or sending is
-     * caught
-     * and logged so a single bad chunk cannot disrupt the packet pipeline.
-     *
-     * @param player the recipient
-     * @param pos    the chunk position (used for logging)
-     * @param delta  the delta to encode and send
-     */
     @SuppressWarnings("unchecked")
-    private static void encodAndSend(
+    private static void encodeAndSend(
             final ServerPlayerEntity player,
             final ChunkPos pos,
-            final ChunkDelta<?, ?> delta) {
-
+            final String worldId,
+            final ChunkDelta<?, ?> delta,
+            final String operationId
+    ) {
         try {
             final byte[] rawData = ENCODER_POOL.get().encode(delta);
 
             if (exceedsSizeLimit(rawData)) {
+                traceSyncFailure(
+                        worldId,
+                        pos,
+                        operationId,
+                        ChunkTraceReason.PAYLOAD_TOO_LARGE,
+                        "skipped delta send because payload exceeded size limit",
+                        rawData.length
+                );
                 Chunkis.LOGGER.error(
-                        "Chunkis: Delta too large for chunk ({}, {}): {} bytes — skipping",
+                        "Chunkis: Delta too large for chunk ({}, {}): {} bytes - skipping",
                         pos.x, pos.z, rawData.length);
                 return;
             }
 
             final ChunkDeltaPayload payload = ChunkDeltaPayload.create(rawData, pos.x, pos.z);
             ServerPlayNetworking.send(player, payload);
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_TX_END,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    SEND_SOURCE,
+                    "sent delta to player " + player.getName().getString(),
+                    worldId,
+                    new DebugChunkKey(pos.x, pos.z),
+                    null,
+                    operationId,
+                    delta.isDirty(),
+                    payload.data().length
+            );
 
         } catch (final Exception e) {
+            traceSyncFailure(
+                    worldId,
+                    pos,
+                    operationId,
+                    ChunkTraceReason.IO_EXCEPTION,
+                    "delta send failed with exception",
+                    null
+            );
             Chunkis.LOGGER.error("Chunkis: Failed to send delta for chunk ({}, {})", pos.x, pos.z, e);
         }
     }
 
-    /**
-     * Returns true if the player is no longer reachable (removed or disconnected).
-     *
-     * @param player the player to check
-     * @return true if the send should be aborted
-     */
     private static boolean isPlayerUnavailable(final ServerPlayerEntity player) {
         return player.isRemoved() || player.isDisconnected();
     }
 
-    /**
-     * Returns true if the raw encoded data exceeds {@value #MAX_DELTA_SIZE} bytes.
-     *
-     * @param data the encoded delta bytes
-     * @return true if the payload is too large to send
-     */
     private static boolean exceedsSizeLimit(final byte[] data) {
         return data.length > MAX_DELTA_SIZE;
+    }
+
+    private static void traceSyncFailure(
+            final String worldId,
+            final ChunkPos pos,
+            final String operationId,
+            final ChunkTraceReason reason,
+            final String message,
+            final Integer byteSize
+    ) {
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CLIENT_SYNC,
+                ChunkTraceEventType.CLIENT_SYNC_FAILED,
+                reason == ChunkTraceReason.IO_EXCEPTION
+                        ? ChunkTraceSeverity.ERROR
+                        : ChunkTraceSeverity.WARN,
+                reason,
+                SEND_SOURCE,
+                message,
+                worldId,
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                operationId,
+                null,
+                byteSize
+        );
     }
 }

@@ -152,11 +152,18 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Reason:
   This still comes after lifecycle correlation is stronger beyond the currently traced save/load/restore path.
 
-### Client-sync ordering
+### Client-sync top-level boundaries
 
-- Decision: `DEFERRED`
-- Reason:
-  Valuable, but outside the first disappearance-focused slice.
+- Decision: `PARTIALLY_IMPLEMENTED`
+- Evidence:
+  `CLIENT_SYNC_TX_START`
+  `CLIENT_SYNC_TX_END`
+  `CLIENT_SYNC_FAILED`
+- Files:
+  `ChunkisNetworking`
+  `ClientDeltaNetworking`
+- Notes:
+  This is intentionally only a send/apply flight recorder. It does not yet thread one shared operation id across the wire or expose compression decisions.
 
 ### Export/watchpoints/ImGUI
 
