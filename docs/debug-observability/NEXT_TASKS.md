@@ -43,6 +43,10 @@
   - payload byte size on traced sync events
 - [x] Added first storage decode-failure classification
   - decompression failure vs generic decode failure vs mapping lookup failure
+- [x] Added first unload-cache lifecycle evidence
+  - cache put
+  - authoritative delta kept over weaker replacement
+  - cache eviction
 - [x] Added focused validation
   - `ChunkTraceStoreTest`
   - `ChunkDeltaTraceTest`
@@ -53,7 +57,7 @@
 
 - [ ] Finish `GlobalChunkTracker` and unload-adjacent lifecycle coverage
   - Goal:
-    make dirty chunk disappearance across unload/cache transitions visible
+    add true unload-hook correlation beyond the current unload-cache lifecycle evidence
 - [ ] Finish `WorldChunkMixin`
   - Goal:
     tie live mutation and restore-to-live-chunk boundaries into the same trace story
@@ -96,6 +100,11 @@
     `GlobalChunkTracker`, `WorldChunkMixin`, `ChunkDebugCommand`
   - Goal:
     make dirty-map transitions visible, expose unload-cache hit/miss, surface stale async completions, and show `op=` in command timelines
+- [x] Extended tracker cache lifecycle evidence
+  - Files:
+    `GlobalChunkTracker`
+  - Goal:
+    show when deltas enter the unload cache, when weaker replacements are refused, and when cache capacity evicts old entries
 
 ## Verification completed for this pass
 

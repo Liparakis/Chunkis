@@ -58,6 +58,12 @@ Notes:
 1. active dirty delta missing
 2. `TRACKER_STATE_UPDATED reason=TRACKER_UNLOAD_CACHE_HIT|TRACKER_UNLOAD_CACHE_MISS`
 
+## Unload-cache lifecycle
+
+1. `TRACKER_STATE_UPDATED reason=TRACKER_UNLOAD_CACHE_PUT`
+2. optional `TRACKER_STATE_UPDATED reason=AUTHORITATIVE_DELTA_KEPT`
+3. optional `TRACKER_STATE_UPDATED reason=TRACKER_UNLOAD_CACHE_EVICT`
+
 ## Load from tracker memory
 
 1. `LOAD_TX_START`

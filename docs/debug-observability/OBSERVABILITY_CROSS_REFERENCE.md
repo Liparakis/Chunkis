@@ -125,7 +125,7 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Files:
   `GlobalChunkTracker`
 - Notes:
-  Dirty-map put/remove, unload-cache hit/miss, and stale async completion are now visible.
+  Dirty-map put/remove, unload-cache put/evict/hit/miss, authoritative-delta keep, and stale async completion are now visible.
   Full unload-hook correlation is still deferred.
 
 ### Off-thread world mutation rejection

@@ -74,7 +74,7 @@ This file separates Phase 2 invariants into three buckets:
 - Current hook points:
   `GlobalChunkTracker`
 - Notes:
-  Dirty-map insert/remove, unload-cache hit/miss, and stale async completion are now visible.
+  Dirty-map insert/remove, unload-cache put/evict/hit/miss, authoritative-delta keep, and stale async completion are now visible.
   True unload-hook correlation is still deferred.
 
 ## `PALETTE_LOOKUP_FAILURE_IDENTIFIED`

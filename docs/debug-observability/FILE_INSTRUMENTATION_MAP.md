@@ -113,7 +113,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/storage/StructureMetadataExtractor.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Structure metadata capture and fallback branch. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/ChunkBlockEntityCapture.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Block-entity capture/remove semantics. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/ChunkRestorer.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Restore start/completion/failure and aggregate applied counts now emit structured events. |
-| `fabric/src/main/java/io/liparakis/chunkis/world/GlobalChunkTracker.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Dirty-map transitions, unload-cache hit/miss, and stale async completion are now traced. |
+| `fabric/src/main/java/io/liparakis/chunkis/world/GlobalChunkTracker.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Dirty-map transitions, unload-cache put/evict/hit/miss, authoritative-delta keep, and stale async completion are now traced. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/LeafTickContext.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Noise-filter context only. |
 
 ## Source Audit Table: Validation / Test Support
@@ -2183,7 +2183,8 @@ Owns dirty delta map and unload-gap LRU cache.
 
 - dirty tracked
 - dirty removed after save
-- unload-cache hit/miss in `VERBOSE`
+- unload-cache put/evict/hit/miss
+- authoritative-delta kept over weaker replacement
 - stale async completion ignored
 
 ### Invariants to check
@@ -2201,7 +2202,7 @@ Owns dirty delta map and unload-gap LRU cache.
 
 ### Next action
 
-State transitions and unload-cache lookup summaries are implemented. Future work is true unload-hook correlation.
+State transitions, unload-cache lifecycle, and lookup summaries are implemented. Future work is true unload-hook correlation.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/world/LeafTickContext.java`
 
