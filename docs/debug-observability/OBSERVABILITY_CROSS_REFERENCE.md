@@ -138,6 +138,17 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Notes:
   This is a real assertion, but intentionally limited to the cheapest unambiguous case.
 
+### Stored-bytes decode failure classification
+
+- Decision: `PARTIALLY_IMPLEMENTED`
+- Evidence:
+  `LOAD_TX_END`
+- Files:
+  `CisStorage`
+- Notes:
+  The storage boundary now distinguishes `DECOMPRESSION_FAILED`, `DECODE_FAILED`, and `MAPPING_LOOKUP_FAILED`.
+  It still does not expose deeper decoder-internal failure stages or client/network decode failures.
+
 ## Deferred intentionally
 
 ### `BOTH` load-source resolution

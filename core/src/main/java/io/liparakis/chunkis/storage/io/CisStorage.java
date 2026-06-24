@@ -352,13 +352,14 @@ public final class CisStorage<B, S, P, N> {
             );
             return delta;
         } catch (final Exception e) {
+            final ChunkTraceReason reason = classifyLoadFailure(e);
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     ChunkTraceEventType.LOAD_TX_END,
                     ChunkTraceSeverity.ERROR,
-                    ChunkTraceReason.IO_EXCEPTION,
+                    reason,
                     LOAD_SOURCE,
-                    "load failed and entry will be cleared",
+                    "load failed and entry will be cleared: " + e.getMessage(),
                     null,
                     toChunkKey(pos),
                     toRegionKey(pos),
@@ -582,6 +583,20 @@ public final class CisStorage<B, S, P, N> {
      */
     private static <S, N> ChunkDelta<S, N> newEmptyDelta() {
         return new ChunkDelta<>();
+    }
+
+    private static ChunkTraceReason classifyLoadFailure(final Exception error) {
+        final String message = error.getMessage();
+        if (message == null) {
+            return ChunkTraceReason.DECODE_FAILED;
+        }
+        if (message.contains("Failed to decompress") || message.contains("Decompressed CIS data too small")) {
+            return ChunkTraceReason.DECOMPRESSION_FAILED;
+        }
+        if (message.contains("Unknown Block ID")) {
+            return ChunkTraceReason.MAPPING_LOOKUP_FAILED;
+        }
+        return ChunkTraceReason.DECODE_FAILED;
     }
 
     private static DebugChunkKey toChunkKey(final CisChunkPos pos) {

@@ -4,6 +4,7 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugLevel;
@@ -95,7 +96,63 @@ class CisStorageTraceTest {
                 );
     }
 
+    @Test
+    void classifiesUnknownBlockIdLoadFailureAsMappingLookupFailure() throws Exception {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+        final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
+        Files.createDirectories(tempDir.resolve("regions"));
+        final Path mappingFile = tempDir.resolve("global_ids.json");
+
+        final CisStorage<String, String, String, String> writerStorage =
+                new CisStorage<>(
+                        tempDir.resolve("regions"),
+                        new CisMapping<>(
+                                mappingFile,
+                                new TestBlockRegistryAdapter(),
+                                stateAdapter,
+                                new PropertyPacker<>(stateAdapter)
+                        ),
+                        stateAdapter,
+                        new TestNbtAdapter(),
+                        "air"
+                );
+
+        final CisChunkPos pos = new CisChunkPos(8, 4);
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 70, 1, "stone");
+        assertThat(writerStorage.save(pos, delta, "save-op-mapping")).isTrue();
+        writerStorage.close();
+
+        Files.writeString(mappingFile, "{\"air\":0,\"missing:block\":1}");
+
+        final CisStorage<String, String, String, String> readerStorage =
+                new CisStorage<>(
+                        tempDir.resolve("regions"),
+                        new CisMapping<>(
+                                mappingFile,
+                                new TestBlockRegistryAdapter(),
+                                stateAdapter,
+                                new PropertyPacker<>(stateAdapter)
+                        ),
+                        stateAdapter,
+                        new TestNbtAdapter(),
+                        "air"
+                );
+
+        final ChunkDelta<String, String> loaded = readerStorage.load(pos, "load-op-mapping");
+        readerStorage.close();
+
+        assertThat(loaded.isEmpty()).isTrue();
+        assertThat(ChunkTraceStore.latest(20))
+                .filteredOn(event -> "load-op-mapping".equals(event.operationId()))
+                .filteredOn(event -> event.eventType() == ChunkTraceEventType.LOAD_TX_END)
+                .extracting(ChunkTraceEvent::reason)
+                .contains(ChunkTraceReason.MAPPING_LOOKUP_FAILED);
+    }
+
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
+        private static final List<String> KNOWN_BLOCKS = List.of("air", "stone");
+
         @Override
         public String getId(final String block) {
             return block;
@@ -103,7 +160,7 @@ class CisStorageTraceTest {
 
         @Override
         public String getBlock(final String id) {
-            return id;
+            return KNOWN_BLOCKS.contains(id) ? id : null;
         }
 
         @Override
@@ -113,7 +170,7 @@ class CisStorageTraceTest {
 
         @Override
         public Collection<String> getRegisteredBlocks() {
-            return List.of("air", "stone");
+            return KNOWN_BLOCKS;
         }
     }
 

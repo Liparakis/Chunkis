@@ -215,14 +215,22 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 ### `LOAD_TX_END`
 
 - Domain: `CHUNK_LIFECYCLE`
-- Severity: `INFO`
+- Severity: `INFO` or `ERROR`
 - Implemented in:
   `core/.../storage/io/CisStorage.java`
   `fabric/.../mixin/storage/ChunkSerializerMixin.java`
 - Meaning:
   Load resolution ended either with an empty result, a stored delta, or an attached delta.
+- Current reason values:
+  `NEITHER`
+  `CHUNKIS_STORAGE`
+  `DECOMPRESSION_FAILED`
+  `DECODE_FAILED`
+  `MAPPING_LOOKUP_FAILED`
 - Current fields:
   chunk key, optional region key, source, operation id
+- Notes:
+  `CisStorage` now distinguishes "stored bytes were unreadable" from "no meaningful Chunkis data" at the storage boundary.
 
 ### `RESTORE_TX_START`
 
@@ -309,6 +317,6 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 
 - No cross-system transaction id threading for vanilla-cancel -> Chunkis-save correlation yet.
 - No `BOTH` load-source classification yet.
-- No palette/mapping failure events yet.
+- No dedicated decoder internals or client-network palette failure events yet.
 - No watchpoints/export/ImGUI events yet.
 - No broad invariant-failure enforcement yet beyond the implemented off-thread assertion.

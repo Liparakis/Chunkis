@@ -41,6 +41,8 @@
   - server send start/end/failure
   - client apply start/end/failure
   - payload byte size on traced sync events
+- [x] Added first storage decode-failure classification
+  - decompression failure vs generic decode failure vs mapping lookup failure
 - [x] Added focused validation
   - `ChunkTraceStoreTest`
   - `ChunkDeltaTraceTest`
@@ -58,9 +60,9 @@
 - [ ] Add transaction correlation ids if the timeline becomes ambiguous
   - Goal:
     extend the new save/load/restore operation ids across the remaining lifecycle edges
-  - [ ] Add decoder/mapping failure events
+  - [ ] Extend decoder/mapping failure evidence beyond storage-load classification
   - Goal:
-    distinguish persistence loss from decode corruption
+    cover deeper decoder internals and client/network decode failures only if the current storage boundary signal proves insufficient
 - [ ] Extend client-sync instrumentation beyond top-level boundaries
   - Goal:
     add payload compression/ordering evidence only if the current send/apply timeline is insufficient

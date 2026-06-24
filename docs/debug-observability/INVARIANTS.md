@@ -79,9 +79,13 @@ This file separates Phase 2 invariants into three buckets:
 
 ## `PALETTE_LOOKUP_FAILURE_IDENTIFIED`
 
-- Status: `NOT_IMPLEMENTED_YET`
-- Why not enforced yet:
-  Decoder/mapping failure surfaces were explicitly left out of this first save/load/restore slice.
+- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Evidence now available:
+  `LOAD_TX_END` with reason `MAPPING_LOOKUP_FAILED`
+- Current hook points:
+  `CisStorage`
+- Notes:
+  This currently covers storage-load mapping failures only. Client/network palette failures and deeper decoder-internal classification are still deferred.
 
 ## `REGION_WRITE_READABLE_WHEN_VERIFIED`
 

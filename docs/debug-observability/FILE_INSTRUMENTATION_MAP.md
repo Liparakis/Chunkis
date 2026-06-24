@@ -48,21 +48,21 @@ Validation sources are audited separately:
 | `core/src/main/java/io/liparakis/chunkis/storage/bits/BitReader.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Bit-level utility; emit at decode caller, not every read. |
 | `core/src/main/java/io/liparakis/chunkis/storage/bits/BitUtils.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Stateless math helpers only. |
 | `core/src/main/java/io/liparakis/chunkis/storage/bits/BitWriter.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Bit-level utility; emit at encode caller, not every write. |
-| `core/src/main/java/io/liparakis/chunkis/storage/codec/AbstractCisDecoder.java` | `CORE_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Decode path for stored/network payloads, palette reconstruction, metadata and entity payload parsing. |
+| `core/src/main/java/io/liparakis/chunkis/storage/codec/AbstractCisDecoder.java` | `CORE_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Decode path for stored/network payloads; Phase 2 now classifies storage-boundary failures without instrumenting decoder internals. |
 | `core/src/main/java/io/liparakis/chunkis/storage/codec/AbstractCisEncoder.java` | `CORE_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Encode path for save/network payloads, section decisions, metadata/block-entity/entity serialization. |
-| `core/src/main/java/io/liparakis/chunkis/storage/codec/CisDecoder.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Storage decoder wrapper and global palette decode entrypoint. |
+| `core/src/main/java/io/liparakis/chunkis/storage/codec/CisDecoder.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Storage decoder wrapper; failure classification currently happens at `CisStorage` rather than per decode sub-step. |
 | `core/src/main/java/io/liparakis/chunkis/storage/codec/CisEncoder.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Storage encoder wrapper and global palette encode entrypoint. |
 | `core/src/main/java/io/liparakis/chunkis/storage/codec/network/CisNetworkDecoder.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Client/network palette resolution and payload decode branch. |
 | `core/src/main/java/io/liparakis/chunkis/storage/codec/network/CisNetworkEncoder.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Server/network payload encode branch. |
 | `core/src/main/java/io/liparakis/chunkis/storage/io/CisRegionCompactor.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Offline maintenance/reporting path, not normal durability runtime. |
 | `core/src/main/java/io/liparakis/chunkis/storage/io/CisRegionInspector.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Existing storage inspection support to reuse later instead of duplicating browser logic. |
-| `core/src/main/java/io/liparakis/chunkis/storage/io/CisStorage.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Save/load start-end and flush lifecycle are now traced at the storage boundary. |
+| `core/src/main/java/io/liparakis/chunkis/storage/io/CisStorage.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Save/load start-end, flush lifecycle, and storage-boundary decode-failure classification are now traced. |
 | `core/src/main/java/io/liparakis/chunkis/storage/io/CompressionContext.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Compression internals; useful only for future perf/fingerprint debugging. |
 | `core/src/main/java/io/liparakis/chunkis/storage/io/RegionFile.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Region read/write transaction boundaries are now traced. |
 | `core/src/main/java/io/liparakis/chunkis/storage/io/RegionKey.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Small value object only. |
 | `core/src/main/java/io/liparakis/chunkis/storage/mapping/BlockIdRegistry.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Persistent block-id mapping and unresolved-id failure surface. |
 | `core/src/main/java/io/liparakis/chunkis/storage/mapping/CisAdapter.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Interface only. |
-| `core/src/main/java/io/liparakis/chunkis/storage/mapping/CisMapping.java` | `CORE_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Mapping flush/load/register path, block-id lookup, decode failure surface. |
+| `core/src/main/java/io/liparakis/chunkis/storage/mapping/CisMapping.java` | `CORE_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Mapping unresolved-id failures are now surfaced indirectly through `CisStorage` load classification; direct mapping hooks remain deferred. |
 | `core/src/main/java/io/liparakis/chunkis/storage/mapping/PropertyPacker.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Property packing/unpacking influences palette/state decode correctness. |
 | `core/src/main/java/io/liparakis/chunkis/storage/model/CisChunk.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Intermediate encoded chunk model; phase-2 hooks belong at encoder/decoder boundaries instead. |
 | `core/src/main/java/io/liparakis/chunkis/storage/model/CisConstants.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Constants only. |

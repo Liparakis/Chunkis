@@ -88,6 +88,17 @@ Notes:
 
 - `BOTH` is not emitted in the current implementation.
 
+## Load with unreadable stored bytes
+
+1. `LOAD_TX_START`
+2. `REGION_READ_TX_START`
+3. `REGION_READ_TX_END`
+4. `LOAD_TX_END reason=DECOMPRESSION_FAILED|DECODE_FAILED|MAPPING_LOOKUP_FAILED`
+
+Notes:
+
+- `CisStorage` clears the unreadable stored entry after tracing the failure and returns an empty delta.
+
 ## Restore result interpretation
 
 1. `RESTORE_TX_START`
