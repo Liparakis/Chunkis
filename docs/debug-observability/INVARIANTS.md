@@ -84,11 +84,12 @@ This file separates Phase 2 invariants into three buckets:
 - Status: `IMPLEMENTED_SIGNAL_ONLY`
 - Evidence now available:
   `TRACKER_STATE_UPDATED`
+  reason `TRACKER_CHUNK_UNLOADED`
 - Current hook points:
   `GlobalChunkTracker`
 - Notes:
-  Dirty-map insert/remove, unload-cache put/evict/hit/miss, authoritative-delta keep, and stale async completion are now visible.
-  True unload-hook correlation is still deferred.
+  Dirty-map insert/remove, unload-cache put/evict/hit/miss, authoritative-delta keep, stale async completion, and real chunk-unload boundaries are now visible.
+  This is still signal only, not a proof that persistence succeeded after unload.
 
 ## `PALETTE_LOOKUP_FAILURE_IDENTIFIED`
 

@@ -60,12 +60,13 @@
   - dedicated `durability-*` operation ids from the reproducer command
 - [x] Added focused durability validation
   - `DurabilityTestCommandTest`
+- [x] Added true unload-hook correlation
+  - `TRACKER_CHUNK_UNLOADED`
+  - dirty-state payload on unload events
+  - Fabric chunk-unload registration in `ChunkisMod`
 
 ## Phase 2 still remaining
 
-- [ ] Finish `GlobalChunkTracker` and unload-adjacent lifecycle coverage
-  - Goal:
-    add true unload-hook correlation beyond the current unload-cache lifecycle evidence
 - [ ] Finish `WorldChunkMixin`
   - Goal:
     tie live mutation and restore-to-live-chunk boundaries into the same trace story
@@ -116,6 +117,11 @@
     `GlobalChunkTracker`
   - Goal:
     show when deltas enter the unload cache, when weaker replacements are refused, and when cache capacity evicts old entries
+- [x] Added true chunk-unload correlation
+  - Files:
+    `GlobalChunkTracker`, `ChunkisMod`
+  - Goal:
+    show when a live world chunk actually unloads and whether a dirty delta was still actively tracked at that boundary
 
 ## Verification completed for this pass
 
@@ -123,6 +129,7 @@
 - [x] `./gradlew :fabric:compileJava :fabric:compileTestJava -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.StorageReportCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.DurabilityTestCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
+- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.world.GlobalChunkTrackerTest" -x :fabric:runGameTest`
 
 ## Known repo-level noise during verification
 

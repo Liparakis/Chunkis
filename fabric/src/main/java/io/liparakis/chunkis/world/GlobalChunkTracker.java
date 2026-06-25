@@ -128,6 +128,16 @@ public final class GlobalChunkTracker {
         );
     }
 
+    public static void noteChunkUnloaded(final WorldChunk chunk) {
+        Objects.requireNonNull(chunk, "chunk");
+        noteChunkUnloaded(
+                chunk.getWorld().getRegistryKey(),
+                chunk.getPos().x,
+                chunk.getPos().z,
+                dirtyDeltas.containsKey(keyOf(chunk.getWorld().getRegistryKey(), chunk.getPos()))
+        );
+    }
+
     public static void clear() {
         dirtyDeltas.clear();
         synchronized (unloadCache) {
@@ -209,7 +219,7 @@ public final class GlobalChunkTracker {
             final ChunkTraceReason reason,
             final String message
     ) {
-        traceTracker(key.dimension, new ChunkPos(key.chunkKey), reason, message);
+        traceTracker(key.dimension, new ChunkPos(key.chunkKey), reason, message, null);
     }
 
     private static void traceTracker(
@@ -217,6 +227,16 @@ public final class GlobalChunkTracker {
             final ChunkPos pos,
             final ChunkTraceReason reason,
             final String message
+    ) {
+        traceTracker(dimension, pos, reason, message, null);
+    }
+
+    private static void traceTracker(
+            final RegistryKey<World> dimension,
+            final ChunkPos pos,
+            final ChunkTraceReason reason,
+            final String message,
+            final Boolean dirtyState
     ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.DIRTY_TRACKING,
@@ -229,7 +249,7 @@ public final class GlobalChunkTracker {
                 new DebugChunkKey(pos.x, pos.z),
                 null,
                 null,
-                null,
+                dirtyState,
                 null
         );
     }
@@ -243,6 +263,46 @@ public final class GlobalChunkTracker {
             final ChunkDelta<?, ?> incoming
     ) {
         return existing != null && isAuthoritative(existing) && !isAuthoritative(incoming);
+    }
+
+    static void noteChunkUnloaded(
+            final RegistryKey<World> dimension,
+            final int chunkX,
+            final int chunkZ,
+            final boolean hadActiveDirtyDelta
+    ) {
+        traceTracker(
+                dimension,
+                new DebugChunkKey(chunkX, chunkZ),
+                ChunkTraceReason.TRACKER_CHUNK_UNLOADED,
+                hadActiveDirtyDelta
+                        ? "world chunk unloaded while dirty delta remained tracked"
+                        : "world chunk unloaded without active dirty delta",
+                hadActiveDirtyDelta
+        );
+    }
+
+    private static void traceTracker(
+            final RegistryKey<World> dimension,
+            final DebugChunkKey chunkKey,
+            final ChunkTraceReason reason,
+            final String message,
+            final Boolean dirtyState
+    ) {
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.DIRTY_TRACKING,
+                ChunkTraceEventType.TRACKER_STATE_UPDATED,
+                ChunkTraceSeverity.INFO,
+                reason,
+                SOURCE,
+                message,
+                dimension.getValue().toString(),
+                chunkKey,
+                null,
+                null,
+                dirtyState,
+                null
+        );
     }
 
     private static void putInUnloadCache(

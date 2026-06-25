@@ -132,14 +132,14 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 
 ### Dirty tracker state visibility
 
-- Decision: `PARTIALLY_IMPLEMENTED`
+- Decision: `IMPLEMENTED_WITH_LIMITATION`
 - Evidence:
   `TRACKER_STATE_UPDATED`
 - Files:
   `GlobalChunkTracker`
 - Notes:
-  Dirty-map put/remove, unload-cache put/evict/hit/miss, authoritative-delta keep, and stale async completion are now visible.
-  Full unload-hook correlation is still deferred.
+  Dirty-map put/remove, unload-cache put/evict/hit/miss, authoritative-delta keep, stale async completion, and real chunk-unload notifications are now visible.
+  The remaining limitation is that unload events are still tracker-level evidence, not a hard persistence assertion.
 
 ### Off-thread world mutation rejection
 
@@ -209,6 +209,8 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   readable timeline formatting
 - `DurabilityTestCommandTest`
   teleport target to chunk-key mapping for durability trace events
+- `GlobalChunkTrackerTest`
+  tracker unload event emission and dirty-state payload
 
 ### Next validation additions after this pass
 

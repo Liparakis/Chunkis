@@ -64,6 +64,16 @@ Notes:
 2. optional `TRACKER_STATE_UPDATED reason=AUTHORITATIVE_DELTA_KEPT`
 3. optional `TRACKER_STATE_UPDATED reason=TRACKER_UNLOAD_CACHE_EVICT`
 
+## Live chunk unload
+
+1. `TRACKER_STATE_UPDATED reason=TRACKER_CHUNK_UNLOADED`
+2. optional later `TRACKER_STATE_UPDATED reason=TRACKER_UNLOAD_CACHE_HIT`
+
+Notes:
+
+- `dirty=true` means the live world chunk unloaded while a dirty delta still existed in the tracker.
+- This is correlation evidence only; it does not claim that a save had already flushed.
+
 ## Load from tracker memory
 
 1. `LOAD_TX_START`

@@ -113,7 +113,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/storage/StructureMetadataExtractor.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Structure metadata capture and fallback branch. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/ChunkBlockEntityCapture.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Block-entity capture/remove semantics. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/ChunkRestorer.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Restore start/completion/failure and aggregate applied counts now emit structured events. |
-| `fabric/src/main/java/io/liparakis/chunkis/world/GlobalChunkTracker.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Dirty-map transitions, unload-cache put/evict/hit/miss, authoritative-delta keep, and stale async completion are now traced. |
+| `fabric/src/main/java/io/liparakis/chunkis/world/GlobalChunkTracker.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Dirty-map transitions, real chunk-unload boundaries, unload-cache put/evict/hit/miss, authoritative-delta keep, and stale async completion are now traced. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/LeafTickContext.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Noise-filter context only. |
 
 ## Source Audit Table: Validation / Test Support
@@ -131,6 +131,7 @@ Validation sources are audited separately:
 | `fabric/src/test/java/io/liparakis/chunkis/command/StorageReportCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Storage inspection reports raw payload mix correctly. | Extend later to compare report output with trace/export summaries. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/ChunkDebugCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Timeline formatter produces readable structured event lines for command output. | Extend later to assert command execution output once command harness coverage is worth the churn. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/DurabilityTestCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Durability teleport target mapping to chunk coordinates used by trace events. | Extend later to assert start/stop/failure event emission once a low-churn command or scheduler harness exists. |
+| `fabric/src/test/java/io/liparakis/chunkis/world/GlobalChunkTrackerTest.java` | `DEBUG_VALIDATION_SUPPORT` | Tracker authority rules and chunk-unload trace emission. | Extend later to assert unload plus later cache-hit/load-source timelines if a light integration harness is added. |
 | `fabric/src/test/java/io/liparakis/chunkis/network/ChunkDeltaPayloadTest.java` | `DEBUG_VALIDATION_SUPPORT` | Payload compression/round-trip behavior. | Assert future client-sync payload size/compression decision events. |
 | `fabric/src/test/java/io/liparakis/chunkis/storage/CisSnapshotCaptureTest.java` | `DEBUG_VALIDATION_SUPPORT` | Snapshot capture Y-coordinate correctness. | Extend to assert snapshot-capture event counts. |
 | `fabric/src/test/java/io/liparakis/chunkis/util/CisNbtUtilTest.java` | `DEBUG_VALIDATION_SUPPORT` | Metadata envelope and suppression semantics. | Assert future metadata/base-NBT/full-baseline events. |
@@ -2186,6 +2187,7 @@ Owns dirty delta map and unload-gap LRU cache.
 
 - dirty tracked
 - dirty removed after save
+- real chunk unload boundary
 - unload-cache put/evict/hit/miss
 - authoritative-delta kept over weaker replacement
 - stale async completion ignored
@@ -2205,7 +2207,7 @@ Owns dirty delta map and unload-gap LRU cache.
 
 ### Next action
 
-State transitions, unload-cache lifecycle, and lookup summaries are implemented. Future work is true unload-hook correlation.
+State transitions, real chunk-unload correlation, unload-cache lifecycle, and lookup summaries are implemented. Future work is stronger assertions tying unload to later save/load outcomes.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/world/LeafTickContext.java`
 
@@ -2307,6 +2309,15 @@ Leave out of Phase 2 unless evidence points here.
   durability run start/stop/failure events should keep stable chunk targeting and operation-id readability.
 - Missing tests to add:
   one focused test for event emission if the reproducer gains a small injectable scheduler seam without widening the command surface.
+
+## `fabric/src/test/java/io/liparakis/chunkis/world/GlobalChunkTrackerTest.java`
+
+- Current behavior:
+  validates authoritative-delta replacement rules and chunk-unload trace emission.
+- Later observability assertions:
+  unload events should correlate cleanly with later unload-cache hits or misses on the same chunk.
+- Missing tests to add:
+  one light integration test for unload event followed by tracker-memory or unload-cache resolution if a cheap harness exists.
 
 ## `fabric/src/test/java/io/liparakis/chunkis/network/ChunkDeltaPayloadTest.java`
 

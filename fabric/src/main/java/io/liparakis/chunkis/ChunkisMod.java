@@ -18,6 +18,7 @@ import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
@@ -104,6 +105,10 @@ public final class ChunkisMod implements ModInitializer {
     private static void registerEvents() {
         ServerWorldEvents.LOAD.register(
                 (server, world) -> migrateWorld(world)
+        );
+
+        ServerChunkEvents.CHUNK_UNLOAD.register(
+                (world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk)
         );
 
         ServerTickEvents.END_WORLD_TICK.register(

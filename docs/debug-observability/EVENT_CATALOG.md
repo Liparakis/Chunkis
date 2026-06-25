@@ -145,12 +145,18 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Current reason values:
   `TRACKER_DIRTY_MAP_PUT`
   `TRACKER_MARK_SAVED`
+  `TRACKER_CHUNK_UNLOADED`
   `TRACKER_UNLOAD_CACHE_PUT`
   `TRACKER_UNLOAD_CACHE_EVICT`
   `TRACKER_UNLOAD_CACHE_HIT`
   `TRACKER_UNLOAD_CACHE_MISS`
   `AUTHORITATIVE_DELTA_KEPT`
   `STALE_GENERATION_IGNORED`
+- Current fields:
+  world id, chunk key, optional dirty state
+- Notes:
+  `TRACKER_CHUNK_UNLOADED` is the first true live-world unload correlation hook.
+  `dirtyState=true` means the chunk left the live world while a dirty delta was still actively tracked.
 
 ### `ASSERTION_FAILED`
 
