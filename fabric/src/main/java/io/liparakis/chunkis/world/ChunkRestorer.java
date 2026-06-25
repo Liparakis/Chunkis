@@ -32,10 +32,12 @@ import net.minecraft.world.chunk.WorldChunk;
 import org.slf4j.Logger;
 
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
@@ -141,7 +143,7 @@ public final class ChunkRestorer {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 RESTORE_SOURCE,
-                "starting restore",
+                "starting restore with decoded payload: " + describeReplayPayload(protoDelta),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(chunkPos.x, chunkPos.z),
                 null,
@@ -186,7 +188,8 @@ public final class ChunkRestorer {
                 RESTORE_SOURCE,
                 "restore completed: blocks=" + visitor.appliedBlocksCount()
                         + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
-                        + ", entities=" + visitor.restoredEntitiesCount(),
+                        + ", entities=" + visitor.restoredEntitiesCount()
+                        + ", blockReplay=" + visitor.blockApplyFailureCounters().describe(),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(chunkPos.x, chunkPos.z),
                 null,
@@ -206,6 +209,21 @@ public final class ChunkRestorer {
                             + protoDelta.getBlockInstructions().size()
                             + ", blockEntities="
                             + protoDelta.getBlockEntities().size(),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    operationId,
+                    runtimeDelta != null && runtimeDelta.isDirty(),
+                    null
+            );
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.RESTORE_EMPTY_RESULT,
+                    RESTORE_SOURCE,
+                    "restore zero-result diagnostics: payload=" + describeReplayPayload(protoDelta)
+                            + ", blockReplay=" + visitor.blockApplyFailureCounters().describe(),
                     world.getRegistryKey().getValue().toString(),
                     new DebugChunkKey(chunkPos.x, chunkPos.z),
                     null,
@@ -270,9 +288,11 @@ public final class ChunkRestorer {
             final int localY,
             final int localZ,
             final BlockState state,
-            final BlockPos worldPosition
+            final BlockPos worldPosition,
+            final BlockApplyFailureCounters counters
     ) {
         if (localY < chunk.getBottomY() || localY > chunk.getTopYInclusive()) {
+            counters.recordOutOfBoundsY();
             LOGGER.warn(
                     "Skipping out-of-bounds restored block at {} in chunk {}",
                     worldPosition,
@@ -285,6 +305,7 @@ public final class ChunkRestorer {
             final int sectionIndex = chunk.getSectionIndex(localY);
 
             if (sectionIndex < 0 || sectionIndex >= chunk.getSectionArray().length) {
+                counters.recordInvalidSectionIndex();
                 LOGGER.warn(
                         "Skipping restored block at {} in chunk {} with invalid section index {}",
                         worldPosition,
@@ -297,6 +318,7 @@ public final class ChunkRestorer {
             final ChunkSection section = chunk.getSection(sectionIndex);
 
             if (section == null) {
+                counters.recordNullSection();
                 LOGGER.warn(
                         "Skipping restored block at {} in chunk {} because section {} is null",
                         worldPosition,
@@ -314,6 +336,7 @@ public final class ChunkRestorer {
 
             return true;
         } catch (final Exception e) {
+            counters.recordException();
             LOGGER.error(
                     "Failed to restore block at {} in chunk {}",
                     worldPosition,
@@ -395,6 +418,7 @@ public final class ChunkRestorer {
         private final ChunkPos chunkPosition;
         private final ChunkDelta<BlockState, NbtCompound> runtimeDelta;
         private final boolean replayLegacyEntities;
+        private final BlockApplyFailureCounters blockApplyFailureCounters;
         private int appliedBlocksCount;
         private int restoredBlockEntitiesCount;
         private int restoredEntitiesCount;
@@ -410,6 +434,7 @@ public final class ChunkRestorer {
             this.chunkPosition = chunk.getPos();
             this.runtimeDelta = runtimeDelta;
             this.replayLegacyEntities = shouldReplayLegacyEntities(sourceDelta);
+            this.blockApplyFailureCounters = new BlockApplyFailureCounters();
         }
 
         /**
@@ -492,7 +517,9 @@ public final class ChunkRestorer {
                 final int localZ,
                 final BlockState state
         ) {
+            blockApplyFailureCounters.recordVisitedInstruction();
             if (state == null) {
+                blockApplyFailureCounters.recordNullState();
                 return;
             }
 
@@ -505,12 +532,14 @@ public final class ChunkRestorer {
                     localY,
                     localZ,
                     state,
-                    worldPos
+                    worldPos,
+                    blockApplyFailureCounters
             )) {
                 return;
             }
 
             copyBlockToRuntimeDelta(localX, localY, localZ, state);
+            blockApplyFailureCounters.recordAppliedBlock();
             appliedBlocksCount++;
         }
 
@@ -758,6 +787,104 @@ public final class ChunkRestorer {
 
         private int restoredEntitiesCount() {
             return restoredEntitiesCount;
+        }
+
+        private BlockApplyFailureCounters blockApplyFailureCounters() {
+            return blockApplyFailureCounters;
+        }
+    }
+
+    static String describeReplayPayload(final ChunkDelta<?, NbtCompound> delta) {
+        if (delta == null) {
+            return "sections=[], blockChanges=[], blockEntities=[]";
+        }
+
+        final TreeSet<Integer> sections = new TreeSet<>();
+        final List<String> blockChanges = new ArrayList<>();
+        final List<String> blockEntities = new ArrayList<>();
+
+        delta.forEachBlock((x, y, z, state) -> {
+            sections.add(y >> 4);
+            blockChanges.add("(" + x + "," + y + "," + z + ")=" + state);
+        });
+
+        delta.getBlockEntities().forEach((packedPos, nbt) -> {
+            final int x = io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos);
+            final int y = io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos);
+            final int z = io.liparakis.chunkis.core.BlockInstruction.unpackZ(packedPos);
+            sections.add(y >> 4);
+            final String id = nbt == null
+                    ? "null"
+                    : nbt.getString(ID_KEY).orElse("<missing-id>");
+            blockEntities.add("(" + x + "," + y + "," + z + ")=" + id);
+        });
+
+        blockEntities.sort(String::compareTo);
+
+        return "sections=" + joinIntegers(sections)
+                + ", blockChanges=" + blockChanges
+                + ", blockEntities=" + blockEntities;
+    }
+
+    private static String joinIntegers(final Set<Integer> values) {
+        final StringBuilder builder = new StringBuilder("[");
+        boolean first = true;
+        for (final int value : values) {
+            if (!first) {
+                builder.append(',');
+            }
+            builder.append(value);
+            first = false;
+        }
+        return builder.append(']').toString();
+    }
+
+    static final class BlockApplyFailureCounters {
+
+        private int visitedInstructions;
+        private int appliedBlocks;
+        private int nullState;
+        private int outOfBoundsY;
+        private int invalidSectionIndex;
+        private int nullSection;
+        private int exception;
+
+        void recordVisitedInstruction() {
+            visitedInstructions++;
+        }
+
+        void recordAppliedBlock() {
+            appliedBlocks++;
+        }
+
+        void recordNullState() {
+            nullState++;
+        }
+
+        void recordOutOfBoundsY() {
+            outOfBoundsY++;
+        }
+
+        void recordInvalidSectionIndex() {
+            invalidSectionIndex++;
+        }
+
+        void recordNullSection() {
+            nullSection++;
+        }
+
+        void recordException() {
+            exception++;
+        }
+
+        String describe() {
+            return "visited=" + visitedInstructions
+                    + ", applied=" + appliedBlocks
+                    + ", nullState=" + nullState
+                    + ", outOfBoundsY=" + outOfBoundsY
+                    + ", invalidSectionIndex=" + invalidSectionIndex
+                    + ", nullSection=" + nullSection
+                    + ", exception=" + exception;
         }
     }
 }

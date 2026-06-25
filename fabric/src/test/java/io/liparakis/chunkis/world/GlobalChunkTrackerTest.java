@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GlobalChunkTrackerTest {
@@ -97,5 +98,29 @@ class GlobalChunkTrackerTest {
         assertEquals("minecraft:overworld", latest.getFirst().worldId());
         assertEquals(7, latest.getFirst().chunkKey().x());
         assertEquals(9, latest.getFirst().chunkKey().z());
+    }
+
+    @Test
+    void asyncSaveCompletionInvalidatesUnloadCacheForCleanDelta() {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+        final RegistryKey<World> overworld = RegistryKey.of(
+                RegistryKeys.WORLD,
+                Identifier.of("minecraft", "overworld")
+        );
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+
+        GlobalChunkTracker.addDelta(overworld, 7, 9, delta, "test");
+
+        final long savedGeneration = delta.getMutationGeneration();
+        assertTrue(delta.isDirty());
+
+        GlobalChunkTracker.markSavedIfUnchanged(overworld, 7, 9, delta, savedGeneration);
+
+        assertFalse(delta.isDirty());
+        assertNull(GlobalChunkTracker.getDelta(overworld, 7, 9));
+
+        final List<ChunkTraceEvent> events = ChunkTraceStore.latest(4);
+        assertTrue(events.stream().anyMatch(event -> event.reason() == ChunkTraceReason.TRACKER_MARK_SAVED));
+        assertTrue(events.stream().anyMatch(event -> event.reason() == ChunkTraceReason.TRACKER_UNLOAD_CACHE_INVALIDATED));
     }
 }

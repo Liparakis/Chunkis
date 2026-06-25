@@ -136,15 +136,7 @@ public final class GlobalChunkTracker {
     }
 
     public static void markSaved(final World world, final ChunkPos position) {
-        final DimensionChunkKey key = keyOf(world.getRegistryKey(), position);
-        if (dirtyDeltas.remove(key) != null) {
-            traceTracker(
-                    world.getRegistryKey(),
-                    position,
-                    ChunkTraceReason.TRACKER_MARK_SAVED,
-                    "removed dirty delta after save"
-            );
-        }
+        markSaved(world.getRegistryKey(), position.x, position.z);
     }
 
     public static void markSavedIfUnchanged(
@@ -153,34 +145,72 @@ public final class GlobalChunkTracker {
             final ChunkDelta<?, ?> liveDelta,
             final long generation
     ) {
+        markSavedIfUnchanged(world.getRegistryKey(), position.x, position.z, liveDelta, generation);
+    }
+
+    static void markSaved(
+            final RegistryKey<World> dimension,
+            final int chunkX,
+            final int chunkZ
+    ) {
+        final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
+        final DebugChunkKey debugKey = new DebugChunkKey(chunkX, chunkZ);
+        if (dirtyDeltas.remove(key) != null) {
+            traceTracker(
+                    dimension,
+                    debugKey,
+                    ChunkTraceReason.TRACKER_MARK_SAVED,
+                    "removed dirty delta after save",
+                    SOURCE,
+                    null
+            );
+        }
+        invalidateUnloadCache(key, "invalidated unload cache after save");
+    }
+
+    static void markSavedIfUnchanged(
+            final RegistryKey<World> dimension,
+            final int chunkX,
+            final int chunkZ,
+            final ChunkDelta<?, ?> liveDelta,
+            final long generation
+    ) {
         if (liveDelta == null) {
             return;
         }
+        final DebugChunkKey debugKey = new DebugChunkKey(chunkX, chunkZ);
         dirtyDeltas.computeIfPresent(
-                keyOf(world.getRegistryKey(), position), (ignored, active) -> {
+                keyOf(dimension, chunkX, chunkZ), (key, active) -> {
                     if (active != liveDelta) {
                         traceTracker(
-                                world.getRegistryKey(),
-                                position,
+                                dimension,
+                                debugKey,
                                 ChunkTraceReason.STALE_GENERATION_IGNORED,
-                                "ignored async save completion for replaced delta"
+                                "ignored async save completion for replaced delta",
+                                SOURCE,
+                                null
                         );
                         return active;
                     }
                     if (liveDelta.markSavedIfGeneration(generation)) {
                         traceTracker(
-                                world.getRegistryKey(),
-                                position,
+                                dimension,
+                                debugKey,
                                 ChunkTraceReason.TRACKER_MARK_SAVED,
-                                "removed dirty delta after unchanged async save"
+                                "removed dirty delta after unchanged async save",
+                                SOURCE,
+                                null
                         );
+                        invalidateUnloadCache(key, "invalidated unload cache after unchanged async save");
                         return null;
                     }
                     traceTracker(
-                            world.getRegistryKey(),
-                            position,
+                            dimension,
+                            debugKey,
                             ChunkTraceReason.STALE_GENERATION_IGNORED,
-                            "ignored async save completion for advanced generation " + generation
+                            "ignored async save completion for advanced generation " + generation,
+                            SOURCE,
+                            null
                     );
                     return active;
                 }
@@ -205,21 +235,44 @@ public final class GlobalChunkTracker {
     }
 
     public static ChunkDelta<?, ?> getDelta(final World world, final ChunkPos position) {
-        final DimensionChunkKey key = keyOf(world.getRegistryKey(), position);
+        return getDelta(world.getRegistryKey(), position.x, position.z);
+    }
+
+    static ChunkDelta<?, ?> getDelta(
+            final RegistryKey<World> dimension,
+            final int chunkX,
+            final int chunkZ
+    ) {
+        final DebugChunkKey debugKey = new DebugChunkKey(chunkX, chunkZ);
+        final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
         final ChunkDelta<?, ?> active = dirtyDeltas.get(key);
         if (active != null) {
             return active;
         }
         final ChunkDelta<?, ?> cached = getFromUnloadCache(key);
+        if (cached != null && !cached.isDirty()) {
+            invalidateUnloadCache(key, "invalidated clean unload-cache delta before load");
+            traceTracker(
+                    dimension,
+                    debugKey,
+                    ChunkTraceReason.TRACKER_UNLOAD_CACHE_MISS,
+                    "ignored clean unload-cache delta and fell back to storage",
+                    SOURCE,
+                    null
+            );
+            return null;
+        }
         traceTracker(
-                world.getRegistryKey(),
-                position,
+                dimension,
+                debugKey,
                 cached != null
                         ? ChunkTraceReason.TRACKER_UNLOAD_CACHE_HIT
                         : ChunkTraceReason.TRACKER_UNLOAD_CACHE_MISS,
                 cached != null
-                        ? "resolved delta from unload cache"
-                        : "no delta in unload cache"
+                        ? "resolved dirty delta from unload cache"
+                        : "no delta in unload cache",
+                SOURCE,
+                null
         );
         return cached;
     }
@@ -290,15 +343,6 @@ public final class GlobalChunkTracker {
             final String source
     ) {
         traceTracker(key.dimension, new ChunkPos(key.chunkKey), reason, message, source, null);
-    }
-
-    private static void traceTracker(
-            final RegistryKey<World> dimension,
-            final ChunkPos pos,
-            final ChunkTraceReason reason,
-            final String message
-    ) {
-        traceTracker(dimension, pos, reason, message, SOURCE, null);
     }
 
     private static void traceTracker(
@@ -401,6 +445,26 @@ public final class GlobalChunkTracker {
         }
     }
 
+    private static void invalidateUnloadCache(
+            final DimensionChunkKey key,
+            final String message
+    ) {
+        final boolean removed;
+        synchronized (unloadCache) {
+            removed = unloadCache.remove(key) != null;
+        }
+        if (removed) {
+            traceTracker(
+                    key.dimension,
+                    new DebugChunkKey(unpackChunkX(key.chunkKey), unpackChunkZ(key.chunkKey)),
+                    ChunkTraceReason.TRACKER_UNLOAD_CACHE_INVALIDATED,
+                    message,
+                    SOURCE,
+                    null
+            );
+        }
+    }
+
     private static boolean shouldSkipDelta(final ChunkDelta<?, ?> delta) {
         return delta == null || (delta.isEmpty() && !delta.isDirty());
     }
@@ -425,6 +489,14 @@ public final class GlobalChunkTracker {
 
     private static long packChunkKey(final int chunkX, final int chunkZ) {
         return (chunkX & 0xFFFFFFFFL) | ((chunkZ & 0xFFFFFFFFL) << 32);
+    }
+
+    private static int unpackChunkX(final long chunkKey) {
+        return (int) chunkKey;
+    }
+
+    private static int unpackChunkZ(final long chunkKey) {
+        return (int) (chunkKey >>> 32);
     }
 
     private static final class DimensionChunkKey {

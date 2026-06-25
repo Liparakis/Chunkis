@@ -114,6 +114,29 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   `/chunkis debug latest <count>`
   `/chunkis debug clear`
 
+### Suspicion-driven chunk discovery
+
+- Decision: `IMPLEMENTED_WITH_LIMITATION`
+- Evidence:
+  `/chunkis debug suspects`
+  `/chunkis debug suspect <suspectId>`
+  `/chunkis debug suspect timeline <suspectId>`
+  `/chunkis debug suspect chunk <x> <z>`
+  `/chunkis debug suspects clear`
+  `/chunkis debug failures [count]`
+  `/chunkis debug failure <eventId>`
+- Files:
+  `ChunkTraceStore`
+  `ChunkTraceSuspect`
+  `ChunkDebugCommand`
+- Notes:
+  This avoids the main watchpoint blind spot: operators no longer need to know the chunk before the failure.
+  The current implementation is intentionally lazy and truthful:
+  it promotes suspects when high-value failure or suspicion signals appear, then stores a copied failure snapshot plus a compact copied chunk/op timeline in a separately bounded suspect registry.
+  Current promotion signals cover direct failure events, prior-stored-payload then `NEITHER` load resolution, and dirty chunk unload without queued/flushed save evidence.
+  Suspect ids are stable registry ids, not event ids or list positions, so the retained suspect snapshot still works after the main trace ring rotates.
+  It still does not add a second persistence layer or long-lived indexing outside debug memory.
+
 ### Durability reproducer timeline
 
 - Decision: `IMPLEMENTED`
@@ -275,6 +298,7 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   `BaseChunkCaptureScheduler`
 - Notes:
   Focused chunk/region watchpoints are now implemented as operator-side filters over the existing in-memory store.
+  Suspicion-driven suspect discovery now complements watchpoints for random disappearing chunks by surfacing candidate chunks automatically.
   JSONL export is now implemented as a world-local dump of the in-memory store.
   Watched pending-save snapshots now expose dirty-tracker, async queue, and deferred base-capture state for selected chunks.
   GUI surfaces remain deferred.
@@ -284,13 +308,13 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 ### Unit tests now covering observability
 
 - `ChunkTraceStoreTest`
-  bounded store and debug default OFF
+  bounded store, debug default OFF, and suspect promotion
 - `ChunkDeltaTraceTest`
   dirty/clean event emission
 - `CisStorageTraceTest`
   save/load storage events
 - `ChunkDebugCommandTest`
-  readable timeline formatting
+  readable timeline formatting and suspect summary/detail formatting
 - `DurabilityTestCommandTest`
   teleport target to chunk-key mapping and manual-stop trace emission for durability events
 - `GlobalChunkTrackerTest`
@@ -307,3 +331,4 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Extend durability game-test coverage to assert a trace timeline around an actual disappearing-chunk reproducer.
 - Extend durability game-test coverage beyond the current chunk-local timeline checks once the pre-existing startup migration/decompression failures stop blocking a full `runGameTest` pass.
 - Add targeted failure-path tests for save rejection, async flush failure, and zero-result restore timelines.
+- Add command execution coverage for suspect/failure listing only if the formatting-only tests stop being enough.

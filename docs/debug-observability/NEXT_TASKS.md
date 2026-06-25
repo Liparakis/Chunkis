@@ -14,6 +14,14 @@
   - `/chunkis debug watch list`
   - `/chunkis debug watch latest <count>`
   - `/chunkis debug watch clear`
+  - suspicion-driven surfacing now exists:
+    `/chunkis debug suspects`
+    `/chunkis debug suspect <suspectId>`
+    `/chunkis debug suspect timeline <suspectId>`
+    `/chunkis debug suspect chunk <x> <z>`
+    `/chunkis debug suspects clear`
+    `/chunkis debug failures [count]`
+    `/chunkis debug failure <eventId>`
 - [x] JSONL export
   - `/chunkis debug export latest <count>`
   - `/chunkis debug export watched <count>`
@@ -116,6 +124,7 @@
 - [x] Debug remains `OFF` by default
 - [x] Structured events stay bounded in-memory and monotonic
 - [x] Minimal `/chunkis debug` command surface exists
+- [x] Suspicion-driven chunk discovery exists without preconfigured watch coordinates
 - [x] The repo compiles with the current trace core and instrumentation
 - [x] No persistence behavior was intentionally changed in this phase
 

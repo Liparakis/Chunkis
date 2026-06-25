@@ -2,9 +2,11 @@ package io.liparakis.chunkis.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import io.liparakis.chunkis.debug.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.ChunkTraceJsonl;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkTraceSuspect;
 import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugLevel;
@@ -32,6 +34,7 @@ import java.util.List;
 public final class ChunkDebugCommand {
 
     private static final int MAX_LATEST_COUNT = 200;
+    private static final int DEFAULT_FAILURE_COUNT = 20;
     private static final String EXPORT_DIRECTORY = "chunkis/debug";
     private static final DateTimeFormatter TIME_FORMAT =
             DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
@@ -43,106 +46,21 @@ public final class ChunkDebugCommand {
     }
 
     public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
-        final var watchCommand = CommandManager.literal("watch")
-                .then(CommandManager.literal("chunk")
-                        .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                                .then(CommandManager.argument("z", IntegerArgumentType.integer())
-                                        .executes(context -> watchChunk(
-                                                context.getSource(),
-                                                IntegerArgumentType.getInteger(context, "x"),
-                                                IntegerArgumentType.getInteger(context, "z")
-                                        )))))
-                .then(CommandManager.literal("region")
-                        .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                                .then(CommandManager.argument("z", IntegerArgumentType.integer())
-                                        .executes(context -> watchRegion(
-                                                context.getSource(),
-                                                IntegerArgumentType.getInteger(context, "x"),
-                                                IntegerArgumentType.getInteger(context, "z")
-                                        )))))
-                .then(CommandManager.literal("clear")
-                        .executes(context -> clearWatchpoints(context.getSource())))
-                .then(CommandManager.literal("list")
-                        .executes(context -> listWatchpoints(context.getSource())))
-                .then(CommandManager.literal("pending")
-                        .executes(context -> pendingWatched(context.getSource())))
-                .then(CommandManager.literal("latest")
-                        .then(CommandManager.argument(
-                                        "count",
-                                        IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
-                                )
-                                .executes(context -> latestWatched(
-                                        context.getSource(),
-                                        IntegerArgumentType.getInteger(context, "count")
-                                ))));
+        final var watchCommand =
+                CommandManager.literal("watch").then(CommandManager.literal("chunk").then(CommandManager.argument("x"
+                        , IntegerArgumentType.integer()).then(CommandManager.argument("z",
+                        IntegerArgumentType.integer()).executes(context -> watchChunk(context.getSource(),
+                        IntegerArgumentType.getInteger(context, "x"), IntegerArgumentType.getInteger(context, "z")))))).then(CommandManager.literal("region").then(CommandManager.argument("x", IntegerArgumentType.integer()).then(CommandManager.argument("z", IntegerArgumentType.integer()).executes(context -> watchRegion(context.getSource(), IntegerArgumentType.getInteger(context, "x"), IntegerArgumentType.getInteger(context, "z")))))).then(CommandManager.literal("clear").executes(context -> clearWatchpoints(context.getSource()))).then(CommandManager.literal("list").executes(context -> listWatchpoints(context.getSource()))).then(CommandManager.literal("pending").executes(context -> pendingWatched(context.getSource()))).then(CommandManager.literal("latest").then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT)).executes(context -> latestWatched(context.getSource(), IntegerArgumentType.getInteger(context, "count")))));
 
-        final var debugCommand = CommandManager.literal("debug")
-                .then(CommandManager.literal("on")
-                        .executes(context -> setLevel(
-                                context.getSource(),
-                                ChunkisDebugLevel.LIFECYCLE,
-                                "Chunkis debug set to LIFECYCLE"
-                        )))
-                .then(CommandManager.literal("off")
-                        .executes(context -> setLevel(
-                                context.getSource(),
-                                ChunkisDebugLevel.OFF,
-                                "Chunkis debug disabled"
-                        )))
-                .then(CommandManager.literal("clear")
-                        .executes(context -> clear(context.getSource())))
-                .then(CommandManager.literal("latest")
-                        .then(CommandManager.argument(
-                                        "count",
-                                        IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
-                                )
-                                .executes(context -> latest(
-                                        context.getSource(),
-                                        IntegerArgumentType.getInteger(context, "count")
-                                ))))
-                .then(CommandManager.literal("export")
-                        .then(CommandManager.literal("latest")
-                                .then(CommandManager.argument(
-                                                "count",
-                                                IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
-                                        )
-                                        .executes(context -> exportLatest(
-                                                context.getSource(),
-                                                IntegerArgumentType.getInteger(context, "count")
-                                        ))))
-                        .then(CommandManager.literal("watched")
-                                .then(CommandManager.argument(
-                                                "count",
-                                                IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
-                                        )
-                                        .executes(context -> exportWatched(
-                                                context.getSource(),
-                                                IntegerArgumentType.getInteger(context, "count")
-                                        )))))
-                .then(watchCommand);
+        final var debugCommand =
+                CommandManager.literal("debug").then(CommandManager.literal("on").executes(context -> setLevel(context.getSource(), ChunkisDebugLevel.LIFECYCLE, "Chunkis debug set to LIFECYCLE"))).then(CommandManager.literal("off").executes(context -> setLevel(context.getSource(), ChunkisDebugLevel.OFF, "Chunkis debug disabled"))).then(CommandManager.literal("clear").executes(context -> clear(context.getSource()))).then(CommandManager.literal("latest").then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT)).executes(context -> latest(context.getSource(), IntegerArgumentType.getInteger(context, "count"))))).then(CommandManager.literal("export").then(CommandManager.literal("latest").then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT)).executes(context -> exportLatest(context.getSource(), IntegerArgumentType.getInteger(context, "count"))))).then(CommandManager.literal("watched").then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT)).executes(context -> exportWatched(context.getSource(), IntegerArgumentType.getInteger(context, "count")))))).then(CommandManager.literal("suspects").executes(context -> listSuspects(context.getSource())).then(CommandManager.literal("clear").executes(context -> clearSuspects(context.getSource())))).then(CommandManager.literal("suspect").then(CommandManager.argument("suspectId", LongArgumentType.longArg(1L)).executes(context -> showSuspect(context.getSource(), LongArgumentType.getLong(context, "suspectId")))).then(CommandManager.literal("timeline").then(CommandManager.argument("suspectId", LongArgumentType.longArg(1L)).executes(context -> showSuspectTimeline(context.getSource(), LongArgumentType.getLong(context, "suspectId"))))).then(CommandManager.literal("chunk").then(CommandManager.argument("x", IntegerArgumentType.integer()).then(CommandManager.argument("z", IntegerArgumentType.integer()).executes(context -> showSuspectChunk(context.getSource(), IntegerArgumentType.getInteger(context, "x"), IntegerArgumentType.getInteger(context, "z"))))))).then(CommandManager.literal("failures").executes(context -> listFailures(context.getSource(), DEFAULT_FAILURE_COUNT)).then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT)).executes(context -> listFailures(context.getSource(), IntegerArgumentType.getInteger(context, "count"))))).then(CommandManager.literal("failure").then(CommandManager.argument("eventId", LongArgumentType.longArg(1L)).executes(context -> showFailure(context.getSource(), LongArgumentType.getLong(context, "eventId"))))).then(watchCommand);
 
-        dispatcher.register(
-                CommandManager.literal("chunkis")
-                        .requires(source -> source.getPermissions()
-                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                        .then(debugCommand)
-        );
+        dispatcher.register(CommandManager.literal("chunkis").requires(source -> source.getPermissions().hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS))).then(debugCommand));
     }
 
     static String formatEvent(final ChunkTraceEvent event) {
         final StringBuilder builder = new StringBuilder(192);
-        builder.append('#').append(event.eventId())
-                .append(' ')
-                .append(TIME_FORMAT.format(Instant.ofEpochMilli(event.timestampMillis())))
-                .append(" UTC ")
-                .append(event.eventType())
-                .append(' ')
-                .append(event.severity())
-                .append('/')
-                .append(event.reason())
-                .append(" [")
-                .append(event.domain())
-                .append(']');
+        builder.append('#').append(event.eventId()).append(' ').append(TIME_FORMAT.format(Instant.ofEpochMilli(event.timestampMillis()))).append(" UTC ").append(event.eventType()).append(' ').append(event.severity()).append('/').append(event.reason()).append(" [").append(event.domain()).append(']');
 
         if (event.worldId() != null) {
             builder.append(" world=").append(event.worldId());
@@ -169,11 +87,7 @@ public final class ChunkDebugCommand {
         return builder.toString();
     }
 
-    private static int setLevel(
-            final ServerCommandSource source,
-            final ChunkisDebugLevel level,
-            final String message
-    ) {
+    private static int setLevel(final ServerCommandSource source, final ChunkisDebugLevel level, final String message) {
         ChunkisDebugConfig.setLevel(level);
         source.sendFeedback(() -> Text.literal("[Chunkis] " + message), true);
         return 1;
@@ -200,29 +114,102 @@ public final class ChunkDebugCommand {
         return oldestFirst.size();
     }
 
-    private static int watchChunk(
-            final ServerCommandSource source,
-            final int chunkX,
-            final int chunkZ
-    ) {
-        ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(chunkX, chunkZ));
-        source.sendFeedback(
-                () -> Text.literal("[Chunkis] Watching chunk " + chunkX + "," + chunkZ),
-                true
-        );
+    private static int listSuspects(final ServerCommandSource source) {
+        final List<ChunkTraceSuspect> suspects = ChunkTraceStore.suspects();
+        if (suspects.isEmpty()) {
+            source.sendFeedback(() -> Text.literal("[Chunkis] No suspicious chunks recorded."), false);
+            return 1;
+        }
+
+        for (final ChunkTraceSuspect suspect : suspects) {
+            source.sendFeedback(() -> Text.literal(formatSuspectSummary(suspect)), false);
+        }
+        return suspects.size();
+    }
+
+    private static int clearSuspects(final ServerCommandSource source) {
+        ChunkTraceStore.clearSuspects();
+        source.sendFeedback(() -> Text.literal("[Chunkis] Cleared retained suspect snapshots."), true);
         return 1;
     }
 
-    private static int watchRegion(
-            final ServerCommandSource source,
-            final int regionX,
-            final int regionZ
-    ) {
+    private static int showSuspect(final ServerCommandSource source, final long suspectId) {
+        final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(suspectId);
+        if (suspect == null) {
+            source.sendError(Text.literal("[Chunkis] No suspect with id " + suspectId));
+            return 0;
+        }
+
+        source.sendFeedback(() -> Text.literal(formatSuspectDetail(suspect)), false);
+        return 1;
+    }
+
+    private static int showSuspectChunk(final ServerCommandSource source, final int chunkX, final int chunkZ) {
+        final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(new DebugChunkKey(chunkX, chunkZ));
+        if (suspect == null) {
+            source.sendError(Text.literal("[Chunkis] No suspicious trace for chunk " + chunkX + "," + chunkZ));
+            return 0;
+        }
+
+        source.sendFeedback(() -> Text.literal(formatSuspectDetail(suspect)), false);
+        return 1;
+    }
+
+    private static int showSuspectTimeline(final ServerCommandSource source, final long suspectId) {
+        final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(suspectId);
+        if (suspect == null) {
+            source.sendError(Text.literal("[Chunkis] No suspect with id " + suspectId));
+            return 0;
+        }
+
+        final List<ChunkTraceEvent> timeline = ChunkTraceStore.suspectTimeline(suspectId);
+        if (timeline.isEmpty()) {
+            source.sendFeedback(() -> Text.literal("[Chunkis] No retained suspect timeline for " + suspectId), false);
+            return 1;
+        }
+
+        source.sendFeedback(() -> Text.literal("[Chunkis] Retained suspect timeline for " + suspectId + " (" + timeline.size() + " events)"), false);
+        for (final ChunkTraceEvent event : timeline) {
+            source.sendFeedback(() -> Text.literal(formatEvent(event)), false);
+        }
+        return timeline.size();
+    }
+
+    private static int listFailures(final ServerCommandSource source, final int count) {
+        final List<ChunkTraceEvent> newestFirst = ChunkTraceStore.latestFailures(count);
+        if (newestFirst.isEmpty()) {
+            source.sendFeedback(() -> Text.literal("[Chunkis] No suspicious failure events stored."), false);
+            return 1;
+        }
+
+        final List<ChunkTraceEvent> oldestFirst = new ArrayList<>(newestFirst);
+        for (int i = oldestFirst.size() - 1; i >= 0; i--) {
+            final ChunkTraceEvent event = oldestFirst.get(i);
+            source.sendFeedback(() -> Text.literal(formatEvent(event)), false);
+        }
+        return oldestFirst.size();
+    }
+
+    private static int showFailure(final ServerCommandSource source, final long eventId) {
+        final ChunkTraceEvent event = ChunkTraceStore.findEvent(eventId);
+        if (event == null) {
+            source.sendError(Text.literal("[Chunkis] No trace event with id " + eventId));
+            return 0;
+        }
+
+        source.sendFeedback(() -> Text.literal(formatEvent(event)), false);
+        return 1;
+    }
+
+    private static int watchChunk(final ServerCommandSource source, final int chunkX, final int chunkZ) {
+        ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(chunkX, chunkZ));
+        source.sendFeedback(() -> Text.literal("[Chunkis] Watching chunk " + chunkX + "," + chunkZ), true);
+        return 1;
+    }
+
+    private static int watchRegion(final ServerCommandSource source, final int regionX, final int regionZ) {
         ChunkTraceWatchpoints.watchRegion(new DebugRegionKey(regionX, regionZ));
-        source.sendFeedback(
-                () -> Text.literal("[Chunkis] Watching region " + regionX + "," + regionZ),
-                true
-        );
+        source.sendFeedback(() -> Text.literal("[Chunkis] Watching region " + regionX + "," + regionZ), true);
         return 1;
     }
 
@@ -271,25 +258,16 @@ public final class ChunkDebugCommand {
         final var basePending = BaseChunkCaptureScheduler.snapshot(world);
 
         for (final DebugChunkKey chunkKey : watchedChunks) {
-            final PendingChunkSnapshot snapshot = new PendingChunkSnapshot(
-                    chunkKey,
-                    trackerPending.containsKey(new ChunkPos(chunkKey.x(), chunkKey.z())),
-                    asyncPending.get(chunkKey),
-                    basePending.get(chunkKey)
-            );
+            final PendingChunkSnapshot snapshot = new PendingChunkSnapshot(chunkKey,
+                    trackerPending.containsKey(new ChunkPos(chunkKey.x(), chunkKey.z())), asyncPending.get(chunkKey),
+                    basePending.get(chunkKey));
             source.sendFeedback(() -> Text.literal(formatPendingSnapshot(snapshot)), false);
         }
         return watchedChunks.size();
     }
 
     private static int exportLatest(final ServerCommandSource source, final int count) {
-        return exportEvents(
-                source,
-                ChunkTraceStore.snapshotMatching(event -> true),
-                "latest-" + count,
-                count,
-                false
-        );
+        return exportEvents(source, ChunkTraceStore.snapshotMatching(event -> true), "latest-" + count, count, false);
     }
 
     private static int exportWatched(final ServerCommandSource source, final int count) {
@@ -298,29 +276,18 @@ public final class ChunkDebugCommand {
             return 0;
         }
 
-        return exportEvents(
-                source,
-                ChunkTraceStore.snapshotMatching(ChunkTraceWatchpoints::matches),
-                "watched-" + count,
-                count,
-                true
-        );
+        return exportEvents(source, ChunkTraceStore.snapshotMatching(ChunkTraceWatchpoints::matches),
+                "watched-" + count, count, true);
     }
 
-    private static int exportEvents(
-            final ServerCommandSource source,
-            final List<ChunkTraceEvent> oldestFirst,
-            final String scope,
-            final int count,
-            final boolean watched
-    ) {
+    private static int exportEvents(final ServerCommandSource source, final List<ChunkTraceEvent> oldestFirst,
+                                    final String scope, final int count, final boolean watched) {
         if (oldestFirst.isEmpty()) {
-            source.sendFeedback(
-                    () -> Text.literal(watched
-                            ? "[Chunkis] No watched trace events stored."
-                            : "[Chunkis] No trace events stored."),
-                    false
-            );
+            source.sendFeedback(() -> Text.literal(watched ? "[Chunkis] No watched trace events stored." : "[Chunkis]" +
+                                                                                                           " No trace" +
+                                                                                                           " events " +
+                                                                                                           "stored.")
+                    , false);
             return 1;
         }
 
@@ -335,21 +302,13 @@ public final class ChunkDebugCommand {
             return 0;
         }
 
-        source.sendFeedback(
-                () -> Text.literal("[Chunkis] Exported "
-                        + exportEvents.size()
-                        + " trace events to "
-                        + exportPath),
-                true
-        );
+        source.sendFeedback(() -> Text.literal("[Chunkis] Exported " + exportEvents.size() + " trace events to " + exportPath), true);
         return exportEvents.size();
     }
 
     static Path resolveExportPath(final ServerCommandSource source, final String scope) {
         final Path saveRoot = source.getServer().getSavePath(WorldSavePath.ROOT);
-        return saveRoot
-                .resolve(EXPORT_DIRECTORY)
-                .resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
+        return saveRoot.resolve(EXPORT_DIRECTORY).resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
     }
 
     static String formatWatchpointSummary() {
@@ -371,25 +330,39 @@ public final class ChunkDebugCommand {
 
     static String formatPendingSnapshot(final PendingChunkSnapshot snapshot) {
         final StringBuilder builder = new StringBuilder(128);
-        builder.append("chunk=")
-                .append(snapshot.chunkKey().x())
-                .append(',')
-                .append(snapshot.chunkKey().z())
-                .append(" trackerDirty=")
-                .append(snapshot.trackerDirty())
-                .append(" asyncQueued=")
-                .append(snapshot.asyncPending() != null)
-                .append(" baseCaptureQueued=")
-                .append(snapshot.baseCapturePending() != null);
+        builder.append("chunk=").append(snapshot.chunkKey().x()).append(',').append(snapshot.chunkKey().z()).append(
+                " trackerDirty=").append(snapshot.trackerDirty()).append(" asyncQueued=").append(snapshot.asyncPending() != null).append(" baseCaptureQueued=").append(snapshot.baseCapturePending() != null);
 
         if (snapshot.asyncPending() != null) {
-            builder.append(" asyncOp=").append(snapshot.asyncPending().operationId())
-                    .append(" asyncGeneration=").append(snapshot.asyncPending().generation())
-                    .append(" asyncDirty=").append(snapshot.asyncPending().dirtyState());
+            builder.append(" asyncOp=").append(snapshot.asyncPending().operationId()).append(" asyncGeneration=").append(snapshot.asyncPending().generation()).append(" asyncDirty=").append(snapshot.asyncPending().dirtyState());
         }
         if (snapshot.baseCapturePending() != null) {
             builder.append(" baseCaptureDirty=").append(snapshot.baseCapturePending().dirtyState());
         }
+        return builder.toString();
+    }
+
+    static String formatSuspectSummary(final ChunkTraceSuspect suspect) {
+        final StringBuilder builder = new StringBuilder(160);
+        builder.append("id=").append(suspect.suspectId()).append(" chunk=").append(suspect.chunkKey().x()).append(',').append(suspect.chunkKey().z());
+        if (suspect.regionKey() != null) {
+            builder.append(" region=").append(suspect.regionKey().x()).append(',').append(suspect.regionKey().z());
+        }
+        builder.append(" reason=").append(suspect.reason()).append(" latest=").append(suspect.latestEvent().eventType()).append('#').append(suspect.latestEvent().eventId()).append(" severity=").append(suspect.severity()).append(" occurrences=").append(suspect.occurrenceCount());
+        return builder.toString();
+    }
+
+    static String formatSuspectDetail(final ChunkTraceSuspect suspect) {
+        final StringBuilder builder = new StringBuilder(384);
+        builder.append("suspectId=").append(suspect.suspectId()).append(" chunk=").append(suspect.chunkKey().x()).append(',').append(suspect.chunkKey().z());
+        if (suspect.regionKey() != null) {
+            builder.append(" region=").append(suspect.regionKey().x()).append(',').append(suspect.regionKey().z());
+        }
+        builder.append(" reason=").append(suspect.reason()).append(" original=").append(suspect.originalFailureEvent().eventType()).append('#').append(suspect.originalFailureEvent().eventId()).append(" latest=").append(suspect.latestEvent().eventType()).append('#').append(suspect.latestEvent().eventId()).append(" severity=").append(suspect.severity()).append(" firstSeen=").append(TIME_FORMAT.format(Instant.ofEpochMilli(suspect.firstSeenTimestampMillis()))).append(" UTC lastSeen=").append(TIME_FORMAT.format(Instant.ofEpochMilli(suspect.lastSeenTimestampMillis()))).append(" UTC occurrences=").append(suspect.occurrenceCount());
+        if (suspect.operationId() != null) {
+            builder.append(" op=").append(suspect.operationId());
+        }
+        builder.append(" timeline=").append(suspect.copiedTimeline().size()).append(" latestMsg=").append(suspect.latestMessage()).append(" inspect=/chunkis debug suspect timeline ").append(suspect.suspectId());
         return builder.toString();
     }
 
@@ -409,11 +382,7 @@ public final class ChunkDebugCommand {
         return String.join(" ", parts);
     }
 
-    record PendingChunkSnapshot(
-            DebugChunkKey chunkKey,
-            boolean trackerDirty,
-            AsyncCisSaveManager.PendingSaveSnapshot asyncPending,
-            BaseChunkCaptureScheduler.QueuedCaptureSnapshot baseCapturePending
-    ) {
-    }
+    record PendingChunkSnapshot(DebugChunkKey chunkKey, boolean trackerDirty,
+                                AsyncCisSaveManager.PendingSaveSnapshot asyncPending,
+                                BaseChunkCaptureScheduler.QueuedCaptureSnapshot baseCapturePending) {}
 }

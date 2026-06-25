@@ -4,6 +4,7 @@ import io.liparakis.chunkis.debug.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceSuspect;
 import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
@@ -12,6 +13,8 @@ import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -95,5 +98,71 @@ class ChunkDebugCommandTest {
         assertTrue(formatted.contains("asyncOp=save-7--2-4"));
         assertTrue(formatted.contains("asyncGeneration=4"));
         assertTrue(formatted.contains("baseCaptureDirty=true"));
+    }
+
+    @Test
+    void formatsSuspectSummaryAndDetail() {
+        final ChunkTraceEvent originalFailure = new ChunkTraceEvent(
+                10L,
+                1_717_171_717_000L,
+                "Server thread",
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.RESTORE_COMPLETED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.RESTORE_EMPTY_RESULT,
+                "ChunkRestorer",
+                "restore applied zero blocks",
+                "minecraft:overworld",
+                new DebugChunkKey(7, -2),
+                new DebugRegionKey(0, -1),
+                "save-7--2-4",
+                null,
+                null
+        );
+        final ChunkTraceEvent latestEvent = new ChunkTraceEvent(
+                21L,
+                1_717_171_718_000L,
+                "Server thread",
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.RESTORE_FAILED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.RESTORE_EXCEPTION,
+                "ChunkRestorer",
+                "write failed",
+                "minecraft:overworld",
+                new DebugChunkKey(7, -2),
+                new DebugRegionKey(0, -1),
+                "save-7--2-4",
+                null,
+                null
+        );
+        final ChunkTraceSuspect suspect = new ChunkTraceSuspect(
+                2L,
+                originalFailure,
+                latestEvent,
+                new DebugChunkKey(7, -2),
+                new DebugRegionKey(0, -1),
+                "save-7--2-4",
+                ChunkTraceReason.RESTORE_EMPTY_RESULT,
+                ChunkTraceSeverity.ERROR,
+                1_717_171_717_000L,
+                1_717_171_718_000L,
+                6,
+                List.of(originalFailure, latestEvent),
+                "write failed"
+        );
+
+        final String summary = ChunkDebugCommand.formatSuspectSummary(suspect);
+        final String detail = ChunkDebugCommand.formatSuspectDetail(suspect);
+
+        assertTrue(summary.contains("id=2 chunk=7,-2"));
+        assertTrue(summary.contains("region=0,-1"));
+        assertTrue(summary.contains("reason=RESTORE_EMPTY_RESULT"));
+        assertTrue(summary.contains("latest=RESTORE_FAILED#21"));
+        assertTrue(detail.contains("original=RESTORE_COMPLETED#10"));
+        assertTrue(detail.contains("latest=RESTORE_FAILED#21"));
+        assertTrue(detail.contains("op=save-7--2-4"));
+        assertTrue(detail.contains("timeline=2"));
+        assertTrue(detail.contains("inspect=/chunkis debug suspect timeline 2"));
     }
 }
