@@ -7,7 +7,9 @@ import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.debug.DebugRegionKey;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
@@ -22,6 +24,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -286,6 +289,7 @@ public final class CisStorage<B, S, P, N> {
         }
 
         regionFile.write(pos, compressedData, operationId);
+        verifyParanoidReadBack(pos, regionFile, compressedData, operationId);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE,
                 ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
@@ -301,6 +305,55 @@ public final class CisStorage<B, S, P, N> {
                 compressedData.length
         );
         return true;
+    }
+
+    private void verifyParanoidReadBack(
+            final CisChunkPos pos,
+            final RegionFile regionFile,
+            final byte[] expectedBytes,
+            final String operationId
+    ) {
+        if (ChunkisDebugConfig.level() != ChunkisDebugLevel.PARANOID) {
+            return;
+        }
+
+        final String verifyOperationId = operationId + "-verify";
+        try {
+            final byte[] readBack = regionFile.read(pos, verifyOperationId);
+            if (!Arrays.equals(expectedBytes, readBack)) {
+                ChunkTraceStore.trace(
+                        ChunkisDebugDomain.ASSERTIONS,
+                        ChunkTraceEventType.ASSERTION_FAILED,
+                        ChunkTraceSeverity.ERROR,
+                        ChunkTraceReason.INVALID_PAYLOAD,
+                        WRITE_SOURCE,
+                        readBack == null
+                                ? "paranoid read-back missing written entry"
+                                : "paranoid read-back bytes mismatched written payload",
+                        null,
+                        toChunkKey(pos),
+                        toRegionKey(pos),
+                        operationId,
+                        null,
+                        expectedBytes.length
+                );
+            }
+        } catch (final IOException e) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.IO_EXCEPTION,
+                    WRITE_SOURCE,
+                    "paranoid read-back failed: " + e.getMessage(),
+                    null,
+                    toChunkKey(pos),
+                    toRegionKey(pos),
+                    operationId,
+                    null,
+                    expectedBytes.length
+            );
+        }
     }
 
     /**

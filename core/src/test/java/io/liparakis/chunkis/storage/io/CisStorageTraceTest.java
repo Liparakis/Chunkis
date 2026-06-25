@@ -150,6 +150,41 @@ class CisStorageTraceTest {
                 .contains(ChunkTraceReason.MAPPING_LOOKUP_FAILED);
     }
 
+    @Test
+    void paranoidWriteVerificationReadsBackStoredBytes() throws Exception {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.PARANOID);
+        final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
+        final CisMapping<String, String, String> mapping = new CisMapping<>(
+                tempDir.resolve("global_ids.json"),
+                new TestBlockRegistryAdapter(),
+                stateAdapter,
+                new PropertyPacker<>(stateAdapter)
+        );
+        Files.createDirectories(tempDir.resolve("regions"));
+
+        final CisStorage<String, String, String, String> storage =
+                new CisStorage<>(tempDir.resolve("regions"), mapping, stateAdapter, new TestNbtAdapter(), "air");
+
+        final CisChunkPos pos = new CisChunkPos(2, 5);
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 70, 1, "stone");
+
+        assertThat(storage.save(pos, delta, "save-op-paranoid")).isTrue();
+        storage.close();
+
+        assertThat(ChunkTraceStore.latest(20))
+                .filteredOn(event -> "save-op-paranoid-verify".equals(event.operationId()))
+                .extracting(ChunkTraceEvent::eventType)
+                .contains(
+                        ChunkTraceEventType.REGION_READ_TX_START,
+                        ChunkTraceEventType.REGION_READ_TX_END
+                );
+        assertThat(ChunkTraceStore.latest(20))
+                .filteredOn(event -> "save-op-paranoid".equals(event.operationId()))
+                .filteredOn(event -> event.eventType() == ChunkTraceEventType.ASSERTION_FAILED)
+                .isEmpty();
+    }
+
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
         private static final List<String> KNOWN_BLOCKS = List.of("air", "stone");
 

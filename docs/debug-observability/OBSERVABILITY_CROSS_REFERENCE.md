@@ -188,6 +188,18 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   The current check is intentionally scoped to block/block-entity replay payload.
   Entity-only and metadata-only deltas are still signal-only, not hard assertions.
 
+### `PARANOID` raw write read-back verification
+
+- Decision: `IMPLEMENTED`
+- Evidence:
+  `ASSERTION_FAILED reason=INVALID_PAYLOAD`
+  `ASSERTION_FAILED reason=IO_EXCEPTION`
+- Files:
+  `CisStorage`
+- Notes:
+  This check is off unless debug level is `PARANOID`.
+  It verifies the raw compressed region entry immediately after write and does not alter persistence results.
+
 ### Stored-bytes decode failure classification
 
 - Decision: `PARTIALLY_IMPLEMENTED`

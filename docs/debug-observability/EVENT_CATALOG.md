@@ -171,8 +171,10 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Current reason values:
   `OFF_THREAD_MUTATION_REJECTED`
   `RESTORE_EMPTY_RESULT`
+  `INVALID_PAYLOAD`
+  `IO_EXCEPTION`
 - Notes:
-  This is still intentionally narrow. Current enforcement covers off-thread live mutation rejection and zero-result restore replay when block/block-entity payload existed.
+  This is still intentionally narrow. Current enforcement covers off-thread live mutation rejection, zero-result restore replay when block/block-entity payload existed, and `PARANOID` raw region write read-back failures.
 
 ### `LOAD_TX_START`
 
@@ -395,4 +397,4 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - No `BOTH` load-source classification yet.
 - No dedicated decoder internals or per-stage client-network palette failure events yet.
 - No dedicated watchpoint/export event types; operator watchpoints and JSONL dump commands now reuse the base store without extra trace noise.
-- No broad invariant-failure enforcement yet beyond the implemented off-thread assertion.
+- No broad invariant-failure enforcement yet beyond the implemented off-thread, zero-result-restore, and `PARANOID` read-back assertions.

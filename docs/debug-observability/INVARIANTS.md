@@ -118,9 +118,16 @@ This file separates Phase 2 invariants into three buckets:
 
 ## `REGION_WRITE_READABLE_WHEN_VERIFIED`
 
-- Status: `DEFERRED_BY_DESIGN`
-- Why deferred:
-  Read-back verification would add extra I/O and belongs behind future `PARANOID` or explicit verification mode.
+- Status: `IMPLEMENTED_ASSERTION`
+- Evidence now available:
+  `REGION_READ_TX_START`
+  `REGION_READ_TX_END`
+  `ASSERTION_FAILED` with reason `INVALID_PAYLOAD` or `IO_EXCEPTION`
+- Current hook points:
+  `CisStorage`
+- Notes:
+  This only runs when debug level is `PARANOID`.
+  The check re-reads the just-written compressed region entry and compares raw bytes without changing persistence behavior.
 
 ## `BASE_CHUNK_NBT_NOT_SILENTLY_IGNORED`
 

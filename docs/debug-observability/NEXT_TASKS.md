@@ -29,7 +29,9 @@
   - `AsyncSaveDataLossGameTest` now asserts save/load/restore trace evidence for the reproduced churn path
   - `compileGametestJava` passes
   - full `runGameTest` is still blocked by pre-existing CIS migration/decompression startup failures before this gametest can complete cleanly
-- [ ] `PARANOID` storage read-back verification
+- [x] `PARANOID` storage read-back verification
+  - `CisStorage.writePrepared(...)` now re-reads the written region entry only when debug level is `PARANOID`
+  - mismatch or read-back failure emits `ASSERTION_FAILED` without changing persistence behavior
 
 ## Phase 2 completed in this pass
 
@@ -122,7 +124,7 @@
 - [x] Add JSONL export or other durable trace dump
 - [x] Add queue snapshots/watchpoints for selected chunks only
 - [ ] Add durability game-test assertions against trace timelines
-- [ ] Add `PARANOID` read-back verification for storage success
+- [x] Add `PARANOID` read-back verification for storage success
 
 ## Explicitly deferred from this pass
 
