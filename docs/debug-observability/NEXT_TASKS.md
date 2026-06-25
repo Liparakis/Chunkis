@@ -79,9 +79,6 @@
 - [ ] Extend decoder/mapping failure evidence beyond storage-load classification
   - Goal:
     cover deeper decoder internals beyond the current storage-load and client-network boundary classifications only if the current signal proves insufficient
-- [ ] Extend client-sync instrumentation beyond top-level boundaries
-  - Goal:
-    add payload compression/ordering evidence only if the current send/apply timeline is insufficient
 - [ ] Add durability reproducer assertions beyond chunk-target mapping
   - Goal:
     extend the new stop-path validation to start/failure event emission only if that can be done without invasive command refactoring
@@ -145,6 +142,11 @@
     `ClientDeltaNetworking`
   - Goal:
     classify malformed client payload decode failures truthfully and avoid redundant re-decode work on the client apply path
+- [x] Extended client-sync evidence with payload compression summaries
+  - Files:
+    `ChunkisNetworking`, `ClientDeltaNetworking`
+  - Goal:
+    show whether payloads crossed the wire compressed and how the raw/decoded byte counts looked without adding deeper codec instrumentation
 
 ## Verification completed for this pass
 
@@ -154,7 +156,7 @@
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.DurabilityTestCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.world.GlobalChunkTrackerTest" -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.mixin.world.WorldChunkMixinTest" -x :fabric:runGameTest`
-- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.client.ClientDeltaNetworkingTest" -x :fabric:runGameTest`
+- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.client.ClientDeltaNetworkingTest" --tests "io.liparakis.chunkis.network.ChunkisNetworkingTest" -x :fabric:runGameTest`
 
 ## Known repo-level noise during verification
 

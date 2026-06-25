@@ -225,7 +225,8 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Notes:
   This is intentionally only a send/apply flight recorder.
   Client-side malformed payload decode failures are now classified at the top-level boundary.
-  It does not yet thread one shared operation id across the wire or expose compression decisions.
+  Compression state is now exposed at the send/apply boundary messages.
+  It still does not thread one shared operation id across the wire.
 
 ### Export/watchpoints/ImGUI
 
@@ -253,6 +254,8 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   restore operation-id handoff and post-restore follow-up failure trace emission
 - `ClientDeltaNetworkingTest`
   client malformed-payload failure classification
+- `ChunkisNetworkingTest`
+  outgoing client-sync compression summary formatting
 
 ### Next validation additions after this pass
 

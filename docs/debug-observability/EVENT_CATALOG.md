@@ -299,6 +299,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   A server-side delta send or client-side delta apply started.
 - Current fields:
   chunk key, source, operation id, optional world id, optional dirty state, optional byte size
+- Notes:
+  Client-side start messages now include whether the payload was compressed on the wire and the decoded byte count.
 
 ### `CLIENT_SYNC_TX_END`
 
@@ -311,6 +313,9 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   A server-side delta send or client-side delta apply completed.
 - Current fields:
   chunk key, source, operation id, optional world id, optional dirty state, byte size
+- Notes:
+  Server-side end messages now include raw vs wire byte counts and whether compression was used.
+  Client-side end messages now include whether the payload arrived compressed and the decoded byte count.
 
 ### `CLIENT_SYNC_FAILED`
 

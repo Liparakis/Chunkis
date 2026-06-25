@@ -155,7 +155,7 @@ public final class ChunkisNetworking {
                     ChunkTraceSeverity.INFO,
                     ChunkTraceReason.NONE,
                     SEND_SOURCE,
-                    "sent delta to player " + player.getName().getString(),
+                    describePayloadOutcome(player.getName().getString(), rawData.length, payload),
                     worldId,
                     new DebugChunkKey(pos.x, pos.z),
                     null,
@@ -209,5 +209,20 @@ public final class ChunkisNetworking {
                 null,
                 byteSize
         );
+    }
+
+    static String describePayloadOutcome(
+            final String playerName,
+            final int rawBytes,
+            final ChunkDeltaPayload payload
+    ) {
+        return "sent delta to player "
+                + playerName
+                + " rawBytes="
+                + rawBytes
+                + " wireBytes="
+                + payload.data().length
+                + " compressed="
+                + payload.compressed();
     }
 }

@@ -191,4 +191,5 @@ Notes:
 Notes:
 
 - Current client-sync operation ids are local to each side; they are not carried over the wire.
+- Compression state is now visible on the existing send/apply boundary messages without adding deeper codec events.
 - This is enough to separate "server sent nothing" from "client received/applied badly" without changing packet format.

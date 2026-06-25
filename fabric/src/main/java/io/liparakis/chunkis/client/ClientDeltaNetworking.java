@@ -116,7 +116,7 @@ public final class ClientDeltaNetworking {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 APPLY_SOURCE,
-                "starting client delta apply",
+                describeIncomingPayload(payload, "starting client delta apply"),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(payload.chunkX(), payload.chunkZ()),
                 null,
@@ -134,7 +134,7 @@ public final class ClientDeltaNetworking {
                     ChunkTraceSeverity.INFO,
                     ChunkTraceReason.NONE,
                     APPLY_SOURCE,
-                    "completed client delta apply",
+                    describeIncomingPayload(payload, "completed client delta apply"),
                     world.getRegistryKey().getValue().toString(),
                     new DebugChunkKey(payload.chunkX(), payload.chunkZ()),
                     null,
@@ -268,6 +268,17 @@ public final class ClientDeltaNetworking {
             return ChunkTraceReason.MAPPING_LOOKUP_FAILED;
         }
         return ChunkTraceReason.DECODE_FAILED;
+    }
+
+    static String describeIncomingPayload(
+            final ChunkDeltaPayload payload,
+            final String prefix
+    ) {
+        return prefix
+                + " compressedOnWire="
+                + payload.compressed()
+                + " decodedBytes="
+                + payload.data().length;
     }
 
     private static boolean isInvalidPayload(final byte[] data) {

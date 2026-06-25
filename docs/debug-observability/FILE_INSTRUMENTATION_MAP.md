@@ -75,7 +75,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/api/impl/ChunkisApiImpl.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Thin API implementation; not part of durability lifecycle. |
 | `fabric/src/main/java/io/liparakis/chunkis/ChunkisMod.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Registers the minimal debug command surface used to inspect the in-memory trace store. |
 | `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaMetrics.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Existing client metrics/log throttling to reuse later. |
-| `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Client receive/apply start-end and top-level failure paths now emit structured sync evidence, including malformed-payload decode classification. |
+| `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_DONE` | Client receive/apply start-end and top-level failure paths now emit structured sync evidence, including malformed-payload decode classification and wire-compression state. |
 | `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaVisitor.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Client-side delta application details. |
 | `fabric/src/main/java/io/liparakis/chunkis/ClientChunkisMod.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Client init wiring only. |
 | `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Reproducer command and async teleport driver now emit run start/teleport/stop/failure events. |
@@ -97,7 +97,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/mixin/world/SpawnHelperMixin.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Entity population cancellation path. |
 | `fabric/src/main/java/io/liparakis/chunkis/mixin/world/WorldChunkMixin.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_DONE` | Restore now reuses the load operation id across the proto->live handoff, emits post-restore follow-up failure evidence, and carries off-thread mutation assertion plus live-mutation origin propagation. |
 | `fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Compression decisions remain deferred; current sync events already capture payload byte size at callers. |
-| `fabric/src/main/java/io/liparakis/chunkis/network/ChunkisNetworking.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Server-side delta send start-end and top-level drop/failure paths now emit structured sync evidence. |
+| `fabric/src/main/java/io/liparakis/chunkis/network/ChunkisNetworking.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_DONE` | Server-side delta send start-end and top-level drop/failure paths now emit structured sync evidence, including compression-state summaries. |
 | `fabric/src/main/java/io/liparakis/chunkis/network/FabricNetworkCodecFactory.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Factory/singleton wiring only. |
 | `fabric/src/main/java/io/liparakis/chunkis/portal/PortalArrivalFallback.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Separate portal fallback algorithm. |
 | `fabric/src/main/java/io/liparakis/chunkis/portal/PortalChunkIndexManager.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Portal metadata/index sidecar; phase-2 priority is low. |
@@ -132,6 +132,7 @@ Validation sources are audited separately:
 | `fabric/src/test/java/io/liparakis/chunkis/command/ChunkDebugCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Timeline formatter produces readable structured event lines for command output. | Extend later to assert command execution output once command harness coverage is worth the churn. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/DurabilityTestCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Durability teleport target mapping and manual-stop trace emission used by durability timeline events. | Extend later to assert start/failure event emission once a low-churn command or scheduler harness exists. |
 | `fabric/src/test/java/io/liparakis/chunkis/client/ClientDeltaNetworkingTest.java` | `DEBUG_VALIDATION_SUPPORT` | Client malformed-payload failures classify as `DECODE_FAILED` vs `MAPPING_LOOKUP_FAILED`. | Extend later only if a light client apply harness is worth adding for end-to-end trace emission. |
+| `fabric/src/test/java/io/liparakis/chunkis/network/ChunkisNetworkingTest.java` | `DEBUG_VALIDATION_SUPPORT` | Outgoing client-sync timeline messages include compression-state summaries. | Extend later only if a light send-path harness is worth adding for end-to-end event emission. |
 | `fabric/src/test/java/io/liparakis/chunkis/mixin/world/WorldChunkMixinTest.java` | `DEBUG_VALIDATION_SUPPORT` | Restore operation-id handoff and post-restore follow-up failure trace emission for the live restore boundary. | Extend later to assert fallback restore-id generation only if that branch matters in practice. |
 | `fabric/src/test/java/io/liparakis/chunkis/world/GlobalChunkTrackerTest.java` | `DEBUG_VALIDATION_SUPPORT` | Tracker authority rules, chunk-unload trace emission, and live-mutation origin propagation. | Extend later to assert unload plus later cache-hit/load-source timelines if a light integration harness is added. |
 | `fabric/src/test/java/io/liparakis/chunkis/network/ChunkDeltaPayloadTest.java` | `DEBUG_VALIDATION_SUPPORT` | Payload compression/round-trip behavior. | Assert future client-sync payload size/compression decision events. |
@@ -632,7 +633,7 @@ Top-level storage save/load/prepare/write/read/close wrapper with region-cache a
 
 ### Status
 
-`PHASE_2_PARTIAL`
+`PHASE_2_DONE`
 
 ### Next action
 
@@ -710,7 +711,7 @@ Actual region-slot allocator and footer metadata owner for chunk payloads.
 
 ### Status
 
-`PHASE_2_PARTIAL`
+`PHASE_2_DONE`
 
 ### Next action
 
@@ -923,7 +924,7 @@ Reads/writes raw and compressed NBT payloads for storage/network codecs.
 
 ### Status
 
-`PHASE_2_PARTIAL`
+`PHASE_2_DONE`
 
 ### Next action
 
@@ -1040,7 +1041,7 @@ Client receive/decode/apply boundary and main-thread handoff for delta packets.
 
 ### Next action
 
-Top-level receive/apply start-end and failure events are implemented. Client malformed-payload failures now distinguish `DECODE_FAILED` vs `MAPPING_LOOKUP_FAILED`, and the apply path no longer re-decodes just for metrics/logging. Future work is compression/order correlation.
+Top-level receive/apply start-end and failure events are implemented. Client malformed-payload failures now distinguish `DECODE_FAILED` vs `MAPPING_LOOKUP_FAILED`, the apply path no longer re-decodes just for metrics/logging, and the send/apply messages now expose compression state. Future work is only shared cross-wire ordering/correlation if a concrete timeline still proves ambiguous.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaVisitor.java`
 
@@ -1110,7 +1111,7 @@ Runs the teleport churn reproducer on its own scheduled executor.
 
 ### Status
 
-`PHASE_2_PARTIAL`
+`PHASE_2_DONE`
 
 ### Next action
 
@@ -1776,7 +1777,7 @@ Server-side delta encode/send/drop path.
 
 ### Next action
 
-Send start-end, empty-delta/player-unavailable skips, payload-too-large drops, and send failures are implemented. Future work is shared cross-wire correlation.
+Send start-end, empty-delta/player-unavailable skips, payload-too-large drops, send failures, and compression-state summaries are implemented. Future work is shared cross-wire correlation only if the current timeline still proves ambiguous.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/storage/AsyncCisSaveManager.java`
 

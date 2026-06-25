@@ -137,6 +137,7 @@ This file separates Phase 2 invariants into three buckets:
   `ClientDeltaNetworking`
 - Notes:
   The top-level send/apply boundaries are now visible, and client malformed-payload failures now distinguish `DECODE_FAILED` vs `MAPPING_LOOKUP_FAILED`.
+  Compression state is now visible on the send/apply messages.
   There is still no shared cross-wire transaction id.
 
 ## `OFF_THREAD_MUTATION_REJECTED`
