@@ -23,6 +23,8 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.state.property.Property;
 import net.minecraft.world.chunk.WorldChunk;
 
+import java.io.IOException;
+
 @Environment(EnvType.CLIENT)
 public final class ClientDeltaNetworking {
 
@@ -124,8 +126,8 @@ public final class ClientDeltaNetworking {
         );
 
         try {
-            applyPayloadToWorld(payload, world, operationId);
-            recordMetricsIfEnabled(payload, startNanos);
+            final int changedBlockCount = applyPayloadToWorld(payload, world, operationId);
+            recordMetricsIfEnabled(changedBlockCount, startNanos);
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CLIENT_SYNC,
                     ChunkTraceEventType.CLIENT_SYNC_TX_END,
@@ -144,8 +146,27 @@ public final class ClientDeltaNetworking {
             Chunkis.LOGGER.debug("Applied ChunkDelta ({},{}) - {} bytes, {} blocks",
                     payload.chunkX(), payload.chunkZ(),
                     payload.data().length,
-                    DECODER.get().decode(payload.data()).getBlockInstructions().size());
+                    changedBlockCount);
 
+        } catch (final IOException e) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    classifyClientSyncFailure(e),
+                    APPLY_SOURCE,
+                    "client delta decode failed",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(payload.chunkX(), payload.chunkZ()),
+                    null,
+                    operationId,
+                    null,
+                    payload.data().length
+            );
+            ClientDeltaMetrics.logErrorThrottled(() -> String.format(
+                    "Decode failed for chunk (%d,%d) - %d bytes",
+                    payload.chunkX(), payload.chunkZ(),
+                    payload.data().length), e);
         } catch (final Exception e) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CLIENT_SYNC,
@@ -162,13 +183,13 @@ public final class ClientDeltaNetworking {
                     payload.data().length
             );
             ClientDeltaMetrics.logErrorThrottled(() -> String.format(
-                    "Decode/apply failed for chunk (%d,%d) - %d bytes",
+                    "Apply failed for chunk (%d,%d) - %d bytes",
                     payload.chunkX(), payload.chunkZ(),
                     payload.data().length), e);
         }
     }
 
-    private static void applyPayloadToWorld(
+    private static int applyPayloadToWorld(
             final ChunkDeltaPayload payload,
             final ClientWorld world,
             final String operationId
@@ -192,7 +213,7 @@ public final class ClientDeltaNetworking {
                     null,
                     payload.data().length
             );
-            return;
+            return 0;
         }
 
         final ChunkDelta<BlockState, NbtCompound> receivedDelta = DECODER.get().decode(payload.data());
@@ -202,6 +223,7 @@ public final class ClientDeltaNetworking {
                 (ChunkDelta<BlockState, NbtCompound>) ((ChunkisDeltaDuck) chunk).chunkis$getDelta();
 
         applyDelta(clientDelta, receivedDelta, world, chunkX, chunkZ);
+        return receivedDelta.getBlockInstructions().size();
     }
 
     private static void applyDelta(
@@ -221,20 +243,31 @@ public final class ClientDeltaNetworking {
     }
 
     private static void recordMetricsIfEnabled(
-            final ChunkDeltaPayload payload,
+            final int changedBlockCount,
             final long startNanos
-    ) throws Exception {
+    ) {
         if (!ClientDeltaMetrics.ENABLED) {
             return;
         }
 
         ClientDeltaMetrics.recordDecode(System.nanoTime() - startNanos);
-        ClientDeltaMetrics.recordBlocksChanged(
-                DECODER.get().decode(payload.data()).getBlockInstructions().size());
+        ClientDeltaMetrics.recordBlocksChanged(changedBlockCount);
 
         if ((ClientDeltaMetrics.packetCount() & 0x3FF) == 0) {
             ClientDeltaMetrics.logSummary();
         }
+    }
+
+    static ChunkTraceReason classifyClientSyncFailure(final Exception error) {
+        if (!(error instanceof IOException)) {
+            return ChunkTraceReason.IO_EXCEPTION;
+        }
+
+        final String message = error.getMessage();
+        if (message != null && message.contains("Unknown Block ID")) {
+            return ChunkTraceReason.MAPPING_LOOKUP_FAILED;
+        }
+        return ChunkTraceReason.DECODE_FAILED;
     }
 
     private static boolean isInvalidPayload(final byte[] data) {

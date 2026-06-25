@@ -75,7 +75,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/api/impl/ChunkisApiImpl.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Thin API implementation; not part of durability lifecycle. |
 | `fabric/src/main/java/io/liparakis/chunkis/ChunkisMod.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Registers the minimal debug command surface used to inspect the in-memory trace store. |
 | `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaMetrics.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Existing client metrics/log throttling to reuse later. |
-| `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Client receive/apply start-end and top-level failure paths now emit structured sync evidence. |
+| `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Client receive/apply start-end and top-level failure paths now emit structured sync evidence, including malformed-payload decode classification. |
 | `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaVisitor.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Client-side delta application details. |
 | `fabric/src/main/java/io/liparakis/chunkis/ClientChunkisMod.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Client init wiring only. |
 | `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Reproducer command and async teleport driver now emit run start/teleport/stop/failure events. |
@@ -1031,7 +1031,7 @@ Client receive/decode/apply boundary and main-thread handoff for delta packets.
 
 ### Risk notes
 
-- Current path decodes twice for metrics/logging; trace implementation should avoid triple work.
+- Keep this boundary coarse; avoid reintroducing extra decode churn just to enrich trace output.
 
 ### Status
 
@@ -1039,7 +1039,7 @@ Client receive/decode/apply boundary and main-thread handoff for delta packets.
 
 ### Next action
 
-Top-level receive/apply start-end and failure events are implemented. Future work is compression/order correlation without extra decode churn.
+Top-level receive/apply start-end and failure events are implemented. Client malformed-payload failures now distinguish `DECODE_FAILED` vs `MAPPING_LOOKUP_FAILED`, and the apply path no longer re-decodes just for metrics/logging. Future work is compression/order correlation.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaVisitor.java`
 

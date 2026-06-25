@@ -324,7 +324,11 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `INVALID_PAYLOAD`
   `CHUNK_NOT_DELTA_CAPABLE`
   `CLIENT_WORLD_UNAVAILABLE`
+  `DECODE_FAILED`
+  `MAPPING_LOOKUP_FAILED`
   `IO_EXCEPTION`
+- Notes:
+  `ClientDeltaNetworking` now classifies malformed client payload decode failures at the top-level apply boundary without adding deeper codec instrumentation.
 
 ### `DURABILITY_TEST_STARTED`
 
@@ -378,6 +382,6 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 
 - No cross-system transaction id threading for vanilla-cancel -> Chunkis-save correlation yet.
 - No `BOTH` load-source classification yet.
-- No dedicated decoder internals or client-network palette failure events yet.
+- No dedicated decoder internals or per-stage client-network palette failure events yet.
 - No watchpoints/export/ImGUI events yet.
 - No broad invariant-failure enforcement yet beyond the implemented off-thread assertion.

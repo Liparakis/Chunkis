@@ -124,7 +124,8 @@ This file separates Phase 2 invariants into three buckets:
   `ChunkisNetworking`
   `ClientDeltaNetworking`
 - Notes:
-  The top-level send/apply boundaries are now visible, but there is still no shared cross-wire transaction id.
+  The top-level send/apply boundaries are now visible, and client malformed-payload failures now distinguish `DECODE_FAILED` vs `MAPPING_LOOKUP_FAILED`.
+  There is still no shared cross-wire transaction id.
 
 ## `OFF_THREAD_MUTATION_REJECTED`
 

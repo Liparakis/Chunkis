@@ -41,6 +41,8 @@
   - server send start/end/failure
   - client apply start/end/failure
   - payload byte size on traced sync events
+- [x] Added first client-side decode failure classification
+  - malformed network payloads now distinguish `DECODE_FAILED` vs `MAPPING_LOOKUP_FAILED`
 - [x] Added first storage decode-failure classification
   - decompression failure vs generic decode failure vs mapping lookup failure
 - [x] Added first unload-cache lifecycle evidence
@@ -75,9 +77,9 @@
 - [ ] Add transaction correlation ids if the timeline becomes ambiguous
   - Goal:
     extend the new save/load/restore operation ids across any remaining lifecycle edges beyond the now-threaded load -> restore handoff
-  - [ ] Extend decoder/mapping failure evidence beyond storage-load classification
+- [ ] Extend decoder/mapping failure evidence beyond storage-load classification
   - Goal:
-    cover deeper decoder internals and client/network decode failures only if the current storage boundary signal proves insufficient
+    cover deeper decoder internals beyond the current storage-load and client-network boundary classifications only if the current signal proves insufficient
 - [ ] Extend client-sync instrumentation beyond top-level boundaries
   - Goal:
     add payload compression/ordering evidence only if the current send/apply timeline is insufficient
@@ -134,6 +136,11 @@
     `ChunkisDeltaDuck`, `CommonChunkMixin`, `ChunkSerializerMixin`, `WorldChunkMixin`
   - Goal:
     keep one coherent operation id from proto load resolution through the later live restore call
+- [x] Tightened client delta failure evidence without deeper protocol churn
+  - Files:
+    `ClientDeltaNetworking`
+  - Goal:
+    classify malformed client payload decode failures truthfully and avoid redundant re-decode work on the client apply path
 
 ## Verification completed for this pass
 
@@ -143,6 +150,7 @@
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.DurabilityTestCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.world.GlobalChunkTrackerTest" -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.mixin.world.WorldChunkMixinTest" -x :fabric:runGameTest`
+- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.client.ClientDeltaNetworkingTest" -x :fabric:runGameTest`
 
 ## Known repo-level noise during verification
 

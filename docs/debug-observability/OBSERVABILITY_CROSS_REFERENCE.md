@@ -175,6 +175,17 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   The storage boundary now distinguishes `DECOMPRESSION_FAILED`, `DECODE_FAILED`, and `MAPPING_LOOKUP_FAILED`.
   It still does not expose deeper decoder-internal failure stages or client/network decode failures.
 
+### Client-side malformed payload classification
+
+- Decision: `PARTIALLY_IMPLEMENTED`
+- Evidence:
+  `CLIENT_SYNC_FAILED`
+- Files:
+  `ClientDeltaNetworking`
+- Notes:
+  The client apply boundary now distinguishes malformed network payload decode failures as `DECODE_FAILED` or `MAPPING_LOOKUP_FAILED`.
+  It still does not expose deeper per-stage decoder internals, shared cross-wire operation ids, or richer apply-side failure taxonomy.
+
 ## Deferred intentionally
 
 ### `BOTH` load-source resolution
@@ -200,7 +211,9 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   `ChunkisNetworking`
   `ClientDeltaNetworking`
 - Notes:
-  This is intentionally only a send/apply flight recorder. It does not yet thread one shared operation id across the wire or expose compression decisions.
+  This is intentionally only a send/apply flight recorder.
+  Client-side malformed payload decode failures are now classified at the top-level boundary.
+  It does not yet thread one shared operation id across the wire or expose compression decisions.
 
 ### Export/watchpoints/ImGUI
 
@@ -226,6 +239,8 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   tracker unload event emission, dirty-state payload, and mutation-origin source propagation
 - `WorldChunkMixinTest`
   restore operation-id handoff from proto duck to live restore
+- `ClientDeltaNetworkingTest`
+  client malformed-payload failure classification
 
 ### Next validation additions after this pass
 
