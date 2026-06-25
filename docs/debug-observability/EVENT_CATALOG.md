@@ -157,6 +157,7 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Notes:
   `TRACKER_CHUNK_UNLOADED` is the first true live-world unload correlation hook.
   `dirtyState=true` means the chunk left the live world while a dirty delta was still actively tracked.
+  `TRACKER_DIRTY_MAP_PUT` now carries the live mutation entrypoint in `source` for `WorldChunkMixin` paths such as `setBlockState`, `setBlockEntity`, and `removeBlockEntity`.
 
 ### `ASSERTION_FAILED`
 

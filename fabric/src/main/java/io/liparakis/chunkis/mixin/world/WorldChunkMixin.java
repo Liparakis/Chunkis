@@ -47,6 +47,12 @@ public class WorldChunkMixin {
 
     @Unique
     private static final String SOURCE = "WorldChunkMixin";
+    @Unique
+    private static final String SET_BLOCK_STATE_SOURCE = "WorldChunkMixin#setBlockState";
+    @Unique
+    private static final String SET_BLOCK_ENTITY_SOURCE = "WorldChunkMixin#setBlockEntity";
+    @Unique
+    private static final String REMOVE_BLOCK_ENTITY_SOURCE = "WorldChunkMixin#removeBlockEntity";
 
     /**
      * Matches Nether portal POI entries already known to vanilla's POI storage.
@@ -121,7 +127,7 @@ public class WorldChunkMixin {
             );
         }
 
-        GlobalChunkTracker.markDirty(chunk);
+        GlobalChunkTracker.markDirty(chunk, SET_BLOCK_STATE_SOURCE);
     }
 
     /**
@@ -178,7 +184,7 @@ public class WorldChunkMixin {
                     serverWorld.getRegistryManager(),
                     chunkis$getBlockDelta()
             );
-            GlobalChunkTracker.markDirty(chunk);
+            GlobalChunkTracker.markDirty(chunk, SET_BLOCK_ENTITY_SOURCE);
         } catch (final Exception e) {
             Chunkis.LOGGER.error("Chunkis: Failed to capture block entity at {}", pos, e);
         }
@@ -199,7 +205,7 @@ public class WorldChunkMixin {
                 pos.getY(),
                 pos.getZ() & CisConstants.COORD_MASK
         );
-        GlobalChunkTracker.markDirty(chunk);
+        GlobalChunkTracker.markDirty(chunk, REMOVE_BLOCK_ENTITY_SOURCE);
     }
 
     /**

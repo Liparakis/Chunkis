@@ -78,4 +78,24 @@ class GlobalChunkTrackerTest {
         assertEquals(4, latest.getFirst().chunkKey().x());
         assertEquals(-3, latest.getFirst().chunkKey().z());
     }
+
+    @Test
+    void carriesMutationOriginIntoDirtyTrackerEvent() {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+        final RegistryKey<World> overworld = RegistryKey.of(
+                RegistryKeys.WORLD,
+                Identifier.of("minecraft", "overworld")
+        );
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+
+        GlobalChunkTracker.addDelta(overworld, 7, 9, delta, "WorldChunkMixin#setBlockState");
+
+        final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(1);
+        assertEquals(1, latest.size());
+        assertEquals(ChunkTraceReason.TRACKER_DIRTY_MAP_PUT, latest.getFirst().reason());
+        assertEquals("WorldChunkMixin#setBlockState", latest.getFirst().source());
+        assertEquals("minecraft:overworld", latest.getFirst().worldId());
+        assertEquals(7, latest.getFirst().chunkKey().x());
+        assertEquals(9, latest.getFirst().chunkKey().z());
+    }
 }

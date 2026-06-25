@@ -64,12 +64,14 @@
   - `TRACKER_CHUNK_UNLOADED`
   - dirty-state payload on unload events
   - Fabric chunk-unload registration in `ChunkisMod`
+- [x] Added first live-mutation origin visibility
+  - `TRACKER_DIRTY_MAP_PUT` now carries `WorldChunkMixin` entrypoint source for block state and block-entity mutation hooks
 
 ## Phase 2 still remaining
 
 - [ ] Finish `WorldChunkMixin`
   - Goal:
-    tie live mutation and restore-to-live-chunk boundaries into the same trace story
+    finish the remaining restore-to-live-chunk story beyond the newly added live-mutation-origin visibility
 - [ ] Add transaction correlation ids if the timeline becomes ambiguous
   - Goal:
     extend the new save/load/restore operation ids across the remaining lifecycle edges
@@ -122,6 +124,11 @@
     `GlobalChunkTracker`, `ChunkisMod`
   - Goal:
     show when a live world chunk actually unloads and whether a dirty delta was still actively tracked at that boundary
+- [x] Added first live mutation-origin evidence
+  - Files:
+    `WorldChunkMixin`, `GlobalChunkTracker`
+  - Goal:
+    show which live world mutation entrypoint first dirtied a chunk without adding per-edit event spam
 
 ## Verification completed for this pass
 

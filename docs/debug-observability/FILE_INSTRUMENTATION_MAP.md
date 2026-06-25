@@ -95,7 +95,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/mixin/world/NetherPortalBlockMixin.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Portal subsystem, not primary disappearance path. |
 | `fabric/src/main/java/io/liparakis/chunkis/mixin/world/PortalForcerMixin.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Portal search diagnostics already use logging. |
 | `fabric/src/main/java/io/liparakis/chunkis/mixin/world/SpawnHelperMixin.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Entity population cancellation path. |
-| `fabric/src/main/java/io/liparakis/chunkis/mixin/world/WorldChunkMixin.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Restore operation-id threading and off-thread mutation assertion now exist; live mutation origin tracing still remains. |
+| `fabric/src/main/java/io/liparakis/chunkis/mixin/world/WorldChunkMixin.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Restore operation-id threading, off-thread mutation assertion, and first live-mutation origin propagation now exist; deeper restore-boundary tracing still remains. |
 | `fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Compression decisions remain deferred; current sync events already capture payload byte size at callers. |
 | `fabric/src/main/java/io/liparakis/chunkis/network/ChunkisNetworking.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Server-side delta send start-end and top-level drop/failure paths now emit structured sync evidence. |
 | `fabric/src/main/java/io/liparakis/chunkis/network/FabricNetworkCodecFactory.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Factory/singleton wiring only. |
@@ -131,7 +131,7 @@ Validation sources are audited separately:
 | `fabric/src/test/java/io/liparakis/chunkis/command/StorageReportCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Storage inspection reports raw payload mix correctly. | Extend later to compare report output with trace/export summaries. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/ChunkDebugCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Timeline formatter produces readable structured event lines for command output. | Extend later to assert command execution output once command harness coverage is worth the churn. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/DurabilityTestCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Durability teleport target mapping to chunk coordinates used by trace events. | Extend later to assert start/stop/failure event emission once a low-churn command or scheduler harness exists. |
-| `fabric/src/test/java/io/liparakis/chunkis/world/GlobalChunkTrackerTest.java` | `DEBUG_VALIDATION_SUPPORT` | Tracker authority rules and chunk-unload trace emission. | Extend later to assert unload plus later cache-hit/load-source timelines if a light integration harness is added. |
+| `fabric/src/test/java/io/liparakis/chunkis/world/GlobalChunkTrackerTest.java` | `DEBUG_VALIDATION_SUPPORT` | Tracker authority rules, chunk-unload trace emission, and live-mutation origin propagation. | Extend later to assert unload plus later cache-hit/load-source timelines if a light integration harness is added. |
 | `fabric/src/test/java/io/liparakis/chunkis/network/ChunkDeltaPayloadTest.java` | `DEBUG_VALIDATION_SUPPORT` | Payload compression/round-trip behavior. | Assert future client-sync payload size/compression decision events. |
 | `fabric/src/test/java/io/liparakis/chunkis/storage/CisSnapshotCaptureTest.java` | `DEBUG_VALIDATION_SUPPORT` | Snapshot capture Y-coordinate correctness. | Extend to assert snapshot-capture event counts. |
 | `fabric/src/test/java/io/liparakis/chunkis/util/CisNbtUtilTest.java` | `DEBUG_VALIDATION_SUPPORT` | Metadata envelope and suppression semantics. | Assert future metadata/base-NBT/full-baseline events. |
@@ -1677,7 +1677,7 @@ Captures live block/block-entity mutations and restores proto-attached snapshots
 
 ### Debug hooks to add
 
-- `DELTA_MARKED_DIRTY` origin events
+- first dirty mutation origin propagation
 - off-thread mutation rejection event
 - `RESTORE_TX_START`
 - `RESTORE_COMPLETED`
@@ -1697,7 +1697,7 @@ Captures live block/block-entity mutations and restores proto-attached snapshots
 
 ### Next action
 
-Restore operation-id threading and off-thread assertion are implemented. Future work is mutation-origin tracing without event spam.
+Restore operation-id threading, off-thread assertion, and first dirty-mutation origin propagation are implemented. Future work is the remaining restore-to-live-chunk boundary detail without event spam.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java`
 
@@ -2313,7 +2313,7 @@ Leave out of Phase 2 unless evidence points here.
 ## `fabric/src/test/java/io/liparakis/chunkis/world/GlobalChunkTrackerTest.java`
 
 - Current behavior:
-  validates authoritative-delta replacement rules and chunk-unload trace emission.
+  validates authoritative-delta replacement rules, chunk-unload trace emission, and live-mutation origin propagation.
 - Later observability assertions:
   unload events should correlate cleanly with later unload-cache hits or misses on the same chunk.
 - Missing tests to add:
