@@ -102,6 +102,19 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   `/chunkis debug latest <count>`
   `/chunkis debug clear`
 
+### Durability reproducer timeline
+
+- Decision: `IMPLEMENTED`
+- Evidence:
+  `DURABILITY_TEST_STARTED`
+  `DURABILITY_TELEPORT_EXECUTED`
+  `DURABILITY_TEST_STOPPED`
+  `DURABILITY_TEST_FAILED`
+- Files:
+  `DurabilityTestCommand`
+- Notes:
+  This does not claim persistence correctness. It only makes the reproducer run itself visible so save/load/restore events can be interpreted against an actual teleport-churn timeline.
+
 ### Operation ids for traced timelines
 
 - Decision: `IMPLEMENTED`
@@ -194,6 +207,8 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   save/load storage events
 - `ChunkDebugCommandTest`
   readable timeline formatting
+- `DurabilityTestCommandTest`
+  teleport target to chunk-key mapping for durability trace events
 
 ### Next validation additions after this pass
 

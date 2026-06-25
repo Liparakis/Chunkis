@@ -52,6 +52,14 @@
   - `ChunkDeltaTraceTest`
   - `CisStorageTraceTest`
   - `ChunkDebugCommandTest`
+- [x] Added durability reproducer timeline evidence
+  - `DURABILITY_TEST_STARTED`
+  - `DURABILITY_TELEPORT_EXECUTED`
+  - `DURABILITY_TEST_STOPPED`
+  - `DURABILITY_TEST_FAILED`
+  - dedicated `durability-*` operation ids from the reproducer command
+- [x] Added focused durability validation
+  - `DurabilityTestCommandTest`
 
 ## Phase 2 still remaining
 
@@ -70,6 +78,9 @@
 - [ ] Extend client-sync instrumentation beyond top-level boundaries
   - Goal:
     add payload compression/ordering evidence only if the current send/apply timeline is insufficient
+- [ ] Add durability reproducer assertions beyond chunk-target mapping
+  - Goal:
+    cover start/stop/failure event emission with a command-level or scheduler-harness test only if that can be done without invasive command refactoring
 
 ## Phase 3 candidates
 
@@ -111,6 +122,7 @@
 - [x] `./gradlew :core:test --tests "io.liparakis.chunkis.debug.ChunkTraceStoreTest" --tests "io.liparakis.chunkis.debug.ChunkDeltaTraceTest" --tests "io.liparakis.chunkis.storage.io.CisStorageTraceTest"`
 - [x] `./gradlew :fabric:compileJava :fabric:compileTestJava -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.StorageReportCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
+- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.DurabilityTestCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
 
 ## Known repo-level noise during verification
 

@@ -55,6 +55,19 @@ This file separates Phase 2 invariants into three buckets:
   Current truthful outcomes are `TRACKER_MEMORY`, `CHUNKIS_STORAGE`, and `NEITHER`.
   `BOTH` remains deferred because the code does not inspect both sources on the same load path.
 
+## `DURABILITY_REPRODUCER_TIMELINE_VISIBLE`
+
+- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Evidence now available:
+  `DURABILITY_TEST_STARTED`
+  `DURABILITY_TELEPORT_EXECUTED`
+  `DURABILITY_TEST_STOPPED`
+  `DURABILITY_TEST_FAILED`
+- Current hook points:
+  `DurabilityTestCommand`
+- Notes:
+  This is intentionally a visibility invariant only. It helps correlate disappearing-chunk reports to a concrete reproducer run without asserting persistence correctness.
+
 ## `VANILLA_SAVE_CANCELLED_REQUIRES_CHUNKIS_PATH`
 
 - Status: `NOT_IMPLEMENTED_YET`

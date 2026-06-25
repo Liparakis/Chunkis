@@ -151,6 +151,17 @@ For the current disappearing-chunk investigation, the minimum useful timeline is
 
 The new `/chunkis debug latest <count>` command is sufficient to inspect this timeline in-memory during a durability run.
 
+## Durability reproducer command
+
+1. `DURABILITY_TEST_STARTED`
+2. repeated `DURABILITY_TELEPORT_EXECUTED`
+3. `DURABILITY_TEST_STOPPED` or `DURABILITY_TEST_FAILED`
+
+Notes:
+
+- These events use their own `durability-*` operation ids so a reproducer run can be separated from save/load/restore operations in the same trace store.
+- A stop event currently means one of three truthful outcomes only: normal completion, manual stop, or replacement by a newer run.
+
 ## Client sync
 
 1. `CLIENT_SYNC_TX_START`

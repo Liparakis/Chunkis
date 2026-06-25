@@ -316,6 +316,54 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `CLIENT_WORLD_UNAVAILABLE`
   `IO_EXCEPTION`
 
+### `DURABILITY_TEST_STARTED`
+
+- Domain: `CHUNK_LIFECYCLE`
+- Severity: `INFO`
+- Implemented in:
+  `fabric/.../command/DurabilityTestCommand.java`
+- Meaning:
+  The teleport-churn durability reproducer started a new run.
+- Current fields:
+  source, world id when available, operation id
+
+### `DURABILITY_TELEPORT_EXECUTED`
+
+- Domain: `CHUNK_LIFECYCLE`
+- Severity: `INFO`
+- Implemented in:
+  `fabric/.../command/DurabilityTestCommand.java`
+- Meaning:
+  One durability teleport step was queued onto the server thread.
+- Current fields:
+  source, world id, chunk key, operation id
+- Notes:
+  This is intentionally one event per queued teleport step, not a deeper per-block or per-save trace.
+
+### `DURABILITY_TEST_STOPPED`
+
+- Domain: `CHUNK_LIFECYCLE`
+- Severity: `INFO`
+- Implemented in:
+  `fabric/.../command/DurabilityTestCommand.java`
+- Meaning:
+  The durability run stopped because it completed, was manually stopped, or was replaced by a newer run.
+- Current fields:
+  source, optional world id, operation id
+
+### `DURABILITY_TEST_FAILED`
+
+- Domain: `CHUNK_LIFECYCLE`
+- Severity: `ERROR`
+- Implemented in:
+  `fabric/.../command/DurabilityTestCommand.java`
+- Meaning:
+  The reproducer failed on its scheduler thread before finishing normally.
+- Current reason values:
+  `IO_EXCEPTION`
+- Notes:
+  The current reason bucket is intentionally coarse because this path is about reproducer lifecycle evidence, not failure taxonomy.
+
 ## Not implemented yet
 
 - No cross-system transaction id threading for vanilla-cancel -> Chunkis-save correlation yet.

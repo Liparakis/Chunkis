@@ -78,7 +78,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Client receive/apply start-end and top-level failure paths now emit structured sync evidence. |
 | `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaVisitor.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Client-side delta application details. |
 | `fabric/src/main/java/io/liparakis/chunkis/ClientChunkisMod.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Client init wiring only. |
-| `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Reproducer command and async teleport driver. |
+| `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Reproducer command and async teleport driver now emit run start/teleport/stop/failure events. |
 | `fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Minimal `/chunkis debug` command surface for on/off/latest/clear and readable timeline output. |
 | `fabric/src/main/java/io/liparakis/chunkis/command/StorageReportCommand.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Existing storage/operator inspection surface to extend later, not hot runtime. |
 | `fabric/src/main/java/io/liparakis/chunkis/migration/CisWorldMigrator.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Migration path only. |
@@ -130,6 +130,7 @@ Validation sources are audited separately:
 | `core/src/test/java/io/liparakis/chunkis/storage/mapping/CisMappingTest.java` | `DEBUG_VALIDATION_SUPPORT` | Mapping file creation, reload, unresolved-id rejection. | Assert future mapping/palette failure events. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/StorageReportCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Storage inspection reports raw payload mix correctly. | Extend later to compare report output with trace/export summaries. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/ChunkDebugCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Timeline formatter produces readable structured event lines for command output. | Extend later to assert command execution output once command harness coverage is worth the churn. |
+| `fabric/src/test/java/io/liparakis/chunkis/command/DurabilityTestCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Durability teleport target mapping to chunk coordinates used by trace events. | Extend later to assert start/stop/failure event emission once a low-churn command or scheduler harness exists. |
 | `fabric/src/test/java/io/liparakis/chunkis/network/ChunkDeltaPayloadTest.java` | `DEBUG_VALIDATION_SUPPORT` | Payload compression/round-trip behavior. | Assert future client-sync payload size/compression decision events. |
 | `fabric/src/test/java/io/liparakis/chunkis/storage/CisSnapshotCaptureTest.java` | `DEBUG_VALIDATION_SUPPORT` | Snapshot capture Y-coordinate correctness. | Extend to assert snapshot-capture event counts. |
 | `fabric/src/test/java/io/liparakis/chunkis/util/CisNbtUtilTest.java` | `DEBUG_VALIDATION_SUPPORT` | Metadata envelope and suppression semantics. | Assert future metadata/base-NBT/full-baseline events. |
@@ -1090,8 +1091,10 @@ Runs the teleport churn reproducer on its own scheduled executor.
 
 ### Debug hooks to add
 
+- `DURABILITY_TEST_STARTED`
 - `DURABILITY_TELEPORT_EXECUTED`
-- start/stop/failure events
+- `DURABILITY_TEST_STOPPED`
+- `DURABILITY_TEST_FAILED`
 
 ### Invariants to check
 
@@ -1104,11 +1107,11 @@ Runs the teleport churn reproducer on its own scheduled executor.
 
 ### Status
 
-`REVIEWED_NEEDS_HOOKS`
+`PHASE_2_PARTIAL`
 
 ### Next action
 
-Instrument command lifecycle and teleport cycles in Phase 2.
+Run start/teleport/stop/failure events are implemented. Future work is only deeper validation of emitted events if a low-churn harness is worth adding.
 
 ## `fabric/src/main/java/io/liparakis/chunkis/command/StorageReportCommand.java`
 
@@ -2295,6 +2298,15 @@ Leave out of Phase 2 unless evidence points here.
   future export/storage summary output should stay consistent with storage inspection.
 - Missing tests to add:
   one command test once export/inspect commands exist.
+
+## `fabric/src/test/java/io/liparakis/chunkis/command/DurabilityTestCommandTest.java`
+
+- Current behavior:
+  validates the chunk-coordinate mapping used by durability teleport trace events.
+- Later observability assertions:
+  durability run start/stop/failure events should keep stable chunk targeting and operation-id readability.
+- Missing tests to add:
+  one focused test for event emission if the reproducer gains a small injectable scheduler seam without widening the command surface.
 
 ## `fabric/src/test/java/io/liparakis/chunkis/network/ChunkDeltaPayloadTest.java`
 

@@ -74,5 +74,6 @@
 - Save requested / cancelled / rejected / queued / flushed / clean transitions are now observable.
 - Load source is now observable as `TRACKER_MEMORY`, `CHUNKIS_STORAGE`, or `NEITHER`.
 - Restore now reports completion/failure plus aggregate applied counts.
+- The durability reproducer command now emits its own structured start/teleport/stop/failure timeline with dedicated `durability-*` operation ids.
 - `BOTH` load-source classification is still intentionally deferred because current code does not observe both sources truthfully in one load pass.
 - No persistence behavior was intentionally changed in this pass.
