@@ -175,6 +175,8 @@ Current Phase 3 command surface:
 - `/chunkis debug watch list`
 - `/chunkis debug watch latest <count>`
 - `/chunkis debug watch clear`
+- `/chunkis debug export latest <count>`
+- `/chunkis debug export watched <count>`
 
 Commands deferred from Phase 1:
 
@@ -203,6 +205,14 @@ Current Phase 3 implementation:
 - Stable field names.
 - No external JSON dependency unless already present.
 - Export should target a predictable path under the world or run directory.
+
+Current Phase 3 implementation:
+
+- export now serializes the bounded in-memory store directly as JSONL
+- each line contains the same structured event fields already held in memory
+- exports are written under `<world>/chunkis/debug/`
+- `export latest` dumps the latest `count` events in chronological order
+- `export watched` dumps the latest watched events in chronological order
 
 ## ImGUI Readiness Plan
 

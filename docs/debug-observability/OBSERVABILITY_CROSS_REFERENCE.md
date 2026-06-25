@@ -234,10 +234,12 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Files:
   `ChunkDebugCommand`
   `ChunkTraceStore`
+  `ChunkTraceJsonl`
   `ChunkTraceWatchpoints`
 - Notes:
   Focused chunk/region watchpoints are now implemented as operator-side filters over the existing in-memory store.
-  JSONL export and GUI surfaces remain deferred.
+  JSONL export is now implemented as a world-local dump of the in-memory store.
+  GUI surfaces remain deferred.
 
 ## Validation linkage
 

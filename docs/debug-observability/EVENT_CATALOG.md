@@ -392,5 +392,5 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - No cross-system transaction id threading for vanilla-cancel -> Chunkis-save correlation yet.
 - No `BOTH` load-source classification yet.
 - No dedicated decoder internals or per-stage client-network palette failure events yet.
-- No watchpoints/export/ImGUI events yet.
+- No dedicated watchpoint/export event types; operator watchpoints and JSONL dump commands now reuse the base store without extra trace noise.
 - No broad invariant-failure enforcement yet beyond the implemented off-thread assertion.

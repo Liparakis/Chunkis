@@ -88,6 +88,10 @@ public final class ChunkTraceStore {
         return latestMatching(count, event -> true);
     }
 
+    public static List<ChunkTraceEvent> snapshot() {
+        return snapshotMatching(event -> true);
+    }
+
     public static List<ChunkTraceEvent> latestMatching(
             final int count,
             final Predicate<ChunkTraceEvent> predicate
@@ -100,6 +104,22 @@ public final class ChunkTraceStore {
         synchronized (MONITOR) {
             final List<ChunkTraceEvent> events = new ArrayList<>(Math.min(count, size));
             for (int i = 0; i < size && events.size() < count; i++) {
+                final int index = (writeIndex - 1 - i + capacity) % capacity;
+                final ChunkTraceEvent event = ring[index];
+                if (event != null && predicate.test(event)) {
+                    events.add(event);
+                }
+            }
+            return events;
+        }
+    }
+
+    public static List<ChunkTraceEvent> snapshotMatching(final Predicate<ChunkTraceEvent> predicate) {
+        Objects.requireNonNull(predicate, "predicate");
+
+        synchronized (MONITOR) {
+            final List<ChunkTraceEvent> events = new ArrayList<>(size);
+            for (int i = size - 1; i >= 0; i--) {
                 final int index = (writeIndex - 1 - i + capacity) % capacity;
                 final ChunkTraceEvent event = ring[index];
                 if (event != null && predicate.test(event)) {

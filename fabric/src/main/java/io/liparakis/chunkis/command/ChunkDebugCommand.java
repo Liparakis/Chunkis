@@ -3,6 +3,7 @@ package io.liparakis.chunkis.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import io.liparakis.chunkis.debug.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.ChunkTraceJsonl;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.ChunkisDebugConfig;
@@ -14,18 +15,24 @@ import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
+import net.minecraft.util.WorldSavePath;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.nio.file.Path;
 
 public final class ChunkDebugCommand {
 
     private static final int MAX_LATEST_COUNT = 200;
+    private static final String EXPORT_DIRECTORY = "chunkis/debug";
     private static final DateTimeFormatter TIME_FORMAT =
             DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter FILE_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").withZone(ZoneOffset.UTC);
 
     private ChunkDebugCommand() {
         throw new AssertionError("Utility class");
@@ -87,6 +94,25 @@ public final class ChunkDebugCommand {
                                         context.getSource(),
                                         IntegerArgumentType.getInteger(context, "count")
                                 ))))
+                .then(CommandManager.literal("export")
+                        .then(CommandManager.literal("latest")
+                                .then(CommandManager.argument(
+                                                "count",
+                                                IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
+                                        )
+                                        .executes(context -> exportLatest(
+                                                context.getSource(),
+                                                IntegerArgumentType.getInteger(context, "count")
+                                        ))))
+                        .then(CommandManager.literal("watched")
+                                .then(CommandManager.argument(
+                                                "count",
+                                                IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
+                                        )
+                                        .executes(context -> exportWatched(
+                                                context.getSource(),
+                                                IntegerArgumentType.getInteger(context, "count")
+                                        )))))
                 .then(watchCommand);
 
         dispatcher.register(
@@ -224,6 +250,76 @@ public final class ChunkDebugCommand {
             source.sendFeedback(() -> Text.literal(formatEvent(event)), false);
         }
         return oldestFirst.size();
+    }
+
+    private static int exportLatest(final ServerCommandSource source, final int count) {
+        return exportEvents(
+                source,
+                ChunkTraceStore.snapshotMatching(event -> true),
+                "latest-" + count,
+                count,
+                false
+        );
+    }
+
+    private static int exportWatched(final ServerCommandSource source, final int count) {
+        if (ChunkTraceWatchpoints.isEmpty()) {
+            source.sendError(Text.literal("[Chunkis] No watchpoints configured."));
+            return 0;
+        }
+
+        return exportEvents(
+                source,
+                ChunkTraceStore.snapshotMatching(ChunkTraceWatchpoints::matches),
+                "watched-" + count,
+                count,
+                true
+        );
+    }
+
+    private static int exportEvents(
+            final ServerCommandSource source,
+            final List<ChunkTraceEvent> oldestFirst,
+            final String scope,
+            final int count,
+            final boolean watched
+    ) {
+        if (oldestFirst.isEmpty()) {
+            source.sendFeedback(
+                    () -> Text.literal(watched
+                            ? "[Chunkis] No watched trace events stored."
+                            : "[Chunkis] No trace events stored."),
+                    false
+            );
+            return 1;
+        }
+
+        final int fromIndex = Math.max(0, oldestFirst.size() - count);
+        final List<ChunkTraceEvent> exportEvents = oldestFirst.subList(fromIndex, oldestFirst.size());
+        final Path exportPath = resolveExportPath(source, scope);
+
+        try {
+            ChunkTraceJsonl.write(exportPath, exportEvents);
+        } catch (final IOException e) {
+            source.sendError(Text.literal("[Chunkis] Trace export failed: " + e.getMessage()));
+            return 0;
+        }
+
+        source.sendFeedback(
+                () -> Text.literal("[Chunkis] Exported "
+                        + exportEvents.size()
+                        + " trace events to "
+                        + exportPath),
+                true
+        );
+        return exportEvents.size();
+    }
+
+    static Path resolveExportPath(final ServerCommandSource source, final String scope) {
+        final Path saveRoot = source.getServer().getSavePath(WorldSavePath.ROOT);
+        return saveRoot
+                .resolve(EXPORT_DIRECTORY)
+                .resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
     }
 
     static String formatWatchpointSummary() {

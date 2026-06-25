@@ -76,4 +76,29 @@ class ChunkTraceStoreTest {
         assertThat(ChunkTraceStore.nextOperationId("save")).isEqualTo("save-2");
         assertThat(ChunkTraceStore.nextOperationId("load")).isEqualTo("load-3");
     }
+
+    @Test
+    void snapshotReturnsOldestFirst() {
+        ChunkTraceStore.record(new ChunkTraceEvent(
+                0L, 1L, "main",
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SAVE_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "TestSource", "first",
+                null, null, null, null, null, null
+        ));
+        ChunkTraceStore.record(new ChunkTraceEvent(
+                0L, 2L, "main",
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.STORAGE_WRITE,
+                "TestSource", "second",
+                null, null, null, null, null, null
+        ));
+
+        assertThat(ChunkTraceStore.snapshot()).extracting(ChunkTraceEvent::message)
+                .containsExactly("first", "second");
+    }
 }

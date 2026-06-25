@@ -14,7 +14,10 @@
   - `/chunkis debug watch list`
   - `/chunkis debug watch latest <count>`
   - `/chunkis debug watch clear`
-- [ ] JSONL export
+- [x] JSONL export
+  - `/chunkis debug export latest <count>`
+  - `/chunkis debug export watched <count>`
+  - writes world-local JSONL traces under `chunkis/debug/`
 - [ ] `ASSERTION_FAILED` invariant enforcement
 - [ ] Queue/pending-save snapshots
 - [ ] Durability game-test assertions
@@ -108,7 +111,7 @@
 ## Phase 3 candidates
 
 - [ ] Add actual invariant enforcement with `ASSERTION_FAILED`
-- [ ] Add JSONL export or other durable trace dump
+- [x] Add JSONL export or other durable trace dump
 - [ ] Add queue snapshots/watchpoints for selected chunks only
 - [ ] Add durability game-test assertions against trace timelines
 - [ ] Add `PARANOID` read-back verification for storage success

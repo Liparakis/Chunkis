@@ -35,7 +35,8 @@ Validation sources are audited separately:
 | `core/src/main/java/io/liparakis/chunkis/debug/DebugChunkKey.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Small optional chunk-coordinate payload for structured traces. |
 | `core/src/main/java/io/liparakis/chunkis/debug/DebugRegionKey.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Small optional region-coordinate payload for structured traces. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceEvent.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Canonical immutable event record used by the flight recorder. |
-| `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceStore.java` | `CORE_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Bounded in-memory event store with monotonic ids, near-zero OFF-path cost, and watched-event filtering for operator queries. |
+| `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceStore.java` | `CORE_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Bounded in-memory event store with monotonic ids, near-zero OFF-path cost, watched-event filtering, and chronological snapshot queries for export. |
+| `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceJsonl.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Serializes the in-memory trace record format to stable one-event-per-line JSONL. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceWatchpoints.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Chunk/region watchpoint registry used by focused trace commands. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkisDebugConfig.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Global runtime switch controlling whether structured events are recorded. |
 | `core/src/main/java/io/liparakis/chunkis/core/BlockInstruction.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Packed coordinate helper; debug at codec boundaries, not per helper call. |
@@ -80,7 +81,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaVisitor.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Client-side delta application details. |
 | `fabric/src/main/java/io/liparakis/chunkis/ClientChunkisMod.java` | `NO_DEBUG_HOOK_NEEDED` | n/a | Client init wiring only. |
 | `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Reproducer command and async teleport driver now emit run start/teleport/stop/failure events. |
-| `fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Minimal `/chunkis debug` command surface now includes chunk/region watchpoints and watched-event queries. |
+| `fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Minimal `/chunkis debug` command surface now includes chunk/region watchpoints, watched-event queries, and world-local JSONL export. |
 | `fabric/src/main/java/io/liparakis/chunkis/command/StorageReportCommand.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Existing storage/operator inspection surface to extend later, not hot runtime. |
 | `fabric/src/main/java/io/liparakis/chunkis/migration/CisWorldMigrator.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Migration path only. |
 | `fabric/src/main/java/io/liparakis/chunkis/migration/McaMigrator.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Migration path only. |
@@ -121,7 +122,8 @@ Validation sources are audited separately:
 
 | File | Classification | Current validation | Future observability assertions |
 | --- | --- | --- | --- |
-| `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceStoreTest.java` | `DEBUG_VALIDATION_SUPPORT` | Debug defaults OFF, monotonic bounded store behavior, newest-event retention. | Extend later to assert store export/query behavior if snapshots/export are added. |
+| `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceStoreTest.java` | `DEBUG_VALIDATION_SUPPORT` | Debug defaults OFF, monotonic bounded store behavior, newest-event retention, and chronological snapshot order. | Extend later only if export begins tracking additional metadata or pagination. |
+| `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceJsonlTest.java` | `DEBUG_VALIDATION_SUPPORT` | Stable JSONL field serialization and one-event-per-line file output. | Extend later only if export schema changes or additional optional fields are added. |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceWatchpointsTest.java` | `DEBUG_VALIDATION_SUPPORT` | Chunk/region watchpoint matching and watched-event filtering behavior. | Extend later only if watchpoints begin affecting capture volume or snapshots. |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkDeltaTraceTest.java` | `DEBUG_VALIDATION_SUPPORT` | Dirty and clean transitions emit the expected structured events. | Extend later to assert generation-sensitive clean transitions and rejection edge cases. |
 | `core/src/test/java/io/liparakis/chunkis/storage/io/CisStorageTraceTest.java` | `DEBUG_VALIDATION_SUPPORT` | Save/load storage hooks emit flush and region read/write transaction events. | Extend later to assert failure paths and missing-entry timelines. |
@@ -131,7 +133,7 @@ Validation sources are audited separately:
 | `core/src/test/java/io/liparakis/chunkis/storage/io/RegionFileFreeListTest.java` | `DEBUG_VALIDATION_SUPPORT` | Free-list reuse, footerless rebuild, corruption fallback. | Assert future region allocator events and corruption assertions. |
 | `core/src/test/java/io/liparakis/chunkis/storage/mapping/CisMappingTest.java` | `DEBUG_VALIDATION_SUPPORT` | Mapping file creation, reload, unresolved-id rejection. | Assert future mapping/palette failure events. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/StorageReportCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Storage inspection reports raw payload mix correctly. | Extend later to compare report output with trace/export summaries. |
-| `fabric/src/test/java/io/liparakis/chunkis/command/ChunkDebugCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Timeline formatter and watchpoint summary formatting for command output. | Extend later to assert command execution output once command harness coverage is worth the churn. |
+| `fabric/src/test/java/io/liparakis/chunkis/command/ChunkDebugCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Timeline formatter and watchpoint summary formatting for command output. | Extend later to assert export feedback paths once command harness coverage is worth the churn. |
 | `fabric/src/test/java/io/liparakis/chunkis/command/DurabilityTestCommandTest.java` | `DEBUG_VALIDATION_SUPPORT` | Durability teleport target mapping and manual-stop trace emission used by durability timeline events. | Extend later to assert start/failure event emission once a low-churn command or scheduler harness exists. |
 | `fabric/src/test/java/io/liparakis/chunkis/client/ClientDeltaNetworkingTest.java` | `DEBUG_VALIDATION_SUPPORT` | Client malformed-payload failures classify as `DECODE_FAILED` vs `MAPPING_LOOKUP_FAILED`. | Extend later only if a light client apply harness is worth adding for end-to-end trace emission. |
 | `fabric/src/test/java/io/liparakis/chunkis/network/ChunkisNetworkingTest.java` | `DEBUG_VALIDATION_SUPPORT` | Outgoing client-sync timeline messages include compression-state summaries. | Extend later only if a light send-path harness is worth adding for end-to-end event emission. |
