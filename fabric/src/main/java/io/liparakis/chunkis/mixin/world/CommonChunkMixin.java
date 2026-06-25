@@ -31,6 +31,8 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
 
     @Unique
     private volatile ChunkDelta<?, ?> chunkis$delta = new ChunkDelta<>();
+    @Unique
+    private volatile String chunkis$restoreOperationId;
 
     /**
      * {@inheritDoc}
@@ -48,6 +50,16 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     @Override
     public void chunkis$setDelta(final ChunkDelta<?, ?> delta) {
         this.chunkis$delta = Objects.requireNonNull(delta, "ChunkDelta cannot be null");
+    }
+
+    @Override
+    public String chunkis$getRestoreOperationId() {
+        return chunkis$restoreOperationId;
+    }
+
+    @Override
+    public void chunkis$setRestoreOperationId(final String operationId) {
+        this.chunkis$restoreOperationId = operationId;
     }
 
     /**

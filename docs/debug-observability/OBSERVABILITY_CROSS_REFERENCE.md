@@ -129,6 +129,7 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   `WorldChunkMixin`
 - Notes:
   The current save/load/restore path now carries operation ids through the traced boundaries that actually participate in the first flight recorder.
+  Load and restore now stay on the same operation id when a proto chunk actually carries a Chunkis delta into `WorldChunkMixin`.
 
 ### Dirty tracker state visibility
 
@@ -223,6 +224,8 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   teleport target to chunk-key mapping for durability trace events
 - `GlobalChunkTrackerTest`
   tracker unload event emission, dirty-state payload, and mutation-origin source propagation
+- `WorldChunkMixinTest`
+  restore operation-id handoff from proto duck to live restore
 
 ### Next validation additions after this pass
 

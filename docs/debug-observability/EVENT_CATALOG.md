@@ -252,6 +252,8 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   Restore into a live `WorldChunk` started.
 - Current fields:
   world id, chunk key, source, operation id
+- Notes:
+  On the normal proto-delta path, `WorldChunkMixin` now reuses the existing load operation id instead of creating a second restore-only id.
 
 ### `RESTORE_COMPLETED`
 
@@ -267,6 +269,7 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   world id, chunk key, source, operation id
 - Notes:
   Applied block/block-entity/entity counts are currently carried in the message.
+  The operation id now stays aligned with the preceding load/attach path when restore came from a proto-carried Chunkis delta.
 
 ### `RESTORE_FAILED`
 

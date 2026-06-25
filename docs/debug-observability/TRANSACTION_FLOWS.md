@@ -82,6 +82,10 @@ Notes:
 4. `RESTORE_TX_START`
 5. `RESTORE_COMPLETED` or `RESTORE_FAILED`
 
+Notes:
+
+- When a proto chunk carries a Chunkis delta into `WorldChunkMixin`, restore now reuses the same `load-*` operation id rather than minting a separate restore id.
+
 ## Load from Chunkis storage
 
 1. `LOAD_TX_START`
@@ -91,6 +95,10 @@ Notes:
 5. `LOAD_TX_END`
 6. `RESTORE_TX_START`
 7. `RESTORE_COMPLETED` or `RESTORE_FAILED`
+
+Notes:
+
+- The same load operation id now survives the proto-attach boundary into the live restore call.
 
 ## Load with no meaningful Chunkis data
 

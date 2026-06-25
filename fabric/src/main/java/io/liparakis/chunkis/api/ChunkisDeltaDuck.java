@@ -13,4 +13,8 @@ public interface ChunkisDeltaDuck {
     ChunkDelta<?, ?> chunkis$getDelta();
 
     void chunkis$setDelta(ChunkDelta<?, ?> delta);
+
+    String chunkis$getRestoreOperationId();
+
+    void chunkis$setRestoreOperationId(String operationId);
 }

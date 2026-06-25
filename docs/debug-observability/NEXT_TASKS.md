@@ -74,7 +74,7 @@
     finish the remaining restore-to-live-chunk story beyond the newly added live-mutation-origin visibility
 - [ ] Add transaction correlation ids if the timeline becomes ambiguous
   - Goal:
-    extend the new save/load/restore operation ids across the remaining lifecycle edges
+    extend the new save/load/restore operation ids across any remaining lifecycle edges beyond the now-threaded load -> restore handoff
   - [ ] Extend decoder/mapping failure evidence beyond storage-load classification
   - Goal:
     cover deeper decoder internals and client/network decode failures only if the current storage boundary signal proves insufficient
@@ -129,6 +129,11 @@
     `WorldChunkMixin`, `GlobalChunkTracker`
   - Goal:
     show which live world mutation entrypoint first dirtied a chunk without adding per-edit event spam
+- [x] Threaded load operation ids into live restore
+  - Files:
+    `ChunkisDeltaDuck`, `CommonChunkMixin`, `ChunkSerializerMixin`, `WorldChunkMixin`
+  - Goal:
+    keep one coherent operation id from proto load resolution through the later live restore call
 
 ## Verification completed for this pass
 
@@ -137,6 +142,7 @@
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.StorageReportCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.DurabilityTestCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
 - [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.world.GlobalChunkTrackerTest" -x :fabric:runGameTest`
+- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.mixin.world.WorldChunkMixinTest" -x :fabric:runGameTest`
 
 ## Known repo-level noise during verification
 

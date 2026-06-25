@@ -161,7 +161,7 @@ public class ChunkSerializerMixin {
         final ChunkDelta<BlockState, NbtCompound> delta = resolved.delta();
         delta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(delta));
 
-        chunkis$attachDeltaToChunk(chunk, delta);
+        chunkis$attachDeltaToChunk(chunk, delta, operationId);
         chunk.setStatus(ChunkStatus.EMPTY);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -242,9 +242,11 @@ public class ChunkSerializerMixin {
     @Unique
     private static void chunkis$attachDeltaToChunk(
             final ProtoChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId) {
         if (chunk instanceof ChunkisDeltaDuck deltaDuck) {
             deltaDuck.chunkis$setDelta(delta);
+            deltaDuck.chunkis$setRestoreOperationId(operationId);
         }
     }
 

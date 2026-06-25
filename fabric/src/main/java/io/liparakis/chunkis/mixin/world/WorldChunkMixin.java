@@ -324,6 +324,7 @@ public class WorldChunkMixin {
             final ChunkDelta<BlockState, NbtCompound> protoDelta
     ) {
         final ChunkDelta<BlockState, NbtCompound> selfDelta = chunkis$getBlockDelta();
+        final String operationId = chunkis$takeRestoreOperationId((ChunkisDeltaDuck) proto);
         selfDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());
         selfDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
 
@@ -334,7 +335,7 @@ public class WorldChunkMixin {
                     chunk,
                     protoDelta,
                     selfDelta,
-                    ChunkTraceStore.nextOperationId("restore")
+                    operationId
             );
             chunkis$resyncPortalPointOfInterestStorage(world, chunk);
             io.liparakis.chunkis.portal.PortalChunkIndexManager.updateChunk(world, chunk);
@@ -345,6 +346,16 @@ public class WorldChunkMixin {
         }
 
         protoDelta.markSaved();
+    }
+
+    @Unique
+    static String chunkis$takeRestoreOperationId(final ChunkisDeltaDuck deltaDuck) {
+        final String operationId = deltaDuck.chunkis$getRestoreOperationId();
+        if (operationId != null) {
+            deltaDuck.chunkis$setRestoreOperationId(null);
+            return operationId;
+        }
+        return ChunkTraceStore.nextOperationId("restore");
     }
 
     /**
