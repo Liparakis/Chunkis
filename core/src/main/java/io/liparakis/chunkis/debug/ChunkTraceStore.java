@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 
 public final class ChunkTraceStore {
 
@@ -84,17 +85,24 @@ public final class ChunkTraceStore {
     }
 
     public static List<ChunkTraceEvent> latest(final int count) {
+        return latestMatching(count, event -> true);
+    }
+
+    public static List<ChunkTraceEvent> latestMatching(
+            final int count,
+            final Predicate<ChunkTraceEvent> predicate
+    ) {
         if (count <= 0) {
             return List.of();
         }
+        Objects.requireNonNull(predicate, "predicate");
 
         synchronized (MONITOR) {
-            final int limit = Math.min(count, size);
-            final List<ChunkTraceEvent> events = new ArrayList<>(limit);
-            for (int i = 0; i < limit; i++) {
+            final List<ChunkTraceEvent> events = new ArrayList<>(Math.min(count, size));
+            for (int i = 0; i < size && events.size() < count; i++) {
                 final int index = (writeIndex - 1 - i + capacity) % capacity;
                 final ChunkTraceEvent event = ring[index];
-                if (event != null) {
+                if (event != null && predicate.test(event)) {
                     events.add(event);
                 }
             }

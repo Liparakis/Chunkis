@@ -4,6 +4,21 @@
 
 - [x] Phase 1 audit and observability planning
 - [x] Phase 2: minimal trace runtime and first save/load/restore flight recorder completed
+- [ ] Phase 3: operator tools, export, assertions, snapshots, and paranoid verification
+
+## Phase 3 progress
+
+- [x] Focused trace commands / watchpoints
+  - `/chunkis debug watch chunk <x> <z>`
+  - `/chunkis debug watch region <x> <z>`
+  - `/chunkis debug watch list`
+  - `/chunkis debug watch latest <count>`
+  - `/chunkis debug watch clear`
+- [ ] JSONL export
+- [ ] `ASSERTION_FAILED` invariant enforcement
+- [ ] Queue/pending-save snapshots
+- [ ] Durability game-test assertions
+- [ ] `PARANOID` storage read-back verification
 
 ## Phase 2 completed in this pass
 

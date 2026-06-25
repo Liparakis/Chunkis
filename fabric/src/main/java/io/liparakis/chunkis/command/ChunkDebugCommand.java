@@ -4,8 +4,11 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import io.liparakis.chunkis.debug.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.DebugRegionKey;
 import net.minecraft.command.permission.Permission;
 import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.server.command.CommandManager;
@@ -29,34 +32,68 @@ public final class ChunkDebugCommand {
     }
 
     public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
+        final var watchCommand = CommandManager.literal("watch")
+                .then(CommandManager.literal("chunk")
+                        .then(CommandManager.argument("x", IntegerArgumentType.integer())
+                                .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                                        .executes(context -> watchChunk(
+                                                context.getSource(),
+                                                IntegerArgumentType.getInteger(context, "x"),
+                                                IntegerArgumentType.getInteger(context, "z")
+                                        )))))
+                .then(CommandManager.literal("region")
+                        .then(CommandManager.argument("x", IntegerArgumentType.integer())
+                                .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                                        .executes(context -> watchRegion(
+                                                context.getSource(),
+                                                IntegerArgumentType.getInteger(context, "x"),
+                                                IntegerArgumentType.getInteger(context, "z")
+                                        )))))
+                .then(CommandManager.literal("clear")
+                        .executes(context -> clearWatchpoints(context.getSource())))
+                .then(CommandManager.literal("list")
+                        .executes(context -> listWatchpoints(context.getSource())))
+                .then(CommandManager.literal("latest")
+                        .then(CommandManager.argument(
+                                        "count",
+                                        IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
+                                )
+                                .executes(context -> latestWatched(
+                                        context.getSource(),
+                                        IntegerArgumentType.getInteger(context, "count")
+                                ))));
+
+        final var debugCommand = CommandManager.literal("debug")
+                .then(CommandManager.literal("on")
+                        .executes(context -> setLevel(
+                                context.getSource(),
+                                ChunkisDebugLevel.LIFECYCLE,
+                                "Chunkis debug set to LIFECYCLE"
+                        )))
+                .then(CommandManager.literal("off")
+                        .executes(context -> setLevel(
+                                context.getSource(),
+                                ChunkisDebugLevel.OFF,
+                                "Chunkis debug disabled"
+                        )))
+                .then(CommandManager.literal("clear")
+                        .executes(context -> clear(context.getSource())))
+                .then(CommandManager.literal("latest")
+                        .then(CommandManager.argument(
+                                        "count",
+                                        IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
+                                )
+                                .executes(context -> latest(
+                                        context.getSource(),
+                                        IntegerArgumentType.getInteger(context, "count")
+                                ))))
+                .then(watchCommand);
+
         dispatcher.register(
                 CommandManager.literal("chunkis")
                         .requires(source -> source.getPermissions()
                                 .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                        .then(CommandManager.literal("debug")
-                                .then(CommandManager.literal("on")
-                                        .executes(context -> setLevel(
-                                                context.getSource(),
-                                                ChunkisDebugLevel.LIFECYCLE,
-                                                "Chunkis debug set to LIFECYCLE"
-                                        )))
-                                .then(CommandManager.literal("off")
-                                        .executes(context -> setLevel(
-                                                context.getSource(),
-                                                ChunkisDebugLevel.OFF,
-                                                "Chunkis debug disabled"
-                                        )))
-                                .then(CommandManager.literal("clear")
-                                        .executes(context -> clear(context.getSource())))
-                                .then(CommandManager.literal("latest")
-                                        .then(CommandManager.argument(
-                                                        "count",
-                                                        IntegerArgumentType.integer(1, MAX_LATEST_COUNT)
-                                                )
-                                                .executes(context -> latest(
-                                                        context.getSource(),
-                                                        IntegerArgumentType.getInteger(context, "count")
-                                                )))))
+                        .then(debugCommand)
         );
     }
 
@@ -129,5 +166,96 @@ public final class ChunkDebugCommand {
             source.sendFeedback(() -> Text.literal(formatEvent(event)), false);
         }
         return oldestFirst.size();
+    }
+
+    private static int watchChunk(
+            final ServerCommandSource source,
+            final int chunkX,
+            final int chunkZ
+    ) {
+        ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(chunkX, chunkZ));
+        source.sendFeedback(
+                () -> Text.literal("[Chunkis] Watching chunk " + chunkX + "," + chunkZ),
+                true
+        );
+        return 1;
+    }
+
+    private static int watchRegion(
+            final ServerCommandSource source,
+            final int regionX,
+            final int regionZ
+    ) {
+        ChunkTraceWatchpoints.watchRegion(new DebugRegionKey(regionX, regionZ));
+        source.sendFeedback(
+                () -> Text.literal("[Chunkis] Watching region " + regionX + "," + regionZ),
+                true
+        );
+        return 1;
+    }
+
+    private static int clearWatchpoints(final ServerCommandSource source) {
+        ChunkTraceWatchpoints.clear();
+        source.sendFeedback(() -> Text.literal("[Chunkis] Cleared trace watchpoints."), true);
+        return 1;
+    }
+
+    private static int listWatchpoints(final ServerCommandSource source) {
+        final String summary = formatWatchpointSummary();
+        source.sendFeedback(() -> Text.literal("[Chunkis] " + summary), false);
+        return 1;
+    }
+
+    private static int latestWatched(final ServerCommandSource source, final int count) {
+        if (ChunkTraceWatchpoints.isEmpty()) {
+            source.sendError(Text.literal("[Chunkis] No watchpoints configured."));
+            return 0;
+        }
+
+        final List<ChunkTraceEvent> newestFirst = ChunkTraceStore.latestMatching(count, ChunkTraceWatchpoints::matches);
+        if (newestFirst.isEmpty()) {
+            source.sendFeedback(() -> Text.literal("[Chunkis] No watched trace events stored."), false);
+            return 1;
+        }
+
+        final List<ChunkTraceEvent> oldestFirst = new ArrayList<>(newestFirst);
+        for (int i = oldestFirst.size() - 1; i >= 0; i--) {
+            final ChunkTraceEvent event = oldestFirst.get(i);
+            source.sendFeedback(() -> Text.literal(formatEvent(event)), false);
+        }
+        return oldestFirst.size();
+    }
+
+    static String formatWatchpointSummary() {
+        final List<DebugChunkKey> chunks = ChunkTraceWatchpoints.watchedChunks();
+        final List<DebugRegionKey> regions = ChunkTraceWatchpoints.watchedRegions();
+        if (chunks.isEmpty() && regions.isEmpty()) {
+            return "No trace watchpoints configured.";
+        }
+
+        final StringBuilder builder = new StringBuilder("Watchpoints:");
+        if (!chunks.isEmpty()) {
+            builder.append(" chunks=").append(formatChunks(chunks));
+        }
+        if (!regions.isEmpty()) {
+            builder.append(" regions=").append(formatRegions(regions));
+        }
+        return builder.toString();
+    }
+
+    private static String formatChunks(final List<DebugChunkKey> chunks) {
+        final List<String> parts = new ArrayList<>(chunks.size());
+        for (final DebugChunkKey chunk : chunks) {
+            parts.add(chunk.x() + "," + chunk.z());
+        }
+        return String.join(" ", parts);
+    }
+
+    private static String formatRegions(final List<DebugRegionKey> regions) {
+        final List<String> parts = new ArrayList<>(regions.size());
+        for (final DebugRegionKey region : regions) {
+            parts.add(region.x() + "," + region.z());
+        }
+        return String.join(" ", parts);
     }
 }

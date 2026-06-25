@@ -230,9 +230,14 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 
 ### Export/watchpoints/ImGUI
 
-- Decision: `DEFERRED`
-- Reason:
-  Not required to produce the first reliable in-memory timeline.
+- Decision: `PARTIALLY_IMPLEMENTED`
+- Files:
+  `ChunkDebugCommand`
+  `ChunkTraceStore`
+  `ChunkTraceWatchpoints`
+- Notes:
+  Focused chunk/region watchpoints are now implemented as operator-side filters over the existing in-memory store.
+  JSONL export and GUI surfaces remain deferred.
 
 ## Validation linkage
 

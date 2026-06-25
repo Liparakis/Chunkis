@@ -168,6 +168,14 @@ Phase 2 likely command surface:
 - trace chunk
 - trace region
 
+Current Phase 3 command surface:
+
+- `/chunkis debug watch chunk <x> <z>`
+- `/chunkis debug watch region <x> <z>`
+- `/chunkis debug watch list`
+- `/chunkis debug watch latest <count>`
+- `/chunkis debug watch clear`
+
 Commands deferred from Phase 1:
 
 - watch/unwatch
@@ -180,6 +188,12 @@ Commands deferred from Phase 1:
 - Watchpoints should be chunk/region keyed filters layered on top of global level/domain gating.
 - If added in Phase 2, watched keys should unlock `PARANOID` detail without forcing global `PARANOID`.
 - Do not add this before the base event store exists.
+
+Current Phase 3 implementation:
+
+- watchpoints are chunk/region keyed filters over the existing in-memory store
+- watchpoints currently affect operator queries only; they do not change trace capture volume
+- `watch latest` reuses the base ring buffer and filters by watched chunk/region keys
 
 ## JSONL Export Plan
 
@@ -259,4 +273,3 @@ Recommended future snapshot APIs:
 - Phase 2 is clearly defined as the first real instrumentation pass.
 - No persistence behavior change is introduced in Phase 1.
 - No duplicate debug system is proposed.
-

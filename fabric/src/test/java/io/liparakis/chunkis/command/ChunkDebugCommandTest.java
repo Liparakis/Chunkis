@@ -4,14 +4,21 @@ import io.liparakis.chunkis.debug.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.debug.DebugRegionKey;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkDebugCommandTest {
+
+    @AfterEach
+    void tearDown() {
+        ChunkTraceWatchpoints.clear();
+    }
 
     @Test
     void formatsStructuredEventTimelineLine() {
@@ -47,5 +54,16 @@ class ChunkDebugCommandTest {
         assertTrue(formatted.contains("src=CisStorage#writePrepared"));
         assertTrue(formatted.contains("thread=Server thread"));
         assertTrue(formatted.contains("msg=flush completed"));
+    }
+
+    @Test
+    void formatsWatchpointSummary() {
+        ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(7, -2));
+        ChunkTraceWatchpoints.watchRegion(new DebugRegionKey(0, -1));
+
+        final String formatted = ChunkDebugCommand.formatWatchpointSummary();
+
+        assertTrue(formatted.contains("chunks=7,-2"));
+        assertTrue(formatted.contains("regions=0,-1"));
     }
 }
