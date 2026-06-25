@@ -173,6 +173,7 @@ Current Phase 3 command surface:
 - `/chunkis debug watch chunk <x> <z>`
 - `/chunkis debug watch region <x> <z>`
 - `/chunkis debug watch list`
+- `/chunkis debug watch pending`
 - `/chunkis debug watch latest <count>`
 - `/chunkis debug watch clear`
 - `/chunkis debug export latest <count>`
@@ -196,6 +197,7 @@ Current Phase 3 implementation:
 - watchpoints are chunk/region keyed filters over the existing in-memory store
 - watchpoints currently affect operator queries only; they do not change trace capture volume
 - `watch latest` reuses the base ring buffer and filters by watched chunk/region keys
+- `watch pending` snapshots watched-chunk dirty-tracker, async-save-queue, and deferred-base-capture state
 
 ## JSONL Export Plan
 
@@ -247,6 +249,12 @@ Recommended future snapshot APIs:
 - transaction subset
 - storage summary snapshot
 - watch registry snapshot
+
+Current Phase 3 queue snapshot surface:
+
+- watched chunk -> dirty tracker presence
+- watched chunk -> async pending save operation/generation/dirty state
+- watched chunk -> deferred base capture queue presence
 
 ## Implementation Phases
 

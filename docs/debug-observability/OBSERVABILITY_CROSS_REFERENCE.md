@@ -248,9 +248,12 @@ This file records the final Phase 2 decision/status for the first flight-recorde
   `ChunkTraceStore`
   `ChunkTraceJsonl`
   `ChunkTraceWatchpoints`
+  `AsyncCisSaveManager`
+  `BaseChunkCaptureScheduler`
 - Notes:
   Focused chunk/region watchpoints are now implemented as operator-side filters over the existing in-memory store.
   JSONL export is now implemented as a world-local dump of the in-memory store.
+  Watched pending-save snapshots now expose dirty-tracker, async queue, and deferred base-capture state for selected chunks.
   GUI surfaces remain deferred.
 
 ## Validation linkage

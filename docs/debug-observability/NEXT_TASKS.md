@@ -22,7 +22,9 @@
   - implemented now for `OFF_THREAD_MUTATION_REJECTED`
   - implemented now for zero-result restore replay with block/block-entity payload
   - broader save/load correlation invariants still deferred
-- [ ] Queue/pending-save snapshots
+- [x] Queue/pending-save snapshots
+  - `/chunkis debug watch pending`
+  - current view covers dirty tracker, async pending saves, and deferred base capture queue for watched chunks
 - [ ] Durability game-test assertions
 - [ ] `PARANOID` storage read-back verification
 
@@ -115,7 +117,7 @@
 
 - [ ] Add broader invariant enforcement with `ASSERTION_FAILED`
 - [x] Add JSONL export or other durable trace dump
-- [ ] Add queue snapshots/watchpoints for selected chunks only
+- [x] Add queue snapshots/watchpoints for selected chunks only
 - [ ] Add durability game-test assertions against trace timelines
 - [ ] Add `PARANOID` read-back verification for storage success
 

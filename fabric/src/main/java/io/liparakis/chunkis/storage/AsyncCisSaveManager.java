@@ -150,6 +150,15 @@ public final class AsyncCisSaveManager {
         WORKERS.clear();
     }
 
+    public static Map<DebugChunkKey, PendingSaveSnapshot> snapshot(final ServerWorld world) {
+        if (world == null) {
+            return Map.of();
+        }
+
+        final SaveWorker worker = WORKERS.get(world.getRegistryKey());
+        return worker == null ? Map.of() : worker.snapshot();
+    }
+
     /**
      * Returns the {@link SaveWorker} for {@code world}, creating and starting one
      * if none exists yet.
@@ -244,6 +253,22 @@ public final class AsyncCisSaveManager {
                         "Chunkis: Interrupted while closing async save worker for {}",
                         world.getRegistryKey().getValue()
                 );
+            }
+        }
+
+        Map<DebugChunkKey, PendingSaveSnapshot> snapshot() {
+            synchronized (monitor) {
+                final Map<DebugChunkKey, PendingSaveSnapshot> snapshots = new LinkedHashMap<>(pending.size());
+                for (final PendingSave save : pending.values()) {
+                    final DebugChunkKey chunkKey = new DebugChunkKey(save.pos().x, save.pos().z);
+                    snapshots.put(chunkKey, new PendingSaveSnapshot(
+                            chunkKey,
+                            save.operationId(),
+                            save.generation(),
+                            save.liveDelta().isDirty()
+                    ));
+                }
+                return snapshots;
             }
         }
 
@@ -393,5 +418,13 @@ public final class AsyncCisSaveManager {
         ) {
             this(storage, pos, cisPos, liveDelta, snapshot, generation, operationId, pos.toLong());
         }
+    }
+
+    public record PendingSaveSnapshot(
+            DebugChunkKey chunkKey,
+            String operationId,
+            long generation,
+            boolean dirtyState
+    ) {
     }
 }

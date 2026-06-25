@@ -10,20 +10,24 @@ import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.debug.DebugRegionKey;
+import io.liparakis.chunkis.storage.AsyncCisSaveManager;
+import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
+import io.liparakis.chunkis.world.GlobalChunkTracker;
 import net.minecraft.command.permission.Permission;
 import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import net.minecraft.util.WorldSavePath;
+import net.minecraft.util.math.ChunkPos;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.nio.file.Path;
 
 public final class ChunkDebugCommand {
 
@@ -60,6 +64,8 @@ public final class ChunkDebugCommand {
                         .executes(context -> clearWatchpoints(context.getSource())))
                 .then(CommandManager.literal("list")
                         .executes(context -> listWatchpoints(context.getSource())))
+                .then(CommandManager.literal("pending")
+                        .executes(context -> pendingWatched(context.getSource())))
                 .then(CommandManager.literal("latest")
                         .then(CommandManager.argument(
                                         "count",
@@ -252,6 +258,30 @@ public final class ChunkDebugCommand {
         return oldestFirst.size();
     }
 
+    private static int pendingWatched(final ServerCommandSource source) {
+        final List<DebugChunkKey> watchedChunks = ChunkTraceWatchpoints.watchedChunks();
+        if (watchedChunks.isEmpty()) {
+            source.sendError(Text.literal("[Chunkis] No chunk watchpoints configured."));
+            return 0;
+        }
+
+        final var world = source.getWorld();
+        final var trackerPending = GlobalChunkTracker.getPendingDeltas(world);
+        final var asyncPending = AsyncCisSaveManager.snapshot(world);
+        final var basePending = BaseChunkCaptureScheduler.snapshot(world);
+
+        for (final DebugChunkKey chunkKey : watchedChunks) {
+            final PendingChunkSnapshot snapshot = new PendingChunkSnapshot(
+                    chunkKey,
+                    trackerPending.containsKey(new ChunkPos(chunkKey.x(), chunkKey.z())),
+                    asyncPending.get(chunkKey),
+                    basePending.get(chunkKey)
+            );
+            source.sendFeedback(() -> Text.literal(formatPendingSnapshot(snapshot)), false);
+        }
+        return watchedChunks.size();
+    }
+
     private static int exportLatest(final ServerCommandSource source, final int count) {
         return exportEvents(
                 source,
@@ -339,6 +369,30 @@ public final class ChunkDebugCommand {
         return builder.toString();
     }
 
+    static String formatPendingSnapshot(final PendingChunkSnapshot snapshot) {
+        final StringBuilder builder = new StringBuilder(128);
+        builder.append("chunk=")
+                .append(snapshot.chunkKey().x())
+                .append(',')
+                .append(snapshot.chunkKey().z())
+                .append(" trackerDirty=")
+                .append(snapshot.trackerDirty())
+                .append(" asyncQueued=")
+                .append(snapshot.asyncPending() != null)
+                .append(" baseCaptureQueued=")
+                .append(snapshot.baseCapturePending() != null);
+
+        if (snapshot.asyncPending() != null) {
+            builder.append(" asyncOp=").append(snapshot.asyncPending().operationId())
+                    .append(" asyncGeneration=").append(snapshot.asyncPending().generation())
+                    .append(" asyncDirty=").append(snapshot.asyncPending().dirtyState());
+        }
+        if (snapshot.baseCapturePending() != null) {
+            builder.append(" baseCaptureDirty=").append(snapshot.baseCapturePending().dirtyState());
+        }
+        return builder.toString();
+    }
+
     private static String formatChunks(final List<DebugChunkKey> chunks) {
         final List<String> parts = new ArrayList<>(chunks.size());
         for (final DebugChunkKey chunk : chunks) {
@@ -353,5 +407,13 @@ public final class ChunkDebugCommand {
             parts.add(region.x() + "," + region.z());
         }
         return String.join(" ", parts);
+    }
+
+    record PendingChunkSnapshot(
+            DebugChunkKey chunkKey,
+            boolean trackerDirty,
+            AsyncCisSaveManager.PendingSaveSnapshot asyncPending,
+            BaseChunkCaptureScheduler.QueuedCaptureSnapshot baseCapturePending
+    ) {
     }
 }

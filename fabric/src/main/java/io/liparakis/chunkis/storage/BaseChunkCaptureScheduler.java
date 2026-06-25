@@ -171,6 +171,15 @@ public final class BaseChunkCaptureScheduler {
         SCHEDULERS.clear();
     }
 
+    public static Map<DebugChunkKey, QueuedCaptureSnapshot> snapshot(final ServerWorld world) {
+        if (world == null) {
+            return Map.of();
+        }
+
+        final SchedulerState state = SCHEDULERS.get(world.getRegistryKey());
+        return state == null ? Map.of() : state.snapshot();
+    }
+
     /**
      * Returns the {@link SchedulerState} for {@code world}, creating one lazily
      * if none exists yet.
@@ -403,6 +412,19 @@ public final class BaseChunkCaptureScheduler {
             lastWarnedQueueSize = 0;
         }
 
+        synchronized Map<DebugChunkKey, QueuedCaptureSnapshot> snapshot() {
+            final Map<DebugChunkKey, QueuedCaptureSnapshot> snapshots = new LinkedHashMap<>(queuedChunks.size());
+            for (final WorldChunk chunk : queuedChunks.values()) {
+                final ChunkDelta<BlockState, NbtCompound> delta = deltaFrom(chunk);
+                final DebugChunkKey chunkKey = new DebugChunkKey(chunk.getPos().x, chunk.getPos().z);
+                snapshots.put(chunkKey, new QueuedCaptureSnapshot(
+                        chunkKey,
+                        delta != null && delta.isDirty()
+                ));
+            }
+            return snapshots;
+        }
+
         /**
          * Enqueues a chunk for capture.
          *
@@ -524,5 +546,11 @@ public final class BaseChunkCaptureScheduler {
                 debugBaseCapture(LOG_FLUSHED, world, pos);
             }
         }
+    }
+
+    public record QueuedCaptureSnapshot(
+            DebugChunkKey chunkKey,
+            boolean dirtyState
+    ) {
     }
 }

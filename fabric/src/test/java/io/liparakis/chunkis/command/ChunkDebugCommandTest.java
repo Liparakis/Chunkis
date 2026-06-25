@@ -8,6 +8,8 @@ import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.debug.DebugRegionKey;
+import io.liparakis.chunkis.storage.AsyncCisSaveManager;
+import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -65,5 +67,33 @@ class ChunkDebugCommandTest {
 
         assertTrue(formatted.contains("chunks=7,-2"));
         assertTrue(formatted.contains("regions=0,-1"));
+    }
+
+    @Test
+    void formatsPendingSnapshotSummary() {
+        final String formatted = ChunkDebugCommand.formatPendingSnapshot(
+                new ChunkDebugCommand.PendingChunkSnapshot(
+                        new DebugChunkKey(7, -2),
+                        true,
+                        new AsyncCisSaveManager.PendingSaveSnapshot(
+                                new DebugChunkKey(7, -2),
+                                "save-7--2-4",
+                                4L,
+                                true
+                        ),
+                        new BaseChunkCaptureScheduler.QueuedCaptureSnapshot(
+                                new DebugChunkKey(7, -2),
+                                true
+                        )
+                )
+        );
+
+        assertTrue(formatted.contains("chunk=7,-2"));
+        assertTrue(formatted.contains("trackerDirty=true"));
+        assertTrue(formatted.contains("asyncQueued=true"));
+        assertTrue(formatted.contains("baseCaptureQueued=true"));
+        assertTrue(formatted.contains("asyncOp=save-7--2-4"));
+        assertTrue(formatted.contains("asyncGeneration=4"));
+        assertTrue(formatted.contains("baseCaptureDirty=true"));
     }
 }
