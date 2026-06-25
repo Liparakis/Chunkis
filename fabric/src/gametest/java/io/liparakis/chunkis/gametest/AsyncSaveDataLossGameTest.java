@@ -2,6 +2,11 @@ package io.liparakis.chunkis.gametest;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.ChunkisDebugLevel;
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
 import io.liparakis.chunkis.storage.CisNbtUtil;
@@ -20,6 +25,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.Chunk;
+
+import java.util.List;
 
 /**
  * Regression coverage for long-distance unload/reload churn that previously let
@@ -42,6 +49,9 @@ public final class AsyncSaveDataLossGameTest {
 
     @GameTest(maxTicks = MAX_TICKS)
     public void survivesHundredFarChunkRoundTripsWithoutLosingEdits(final TestContext context) {
+        ChunkTraceStore.clear();
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+
         final ServerWorld world = context.getWorld();
         final ChunkTargets targets = createTargets(context);
 
@@ -106,9 +116,11 @@ public final class AsyncSaveDataLossGameTest {
 
             assertPersistedBaseChunkPresent(context, world, targets.nearChunk(), "near");
             assertPersistedBaseChunkPresent(context, world, targets.farChunk(), "far");
+            assertTraceTimeline(context, targets);
 
             world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
             world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
+            ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
             context.complete();
         });
     }
@@ -196,6 +208,51 @@ public final class AsyncSaveDataLossGameTest {
         context.assertTrue(
                 delta != null && CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata()),
                 Text.literal("Expected persisted base chunk NBT for the " + label + " chunk."));
+    }
+
+    private static void assertTraceTimeline(final TestContext context, final ChunkTargets targets) {
+        final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
+                matchesChunk(event, targets.nearChunk()) || matchesChunk(event, targets.farChunk()));
+
+        context.assertTrue(
+                containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_TX_START)
+                        || containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_QUEUED)
+                        || containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
+                Text.literal("Expected near chunk save timeline evidence in trace store."));
+        context.assertTrue(
+                containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_TX_START)
+                        || containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_QUEUED)
+                        || containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
+                Text.literal("Expected far chunk save timeline evidence in trace store."));
+        context.assertTrue(
+                containsEvent(events, targets.nearChunk(), ChunkTraceEventType.LOAD_SOURCE_RESOLVED),
+                Text.literal("Expected near chunk load-source evidence after explicit storage load."));
+        context.assertTrue(
+                containsEvent(events, targets.farChunk(), ChunkTraceEventType.LOAD_SOURCE_RESOLVED),
+                Text.literal("Expected far chunk load-source evidence after explicit storage load."));
+        context.assertTrue(
+                containsEvent(events, targets.nearChunk(), ChunkTraceEventType.RESTORE_COMPLETED)
+                        || containsEvent(events, targets.farChunk(), ChunkTraceEventType.RESTORE_COMPLETED),
+                Text.literal("Expected at least one restore-completed event during long-distance churn."));
+    }
+
+    private static boolean containsEvent(
+            final List<ChunkTraceEvent> events,
+            final ChunkPos chunkPos,
+            final ChunkTraceEventType eventType
+    ) {
+        for (final ChunkTraceEvent event : events) {
+            if (event.eventType() == eventType && matchesChunk(event, chunkPos)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean matchesChunk(final ChunkTraceEvent event, final ChunkPos chunkPos) {
+        return event.chunkKey() != null
+                && event.chunkKey().x() == chunkPos.x
+                && event.chunkKey().z() == chunkPos.z;
     }
 
     private record ChunkTargets(

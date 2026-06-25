@@ -26,6 +26,9 @@
   - `/chunkis debug watch pending`
   - current view covers dirty tracker, async pending saves, and deferred base capture queue for watched chunks
 - [ ] Durability game-test assertions
+  - `AsyncSaveDataLossGameTest` now asserts save/load/restore trace evidence for the reproduced churn path
+  - `compileGametestJava` passes
+  - full `runGameTest` is still blocked by pre-existing CIS migration/decompression startup failures before this gametest can complete cleanly
 - [ ] `PARANOID` storage read-back verification
 
 ## Phase 2 completed in this pass
