@@ -12,6 +12,8 @@ import io.liparakis.chunkis.debug.DebugChunkKey;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,7 +32,7 @@ class WorldChunkMixinTest {
         final FakeChunkisDeltaDuck duck = new FakeChunkisDeltaDuck();
         duck.chunkis$setRestoreOperationId("load-42");
 
-        assertEquals("load-42", WorldChunkMixin.chunkis$takeRestoreOperationId(duck));
+        assertEquals("load-42", invokeTakeRestoreOperationId(duck));
         assertNull(duck.chunkis$getRestoreOperationId());
     }
 
@@ -38,7 +40,7 @@ class WorldChunkMixinTest {
     void tracesPostRestoreFollowUpFailure() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
-        WorldChunkMixin.chunkis$tracePostRestoreFailure(
+        invokeTracePostRestoreFailure(
                 "minecraft:overworld",
                 new DebugChunkKey(7, -3),
                 "load-17",
@@ -53,6 +55,38 @@ class WorldChunkMixinTest {
         assertEquals(7, event.chunkKey().x());
         assertEquals(-3, event.chunkKey().z());
         assertTrue(event.message().contains("portal-index-update"));
+    }
+
+    private static String invokeTakeRestoreOperationId(final ChunkisDeltaDuck duck) {
+        try {
+            final Method method = WorldChunkMixin.class
+                    .getDeclaredMethod("chunkis$takeRestoreOperationId", ChunkisDeltaDuck.class);
+            method.setAccessible(true);
+            return (String) method.invoke(null, duck);
+        } catch (final Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static void invokeTracePostRestoreFailure(
+            final String worldId,
+            final DebugChunkKey chunkKey,
+            final String operationId,
+            final String failedStage
+    ) {
+        try {
+            final Method method = WorldChunkMixin.class.getDeclaredMethod(
+                    "chunkis$tracePostRestoreFailure",
+                    String.class,
+                    DebugChunkKey.class,
+                    String.class,
+                    String.class
+            );
+            method.setAccessible(true);
+            method.invoke(null, worldId, chunkKey, operationId, failedStage);
+        } catch (final Exception e) {
+            throw new AssertionError(e);
+        }
     }
 
     private static final class FakeChunkisDeltaDuck implements ChunkisDeltaDuck {

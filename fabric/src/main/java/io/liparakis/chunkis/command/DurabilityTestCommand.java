@@ -88,15 +88,7 @@ public final class DurabilityTestCommand {
         runIdRef.set(runId);
 
         final AtomicInteger remaining = new AtomicInteger(count);
-        trace(
-                ChunkTraceEventType.DURABILITY_TEST_STARTED,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.NONE,
-                "starting durability test count=" + count + " delayMs=" + delayMs,
-                worldId(source),
-                null,
-                runId
-        );
+        traceStarted(count, delayMs, worldId(source), runId);
 
         source.sendFeedback(
                 () -> Text.literal("[Chunkis] Starting durability test: " + count + " cycles at " + delayMs + "ms delay"),
@@ -156,15 +148,7 @@ public final class DurabilityTestCommand {
                         });
                     } catch (Exception exception) {
                         if (shutdownAndClear(executor, runId)) {
-                            trace(
-                                    ChunkTraceEventType.DURABILITY_TEST_FAILED,
-                                    ChunkTraceSeverity.ERROR,
-                                    ChunkTraceReason.IO_EXCEPTION,
-                                    "durability test failed: " + exception.getMessage(),
-                                    worldId(source),
-                                    null,
-                                    runId
-                            );
+                            traceFailed(exception.getMessage(), worldId(source), runId);
                         }
                         source.getServer().execute(() ->
                                 source.sendError(
@@ -229,6 +213,39 @@ public final class DurabilityTestCommand {
 
     private static String worldId(final ServerCommandSource source) {
         return source.getWorld().getRegistryKey().getValue().toString();
+    }
+
+    static void traceStarted(
+            final int count,
+            final int delayMs,
+            final String worldId,
+            final String operationId
+    ) {
+        trace(
+                ChunkTraceEventType.DURABILITY_TEST_STARTED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "starting durability test count=" + count + " delayMs=" + delayMs,
+                worldId,
+                null,
+                operationId
+        );
+    }
+
+    static void traceFailed(
+            final String failureMessage,
+            final String worldId,
+            final String operationId
+    ) {
+        trace(
+                ChunkTraceEventType.DURABILITY_TEST_FAILED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.IO_EXCEPTION,
+                "durability test failed: " + failureMessage,
+                worldId,
+                null,
+                operationId
+        );
     }
 
     private static void trace(

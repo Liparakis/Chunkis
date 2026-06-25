@@ -64,6 +64,8 @@
   - `DurabilityTestCommandTest`
 - [x] Added first durability lifecycle event validation
   - `DurabilityTestCommandTest` now asserts manual stop emits `DURABILITY_TEST_STOPPED` and clears run state
+- [x] Extended durability lifecycle validation to start/failure emission
+  - `DurabilityTestCommandTest` now asserts `DURABILITY_TEST_STARTED` and `DURABILITY_TEST_FAILED`
 - [x] Added true unload-hook correlation
   - `TRACKER_CHUNK_UNLOADED`
   - dirty-state payload on unload events
@@ -86,7 +88,7 @@
 
 - [ ] Add more transaction correlation ids only if a real timeline still proves ambiguous
 - [ ] Extend decoder internals only if storage-boundary plus client-boundary failure classification proves insufficient
-- [ ] Extend durability reproducer validation to start/failure emission only if a low-churn harness is worth the extra test complexity
+- [ ] Extend durability reproducer validation further only if a fuller scheduler or command harness is worth the extra test complexity
 
 ## Phase 3 candidates
 

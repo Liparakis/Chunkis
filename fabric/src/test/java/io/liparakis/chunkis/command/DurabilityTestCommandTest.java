@@ -2,6 +2,7 @@ package io.liparakis.chunkis.command;
 
 import io.liparakis.chunkis.debug.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugLevel;
@@ -58,6 +59,26 @@ class DurabilityTestCommandTest {
                 event.eventType() == ChunkTraceEventType.DURABILITY_TEST_STOPPED
                         && "durability-7".equals(event.operationId())
                         && "stopped manually".equals(event.message())));
+    }
+
+    @Test
+    void emitsStartedAndFailedDurabilityTraceEvents() {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+
+        DurabilityTestCommand.traceStarted(12, 25, "minecraft:overworld", "durability-9");
+        DurabilityTestCommand.traceFailed("boom", "minecraft:overworld", "durability-9");
+
+        final List<ChunkTraceEvent> events = ChunkTraceStore.latest(5);
+        assertTrue(events.stream().anyMatch(event ->
+                event.eventType() == ChunkTraceEventType.DURABILITY_TEST_STARTED
+                        && "durability-9".equals(event.operationId())
+                        && event.message().contains("count=12")
+                        && event.message().contains("delayMs=25")));
+        assertTrue(events.stream().anyMatch(event ->
+                event.eventType() == ChunkTraceEventType.DURABILITY_TEST_FAILED
+                        && event.reason() == ChunkTraceReason.IO_EXCEPTION
+                        && "durability-9".equals(event.operationId())
+                        && "durability test failed: boom".equals(event.message())));
     }
 
     private static void setRunState(
