@@ -62,6 +62,8 @@
   - dedicated `durability-*` operation ids from the reproducer command
 - [x] Added focused durability validation
   - `DurabilityTestCommandTest`
+- [x] Added first durability lifecycle event validation
+  - `DurabilityTestCommandTest` now asserts manual stop emits `DURABILITY_TEST_STOPPED` and clears run state
 - [x] Added true unload-hook correlation
   - `TRACKER_CHUNK_UNLOADED`
   - dirty-state payload on unload events
@@ -85,7 +87,7 @@
     add payload compression/ordering evidence only if the current send/apply timeline is insufficient
 - [ ] Add durability reproducer assertions beyond chunk-target mapping
   - Goal:
-    cover start/stop/failure event emission with a command-level or scheduler-harness test only if that can be done without invasive command refactoring
+    extend the new stop-path validation to start/failure event emission only if that can be done without invasive command refactoring
 
 ## Phase 3 candidates
 

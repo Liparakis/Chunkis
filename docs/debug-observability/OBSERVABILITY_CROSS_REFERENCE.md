@@ -234,7 +234,7 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - `ChunkDebugCommandTest`
   readable timeline formatting
 - `DurabilityTestCommandTest`
-  teleport target to chunk-key mapping for durability trace events
+  teleport target to chunk-key mapping and manual-stop trace emission for durability events
 - `GlobalChunkTrackerTest`
   tracker unload event emission, dirty-state payload, and mutation-origin source propagation
 - `WorldChunkMixinTest`
