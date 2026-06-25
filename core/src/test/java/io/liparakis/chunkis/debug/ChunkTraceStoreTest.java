@@ -95,10 +95,42 @@ class ChunkTraceStoreTest {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.STORAGE_WRITE,
                 "TestSource", "second",
-                null, null, null, null, null, null
+                "minecraft:overworld",
+                new DebugChunkKey(1, 2),
+                null,
+                "save-2",
+                null,
+                32
         ));
 
         assertThat(ChunkTraceStore.snapshot()).extracting(ChunkTraceEvent::message)
                 .containsExactly("first", "second");
+    }
+
+    @Test
+    void recordsAssertionForMalformedSaveRejectedEvent() {
+        ChunkTraceStore.record(new ChunkTraceEvent(
+                0L, 1L, "main",
+                ChunkisDebugDomain.SAVE_GUARDS,
+                ChunkTraceEventType.SAVE_REJECTED,
+                ChunkTraceSeverity.WARN,
+                ChunkTraceReason.NONE,
+                "TestSource", "missing reason",
+                "minecraft:overworld",
+                new DebugChunkKey(4, -2),
+                null,
+                "save-1",
+                true,
+                null
+        ));
+
+        assertThat(ChunkTraceStore.latest(2))
+                .extracting(ChunkTraceEvent::eventType)
+                .containsExactly(
+                        ChunkTraceEventType.ASSERTION_FAILED,
+                        ChunkTraceEventType.SAVE_REJECTED
+                );
+        assertThat(ChunkTraceStore.latest(1).getFirst().message())
+                .contains("save rejected without a machine-readable reason");
     }
 }

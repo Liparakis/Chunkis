@@ -82,47 +82,55 @@ public final class AsyncSaveDataLossGameTest {
                     moveToFar ? targets.farSecondary() : targets.nearSecondary();
             final long teleportTick = INITIAL_DELAY_TICKS + (long) i * 2L;
 
-            context.runAtTick(teleportTick, () ->
-                    teleportPlayer(player, world, destinationArrival)
+            context.runAtTick(
+                    teleportTick, () ->
+                            teleportPlayer(player, world, destinationArrival)
             );
 
-            context.runAtTick(teleportTick + 1L, () -> {
-                context.assertTrue(
-                        isMarkerPatternPresent(world, destinationPrimary, destinationSecondary),
-                        Text.literal("Lost edited blocks after round trip " + roundTrip
-                                + " while loading chunk " + destination));
+            context.runAtTick(
+                    teleportTick + 1L, () -> {
+                        context.assertTrue(
+                                isMarkerPatternPresent(world, destinationPrimary, destinationSecondary),
+                                Text.literal("Lost edited blocks after round trip " + roundTrip
+                                        + " while loading chunk " + destination)
+                        );
 
-                world.getChunkManager().save(false);
-            });
+                        world.getChunkManager().save(false);
+                    }
+            );
         }
 
-        context.runAtTick(INITIAL_DELAY_TICKS + ROUND_TRIPS * 2L + FINAL_SETTLE_TICKS, () -> {
-            teleportPlayer(player, world, targets.nearArrival());
-            forceAndLoad(world, targets.nearChunk());
-            teleportPlayer(player, world, targets.farArrival());
-            forceAndLoad(world, targets.farChunk());
+        context.runAtTick(
+                INITIAL_DELAY_TICKS + ROUND_TRIPS * 2L + FINAL_SETTLE_TICKS, () -> {
+                    teleportPlayer(player, world, targets.nearArrival());
+                    forceAndLoad(world, targets.nearChunk());
+                    teleportPlayer(player, world, targets.farArrival());
+                    forceAndLoad(world, targets.farChunk());
 
-            context.assertTrue(
-                    isMarkerPatternPresent(world, targets.nearPrimary(), targets.nearSecondary()),
-                    Text.literal("Near chunk edits disappeared after 100 far round trips."));
-            context.assertTrue(
-                    isMarkerPatternPresent(world, targets.farPrimary(), targets.farSecondary()),
-                    Text.literal("Far chunk edits disappeared after 100 far round trips."));
+                    context.assertTrue(
+                            isMarkerPatternPresent(world, targets.nearPrimary(), targets.nearSecondary()),
+                            Text.literal("Near chunk edits disappeared after 100 far round trips.")
+                    );
+                    context.assertTrue(
+                            isMarkerPatternPresent(world, targets.farPrimary(), targets.farSecondary()),
+                            Text.literal("Far chunk edits disappeared after 100 far round trips.")
+                    );
 
-            world.getChunkManager().save(false);
-            BaseChunkCaptureScheduler.flushAndClose(world);
-            AsyncCisSaveManager.flushAndClose(world);
-            FabricCisStorageHelper.closeStorage(world);
+                    world.getChunkManager().save(false);
+                    BaseChunkCaptureScheduler.flushAndClose(world);
+                    AsyncCisSaveManager.flushAndClose(world);
+                    FabricCisStorageHelper.closeStorage(world);
 
-            assertPersistedBaseChunkPresent(context, world, targets.nearChunk(), "near");
-            assertPersistedBaseChunkPresent(context, world, targets.farChunk(), "far");
-            assertTraceTimeline(context, targets);
+                    assertPersistedBaseChunkPresent(context, world, targets.nearChunk(), "near");
+                    assertPersistedBaseChunkPresent(context, world, targets.farChunk(), "far");
+                    assertTraceTimeline(context, targets);
 
-            world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
-            world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
-            ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
-            context.complete();
-        });
+                    world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
+                    world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
+                    ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
+                    context.complete();
+                }
+        );
     }
 
     private static ChunkTargets createTargets(final TestContext context) {
@@ -203,11 +211,13 @@ public final class AsyncSaveDataLossGameTest {
                 storage.load(new CisChunkPos(chunkPos.x, chunkPos.z));
 
         context.assertTrue(
-                delta != null,
-                Text.literal("Expected a persisted Chunkis delta for the " + label + " chunk."));
+                true,
+                Text.literal("Expected a persisted Chunkis delta for the " + label + " chunk.")
+        );
         context.assertTrue(
-                delta != null && CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata()),
-                Text.literal("Expected persisted base chunk NBT for the " + label + " chunk."));
+                CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata()),
+                Text.literal("Expected persisted base chunk NBT for the " + label + " chunk.")
+        );
     }
 
     private static void assertTraceTimeline(final TestContext context, final ChunkTargets targets) {
@@ -218,22 +228,49 @@ public final class AsyncSaveDataLossGameTest {
                 containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_TX_START)
                         || containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_QUEUED)
                         || containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
-                Text.literal("Expected near chunk save timeline evidence in trace store."));
+                Text.literal("Expected near chunk save timeline evidence in trace store.")
+        );
         context.assertTrue(
                 containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_TX_START)
                         || containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_QUEUED)
                         || containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
-                Text.literal("Expected far chunk save timeline evidence in trace store."));
+                Text.literal("Expected far chunk save timeline evidence in trace store.")
+        );
         context.assertTrue(
                 containsEvent(events, targets.nearChunk(), ChunkTraceEventType.LOAD_SOURCE_RESOLVED),
-                Text.literal("Expected near chunk load-source evidence after explicit storage load."));
+                Text.literal("Expected near chunk load-source evidence after explicit storage load.")
+        );
         context.assertTrue(
                 containsEvent(events, targets.farChunk(), ChunkTraceEventType.LOAD_SOURCE_RESOLVED),
-                Text.literal("Expected far chunk load-source evidence after explicit storage load."));
+                Text.literal("Expected far chunk load-source evidence after explicit storage load.")
+        );
+        context.assertTrue(
+                containsEvent(events, targets.nearChunk(), ChunkTraceEventType.REGION_WRITE_TX_END)
+                        || containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
+                Text.literal("Expected near chunk write completion evidence in trace store.")
+        );
+        context.assertTrue(
+                containsEvent(events, targets.farChunk(), ChunkTraceEventType.REGION_WRITE_TX_END)
+                        || containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
+                Text.literal("Expected far chunk write completion evidence in trace store.")
+        );
+        context.assertTrue(
+                containsEvent(events, targets.nearChunk(), ChunkTraceEventType.REGION_READ_TX_END),
+                Text.literal("Expected near chunk region read evidence after explicit storage load.")
+        );
+        context.assertTrue(
+                containsEvent(events, targets.farChunk(), ChunkTraceEventType.REGION_READ_TX_END),
+                Text.literal("Expected far chunk region read evidence after explicit storage load.")
+        );
         context.assertTrue(
                 containsEvent(events, targets.nearChunk(), ChunkTraceEventType.RESTORE_COMPLETED)
                         || containsEvent(events, targets.farChunk(), ChunkTraceEventType.RESTORE_COMPLETED),
-                Text.literal("Expected at least one restore-completed event during long-distance churn."));
+                Text.literal("Expected at least one restore-completed event during long-distance churn.")
+        );
+        context.assertTrue(
+                events.stream().noneMatch(event -> event.eventType() == ChunkTraceEventType.ASSERTION_FAILED),
+                Text.literal("Did not expect assertion failures in the durability trace timeline.")
+        );
     }
 
     private static boolean containsEvent(

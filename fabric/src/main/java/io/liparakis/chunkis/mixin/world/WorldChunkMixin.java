@@ -98,11 +98,8 @@ public class WorldChunkMixin {
      */
     @Inject(method = "setBlockState", at = @At("HEAD"))
     private void chunkis$onSetBlockState(
-            final BlockPos pos,
-            final BlockState state,
-            final int flags,
-            final CallbackInfoReturnable<BlockState> cir
-    ) {
+            final BlockPos pos, final BlockState state, final int flags,
+            final CallbackInfoReturnable<BlockState> cir) {
         final WorldChunk chunk = chunkis$self();
         if (chunkis$shouldNotTrackChunkMutation(chunk)) {
             return;
@@ -115,16 +112,13 @@ public class WorldChunkMixin {
 
         final ChunkDelta<BlockState, NbtCompound> delta = chunkis$getBlockDelta();
         delta.addBlockChange(
-                pos.getX() & CisConstants.COORD_MASK,
-                pos.getY(),
-                pos.getZ() & CisConstants.COORD_MASK,
+                pos.getX() & CisConstants.COORD_MASK, pos.getY(), pos.getZ() & CisConstants.COORD_MASK,
                 state
         );
 
         if (!state.hasBlockEntity()) {
             delta.removeBlockEntityData(
-                    pos.getX() & CisConstants.COORD_MASK,
-                    pos.getY(),
+                    pos.getX() & CisConstants.COORD_MASK, pos.getY(),
                     pos.getZ() & CisConstants.COORD_MASK
             );
         }
@@ -140,11 +134,8 @@ public class WorldChunkMixin {
      */
     @Inject(method = "setBlockState", at = @At("RETURN"))
     private void chunkis$afterSetBlockState(
-            final BlockPos pos,
-            final BlockState state,
-            final int flags,
-            final CallbackInfoReturnable<BlockState> cir
-    ) {
+            final BlockPos pos, final BlockState state, final int flags,
+            final CallbackInfoReturnable<BlockState> cir) {
         final WorldChunk chunk = chunkis$self();
         if (chunkis$shouldNotTrackChunkMutation(chunk)) {
             return;
@@ -182,8 +173,7 @@ public class WorldChunkMixin {
 
         try {
             ChunkBlockEntityCapture.captureBlockEntity(
-                    blockEntity,
-                    serverWorld.getRegistryManager(),
+                    blockEntity, serverWorld.getRegistryManager(),
                     chunkis$getBlockDelta()
             );
             GlobalChunkTracker.markDirty(chunk, SET_BLOCK_ENTITY_SOURCE);
@@ -203,8 +193,7 @@ public class WorldChunkMixin {
         }
 
         chunkis$getBlockDelta().removeBlockEntityData(
-                pos.getX() & CisConstants.COORD_MASK,
-                pos.getY(),
+                pos.getX() & CisConstants.COORD_MASK, pos.getY(),
                 pos.getZ() & CisConstants.COORD_MASK
         );
         GlobalChunkTracker.markDirty(chunk, REMOVE_BLOCK_ENTITY_SOURCE);
@@ -214,14 +203,11 @@ public class WorldChunkMixin {
      * Replays any proto-attached CIS snapshot once vanilla promotes a proto chunk
      * into a live world chunk.
      */
-    @Inject(method = "<init>(Lnet/minecraft/server/world/ServerWorld;Lnet/minecraft/world/chunk/ProtoChunk;" +
-            "Lnet/minecraft/world/chunk/WorldChunk$EntityLoader;)V", at = @At("RETURN"))
+    @Inject(method = "<init>(Lnet/minecraft/server/world/ServerWorld;Lnet/minecraft/world/chunk/ProtoChunk;" + "Lnet" +
+            "/minecraft/world/chunk/WorldChunk$EntityLoader;)V", at = @At("RETURN"))
     private void chunkis$onConstructFromProto(
-            final ServerWorld world,
-            final ProtoChunk protoChunk,
-            final WorldChunk.EntityLoader entityLoader,
-            final CallbackInfo ci
-    ) {
+            final ServerWorld world, final ProtoChunk protoChunk,
+            final WorldChunk.EntityLoader entityLoader, final CallbackInfo ci) {
         final ChunkDelta<BlockState, NbtCompound> protoDelta = chunkis$resolveProtoDelta(protoChunk);
         if (protoDelta == null || protoDelta.isEmpty()) {
             return;
@@ -249,23 +235,17 @@ public class WorldChunkMixin {
 
         if (!chunkis$isOnServerThread(world)) {
             ChunkTraceStore.trace(
-                    ChunkisDebugDomain.ASSERTIONS,
-                    ChunkTraceEventType.ASSERTION_FAILED,
-                    ChunkTraceSeverity.ERROR,
-                    ChunkTraceReason.OFF_THREAD_MUTATION_REJECTED,
-                    SOURCE + "#chunkis$shouldNotTrackChunkMutation",
-                    "rejected mutation outside server thread",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
-                    null,
-                    null,
-                    null,
-                    null
+                    ChunkisDebugDomain.ASSERTIONS, ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR, ChunkTraceReason.OFF_THREAD_MUTATION_REJECTED, SOURCE +
+                            "#chunkis$shouldNotTrackChunkMutation", "rejected mutation outside server thread",
+                    world.getRegistryKey().getValue().toString(), new DebugChunkKey(
+                            chunk.getPos().x,
+                            chunk.getPos().z
+                    ), null, null, null, null
             );
             Chunkis.LOGGER.warn(
                     "Chunkis: Block change rejected outside server thread for chunk {} on thread {}",
-                    chunk.getPos(),
-                    Thread.currentThread().getName()
+                    chunk.getPos(), Thread.currentThread().getName()
             );
             return true;
         }
@@ -279,8 +259,7 @@ public class WorldChunkMixin {
      */
     @Unique
     private static boolean chunkis$isNaturalLeafDecay(final BlockState previous, final BlockState next) {
-        return LeafTickContext.isActive()
-                && (previous.getBlock() instanceof LeavesBlock || next.getBlock() instanceof LeavesBlock);
+        return LeafTickContext.isActive() && (previous.getBlock() instanceof LeavesBlock || next.getBlock() instanceof LeavesBlock);
     }
 
     /**
@@ -310,9 +289,8 @@ public class WorldChunkMixin {
     @Unique
     @SuppressWarnings("unchecked")
     private static ChunkDelta<BlockState, NbtCompound> chunkis$resolveProtoDelta(final ProtoChunk proto) {
-        return proto instanceof ChunkisDeltaDuck duck
-                ? (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta()
-                : null;
+        return proto instanceof ChunkisDeltaDuck duck ?
+                (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta() : null;
     }
 
     /**
@@ -320,11 +298,9 @@ public class WorldChunkMixin {
      */
     @Unique
     private void chunkis$restoreChunkFromDelta(
-            final ServerWorld world,
-            final WorldChunk chunk,
+            final ServerWorld world, final WorldChunk chunk,
             final ProtoChunk proto,
-            final ChunkDelta<BlockState, NbtCompound> protoDelta
-    ) {
+            final ChunkDelta<BlockState, NbtCompound> protoDelta) {
         final ChunkDelta<BlockState, NbtCompound> selfDelta = chunkis$getBlockDelta();
         final String operationId = chunkis$takeRestoreOperationId((ChunkisDeltaDuck) proto);
         boolean coreRestoreCompleted = false;
@@ -334,13 +310,7 @@ public class WorldChunkMixin {
 
         try {
             chunkis$isRestoring = true;
-            ChunkRestorer.restore(
-                    world,
-                    chunk,
-                    protoDelta,
-                    selfDelta,
-                    operationId
-            );
+            ChunkRestorer.restore(world, chunk, protoDelta, selfDelta, operationId);
             coreRestoreCompleted = true;
             failedStage = "portal-poi-resync";
             chunkis$resyncPortalPointOfInterestStorage(world, chunk);
@@ -350,9 +320,7 @@ public class WorldChunkMixin {
             if (coreRestoreCompleted) {
                 chunkis$tracePostRestoreFailure(
                         world.getRegistryKey().getValue().toString(),
-                        new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
-                        operationId,
-                        failedStage
+                        new DebugChunkKey(chunk.getPos().x, chunk.getPos().z), operationId, failedStage
                 );
             }
             Chunkis.LOGGER.error("Chunkis: Failed to restore chunk {}", proto.getPos(), e);
@@ -364,7 +332,7 @@ public class WorldChunkMixin {
     }
 
     @Unique
-    static String chunkis$takeRestoreOperationId(final ChunkisDeltaDuck deltaDuck) {
+    private static String chunkis$takeRestoreOperationId(final ChunkisDeltaDuck deltaDuck) {
         final String operationId = deltaDuck.chunkis$getRestoreOperationId();
         if (operationId != null) {
             deltaDuck.chunkis$setRestoreOperationId(null);
@@ -374,25 +342,13 @@ public class WorldChunkMixin {
     }
 
     @Unique
-    static void chunkis$tracePostRestoreFailure(
-            final String worldId,
-            final DebugChunkKey chunkKey,
-            final String operationId,
-            final String failedStage
-    ) {
+    private static void chunkis$tracePostRestoreFailure(
+            final String worldId, final DebugChunkKey chunkKey,
+            final String operationId, final String failedStage) {
         ChunkTraceStore.trace(
-                ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.RESTORE_FAILED,
-                ChunkTraceSeverity.ERROR,
-                ChunkTraceReason.RESTORE_EXCEPTION,
-                RESTORE_SOURCE,
-                "post-restore follow-up failed during " + failedStage,
-                worldId,
-                chunkKey,
-                null,
-                operationId,
-                null,
-                null
+                ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.RESTORE_FAILED,
+                ChunkTraceSeverity.ERROR, ChunkTraceReason.RESTORE_EXCEPTION, RESTORE_SOURCE, "post-restore follow-up" +
+                        " failed during " + failedStage, worldId, chunkKey, null, operationId, null, null
         );
     }
 
@@ -407,9 +363,7 @@ public class WorldChunkMixin {
     private void chunkis$resyncPortalPointOfInterestStorage(final ServerWorld world, final WorldChunk chunk) {
         final PointOfInterestStorage poiStorage = world.getPointOfInterestStorage();
         final RegistryEntry<PointOfInterestType> portalType =
-                world.getRegistryManager()
-                        .getOrThrow(RegistryKeys.POINT_OF_INTEREST_TYPE)
-                        .getOrThrow(PointOfInterestTypes.NETHER_PORTAL);
+                world.getRegistryManager().getOrThrow(RegistryKeys.POINT_OF_INTEREST_TYPE).getOrThrow(PointOfInterestTypes.NETHER_PORTAL);
 
         final int blockCount = chunkis$addPortalPois(chunk, poiStorage, portalType);
         if (blockCount == 0) {
@@ -417,17 +371,14 @@ public class WorldChunkMixin {
         }
 
         final long poiCount = poiStorage.getInChunk(
-                PORTAL_POI_PREDICATE,
-                chunk.getPos(),
+                PORTAL_POI_PREDICATE, chunk.getPos(),
                 PointOfInterestStorage.OccupationStatus.ANY
         ).count();
 
         if (poiCount == 0) {
             Chunkis.LOGGER.warn(
-                    "Chunkis [PORTAL]: Restored chunk {} in {} has {} portal block(s) but no portal POIs after resync",
-                    chunk.getPos(),
-                    world.getRegistryKey().getValue(),
-                    blockCount
+                    "Chunkis [PORTAL]: Restored chunk {} in {} has {} portal block(s) but no portal POIs " +
+                            "after resync", chunk.getPos(), world.getRegistryKey().getValue(), blockCount
             );
         }
     }
@@ -437,14 +388,11 @@ public class WorldChunkMixin {
      */
     @Unique
     private int chunkis$addPortalPois(
-            final WorldChunk chunk,
-            final PointOfInterestStorage poiStorage,
-            final RegistryEntry<PointOfInterestType> portalType
-    ) {
+            final WorldChunk chunk, final PointOfInterestStorage poiStorage,
+            final RegistryEntry<PointOfInterestType> portalType) {
         chunkis$portalBlockCount = 0;
         chunk.forEachBlockMatchingPredicate(
-                NETHER_PORTAL_BLOCK_PREDICATE,
-                (pos, state) -> {
+                NETHER_PORTAL_BLOCK_PREDICATE, (pos, state) -> {
                     chunkis$portalBlockCount++;
                     poiStorage.add(pos, portalType);
                 }

@@ -174,7 +174,13 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
   `INVALID_PAYLOAD`
   `IO_EXCEPTION`
 - Notes:
-  This is still intentionally narrow. Current enforcement covers off-thread live mutation rejection, zero-result restore replay when block/block-entity payload existed, and `PARANOID` raw region write read-back failures.
+  This is still intentionally narrow. Current enforcement covers off-thread live mutation rejection, zero-result restore replay when block/block-entity payload existed, `PARANOID` raw region write read-back failures, and malformed high-value trace payloads detected at the store boundary.
+  Current store-boundary payload checks cover:
+  `SAVE_REJECTED` without a machine-readable reason,
+  `LOAD_SOURCE_RESOLVED` with an invalid source reason,
+  `VANILLA_SAVE_CANCELLED` without chunk identity,
+  save queue/flush events missing operation id or chunk identity,
+  and `DELTA_MARKED_CLEAN` carrying `dirtyState=true`.
 
 ### `LOAD_TX_START`
 

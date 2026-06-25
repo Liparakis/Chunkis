@@ -27,17 +27,8 @@ public final class ChunkTraceStore {
     public static ChunkTraceEvent record(final ChunkTraceEvent event) {
         Objects.requireNonNull(event, "event");
 
-        final ChunkTraceEvent stored = event.eventId() > 0
-                ? event
-                : event.withEventId(EVENT_IDS.incrementAndGet());
-
-        synchronized (MONITOR) {
-            ring[writeIndex] = stored;
-            writeIndex = (writeIndex + 1) % capacity;
-            if (size < capacity) {
-                size++;
-            }
-        }
+        final ChunkTraceEvent stored = append(event);
+        maybeRecordInvariantFailure(stored);
 
         return stored;
     }
@@ -136,6 +127,51 @@ public final class ChunkTraceStore {
             size = 0;
             writeIndex = 0;
         }
+    }
+
+    private static ChunkTraceEvent append(final ChunkTraceEvent event) {
+        final ChunkTraceEvent stored = event.eventId() > 0
+                ? event
+                : event.withEventId(EVENT_IDS.incrementAndGet());
+
+        synchronized (MONITOR) {
+            ring[writeIndex] = stored;
+            writeIndex = (writeIndex + 1) % capacity;
+            if (size < capacity) {
+                size++;
+            }
+        }
+
+        return stored;
+    }
+
+    private static void maybeRecordInvariantFailure(final ChunkTraceEvent event) {
+        if (event.eventType() == ChunkTraceEventType.ASSERTION_FAILED) {
+            return;
+        }
+
+        final String violation = ChunkTraceInvariants.describeEventViolation(event);
+        if (violation == null) {
+            return;
+        }
+
+        append(new ChunkTraceEvent(
+                0L,
+                System.currentTimeMillis(),
+                Thread.currentThread().getName(),
+                ChunkisDebugDomain.ASSERTIONS,
+                ChunkTraceEventType.ASSERTION_FAILED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.INVALID_PAYLOAD,
+                "ChunkTraceStore#record",
+                violation,
+                event.worldId(),
+                event.chunkKey(),
+                event.regionKey(),
+                event.operationId(),
+                event.dirtyState(),
+                event.byteSize()
+        ));
     }
 
     static void setCapacityForTests(final int newCapacity) {

@@ -230,11 +230,22 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Reason:
   Current code does not inspect both tracker memory and storage truthfully on one load path, so emitting `BOTH` now would guess.
 
-### Hard assertion enforcement
+### Trace-shape invariant enforcement
 
-- Decision: `DEFERRED`
-- Reason:
-  This still comes after lifecycle correlation is stronger beyond the currently traced save/load/restore path.
+- Decision: `PARTIALLY_IMPLEMENTED`
+- Evidence:
+  `ASSERTION_FAILED reason=INVALID_PAYLOAD`
+- Files:
+  `ChunkTraceStore`
+  `ChunkTraceInvariants`
+- Notes:
+  The store now enforces the cheapest high-value event-shape checks without changing runtime behavior:
+  `SAVE_REJECTED` must carry a machine-readable reason,
+  `LOAD_SOURCE_RESOLVED` must use an allowed source reason,
+  `VANILLA_SAVE_CANCELLED` must identify a chunk,
+  key save queue/flush events must carry both operation id and chunk identity,
+  and `DELTA_MARKED_CLEAN` must actually report `dirtyState=false`.
+  Broader multi-event correlation assertions remain deferred.
 
 ### Client-sync top-level boundaries
 
@@ -294,4 +305,5 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 ### Next validation additions after this pass
 
 - Extend durability game-test coverage to assert a trace timeline around an actual disappearing-chunk reproducer.
+- Extend durability game-test coverage beyond the current chunk-local timeline checks once the pre-existing startup migration/decompression failures stop blocking a full `runGameTest` pass.
 - Add targeted failure-path tests for save rejection, async flush failure, and zero-result restore timelines.

@@ -13,14 +13,17 @@ This file separates Phase 2 invariants into three buckets:
 
 ## `SAVE_REJECT_REASON_PRESENT`
 
-- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Status: `IMPLEMENTED_ASSERTION`
 - Evidence now available:
-  `SAVE_REJECTED` with reason `SPARSE_DELTA_REJECTED`
+  `SAVE_REJECTED`
+  `ASSERTION_FAILED` with reason `INVALID_PAYLOAD`
 - Current hook points:
   `ThreadedAnvilChunkStorageMixin`
   `BaseChunkCaptureScheduler`
+  `ChunkTraceStore`
+  `ChunkTraceInvariants`
 - Notes:
-  This pass records the rejection reason directly instead of adding a separate assertion event.
+  The trace store now emits `ASSERTION_FAILED` if a `SAVE_REJECTED` event reaches the store with reason `NONE`.
 
 ## `DELTA_MARKED_CLEAN_AFTER_SUCCESS`
 
@@ -61,14 +64,18 @@ This file separates Phase 2 invariants into three buckets:
 
 ## `LOAD_SOURCE_RECORDED`
 
-- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Status: `IMPLEMENTED_ASSERTION`
 - Evidence now available:
   `LOAD_SOURCE_RESOLVED`
+  `ASSERTION_FAILED` with reason `INVALID_PAYLOAD`
 - Current hook points:
   `ChunkSerializerMixin`
+  `ChunkTraceStore`
+  `ChunkTraceInvariants`
 - Notes:
   Current truthful outcomes are `TRACKER_MEMORY`, `CHUNKIS_STORAGE`, and `NEITHER`.
-  `BOTH` remains deferred because the code does not inspect both sources on the same load path.
+  `BOTH` remains deferred as a produced runtime outcome because the code does not inspect both sources on the same load path.
+  The store now asserts that any emitted `LOAD_SOURCE_RESOLVED` reason stays within the allowed load-source set.
 
 ## `DURABILITY_REPRODUCER_TIMELINE_VISIBLE`
 
@@ -80,19 +87,26 @@ This file separates Phase 2 invariants into three buckets:
   `DURABILITY_TEST_FAILED`
 - Current hook points:
   `DurabilityTestCommand`
+  `AsyncSaveDataLossGameTest`
 - Notes:
   This is intentionally a visibility invariant only. It helps correlate disappearing-chunk reports to a concrete reproducer run without asserting persistence correctness.
+  The durability gametest now asserts a stronger trace subset for the reproduced churn path: save evidence, flush-or-region-write evidence, load-source evidence, region-read evidence, restore completion, and absence of `ASSERTION_FAILED` for the watched chunks.
 
 ## `VANILLA_SAVE_CANCELLED_REQUIRES_CHUNKIS_PATH`
 
-- Status: `NOT_IMPLEMENTED_YET`
+- Status: `IMPLEMENTED_SIGNAL_ONLY`
 - What exists now:
   `VANILLA_SAVE_CANCELLED`
   `SAVE_QUEUED`
   `SAVE_FLUSH_*`
   `SAVE_REJECTED`
-- Why not enforced yet:
-  This pass does not thread a transaction id through cancel, queue, flush, and clean transitions, so a hard per-chunk assertion would still guess.
+- Current hook points:
+  `StoragePreventionMixin`
+  `ChunkTraceStore`
+  `ChunkTraceInvariants`
+- Notes:
+  The store now asserts the cheap subset: `VANILLA_SAVE_CANCELLED` must at least identify a chunk.
+  Full cancellation-to-Chunkis-path correlation is still deferred because a hard end-to-end proof would still guess in some interleavings.
 
 ## `UNLOAD_DIRTY_CHUNK_NOT_SILENT`
 

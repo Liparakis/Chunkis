@@ -35,8 +35,8 @@ Validation sources are audited separately:
 | `core/src/main/java/io/liparakis/chunkis/debug/DebugChunkKey.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Small optional chunk-coordinate payload for structured traces. |
 | `core/src/main/java/io/liparakis/chunkis/debug/DebugRegionKey.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Small optional region-coordinate payload for structured traces. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceEvent.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Canonical immutable event record used by the flight recorder. |
-| `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceInvariants.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Cheap invariant predicates shared by restore/assertion instrumentation. |
-| `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceStore.java` | `CORE_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Bounded in-memory event store with monotonic ids, near-zero OFF-path cost, watched-event filtering, and chronological snapshot queries for export. |
+| `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceInvariants.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Cheap invariant predicates now cover both restore assertions and malformed high-value trace payload detection. |
+| `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceStore.java` | `CORE_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Bounded in-memory event store with monotonic ids, near-zero OFF-path cost, watched-event filtering, chronological snapshot queries for export, and store-boundary `ASSERTION_FAILED` emission for malformed high-value events. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceJsonl.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Serializes the in-memory trace record format to stable one-event-per-line JSONL. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceWatchpoints.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Chunk/region watchpoint registry used by focused trace commands. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkisDebugConfig.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Global runtime switch controlling whether structured events are recorded. |
@@ -123,7 +123,7 @@ Validation sources are audited separately:
 
 | File | Classification | Current validation | Future observability assertions |
 | --- | --- | --- | --- |
-| `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceStoreTest.java` | `DEBUG_VALIDATION_SUPPORT` | Debug defaults OFF, monotonic bounded store behavior, newest-event retention, and chronological snapshot order. | Extend later only if export begins tracking additional metadata or pagination. |
+| `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceStoreTest.java` | `DEBUG_VALIDATION_SUPPORT` | Debug defaults OFF, monotonic bounded store behavior, newest-event retention, chronological snapshot order, and store-boundary assertion emission for malformed save events. | Extend later only if export begins tracking additional metadata, pagination, or broader malformed event families. |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceInvariantsTest.java` | `DEBUG_VALIDATION_SUPPORT` | Zero-result restore assertion predicate only fires for actual replay payload, not metadata-only deltas. | Extend later if entity-only restore assertions become implementable. |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceJsonlTest.java` | `DEBUG_VALIDATION_SUPPORT` | Stable JSONL field serialization and one-event-per-line file output. | Extend later only if export schema changes or additional optional fields are added. |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceWatchpointsTest.java` | `DEBUG_VALIDATION_SUPPORT` | Chunk/region watchpoint matching and watched-event filtering behavior. | Extend later only if watchpoints begin affecting capture volume or snapshots. |
@@ -145,7 +145,7 @@ Validation sources are audited separately:
 | `fabric/src/test/java/io/liparakis/chunkis/storage/CisSnapshotCaptureTest.java` | `DEBUG_VALIDATION_SUPPORT` | Snapshot capture Y-coordinate correctness. | Extend to assert snapshot-capture event counts. |
 | `fabric/src/test/java/io/liparakis/chunkis/util/CisNbtUtilTest.java` | `DEBUG_VALIDATION_SUPPORT` | Metadata envelope and suppression semantics. | Assert future metadata/base-NBT/full-baseline events. |
 | `fabric/src/test/java/io/liparakis/chunkis/util/FabricCisStorageHelperTest.java` | `DEBUG_VALIDATION_SUPPORT` | Dimension-specific storage paths. | Minimal future use; only assert storage-open path metadata if added. |
-| `fabric/src/gametest/java/io/liparakis/chunkis/gametest/AsyncSaveDataLossGameTest.java` | `DEBUG_VALIDATION_SUPPORT` | Durability round trips, persisted base-chunk presence, and save/load/restore trace evidence for the reproduced churn path. | Full runtime verification is still gated by the current `runGameTest` startup migration/decompression failures. |
+| `fabric/src/gametest/java/io/liparakis/chunkis/gametest/AsyncSaveDataLossGameTest.java` | `DEBUG_VALIDATION_SUPPORT` | Durability round trips, persisted base-chunk presence, and trace-timeline assertions for save evidence, flush-or-region-write evidence, load-source evidence, region-read evidence, restore completion, and no watched-chunk `ASSERTION_FAILED` events. | Full runtime verification is still gated by the current `runGameTest` startup migration/decompression failures. |
 | `fabric/src/gametest/java/io/liparakis/chunkis/gametest/CisFixtureMigrationGameTest.java` | `DEBUG_VALIDATION_SUPPORT` | Legacy fixture migration correctness. | Assert migration-related inspection events only if migration tracing is added. |
 | `fabric/src/gametest/java/io/liparakis/chunkis/gametest/LegacyEntityStorageHandoffGameTest.java` | `DEBUG_VALIDATION_SUPPORT` | One-time legacy entity replay handoff. | Assert future restore/entity-handoff events. |
 | `fabric/src/gametest/java/io/liparakis/chunkis/gametest/StructureMetadataExtractorGameTest.java` | `DEBUG_VALIDATION_SUPPORT` | Direct structure extraction matches vanilla serialization. | Assert structure-capture success/fallback events later. |
@@ -166,7 +166,7 @@ Validation sources are audited separately:
 
 - total validation Java files scanned: `18`
 - validation files classified as `DEBUG_VALIDATION_SUPPORT`: `18`
-- validation files already asserting observability events: `4`
+- validation files already asserting observability events: `5`
 - validation files needing future observability assertions: `18`
 
 ## Phase 2 implementation status

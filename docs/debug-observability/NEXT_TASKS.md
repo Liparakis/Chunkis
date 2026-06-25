@@ -18,15 +18,22 @@
   - `/chunkis debug export latest <count>`
   - `/chunkis debug export watched <count>`
   - writes world-local JSONL traces under `chunkis/debug/`
-- [ ] `ASSERTION_FAILED` invariant enforcement
+- [x] `ASSERTION_FAILED` invariant enforcement
   - implemented now for `OFF_THREAD_MUTATION_REJECTED`
   - implemented now for zero-result restore replay with block/block-entity payload
-  - broader save/load correlation invariants still deferred
+  - implemented now for malformed high-value trace payloads at the store boundary:
+    `SAVE_REJECTED` without machine-readable reason,
+    `LOAD_SOURCE_RESOLVED` with invalid source reason,
+    `VANILLA_SAVE_CANCELLED` without chunk identity,
+    save queue/flush lifecycle events missing operation id or chunk identity,
+    `DELTA_MARKED_CLEAN` carrying `dirtyState=true`
+  - broader multi-event save/load correlation invariants still deferred
 - [x] Queue/pending-save snapshots
   - `/chunkis debug watch pending`
   - current view covers dirty tracker, async pending saves, and deferred base capture queue for watched chunks
-- [ ] Durability game-test assertions
+- [x] Durability game-test assertions
   - `AsyncSaveDataLossGameTest` now asserts save/load/restore trace evidence for the reproduced churn path
+  - the trace check now also requires flush-or-region-write evidence, region-read evidence, and absence of `ASSERTION_FAILED` for the watched chunks
   - `compileGametestJava` passes
   - full `runGameTest` is still blocked by pre-existing CIS migration/decompression startup failures before this gametest can complete cleanly
 - [x] `PARANOID` storage read-back verification
@@ -120,10 +127,10 @@
 
 ## Phase 3 candidates
 
-- [ ] Add broader invariant enforcement with `ASSERTION_FAILED`
+- [x] Add broader invariant enforcement with `ASSERTION_FAILED`
 - [x] Add JSONL export or other durable trace dump
 - [x] Add queue snapshots/watchpoints for selected chunks only
-- [ ] Add durability game-test assertions against trace timelines
+- [x] Add durability game-test assertions against trace timelines
 - [x] Add `PARANOID` read-back verification for storage success
 
 ## Explicitly deferred from this pass
