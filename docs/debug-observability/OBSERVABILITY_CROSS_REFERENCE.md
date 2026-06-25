@@ -90,6 +90,18 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Notes:
   Applied counts are currently carried in the event message rather than dedicated numeric fields.
 
+### Does the live restore boundary still emit failure if post-restore follow-up breaks?
+
+- Decision: `IMPLEMENTED`
+- Evidence:
+  `RESTORE_FAILED`
+- Files:
+  `ChunkRestorer`
+  `WorldChunkMixin`
+- Notes:
+  Core snapshot replay failures were already emitted from `ChunkRestorer`.
+  `WorldChunkMixin` now also emits `RESTORE_FAILED` when the later portal POI or portal index follow-up breaks after the core restore already succeeded.
+
 ### Minimal command support
 
 - Decision: `IMPLEMENTED`
@@ -238,7 +250,7 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - `GlobalChunkTrackerTest`
   tracker unload event emission, dirty-state payload, and mutation-origin source propagation
 - `WorldChunkMixinTest`
-  restore operation-id handoff from proto duck to live restore
+  restore operation-id handoff and post-restore follow-up failure trace emission
 - `ClientDeltaNetworkingTest`
   client malformed-payload failure classification
 

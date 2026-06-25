@@ -134,6 +134,7 @@ Meaning of `RESTORE_COMPLETED` right now:
   some meaningful block, block-entity, or entity application happened
 - reason `RESTORE_EMPTY_RESULT`
   restore ran but aggregate applied counts were zero
+- `RESTORE_FAILED` can still appear later from `WorldChunkMixin` if portal POI or portal index follow-up breaks after the core restore already completed
 
 ## Region read
 

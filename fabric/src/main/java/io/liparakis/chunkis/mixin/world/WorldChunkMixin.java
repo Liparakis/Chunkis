@@ -48,6 +48,8 @@ public class WorldChunkMixin {
     @Unique
     private static final String SOURCE = "WorldChunkMixin";
     @Unique
+    private static final String RESTORE_SOURCE = "WorldChunkMixin#chunkis$restoreChunkFromDelta";
+    @Unique
     private static final String SET_BLOCK_STATE_SOURCE = "WorldChunkMixin#setBlockState";
     @Unique
     private static final String SET_BLOCK_ENTITY_SOURCE = "WorldChunkMixin#setBlockEntity";
@@ -325,6 +327,8 @@ public class WorldChunkMixin {
     ) {
         final ChunkDelta<BlockState, NbtCompound> selfDelta = chunkis$getBlockDelta();
         final String operationId = chunkis$takeRestoreOperationId((ChunkisDeltaDuck) proto);
+        boolean coreRestoreCompleted = false;
+        String failedStage = "chunk-restore";
         selfDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());
         selfDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
 
@@ -337,9 +341,20 @@ public class WorldChunkMixin {
                     selfDelta,
                     operationId
             );
+            coreRestoreCompleted = true;
+            failedStage = "portal-poi-resync";
             chunkis$resyncPortalPointOfInterestStorage(world, chunk);
+            failedStage = "portal-index-update";
             io.liparakis.chunkis.portal.PortalChunkIndexManager.updateChunk(world, chunk);
         } catch (final Exception e) {
+            if (coreRestoreCompleted) {
+                chunkis$tracePostRestoreFailure(
+                        world.getRegistryKey().getValue().toString(),
+                        new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                        operationId,
+                        failedStage
+                );
+            }
             Chunkis.LOGGER.error("Chunkis: Failed to restore chunk {}", proto.getPos(), e);
         } finally {
             chunkis$isRestoring = false;
@@ -356,6 +371,29 @@ public class WorldChunkMixin {
             return operationId;
         }
         return ChunkTraceStore.nextOperationId("restore");
+    }
+
+    @Unique
+    static void chunkis$tracePostRestoreFailure(
+            final String worldId,
+            final DebugChunkKey chunkKey,
+            final String operationId,
+            final String failedStage
+    ) {
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.RESTORE_FAILED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.RESTORE_EXCEPTION,
+                RESTORE_SOURCE,
+                "post-restore follow-up failed during " + failedStage,
+                worldId,
+                chunkKey,
+                null,
+                operationId,
+                null,
+                null
+        );
     }
 
     /**

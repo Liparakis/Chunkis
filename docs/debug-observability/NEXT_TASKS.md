@@ -73,9 +73,6 @@
 
 ## Phase 2 still remaining
 
-- [ ] Finish `WorldChunkMixin`
-  - Goal:
-    finish the remaining restore-to-live-chunk story beyond the newly added live-mutation-origin visibility
 - [ ] Add transaction correlation ids if the timeline becomes ambiguous
   - Goal:
     extend the new save/load/restore operation ids across any remaining lifecycle edges beyond the now-threaded load -> restore handoff
@@ -138,6 +135,11 @@
     `ChunkisDeltaDuck`, `CommonChunkMixin`, `ChunkSerializerMixin`, `WorldChunkMixin`
   - Goal:
     keep one coherent operation id from proto load resolution through the later live restore call
+- [x] Closed the remaining `WorldChunkMixin` restore boundary gap
+  - Files:
+    `WorldChunkMixin`
+  - Goal:
+    trace post-restore live-chunk follow-up failures so `RESTORE_COMPLETED` is no longer the final structured signal when portal POI/index follow-up breaks afterward
 - [x] Tightened client delta failure evidence without deeper protocol churn
   - Files:
     `ClientDeltaNetworking`

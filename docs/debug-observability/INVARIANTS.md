@@ -44,6 +44,18 @@ This file separates Phase 2 invariants into three buckets:
 - Notes:
   Zero-result restores are now visible through reason `RESTORE_EMPTY_RESULT`, but not yet escalated to `ASSERTION_FAILED`.
 
+## `POST_RESTORE_FOLLOW_UP_NOT_SILENT`
+
+- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Evidence now available:
+  `RESTORE_FAILED`
+- Current hook points:
+  `ChunkRestorer`
+  `WorldChunkMixin`
+- Notes:
+  Core restore exceptions were already visible.
+  The live restore boundary now also emits a failure signal if portal POI or portal index follow-up breaks after replay.
+
 ## `LOAD_SOURCE_RECORDED`
 
 - Status: `IMPLEMENTED_SIGNAL_ONLY`

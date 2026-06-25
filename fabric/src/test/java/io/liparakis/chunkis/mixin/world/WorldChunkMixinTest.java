@@ -2,12 +2,28 @@ package io.liparakis.chunkis.mixin.world;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.DebugChunkKey;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WorldChunkMixinTest {
+
+    @AfterEach
+    void tearDown() {
+        ChunkTraceStore.clear();
+        ChunkTraceStore.resetForTests();
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
+    }
 
     @Test
     void takesRestoreOperationIdFromDuckAndClearsIt() {
@@ -16,6 +32,27 @@ class WorldChunkMixinTest {
 
         assertEquals("load-42", WorldChunkMixin.chunkis$takeRestoreOperationId(duck));
         assertNull(duck.chunkis$getRestoreOperationId());
+    }
+
+    @Test
+    void tracesPostRestoreFollowUpFailure() {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+
+        WorldChunkMixin.chunkis$tracePostRestoreFailure(
+                "minecraft:overworld",
+                new DebugChunkKey(7, -3),
+                "load-17",
+                "portal-index-update"
+        );
+
+        final ChunkTraceEvent event = ChunkTraceStore.latest(1).getFirst();
+        assertEquals(ChunkTraceEventType.RESTORE_FAILED, event.eventType());
+        assertEquals(ChunkTraceReason.RESTORE_EXCEPTION, event.reason());
+        assertEquals("load-17", event.operationId());
+        assertEquals("minecraft:overworld", event.worldId());
+        assertEquals(7, event.chunkKey().x());
+        assertEquals(-3, event.chunkKey().z());
+        assertTrue(event.message().contains("portal-index-update"));
     }
 
     private static final class FakeChunkisDeltaDuck implements ChunkisDeltaDuck {

@@ -277,12 +277,16 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Severity: `ERROR`
 - Implemented in:
   `fabric/.../world/ChunkRestorer.java`
+  `fabric/.../mixin/world/WorldChunkMixin.java`
 - Meaning:
-  Restore failed with an exception that is rethrown after tracing.
+  Restore failed either during core snapshot replay or during the later live-chunk follow-up after replay.
 - Current reason values:
   `RESTORE_EXCEPTION`
 - Current fields:
   world id, chunk key, source, operation id
+- Notes:
+  `ChunkRestorer` emits the core restore failure path.
+  `WorldChunkMixin` now emits the post-restore follow-up failure path when portal POI/index resync fails after the core restore already completed.
 
 ### `CLIENT_SYNC_TX_START`
 
