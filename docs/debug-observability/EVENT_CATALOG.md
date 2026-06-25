@@ -165,12 +165,14 @@ Debug defaults to `OFF`. When disabled, call sites use `ChunkTraceStore.trace(..
 - Severity: `ERROR`
 - Implemented in:
   `fabric/.../mixin/world/WorldChunkMixin.java`
+  `fabric/.../world/ChunkRestorer.java`
 - Meaning:
   A cheap, high-confidence invariant failed.
 - Current reason values:
   `OFF_THREAD_MUTATION_REJECTED`
+  `RESTORE_EMPTY_RESULT`
 - Notes:
-  This is intentionally narrow. General invariant enforcement is still deferred.
+  This is still intentionally narrow. Current enforcement covers off-thread live mutation rejection and zero-result restore replay when block/block-entity payload existed.
 
 ### `LOAD_TX_START`
 

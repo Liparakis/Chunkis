@@ -2,6 +2,8 @@
 
 This file separates Phase 2 invariants into three buckets:
 
+- `IMPLEMENTED_ASSERTION`
+  The code now emits `ASSERTION_FAILED` for this condition.
 - `IMPLEMENTED_SIGNAL_ONLY`
   The trace now exposes the evidence needed to inspect the condition, but does not yet emit `ASSERTION_FAILED`.
 - `NOT_IMPLEMENTED_YET`
@@ -35,14 +37,15 @@ This file separates Phase 2 invariants into three buckets:
 
 ## `NON_EMPTY_DELTA_RESTORES_SOMETHING`
 
-- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Status: `IMPLEMENTED_ASSERTION`
 - Evidence now available:
   `RESTORE_COMPLETED`
-  message includes applied block, block-entity, and entity counts
+  `ASSERTION_FAILED` with reason `RESTORE_EMPTY_RESULT`
 - Current hook points:
   `ChunkRestorer`
 - Notes:
-  Zero-result restores are now visible through reason `RESTORE_EMPTY_RESULT`, but not yet escalated to `ASSERTION_FAILED`.
+  Phase 3 now asserts the cheap high-confidence subset: the persisted delta carried block or block-entity replay payload, but replay applied zero objects.
+  Entity-only and metadata-only deltas remain outside this check by design.
 
 ## `POST_RESTORE_FOLLOW_UP_NOT_SILENT`
 
@@ -142,7 +145,7 @@ This file separates Phase 2 invariants into three buckets:
 
 ## `OFF_THREAD_MUTATION_REJECTED`
 
-- Status: `IMPLEMENTED_SIGNAL_ONLY`
+- Status: `IMPLEMENTED_ASSERTION`
 - Evidence now available:
   `ASSERTION_FAILED` with reason `OFF_THREAD_MUTATION_REJECTED`
 - Current hook points:

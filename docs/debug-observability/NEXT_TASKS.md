@@ -19,6 +19,9 @@
   - `/chunkis debug export watched <count>`
   - writes world-local JSONL traces under `chunkis/debug/`
 - [ ] `ASSERTION_FAILED` invariant enforcement
+  - implemented now for `OFF_THREAD_MUTATION_REJECTED`
+  - implemented now for zero-result restore replay with block/block-entity payload
+  - broader save/load correlation invariants still deferred
 - [ ] Queue/pending-save snapshots
 - [ ] Durability game-test assertions
 - [ ] `PARANOID` storage read-back verification
@@ -110,7 +113,7 @@
 
 ## Phase 3 candidates
 
-- [ ] Add actual invariant enforcement with `ASSERTION_FAILED`
+- [ ] Add broader invariant enforcement with `ASSERTION_FAILED`
 - [x] Add JSONL export or other durable trace dump
 - [ ] Add queue snapshots/watchpoints for selected chunks only
 - [ ] Add durability game-test assertions against trace timelines

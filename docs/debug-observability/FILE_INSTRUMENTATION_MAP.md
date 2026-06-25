@@ -35,6 +35,7 @@ Validation sources are audited separately:
 | `core/src/main/java/io/liparakis/chunkis/debug/DebugChunkKey.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Small optional chunk-coordinate payload for structured traces. |
 | `core/src/main/java/io/liparakis/chunkis/debug/DebugRegionKey.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Small optional region-coordinate payload for structured traces. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceEvent.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_2_IMPLEMENTED` | Canonical immutable event record used by the flight recorder. |
+| `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceInvariants.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Cheap invariant predicates shared by restore/assertion instrumentation. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceStore.java` | `CORE_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Bounded in-memory event store with monotonic ids, near-zero OFF-path cost, watched-event filtering, and chronological snapshot queries for export. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceJsonl.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Serializes the in-memory trace record format to stable one-event-per-line JSONL. |
 | `core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceWatchpoints.java` | `SUPPORTING_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Chunk/region watchpoint registry used by focused trace commands. |
@@ -114,7 +115,7 @@ Validation sources are audited separately:
 | `fabric/src/main/java/io/liparakis/chunkis/storage/FabricCisStorageHelper.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Storage open/close lifecycle and per-dimension wrapper caching. |
 | `fabric/src/main/java/io/liparakis/chunkis/storage/StructureMetadataExtractor.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Structure metadata capture and fallback branch. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/ChunkBlockEntityCapture.java` | `SUPPORTING_HOOK_REQUIRED` | `REVIEWED_NEEDS_HOOKS` | Block-entity capture/remove semantics. |
-| `fabric/src/main/java/io/liparakis/chunkis/world/ChunkRestorer.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Restore start/completion/failure and aggregate applied counts now emit structured events. |
+| `fabric/src/main/java/io/liparakis/chunkis/world/ChunkRestorer.java` | `CORE_HOOK_REQUIRED` | `PHASE_3_PARTIAL` | Restore start/completion/failure and aggregate applied counts now emit structured events, plus a cheap zero-result replay assertion when replay payload existed. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/GlobalChunkTracker.java` | `CORE_HOOK_REQUIRED` | `PHASE_2_PARTIAL` | Dirty-map transitions, real chunk-unload boundaries, unload-cache put/evict/hit/miss, authoritative-delta keep, and stale async completion are now traced. |
 | `fabric/src/main/java/io/liparakis/chunkis/world/LeafTickContext.java` | `INSPECTION_ONLY` | `NEEDS_RECHECK` | Noise-filter context only. |
 
@@ -123,6 +124,7 @@ Validation sources are audited separately:
 | File | Classification | Current validation | Future observability assertions |
 | --- | --- | --- | --- |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceStoreTest.java` | `DEBUG_VALIDATION_SUPPORT` | Debug defaults OFF, monotonic bounded store behavior, newest-event retention, and chronological snapshot order. | Extend later only if export begins tracking additional metadata or pagination. |
+| `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceInvariantsTest.java` | `DEBUG_VALIDATION_SUPPORT` | Zero-result restore assertion predicate only fires for actual replay payload, not metadata-only deltas. | Extend later if entity-only restore assertions become implementable. |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceJsonlTest.java` | `DEBUG_VALIDATION_SUPPORT` | Stable JSONL field serialization and one-event-per-line file output. | Extend later only if export schema changes or additional optional fields are added. |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkTraceWatchpointsTest.java` | `DEBUG_VALIDATION_SUPPORT` | Chunk/region watchpoint matching and watched-event filtering behavior. | Extend later only if watchpoints begin affecting capture volume or snapshots. |
 | `core/src/test/java/io/liparakis/chunkis/debug/ChunkDeltaTraceTest.java` | `DEBUG_VALIDATION_SUPPORT` | Dirty and clean transitions emit the expected structured events. | Extend later to assert generation-sensitive clean transitions and rejection edge cases. |

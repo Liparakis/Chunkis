@@ -3,6 +3,7 @@ package io.liparakis.chunkis.world;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceInvariants;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
@@ -193,6 +194,26 @@ public final class ChunkRestorer {
                 runtimeDelta != null && runtimeDelta.isDirty(),
                 null
         );
+
+        if (ChunkTraceInvariants.shouldAssertNonEmptyRestore(protoDelta, appliedCount)) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.RESTORE_EMPTY_RESULT,
+                    RESTORE_SOURCE,
+                    "restore replay payload produced zero applied results: blocks="
+                            + protoDelta.getBlockInstructions().size()
+                            + ", blockEntities="
+                            + protoDelta.getBlockEntities().size(),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    operationId,
+                    runtimeDelta != null && runtimeDelta.isDirty(),
+                    null
+            );
+        }
     }
 
     /**

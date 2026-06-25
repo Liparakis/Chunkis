@@ -176,6 +176,18 @@ This file records the final Phase 2 decision/status for the first flight-recorde
 - Notes:
   This is a real assertion, but intentionally limited to the cheapest unambiguous case.
 
+### Zero-result restore with replay payload
+
+- Decision: `IMPLEMENTED`
+- Evidence:
+  `ASSERTION_FAILED reason=RESTORE_EMPTY_RESULT`
+- Files:
+  `ChunkRestorer`
+  `ChunkTraceInvariants`
+- Notes:
+  The current check is intentionally scoped to block/block-entity replay payload.
+  Entity-only and metadata-only deltas are still signal-only, not hard assertions.
+
 ### Stored-bytes decode failure classification
 
 - Decision: `PARTIALLY_IMPLEMENTED`
