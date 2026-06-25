@@ -3,7 +3,7 @@
 ## Current phase status
 
 - [x] Phase 1 audit and observability planning
-- [x] Phase 2 pass 1: minimal trace runtime and first save/load/restore flight recorder
+- [x] Phase 2: minimal trace runtime and first save/load/restore flight recorder completed
 
 ## Phase 2 completed in this pass
 
@@ -71,17 +71,22 @@
 - [x] Added first live-mutation origin visibility
   - `TRACKER_DIRTY_MAP_PUT` now carries `WorldChunkMixin` entrypoint source for block state and block-entity mutation hooks
 
-## Phase 2 still remaining
+## Phase 2 completion audit
 
-- [ ] Add transaction correlation ids if the timeline becomes ambiguous
-  - Goal:
-    extend the new save/load/restore operation ids across any remaining lifecycle edges beyond the now-threaded load -> restore handoff
-- [ ] Extend decoder/mapping failure evidence beyond storage-load classification
-  - Goal:
-    cover deeper decoder internals beyond the current storage-load and client-network boundary classifications only if the current signal proves insufficient
-- [ ] Add durability reproducer assertions beyond chunk-target mapping
-  - Goal:
-    extend the new stop-path validation to start/failure event emission only if that can be done without invasive command refactoring
+- [x] Minimal trace runtime exists and is shared across `core` and `fabric`
+- [x] Save path answers save requested / cancelled / rejected / queued / flushed / delta clean questions
+- [x] Load and restore path answer source resolution and restore result questions
+- [x] Debug remains `OFF` by default
+- [x] Structured events stay bounded in-memory and monotonic
+- [x] Minimal `/chunkis debug` command surface exists
+- [x] The repo compiles with the current trace core and instrumentation
+- [x] No persistence behavior was intentionally changed in this phase
+
+## Optional follow-ups after Phase 2
+
+- [ ] Add more transaction correlation ids only if a real timeline still proves ambiguous
+- [ ] Extend decoder internals only if storage-boundary plus client-boundary failure classification proves insufficient
+- [ ] Extend durability reproducer validation to start/failure emission only if a low-churn harness is worth the extra test complexity
 
 ## Phase 3 candidates
 
@@ -152,11 +157,8 @@
 
 - [x] `./gradlew :core:test --tests "io.liparakis.chunkis.debug.ChunkTraceStoreTest" --tests "io.liparakis.chunkis.debug.ChunkDeltaTraceTest" --tests "io.liparakis.chunkis.storage.io.CisStorageTraceTest"`
 - [x] `./gradlew :fabric:compileJava :fabric:compileTestJava -x :fabric:runGameTest`
-- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.StorageReportCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
-- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.DurabilityTestCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" -x :fabric:runGameTest`
-- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.world.GlobalChunkTrackerTest" -x :fabric:runGameTest`
-- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.mixin.world.WorldChunkMixinTest" -x :fabric:runGameTest`
-- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.client.ClientDeltaNetworkingTest" --tests "io.liparakis.chunkis.network.ChunkisNetworkingTest" -x :fabric:runGameTest`
+- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.command.StorageReportCommandTest" --tests "io.liparakis.chunkis.command.ChunkDebugCommandTest" --tests "io.liparakis.chunkis.command.DurabilityTestCommandTest" -x :fabric:runGameTest`
+- [x] `./gradlew :fabric:test --tests "io.liparakis.chunkis.world.GlobalChunkTrackerTest" --tests "io.liparakis.chunkis.mixin.world.WorldChunkMixinTest" --tests "io.liparakis.chunkis.client.ClientDeltaNetworkingTest" --tests "io.liparakis.chunkis.network.ChunkisNetworkingTest" -x :fabric:runGameTest`
 
 ## Known repo-level noise during verification
 
