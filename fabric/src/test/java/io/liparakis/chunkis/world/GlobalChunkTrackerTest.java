@@ -2,6 +2,7 @@ package io.liparakis.chunkis.world;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugLevel;
@@ -122,5 +123,24 @@ class GlobalChunkTrackerTest {
         final List<ChunkTraceEvent> events = ChunkTraceStore.latest(4);
         assertTrue(events.stream().anyMatch(event -> event.reason() == ChunkTraceReason.TRACKER_MARK_SAVED));
         assertTrue(events.stream().anyMatch(event -> event.reason() == ChunkTraceReason.TRACKER_UNLOAD_CACHE_INVALIDATED));
+    }
+
+    @Test
+    void assertsImmediatelyWhenCachingBlockEntityOnlyPayloadWithoutBase() {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+        final RegistryKey<World> overworld = RegistryKey.of(
+                RegistryKeys.WORLD,
+                Identifier.of("minecraft", "overworld")
+        );
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.addBlockEntityData(1, 64, 1, new NbtCompound());
+
+        GlobalChunkTracker.addDelta(overworld, 6, 85, delta, "WorldChunkMixin#setBlockEntity");
+
+        final List<ChunkTraceEvent> events = ChunkTraceStore.latest(4);
+        assertTrue(events.stream().anyMatch(event ->
+                event.eventType() == ChunkTraceEventType.ASSERTION_FAILED
+                        && event.reason() == ChunkTraceReason.INVALID_PAYLOAD
+                        && "WorldChunkMixin#setBlockEntity".equals(event.source())));
     }
 }

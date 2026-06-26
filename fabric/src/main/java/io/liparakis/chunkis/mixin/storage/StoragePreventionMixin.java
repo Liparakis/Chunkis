@@ -114,7 +114,6 @@ public class StoragePreventionMixin {
     private void chunkis$blockGetTagAt(
             final ChunkPos pos,
             final CallbackInfoReturnable<NbtCompound> cir) {
-
         logTrace("Blocking vanilla chunk read for {}", pos);
         cir.setReturnValue(null);
     }
@@ -139,7 +138,6 @@ public class StoragePreventionMixin {
             final ChunkPos chunkPos,
             final NbtScanner scanner,
             final CallbackInfo ci) {
-
         logTrace("Blocking vanilla chunk scan for {}", chunkPos);
         ci.cancel();
     }

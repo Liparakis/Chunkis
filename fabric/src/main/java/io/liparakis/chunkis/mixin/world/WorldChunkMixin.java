@@ -5,10 +5,12 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import io.liparakis.chunkis.world.ChunkBlockEntityCapture;
 import io.liparakis.chunkis.world.ChunkRestorer;
@@ -111,6 +113,9 @@ public class WorldChunkMixin {
         }
 
         final ChunkDelta<BlockState, NbtCompound> delta = chunkis$getBlockDelta();
+        if (chunk.getWorld() instanceof ServerWorld serverWorld) {
+            BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
+        }
         delta.addBlockChange(
                 pos.getX() & CisConstants.COORD_MASK, pos.getY(), pos.getZ() & CisConstants.COORD_MASK,
                 state
@@ -171,10 +176,12 @@ public class WorldChunkMixin {
             return;
         }
 
+        final ChunkDelta<BlockState, NbtCompound> delta = chunkis$getBlockDelta();
         try {
+            BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
             ChunkBlockEntityCapture.captureBlockEntity(
                     blockEntity, serverWorld.getRegistryManager(),
-                    chunkis$getBlockDelta()
+                    delta
             );
             GlobalChunkTracker.markDirty(chunk, SET_BLOCK_ENTITY_SOURCE);
         } catch (final Exception e) {
@@ -307,6 +314,25 @@ public class WorldChunkMixin {
         String failedStage = "chunk-restore";
         selfDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());
         selfDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
+        final boolean hasPersistedBaseChunk =
+                io.liparakis.chunkis.storage.CisNbtUtil.hasPersistedBaseChunkNbt(protoDelta.getChunkMetadata());
+
+        if (hasPersistedBaseChunk) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_SNAPSHOT_APPLY_STARTED,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    RESTORE_SOURCE,
+                    "world chunk before sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                    null,
+                    operationId,
+                    protoDelta.isDirty(),
+                    null
+            );
+        }
 
         try {
             chunkis$isRestoring = true;
@@ -328,7 +354,45 @@ public class WorldChunkMixin {
             chunkis$isRestoring = false;
         }
 
-        protoDelta.markSaved();
+        if (hasPersistedBaseChunk) {
+            final int finalSections = ChunkSectionDebugUtil.countNonEmptySections(chunk);
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    finalSections > 0
+                            ? ChunkTraceEventType.BASE_SNAPSHOT_APPLY_COMPLETED
+                            : ChunkTraceEventType.BASE_SNAPSHOT_APPLY_FAILED,
+                    finalSections > 0 ? ChunkTraceSeverity.INFO : ChunkTraceSeverity.ERROR,
+                    finalSections > 0 ? ChunkTraceReason.NONE : ChunkTraceReason.BASE_SNAPSHOT_NOT_APPLIED,
+                    RESTORE_SOURCE,
+                    "world chunk after sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                    null,
+                    operationId,
+                    protoDelta.isDirty(),
+                    null
+            );
+            if (finalSections == 0) {
+                ChunkTraceStore.trace(
+                        ChunkisDebugDomain.ASSERTIONS,
+                        ChunkTraceEventType.ASSERTION_FAILED,
+                        ChunkTraceSeverity.ERROR,
+                        ChunkTraceReason.BASE_SNAPSHOT_NOT_APPLIED,
+                        RESTORE_SOURCE,
+                        "persisted base NBT existed but final server chunk had zero non-empty sections",
+                        world.getRegistryKey().getValue().toString(),
+                        new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                        null,
+                        operationId,
+                        protoDelta.isDirty(),
+                        null
+                );
+            }
+        }
+
+        if (chunkis$shouldMarkRestoredDeltaSaved((ChunkisDeltaDuck) proto, protoDelta)) {
+            protoDelta.markSaved();
+        }
     }
 
     @Unique
@@ -339,6 +403,14 @@ public class WorldChunkMixin {
             return operationId;
         }
         return ChunkTraceStore.nextOperationId("restore");
+    }
+
+    @Unique
+    private static boolean chunkis$shouldMarkRestoredDeltaSaved(
+            final ChunkisDeltaDuck deltaDuck,
+            final ChunkDelta<?, ?> delta
+    ) {
+        return deltaDuck.chunkis$wasRestoreLoadedFromStorage() || !delta.isDirty();
     }
 
     @Unique

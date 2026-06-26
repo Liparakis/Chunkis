@@ -2,7 +2,12 @@ package io.liparakis.chunkis.storage;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -62,8 +67,18 @@ public final class BaseChunkCaptureUtil {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta) {
         if (shouldSkipCapture(chunk, delta)) {
+            traceCaptureSkipped(world, chunk, delta, "captureAndPersistBaseChunkIfMissing");
             return;
         }
+
+        traceLifecycle(
+                world,
+                chunk,
+                delta,
+                ChunkTraceEventType.BASE_CAPTURE_REQUESTED,
+                "BaseChunkCaptureUtil#captureAndPersistBaseChunkIfMissing",
+                "base capture requested"
+        );
 
         captureBaseChunk(world, chunk, delta);
 
@@ -90,6 +105,7 @@ public final class BaseChunkCaptureUtil {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta) {
         if (shouldSkipCapture(chunk, delta)) {
+            traceCaptureSkipped(world, chunk, delta, "captureBaseChunk");
             return delta;
         }
         return captureBaseChunk(world, chunk, delta, hasPortalBlocks(chunk));
@@ -112,8 +128,35 @@ public final class BaseChunkCaptureUtil {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final boolean portalChunk) {
         if (shouldSkipCapture(chunk, delta)) {
+            traceCaptureSkipped(world, chunk, delta, "captureBaseChunk(portal)");
             return delta;
         }
+
+        final int beforeBlocks = delta.getBlockInstructions().size();
+        final int beforeBlockEntities = delta.getBlockEntities().size();
+        final DebugChunkKey chunkKey = new DebugChunkKey(chunk.getPos().x, chunk.getPos().z);
+        traceLifecycle(
+                world,
+                chunk,
+                delta,
+                ChunkTraceEventType.BASE_CAPTURE_STARTED,
+                "BaseChunkCaptureUtil#captureBaseChunk",
+                "base capture started"
+        );
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.BASE_NBT_CAPTURE_STARTED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "BaseChunkCaptureUtil#captureBaseChunk",
+                "starting base capture: " + DeltaPersistenceGuard.describeDeltaShape(delta),
+                world.getRegistryKey().getValue().toString(),
+                chunkKey,
+                null,
+                null,
+                delta.isDirty(),
+                null
+        );
 
         final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 CisNbtUtil.extractPersistedStructureMetadata(delta.getChunkMetadata()),
@@ -124,8 +167,44 @@ public final class BaseChunkCaptureUtil {
         );
 
         delta.setChunkMetadata(metadata);
+        traceLifecycle(
+                world,
+                chunk,
+                delta,
+                ChunkTraceEventType.BASE_METADATA_ATTACHED,
+                "BaseChunkCaptureUtil#captureBaseChunk",
+                "base metadata attached"
+        );
         delta.clearBlockPayloads(false);
         delta.setSuppressInitialRepopulation(true);
+        traceLifecycle(
+                world,
+                chunk,
+                delta,
+                ChunkTraceEventType.BASE_CAPTURE_COMPLETED,
+                "BaseChunkCaptureUtil#captureBaseChunk",
+                "base capture completed"
+        );
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.BASE_NBT_CAPTURED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "BaseChunkCaptureUtil#captureBaseChunk",
+                "captured base NBT: metadataKeys=" + metadata.getKeys()
+                        + ", suppressInitialRepopulation=" + delta.shouldSuppressInitialRepopulation()
+                        + ", blocksBefore=" + beforeBlocks
+                        + ", blocksAfter=" + delta.getBlockInstructions().size()
+                        + ", blockEntitiesBefore=" + beforeBlockEntities
+                        + ", blockEntitiesAfter=" + delta.getBlockEntities().size(),
+                world.getRegistryKey().getValue().toString(),
+                chunkKey,
+                null,
+                null,
+                delta.isDirty(),
+                null
+        );
 
         return delta;
     }
@@ -169,5 +248,57 @@ public final class BaseChunkCaptureUtil {
         return chunk == null
                 || delta == null
                 || CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+    }
+
+    private static void traceCaptureSkipped(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final ChunkDelta<?, ?> delta,
+            final String source
+    ) {
+        if (world == null || chunk == null || delta == null) {
+            return;
+        }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.BASE_NBT_CAPTURE_SKIPPED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "BaseChunkCaptureUtil#" + source,
+                "skipped base capture: " + DeltaPersistenceGuard.describeDeltaShape(delta),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                null,
+                null,
+                delta.isDirty(),
+                null
+        );
+    }
+
+    private static void traceLifecycle(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final ChunkDelta<?, ?> delta,
+            final ChunkTraceEventType eventType,
+            final String source,
+            final String message
+    ) {
+        if (world == null || chunk == null || delta == null) {
+            return;
+        }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                eventType,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                source,
+                message + ": " + DeltaPersistenceGuard.describeLifecycleState(delta),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                null,
+                null,
+                delta.isDirty(),
+                null
+        );
     }
 }

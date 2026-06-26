@@ -60,13 +60,6 @@ public final class BaseChunkCaptureScheduler {
             );
 
     /**
-     * Queue size that triggers a warning. A high queue means the server is
-     * modifying first-seen chunks faster than the deferred capture pass can drain.
-     */
-    private static final int QUEUE_WARN_THRESHOLD =
-            Integer.getInteger("chunkis.baseCapture.queueWarnThreshold", 256);
-
-    /**
      * SLF4J template logged after a successful deferred (async) base capture.
      */
     private static final String LOG_CAPTURED =
@@ -77,13 +70,6 @@ public final class BaseChunkCaptureScheduler {
      */
     private static final String LOG_FLUSHED =
             "Chunkis [BASE]: Flushed deferred base chunk for {} in {} during shutdown";
-
-    /**
-     * SLF4J template logged when deferred capture backlog grows large.
-     */
-    private static final String LOG_BACKLOG =
-            "Chunkis [BASE]: Deferred base capture queue has {} chunk(s) in {}; " +
-                    "increase -Dchunkis.baseCapture.deferredPerTick if this stays high";
 
     /**
      * Per-dimension scheduler states, keyed by {@link RegistryKey}.
@@ -114,29 +100,6 @@ public final class BaseChunkCaptureScheduler {
             return;
         }
         stateFor(world).tick(world);
-    }
-
-    /**
-     * Enqueues {@code chunk} for deferred base capture in {@code world}.
-     *
-     * <p>If the chunk is already queued, its position is promoted to the tail of
-     * the FIFO queue to ensure it is eventually processed.</p>
-     *
-     * @param world the world that owns the chunk
-     * @param chunk the chunk awaiting base capture
-     */
-    public static void schedule(final ServerWorld world, final WorldChunk chunk) {
-        if (world == null || chunk == null) {
-            return;
-        }
-        final int queueSizeToWarn = stateFor(world).schedule(chunk);
-        if (queueSizeToWarn >= 0) {
-            Chunkis.LOGGER.warn(
-                    LOG_BACKLOG,
-                    queueSizeToWarn,
-                    world.getRegistryKey().getValue()
-            );
-        }
     }
 
     /**
@@ -323,6 +286,23 @@ public final class BaseChunkCaptureScheduler {
             final String context,
             final String caller,
             final String operationId) {
+        if (DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta)) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.INVALID_PAYLOAD,
+                    caller,
+                    "attempted to persist sparse block-entity payload without persisted base chunk NBT on "
+                            + context + ": " + DeltaPersistenceGuard.describeDeltaShape(delta),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(pos.x, pos.z),
+                    null,
+                    operationId,
+                    delta.isDirty(),
+                    null
+            );
+        }
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
             return false;
         }
@@ -399,17 +379,10 @@ public final class BaseChunkCaptureScheduler {
         private final LinkedHashMap<Long, WorldChunk> queuedChunks = new LinkedHashMap<>();
 
         /**
-         * Last queue size reported in a backlog warning. Zero means no warning is
-         * currently active.
-         */
-        private int lastWarnedQueueSize = 0;
-
-        /**
          * Drops every queued chunk from this dimension-local state.
          */
         synchronized void clear() {
             queuedChunks.clear();
-            lastWarnedQueueSize = 0;
         }
 
         synchronized Map<DebugChunkKey, QueuedCaptureSnapshot> snapshot() {
@@ -417,33 +390,14 @@ public final class BaseChunkCaptureScheduler {
             for (final WorldChunk chunk : queuedChunks.values()) {
                 final ChunkDelta<BlockState, NbtCompound> delta = deltaFrom(chunk);
                 final DebugChunkKey chunkKey = new DebugChunkKey(chunk.getPos().x, chunk.getPos().z);
-                snapshots.put(chunkKey, new QueuedCaptureSnapshot(
-                        chunkKey,
-                        delta != null && delta.isDirty()
-                ));
+                snapshots.put(
+                        chunkKey, new QueuedCaptureSnapshot(
+                                chunkKey,
+                                delta != null && delta.isDirty()
+                        )
+                );
             }
             return snapshots;
-        }
-
-        /**
-         * Enqueues a chunk for capture.
-         *
-         * @return queue size to warn about, or {@code -1} when no warning is needed
-         */
-        synchronized int schedule(final WorldChunk chunk) {
-            final long pos = chunk.getPos().toLong();
-            queuedChunks.remove(pos);
-            queuedChunks.put(pos, chunk);
-
-            final int queueSize = queuedChunks.size();
-            if (QUEUE_WARN_THRESHOLD <= 0 || queueSize < QUEUE_WARN_THRESHOLD) {
-                return -1;
-            }
-            if (lastWarnedQueueSize == 0 || queueSize >= lastWarnedQueueSize * 2) {
-                lastWarnedQueueSize = queueSize;
-                return queueSize;
-            }
-            return -1;
         }
 
         /**
@@ -487,9 +441,6 @@ public final class BaseChunkCaptureScheduler {
             }
             final WorldChunk chunk = it.next().getValue();
             it.remove();
-            if (queuedChunks.size() < QUEUE_WARN_THRESHOLD) {
-                lastWarnedQueueSize = 0;
-            }
             return chunk;
         }
 

@@ -6,14 +6,17 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
+import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import io.liparakis.chunkis.storage.CisSnapshotCapture;
+import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
 import io.liparakis.chunkis.storage.DeltaPersistenceGuard;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.StructureMetadataExtractor;
@@ -156,14 +159,118 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         ChunkDelta<BlockState, NbtCompound> delta = chunkis$getTrackedDelta(chunkPos);
 
         if (chunkis$shouldBypassTrackedDelta(delta)) {
-            delta = storage.load(new CisChunkPos(chunkPos.x, chunkPos.z));
+            final CisChunkPos cisPos = new CisChunkPos(chunkPos.x, chunkPos.z);
+            if (!storage.contains(cisPos)) {
+                return;
+            }
+            delta = storage.load(cisPos);
         } else {
             chunkis$saveDirtyDelta(storage, chunkPos, delta);
         }
 
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+            return;
+        }
 
+        final boolean hasPersistedBaseChunk =
+                delta != null && CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        if (hasPersistedBaseChunk) {
+            final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(delta.getChunkMetadata());
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_NBT_DECODE_STARTED,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                    "base NBT decode started: loadSource="
+                            + (delta != null ? "delta-present" : "none")
+                            + ", storageEntryExists="
+                            + (delta != null && !delta.isEmpty())
+                            + ", metadataKeys="
+                            + (delta != null && delta.getChunkMetadata() != null
+                            ? delta.getChunkMetadata().getKeys()
+                            : List.of())
+                            + ", baseNbtKeys="
+                            + (baseChunkNbt != null ? baseChunkNbt.getKeys() : List.of())
+                            + ", baseNbtApproxBytes="
+                            + (baseChunkNbt != null ? baseChunkNbt.toString().length() : 0),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    null,
+                    delta != null && delta.isDirty(),
+                    null
+            );
+        }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                hasPersistedBaseChunk
+                        ? ChunkTraceEventType.BASE_NBT_FOUND
+                        : ChunkTraceEventType.BASE_NBT_MISSING,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                hasPersistedBaseChunk
+                        ? "found persisted base chunk NBT in delta metadata"
+                        : "no persisted base chunk NBT in delta metadata",
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                delta != null && delta.isDirty(),
+                null
+        );
+
+        final CisNbtUtil.LoadChunkNbtResult loadNbt =
+                CisNbtUtil.buildLoadChunkNbt(chunkPos, GAME_DATA_VERSION, delta);
+        if (loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.USED) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_NBT_APPLIED,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                    "applied persisted base chunk NBT to synthetic load root",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    null,
+                    delta != null && delta.isDirty(),
+                    null
+            );
+        } else if (loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.SKIPPED) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_NBT_SKIPPED,
+                    ChunkTraceSeverity.WARN,
+                    ChunkTraceReason.NONE,
+                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                    "persisted base chunk NBT was present but skipped for load root",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    null,
+                    delta != null && delta.isDirty(),
+                    null
+            );
+        }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.LOAD_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                "built load NBT with baseChunkNbt="
+                        + loadNbt.baseChunkUsage().name().toLowerCase(Locale.ROOT),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                delta != null && delta.isDirty(),
+                null
+        );
         cir.setReturnValue(CompletableFuture.completedFuture(
-                Optional.of(chunkis$buildChunkNbt(chunkPos, delta))));
+                Optional.of(loadNbt.root())));
     }
 
     /**
@@ -213,6 +320,9 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         ChunkDelta<BlockState, NbtCompound> delta = chunkis$getActiveDelta(pos);
         if (delta == null) {
             delta = chunkis$getChunkDelta(chunk);
+        }
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+            return;
         }
 
         delta = chunkis$captureSnapshot(chunk, delta);
@@ -332,6 +442,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
 
         final ChunkDelta<BlockState, NbtCompound> delta =
                 existingDelta != null ? existingDelta : new ChunkDelta<>();
+        final NbtCompound existingMetadata = delta.getChunkMetadata();
 
         delta.setSuppressInitialRepopulation(true);
 
@@ -342,9 +453,11 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 structureData,
                 true,
-                false,
-                null,
-                chunk instanceof WorldChunk worldChunk && io.liparakis.chunkis.storage.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
+                CisNbtUtil.hasFullBlockBaseline(existingMetadata),
+                CisNbtUtil.extractPersistedBaseChunkNbt(existingMetadata),
+                chunk instanceof WorldChunk worldChunk
+                        ? io.liparakis.chunkis.storage.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
+                        : CisNbtUtil.hasPersistedPortalChunk(existingMetadata)
         );
 
         chunkis$updateDeltaMetadata(delta, metadata, chunk.getPos());
@@ -430,15 +543,23 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
         final String operationId = ChunkTraceStore.nextOperationId("save");
-        if (delta == null || !delta.isDirty()) {
+        ChunkDelta<BlockState, NbtCompound> deltaToSave = delta;
+        if (deltaToSave == null || !deltaToSave.isDirty()) {
             return;
         }
-        if (chunkis$rejectSparse(pos, delta, "load-path-sync", "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta"
+        deltaToSave = chunkis$recoverSparseDeltaOnSaveGuard(
+                pos,
+                deltaToSave,
+                "load-path-sync",
+                "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta",
+                operationId
+        );
+        if (chunkis$rejectSparse(pos, deltaToSave, "load-path-sync", "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta"
                 , operationId)) {
             return;
         }
 
-        if (storage.save(new CisChunkPos(pos.x, pos.z), delta, operationId)) {
+        if (storage.save(new CisChunkPos(pos.x, pos.z), deltaToSave, operationId)) {
             GlobalChunkTracker.markSaved(world, pos);
         }
     }
@@ -460,17 +581,98 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId) {
-        if (delta == null || !delta.isDirty()) {
+        ChunkDelta<BlockState, NbtCompound> deltaToQueue = delta;
+        if (deltaToQueue == null || !deltaToQueue.isDirty()) {
             return;
         }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SAVE_QUEUE_REQUESTED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
+                "save queue requested: " + DeltaPersistenceGuard.describeLifecycleState(delta),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                operationId,
+                deltaToQueue.isDirty(),
+                null
+        );
+        deltaToQueue = chunkis$recoverSparseDeltaOnSaveGuard(
+                pos,
+                deltaToQueue,
+                "save-hook-async",
+                "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
+                operationId
+        );
         if (chunkis$rejectSparse(
-                pos, delta, "save-hook-async", "ThreadedAnvilChunkStorageMixin" +
+                pos, deltaToQueue, "save-hook-async", "ThreadedAnvilChunkStorageMixin" +
                         "#chunkis$queueDirtyDelta", operationId
         )) {
             return;
         }
 
-        AsyncCisSaveManager.submit(world, storage, pos, delta, operationId);
+        AsyncCisSaveManager.submit(world, storage, pos, deltaToQueue, operationId);
+    }
+
+    @Unique
+    private ChunkDelta<BlockState, NbtCompound> chunkis$recoverSparseDeltaOnSaveGuard(
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String path,
+            final String caller,
+            final String operationId
+    ) {
+        if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
+            return delta;
+        }
+
+        final WorldChunk liveChunk = world.getChunkManager().getWorldChunk(pos.x, pos.z, false);
+        final ChunkDelta<BlockState, NbtCompound> liveDelta = liveChunk != null
+                ? chunkis$getChunkDelta(liveChunk)
+                : null;
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.BASE_CAPTURE_ON_SAVE_GUARD,
+                liveChunk != null ? ChunkTraceSeverity.INFO : ChunkTraceSeverity.WARN,
+                ChunkTraceReason.NONE,
+                caller,
+                liveChunk != null
+                        ? "capturing base snapshot on save guard before retry: "
+                        + DeltaPersistenceGuard.describeLifecycleState(liveDelta != null ? liveDelta : delta)
+                        : "could not capture base snapshot on save guard because live chunk was unavailable: "
+                        + DeltaPersistenceGuard.describeLifecycleState(delta),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                operationId,
+                delta.isDirty(),
+                null
+        );
+
+        if (liveChunk == null) {
+            return delta;
+        }
+
+        final ChunkDelta<BlockState, NbtCompound> recoveredDelta = liveDelta != null ? liveDelta : delta;
+        BaseChunkCaptureUtil.captureBaseChunk(world, liveChunk, recoveredDelta);
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SAVE_RETRY_AFTER_BASE_CAPTURE,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                caller,
+                "retrying save after base capture: " + DeltaPersistenceGuard.describeLifecycleState(recoveredDelta),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                operationId,
+                recoveredDelta.isDirty(),
+                null
+        );
+        return recoveredDelta;
     }
 
     /**
@@ -492,6 +694,23 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final String path,
             final String caller,
             final String operationId) {
+        if (DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta)) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.INVALID_PAYLOAD,
+                    caller,
+                    "attempted to persist sparse block-entity payload without persisted base chunk NBT on "
+                            + path + ": " + DeltaPersistenceGuard.describeDeltaShape(delta),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(pos.x, pos.z),
+                    null,
+                    operationId,
+                    delta.isDirty(),
+                    null
+            );
+        }
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
             return false;
         }
@@ -549,10 +768,10 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      * Builds the minimal NBT compound used to ferry Chunkis data through vanilla
      * chunk deserialization.
      *
-     * <p>If the delta contains a persisted vanilla-compatible base chunk, that base
-     * is reused and the delta payloads are merged into it. Otherwise a small
-     * synthetic NBT compound is created with the chunk position, data version,
-     * metadata, and delta payload.</p>
+     * <p>Delegates to {@link CisNbtUtil#buildLoadChunkNbt} so persisted base chunk
+     * NBT can become the vanilla deserialization baseline when present. Without
+     * that baseline, Chunkis falls back to the synthetic empty-shell NBT that
+     * triggers regeneration before sparse replay.</p>
      *
      * @param pos   the chunk position
      * @param delta the delta to embed; may be {@code null}
@@ -562,10 +781,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     private static NbtCompound chunkis$buildChunkNbt(
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
-        final NbtCompound nbt = CisNbtUtil.createBaseNbt(pos, GAME_DATA_VERSION);
-        CisNbtUtil.putChunkMetadata(nbt, delta);
-        CisNbtUtil.putDelta(nbt, delta);
-        return nbt;
+        return CisNbtUtil.buildLoadChunkNbt(pos, GAME_DATA_VERSION, delta).root();
     }
 
     /**

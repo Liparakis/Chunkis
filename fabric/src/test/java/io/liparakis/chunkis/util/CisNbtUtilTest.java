@@ -3,6 +3,7 @@ package io.liparakis.chunkis.util;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -104,6 +105,39 @@ class CisNbtUtilTest {
     @Test
     void returnsFalseWhenNoDeltaExists() {
         assertFalse(CisNbtUtil.shouldSuppressInitialRepopulation(new NbtCompound(), null));
+    }
+
+    @Test
+    void buildLoadChunkNbtUsesPersistedBaseChunkBaselineWhenPresent() {
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
+        final NbtCompound baseChunk = new NbtCompound();
+        baseChunk.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
+        baseChunk.putInt(CisNbtUtil.X_POS_KEY, 3);
+        baseChunk.putInt(CisNbtUtil.Z_POS_KEY, 7);
+
+        final NbtCompound entity = new NbtCompound();
+        entity.putString("id", "minecraft:pig");
+        delta.setEntities(java.util.List.of(entity), false);
+        delta.setChunkMetadata(
+                CisNbtUtil.createChunkMetadataTakingOwnership(
+                        null,
+                        true,
+                        false,
+                        baseChunk
+                ),
+                false
+        );
+
+        final CisNbtUtil.LoadChunkNbtResult result =
+                CisNbtUtil.buildLoadChunkNbt(3, 7, 3953, delta);
+
+        assertEquals(CisNbtUtil.PersistedBaseChunkUsage.USED, result.baseChunkUsage());
+        assertEquals("minecraft:full", result.root().getString(CisNbtUtil.STATUS_KEY).orElseThrow());
+        assertEquals(3, result.root().getInt(CisNbtUtil.X_POS_KEY).orElseThrow());
+        assertEquals(7, result.root().getInt(CisNbtUtil.Z_POS_KEY).orElseThrow());
+        assertTrue(result.root().contains(CisNbtUtil.CHUNKIS_DATA_KEY));
+        final NbtList entities = result.root().getList("entities").orElseThrow();
+        assertEquals(1, entities.size());
     }
 
     // -------------------------------------------------------------------------

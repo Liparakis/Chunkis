@@ -429,6 +429,16 @@ public final class CisStorage<B, S, P, N> {
         }
     }
 
+    public boolean contains(final CisChunkPos pos) {
+        Objects.requireNonNull(pos, "pos");
+        try {
+            final RegionFile regionFile = getRegionFile(pos, false);
+            return regionFile != null && regionFile.hasChunk(pos);
+        } catch (final IOException e) {
+            return false;
+        }
+    }
+
     /**
      * Loads a chunk delta without clearing the underlying storage entry on decode
      * failure.

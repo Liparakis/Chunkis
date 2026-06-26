@@ -57,6 +57,19 @@ class WorldChunkMixinTest {
         assertTrue(event.message().contains("portal-index-update"));
     }
 
+    @Test
+    void marksRestoredDeltaSavedOnlyWhenLoadedFromStorage() {
+        final ChunkDelta<String, String> dirtyDelta = new ChunkDelta<>();
+        dirtyDelta.markDirty();
+        final FakeChunkisDeltaDuck memoryDuck = new FakeChunkisDeltaDuck();
+        memoryDuck.chunkis$setRestoreLoadedFromStorage(false);
+        final FakeChunkisDeltaDuck storageDuck = new FakeChunkisDeltaDuck();
+        storageDuck.chunkis$setRestoreLoadedFromStorage(true);
+
+        assertTrue(invokeShouldMarkRestoredDeltaSaved(storageDuck, dirtyDelta));
+        assertTrue(!invokeShouldMarkRestoredDeltaSaved(memoryDuck, dirtyDelta));
+    }
+
     private static String invokeTakeRestoreOperationId(final ChunkisDeltaDuck duck) {
         try {
             final Method method = WorldChunkMixin.class
@@ -89,10 +102,28 @@ class WorldChunkMixinTest {
         }
     }
 
+    private static boolean invokeShouldMarkRestoredDeltaSaved(
+            final ChunkisDeltaDuck duck,
+            final ChunkDelta<?, ?> delta
+    ) {
+        try {
+            final Method method = WorldChunkMixin.class.getDeclaredMethod(
+                    "chunkis$shouldMarkRestoredDeltaSaved",
+                    ChunkisDeltaDuck.class,
+                    ChunkDelta.class
+            );
+            method.setAccessible(true);
+            return (boolean) method.invoke(null, duck, delta);
+        } catch (final Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
     private static final class FakeChunkisDeltaDuck implements ChunkisDeltaDuck {
 
         private final ChunkDelta<?, ?> delta = new ChunkDelta<>();
         private String restoreOperationId;
+        private boolean restoreLoadedFromStorage;
 
         @Override
         public ChunkDelta<?, ?> chunkis$getDelta() {
@@ -112,6 +143,16 @@ class WorldChunkMixinTest {
         @Override
         public void chunkis$setRestoreOperationId(final String operationId) {
             this.restoreOperationId = operationId;
+        }
+
+        @Override
+        public boolean chunkis$wasRestoreLoadedFromStorage() {
+            return restoreLoadedFromStorage;
+        }
+
+        @Override
+        public void chunkis$setRestoreLoadedFromStorage(final boolean restoreLoadedFromStorage) {
+            this.restoreLoadedFromStorage = restoreLoadedFromStorage;
         }
     }
 }

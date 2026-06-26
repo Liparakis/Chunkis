@@ -41,11 +41,19 @@ public final class DeltaPersistenceGuard {
         if (delta == null) {
             return false;
         }
-        if (delta.getSourceVersion() >= io.liparakis.chunkis.storage.model.CisConstants.VERSION) {
+        final Object meta = delta.getChunkMetadata();
+        return hasReplayPayload(delta)
+                && !CisNbtUtil.hasPersistedBaseChunkNbt(meta)
+                && !CisNbtUtil.hasFullBlockBaseline(meta);
+    }
+
+    public static boolean hasInvalidBlockEntityOnlyPayloadWithoutBase(final ChunkDelta<?, ?> delta) {
+        if (delta == null) {
             return false;
         }
         final Object meta = delta.getChunkMetadata();
-        return hasReplayPayload(delta)
+        return delta.getBlockInstructions().isEmpty()
+                && !delta.getBlockEntities().isEmpty()
                 && !CisNbtUtil.hasPersistedBaseChunkNbt(meta)
                 && !CisNbtUtil.hasFullBlockBaseline(meta);
     }
@@ -69,17 +77,48 @@ public final class DeltaPersistenceGuard {
             return;
         }
         Chunkis.LOGGER.error(
-                "Chunkis [INVALID_SAVE]: Rejected base-less sparse delta for {} in {} path={} caller={} blocks={} blockEntities={} entities={} metadata={} suppressInitialRepopulation={}",
+                "Chunkis [INVALID_SAVE]: Rejected base-less sparse delta for {} in {} path={} caller={} shape={} suppressInitialRepopulation={}",
                 pos != null ? pos : "<unknown>",
                 world != null ? world.getRegistryKey().getValue() : "<unknown>",
                 path,
                 caller,
-                delta.getBlockInstructions().size(),
-                delta.getBlockEntities().size(),
-                delta.countNonNullEntities(),
-                delta.getChunkMetadata() != null,
+                describeDeltaShape(delta),
                 delta.shouldSuppressInitialRepopulation()
         );
+    }
+
+    public static String describeDeltaShape(final ChunkDelta<?, ?> delta) {
+        if (delta == null) {
+            return "null";
+        }
+
+        final Object meta = delta.getChunkMetadata();
+        return "blocks=" + delta.getBlockInstructions().size()
+                + ", blockEntities=" + delta.getBlockEntities().size()
+                + ", entities=" + delta.countNonNullEntities()
+                + ", sections=" + countSections(delta)
+                + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(meta)
+                + ", fullBaseline=" + CisNbtUtil.hasFullBlockBaseline(meta)
+                + ", metadataKeys=" + describeMetadataKeys(meta)
+                + ", sourceVersion=" + delta.getSourceVersion()
+                + ", mutationGeneration=" + delta.getMutationGeneration()
+                + ", dirty=" + delta.isDirty()
+                + ", sparse=" + hasReplayPayload(delta);
+    }
+
+    public static String describeLifecycleState(final ChunkDelta<?, ?> delta) {
+        if (delta == null) {
+            return "null";
+        }
+
+        final Object meta = delta.getChunkMetadata();
+        return "mutationGeneration=" + delta.getMutationGeneration()
+                + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(meta)
+                + ", fullBaseline=" + CisNbtUtil.hasFullBlockBaseline(meta)
+                + ", metadataKeys=" + describeMetadataKeys(meta)
+                + ", suppressInitialRepopulation=" + delta.shouldSuppressInitialRepopulation()
+                + ", blockChanges=" + delta.getBlockInstructions().size()
+                + ", blockEntities=" + delta.getBlockEntities().size();
     }
 
     /**
@@ -90,5 +129,20 @@ public final class DeltaPersistenceGuard {
         return !delta.getBlockInstructions().isEmpty()
                 || !delta.getBlockEntities().isEmpty()
                 || delta.countNonNullEntities() > 0;
+    }
+
+    private static int countSections(final ChunkDelta<?, ?> delta) {
+        final java.util.Set<Integer> sections = new java.util.HashSet<>();
+        delta.forEachBlock((x, y, z, state) -> sections.add(y >> 4));
+        delta.getBlockEntities().forEach((packedPos, nbt) ->
+                sections.add(io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos) >> 4));
+        return sections.size();
+    }
+
+    private static String describeMetadataKeys(final Object metadata) {
+        if (!(metadata instanceof net.minecraft.nbt.NbtCompound compound) || compound.isEmpty()) {
+            return "[]";
+        }
+        return compound.getKeys().toString();
     }
 }

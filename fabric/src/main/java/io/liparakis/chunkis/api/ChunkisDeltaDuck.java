@@ -17,4 +17,8 @@ public interface ChunkisDeltaDuck {
     String chunkis$getRestoreOperationId();
 
     void chunkis$setRestoreOperationId(String operationId);
+
+    boolean chunkis$wasRestoreLoadedFromStorage();
+
+    void chunkis$setRestoreLoadedFromStorage(boolean restoreLoadedFromStorage);
 }

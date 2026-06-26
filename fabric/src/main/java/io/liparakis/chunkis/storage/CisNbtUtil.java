@@ -117,6 +117,12 @@ public final class CisNbtUtil {
     public static final String HAS_DELTA_KEY = "HasDelta";
 
     /**
+     * Synthetic load-path marker describing whether persisted base chunk NBT was
+     * used to build the temporary chunk NBT passed into vanilla deserialization.
+     */
+    public static final String LOAD_BASE_CHUNK_USAGE_KEY = "LoadBaseChunkUsage";
+
+    /**
      * NBT key required by Minecraft's entity deserializer.
      */
     private static final String ENTITY_ID_KEY = "id";
@@ -146,12 +152,28 @@ public final class CisNbtUtil {
     ) {
         Objects.requireNonNull(pos, "pos");
 
+        return createBaseNbt(pos.x, pos.z, dataVersion);
+    }
+
+    /**
+     * Creates a minimal vanilla-compatible chunk NBT compound.
+     *
+     * @param chunkX      chunk X coordinate
+     * @param chunkZ      chunk Z coordinate
+     * @param dataVersion Minecraft data version
+     * @return newly created base chunk NBT
+     */
+    public static NbtCompound createBaseNbt(
+            final int chunkX,
+            final int chunkZ,
+            final int dataVersion
+    ) {
         final NbtCompound nbt = new NbtCompound();
 
         nbt.putInt(DATA_VERSION_KEY, dataVersion);
         nbt.putString(STATUS_KEY, STATUS_EMPTY);
-        nbt.putInt(X_POS_KEY, pos.x);
-        nbt.putInt(Z_POS_KEY, pos.z);
+        nbt.putInt(X_POS_KEY, chunkX);
+        nbt.putInt(Z_POS_KEY, chunkZ);
 
         return nbt;
     }
@@ -183,6 +205,73 @@ public final class CisNbtUtil {
         chunkisData.putBoolean(HAS_DELTA_KEY, true);
 
         root.put(CHUNKIS_DATA_KEY, chunkisData);
+    }
+
+    /**
+     * Builds the chunk NBT passed into vanilla load conversion.
+     *
+     * <p>When persisted base chunk NBT exists, that base becomes the deserialization
+     * baseline and Chunkis only replays sparse post-capture deltas on top later.
+     * Without a base, Chunkis falls back to the synthetic empty-shell NBT that
+     * triggers regeneration before replay.</p>
+     *
+     * @param pos         chunk position
+     * @param dataVersion Minecraft data version
+     * @param delta       Chunkis delta for the chunk, may be {@code null}
+     * @return chunk NBT plus machine-readable base-chunk usage status
+     */
+    public static LoadChunkNbtResult buildLoadChunkNbt(
+            final ChunkPos pos,
+            final int dataVersion,
+            final ChunkDelta<?, NbtCompound> delta
+    ) {
+        Objects.requireNonNull(pos, "pos");
+
+        return buildLoadChunkNbt(pos.x, pos.z, dataVersion, delta);
+    }
+
+    /**
+     * Builds the chunk NBT passed into vanilla load conversion.
+     *
+     * @param chunkX      chunk X coordinate
+     * @param chunkZ      chunk Z coordinate
+     * @param dataVersion Minecraft data version
+     * @param delta       Chunkis delta for the chunk, may be {@code null}
+     * @return chunk NBT plus machine-readable base-chunk usage status
+     */
+    public static LoadChunkNbtResult buildLoadChunkNbt(
+            final int chunkX,
+            final int chunkZ,
+            final int dataVersion,
+            final ChunkDelta<?, NbtCompound> delta
+    ) {
+
+        final Object metadata = delta != null ? delta.getChunkMetadata() : null;
+        final NbtCompound baseChunkNbt = extractPersistedBaseChunkNbt(metadata);
+        final PersistedBaseChunkUsage baseChunkUsage;
+        final NbtCompound root;
+
+        if (baseChunkNbt != null) {
+            root = baseChunkNbt;
+            baseChunkUsage = PersistedBaseChunkUsage.USED;
+
+            if (delta != null && delta.countNonNullEntities() > 0) {
+                replaceChunkEntitiesFromDelta(root, castDelta(delta));
+            }
+        } else {
+            root = createBaseNbt(chunkX, chunkZ, dataVersion);
+            baseChunkUsage = hasPersistedBaseChunkNbt(metadata)
+                    ? PersistedBaseChunkUsage.SKIPPED
+                    : PersistedBaseChunkUsage.MISSING;
+        }
+
+        if (delta != null) {
+            putChunkMetadata(root, castDelta(delta));
+            putDelta(root, castDelta(delta));
+        }
+        putLoadBaseChunkUsage(root, baseChunkUsage);
+
+        return new LoadChunkNbtResult(root, baseChunkUsage);
     }
 
     /**
@@ -661,6 +750,16 @@ public final class CisNbtUtil {
     }
 
     /**
+     * Returns whether a chunk root came through the synthetic Chunkis load path.
+     *
+     * @param root serialized chunk NBT root
+     * @return {@code true} when the synthetic Chunkis marker is present
+     */
+    public static boolean hasSyntheticChunkisLoadMarker(final NbtCompound root) {
+        return root != null && hasChunkisDeltaMarker(root);
+    }
+
+    /**
      * Reads the explicit suppression flag from a delta's metadata.
      *
      * @param delta delta to inspect
@@ -685,6 +784,23 @@ public final class CisNbtUtil {
 
         return chunkisData != null
                 && chunkisData.getBoolean(HAS_DELTA_KEY).orElse(false);
+    }
+
+    /**
+     * Records transient load-path baseline usage inside the synthetic Chunkis marker.
+     *
+     * @param root            chunk root being sent through vanilla deserialization
+     * @param baseChunkUsage  whether persisted base chunk NBT was used
+     */
+    private static void putLoadBaseChunkUsage(
+            final NbtCompound root,
+            final PersistedBaseChunkUsage baseChunkUsage
+    ) {
+        Objects.requireNonNull(root, "root");
+        Objects.requireNonNull(baseChunkUsage, "baseChunkUsage");
+
+        final NbtCompound chunkisData = getOrCreateCompound(root, CHUNKIS_DATA_KEY);
+        chunkisData.putString(LOAD_BASE_CHUNK_USAGE_KEY, baseChunkUsage.name());
     }
 
     /**
@@ -815,6 +931,46 @@ public final class CisNbtUtil {
         }
 
         return parent.getCompound(key).orElse(null);
+    }
+
+    /**
+     * Returns an existing nested compound or creates and installs a new one.
+     *
+     * @param parent parent compound
+     * @param key    nested compound key
+     * @return mutable nested compound
+     */
+    private static NbtCompound getOrCreateCompound(
+            final NbtCompound parent,
+            final String key
+    ) {
+        final NbtCompound existing = getCompoundOrNull(parent, key);
+        if (existing != null) {
+            return existing;
+        }
+
+        final NbtCompound created = new NbtCompound();
+        parent.put(key, created);
+        return created;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ChunkDelta<BlockState, NbtCompound> castDelta(
+            final ChunkDelta<?, NbtCompound> delta
+    ) {
+        return (ChunkDelta<BlockState, NbtCompound>) delta;
+    }
+
+    public enum PersistedBaseChunkUsage {
+        USED,
+        SKIPPED,
+        MISSING
+    }
+
+    public record LoadChunkNbtResult(
+            NbtCompound root,
+            PersistedBaseChunkUsage baseChunkUsage
+    ) {
     }
 
     /**

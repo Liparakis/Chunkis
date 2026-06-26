@@ -339,6 +339,23 @@ public final class AsyncCisSaveManager {
                 }
 
                 //Sparse delta without a persisted base is unsafe to write.
+                if (DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(save.snapshot())) {
+                    ChunkTraceStore.trace(
+                            ChunkisDebugDomain.ASSERTIONS,
+                            ChunkTraceEventType.ASSERTION_FAILED,
+                            ChunkTraceSeverity.ERROR,
+                            ChunkTraceReason.INVALID_PAYLOAD,
+                            PROCESS_SOURCE,
+                            "attempted to persist sparse block-entity payload without persisted base chunk NBT: "
+                                    + DeltaPersistenceGuard.describeDeltaShape(save.snapshot()),
+                            world.getRegistryKey().getValue().toString(),
+                            new DebugChunkKey(save.pos().x, save.pos().z),
+                            null,
+                            save.operationId(),
+                            save.liveDelta().isDirty(),
+                            null
+                    );
+                }
                 if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(save.snapshot())) {
                     DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(
                             world,

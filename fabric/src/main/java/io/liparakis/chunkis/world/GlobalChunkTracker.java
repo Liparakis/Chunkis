@@ -9,6 +9,7 @@ import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.CisNbtUtil;
+import io.liparakis.chunkis.storage.DeltaPersistenceGuard;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
@@ -102,6 +103,7 @@ public final class GlobalChunkTracker {
         }
         delta.markDirty();
         final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
+        assertInvalidSparsePayloadWithoutBase(key, delta, source);
         final DebugChunkKey debugKey = new DebugChunkKey(chunkX, chunkZ);
         final ChunkDelta<?, ?> existing = dirtyDeltas.get(key);
 
@@ -301,6 +303,10 @@ public final class GlobalChunkTracker {
             final ChunkDelta<?, ?> delta,
             final String source
     ) {
+        if (!dirtyDeltas.containsKey(key)) {
+            traceFirstDirtyMutation(key, delta, source);
+        }
+        assertInvalidSparsePayloadWithoutBase(key, delta, source);
         final ChunkDelta<?, ?> existing = dirtyDeltas.get(key);
 
         if (existing == delta) {
@@ -467,6 +473,56 @@ public final class GlobalChunkTracker {
 
     private static boolean shouldSkipDelta(final ChunkDelta<?, ?> delta) {
         return delta == null || (delta.isEmpty() && !delta.isDirty());
+    }
+
+    private static void traceFirstDirtyMutation(
+            final DimensionChunkKey key,
+            final ChunkDelta<?, ?> delta,
+            final String source
+    ) {
+        if (delta == null || !delta.isDirty()) {
+            return;
+        }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.FIRST_DIRTY_MUTATION,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.DELTA_BECAME_DIRTY,
+                source,
+                "first dirty mutation observed: " + DeltaPersistenceGuard.describeLifecycleState(delta),
+                key.dimension.getValue().toString(),
+                new DebugChunkKey(unpackChunkX(key.chunkKey), unpackChunkZ(key.chunkKey)),
+                null,
+                null,
+                true,
+                null
+        );
+    }
+
+    private static void assertInvalidSparsePayloadWithoutBase(
+            final DimensionChunkKey key,
+            final ChunkDelta<?, ?> delta,
+            final String source
+    ) {
+        if (!DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta)) {
+            return;
+        }
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.ASSERTIONS,
+                ChunkTraceEventType.ASSERTION_FAILED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.INVALID_PAYLOAD,
+                source,
+                "cached sparse block-entity payload without persisted base chunk NBT: "
+                        + DeltaPersistenceGuard.describeDeltaShape(delta),
+                key.dimension.getValue().toString(),
+                new DebugChunkKey(unpackChunkX(key.chunkKey), unpackChunkZ(key.chunkKey)),
+                null,
+                null,
+                delta.isDirty(),
+                null
+        );
     }
 
     private static DimensionChunkKey keyOf(

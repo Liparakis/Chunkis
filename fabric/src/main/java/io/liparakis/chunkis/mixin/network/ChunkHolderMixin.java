@@ -1,5 +1,12 @@
 package io.liparakis.chunkis.mixin.network;
 
+import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.network.ChunkisNetworking;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
@@ -66,6 +73,21 @@ public abstract class ChunkHolderMixin {
 
         final WorldChunk chunk = this.getWorldChunk();
         if (chunk == null) return;
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CLIENT_SYNC,
+                ChunkTraceEventType.CHUNK_SENT_TO_CLIENT_SUMMARY,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
+                "sending vanilla chunk packet summary: players=" + players.size()
+                        + ", " + ChunkSectionDebugUtil.summarize(chunk),
+                chunk.getWorld().getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                null,
+                null,
+                null,
+                null
+        );
 
         for (final ServerPlayerEntity player : players) {
             ChunkisNetworking.sendDelta(player, chunk);

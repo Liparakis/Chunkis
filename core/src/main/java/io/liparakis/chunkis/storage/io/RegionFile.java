@@ -242,6 +242,11 @@ final class RegionFile implements AutoCloseable {
         return buffer.array();
     }
 
+    synchronized boolean hasChunk(CisChunkPos pos) {
+        final int index = getChunkIndex(pos);
+        return offsets[index] != 0 && lengths[index] > 0;
+    }
+
     /**
      * Writes chunk data to the region file, or clears the entry when {@code data} is null.
      *

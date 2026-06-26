@@ -24,4 +24,22 @@ class ChunkTraceInvariantsTest {
 
         assertThat(ChunkTraceInvariants.shouldAssertNonEmptyRestore(delta, 0)).isFalse();
     }
+
+    @Test
+    void blockEntityOnlyPayloadWithoutBaseIsInvalid() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>();
+        delta.addBlockEntityData(1, 64, 1, "chest");
+
+        assertThat(ChunkTraceInvariants.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta, false)).isTrue();
+        assertThat(ChunkTraceInvariants.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta, true)).isFalse();
+    }
+
+    @Test
+    void snapshotBackedRestoreIsNotEmptyWhenOnlyBaseWasApplied() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>();
+        delta.setChunkMetadata("metadata", false);
+
+        assertThat(ChunkTraceInvariants.shouldReportRestoreEmptyResult(delta, 0, true)).isFalse();
+        assertThat(ChunkTraceInvariants.shouldReportRestoreEmptyResult(delta, 0, false)).isTrue();
+    }
 }

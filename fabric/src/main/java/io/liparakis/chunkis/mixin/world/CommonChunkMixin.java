@@ -2,6 +2,7 @@ package io.liparakis.chunkis.mixin.world;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
@@ -33,6 +34,8 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     private volatile ChunkDelta<?, ?> chunkis$delta = new ChunkDelta<>();
     @Unique
     private volatile String chunkis$restoreOperationId;
+    @Unique
+    private volatile boolean chunkis$restoreLoadedFromStorage;
 
     /**
      * {@inheritDoc}
@@ -62,6 +65,16 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
         this.chunkis$restoreOperationId = operationId;
     }
 
+    @Override
+    public boolean chunkis$wasRestoreLoadedFromStorage() {
+        return chunkis$restoreLoadedFromStorage;
+    }
+
+    @Override
+    public void chunkis$setRestoreLoadedFromStorage(final boolean restoreLoadedFromStorage) {
+        this.chunkis$restoreLoadedFromStorage = restoreLoadedFromStorage;
+    }
+
     /**
      * Injected at the return of {@code needsSaving()} to override the result
      * when the Chunkis delta is dirty, even if vanilla considers the chunk clean.
@@ -85,6 +98,10 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      */
     @Inject(method = "markNeedsSaving", at = @At("HEAD"))
     private void chunkis$onMarkNeedsSaving(final CallbackInfo ci) {
+        if (!ChunkDeltaOwnership.shouldMirrorVanillaDirtyState(this.chunkis$delta)) {
+            return;
+        }
+
         if (!this.chunkis$delta.markDirtyIfClean()) {
             return;
         }

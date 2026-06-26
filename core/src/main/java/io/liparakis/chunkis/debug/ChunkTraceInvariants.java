@@ -21,8 +21,50 @@ public final class ChunkTraceInvariants {
             final ChunkDelta<?, ?> delta,
             final int appliedCount
     ) {
+        return shouldAssertNonEmptyRestore(delta, appliedCount, false);
+    }
+
+    public static boolean shouldAssertNonEmptyRestore(
+            final ChunkDelta<?, ?> delta,
+            final int appliedCount,
+            final boolean snapshotBackedRestore
+    ) {
         if (delta == null || appliedCount != 0) {
             return false;
+        }
+
+        if (snapshotBackedRestore) {
+            return !delta.getBlockInstructions().isEmpty() || !delta.getBlockEntities().isEmpty();
+        }
+
+        return !delta.getBlockInstructions().isEmpty() || !delta.getBlockEntities().isEmpty();
+    }
+
+    public static boolean hasInvalidBlockEntityOnlyPayloadWithoutBase(
+            final ChunkDelta<?, ?> delta,
+            final boolean hasPersistedBaseChunk
+    ) {
+        if (delta == null || hasPersistedBaseChunk) {
+            return false;
+        }
+
+        return delta.getBlockInstructions().isEmpty() && !delta.getBlockEntities().isEmpty();
+    }
+
+    public static boolean shouldReportRestoreEmptyResult(
+            final ChunkDelta<?, ?> delta,
+            final int appliedCount,
+            final boolean snapshotBackedRestore
+    ) {
+        if (delta == null) {
+            return false;
+        }
+        if (appliedCount != 0) {
+            return false;
+        }
+
+        if (!snapshotBackedRestore) {
+            return true;
         }
 
         return !delta.getBlockInstructions().isEmpty() || !delta.getBlockEntities().isEmpty();

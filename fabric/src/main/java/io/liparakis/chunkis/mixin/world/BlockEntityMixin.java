@@ -100,7 +100,6 @@ public abstract class BlockEntityMixin {
         final ChunkDelta<BlockState, NbtCompound> delta =
                 (ChunkDelta<BlockState, NbtCompound>) deltaDuck.chunkis$getDelta();
 
-
         BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
         delta.markDirty();
         chunk.markNeedsSaving();

@@ -65,6 +65,17 @@ public final class CisSnapshotCapture {
                 target
         );
 
+        final Object existingMetadata = target.getChunkMetadata();
+        target.setChunkMetadata(
+                CisNbtUtil.createChunkMetadataTakingOwnership(
+                        CisNbtUtil.extractPersistedStructureMetadata((NbtCompound) existingMetadata),
+                        true,
+                        true,
+                        CisNbtUtil.extractPersistedBaseChunkNbt(existingMetadata),
+                        BaseChunkCaptureUtil.hasPortalBlocks(chunk)
+                ),
+                false
+        );
         target.setSuppressInitialRepopulation(true);
         return target;
     }

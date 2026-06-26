@@ -5,6 +5,7 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
@@ -27,6 +28,10 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Intercepts {@link SerializedChunk#convert} to attach Chunkis delta data to
@@ -54,6 +59,25 @@ public class ChunkSerializerMixin {
 
     @Unique
     private static final String SOURCE = "ChunkSerializerMixin";
+    @Unique
+    private static final Map<SerializedChunk, Boolean> chunkis$syntheticLoadMarker =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    @Inject(method = "fromNbt", at = @At("RETURN"))
+    private static void chunkis$onFromNbt(
+            final net.minecraft.world.HeightLimitView world,
+            final net.minecraft.world.chunk.PalettesFactory containerFactory,
+            final NbtCompound nbt,
+            final CallbackInfoReturnable<SerializedChunk> cir) {
+        final SerializedChunk serializedChunk = cir.getReturnValue();
+        if (serializedChunk == null) {
+            return;
+        }
+
+        if (CisNbtUtil.hasSyntheticChunkisLoadMarker(nbt)) {
+            chunkis$syntheticLoadMarker.put(serializedChunk, Boolean.TRUE);
+        }
+    }
 
 
     /**
@@ -69,7 +93,7 @@ public class ChunkSerializerMixin {
      * @param cir        callback holding the converted proto chunk
      */
     @Inject(method = "convert", at = @At("RETURN"))
-    private static void chunkis$onConvert(
+    private void chunkis$onConvert(
             final ServerWorld world,
             final PointOfInterestStorage poiStorage,
             final StorageKey key,
@@ -77,6 +101,11 @@ public class ChunkSerializerMixin {
             final CallbackInfoReturnable<ProtoChunk> cir) {
         final ProtoChunk chunk = cir.getReturnValue();
         if (chunk == null) {
+            return;
+        }
+        final boolean syntheticChunkisLoad =
+                chunkis$consumeSyntheticLoadMarker((SerializedChunk) (Object) this);
+        if (!syntheticChunkisLoad) {
             return;
         }
         final String operationId = ChunkTraceStore.nextOperationId("load");
@@ -95,6 +124,11 @@ public class ChunkSerializerMixin {
                 null
         );
         chunkis$restoreChunkDelta(world, chunkPos, chunk, operationId);
+    }
+
+    @Unique
+    private static boolean chunkis$consumeSyntheticLoadMarker(final SerializedChunk serializedChunk) {
+        return Boolean.TRUE.equals(chunkis$syntheticLoadMarker.remove(serializedChunk));
     }
 
     /**
@@ -160,16 +194,83 @@ public class ChunkSerializerMixin {
 
         final ChunkDelta<BlockState, NbtCompound> delta = resolved.delta();
         delta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(delta));
+        final boolean hasPersistedBaseChunk =
+                CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        final int protoSectionsBeforeRestore = ChunkSectionDebugUtil.countNonEmptySections(chunk);
+        final int protoNonAirBlocksAfterBase = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
 
-        chunkis$attachDeltaToChunk(chunk, delta, operationId);
-        chunk.setStatus(ChunkStatus.EMPTY);
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.PROTO_CHUNK_SECTIONS_BEFORE_RESTORE,
+                ChunkTraceSeverity.INFO,
+                resolved.reason(),
+                SOURCE + "#chunkis$restoreChunkDelta",
+                "proto sections before restore: " + ChunkSectionDebugUtil.summarize(chunk),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                operationId,
+                delta.isDirty(),
+                null
+        );
+        if (hasPersistedBaseChunk) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    protoSectionsBeforeRestore > 0
+                            ? ChunkTraceEventType.BASE_NBT_DECODE_COMPLETED
+                            : ChunkTraceEventType.BASE_NBT_DECODE_FAILED,
+                    protoSectionsBeforeRestore > 0
+                            ? ChunkTraceSeverity.INFO
+                            : ChunkTraceSeverity.ERROR,
+                    protoSectionsBeforeRestore > 0
+                            ? ChunkTraceReason.NONE
+                            : ChunkTraceReason.DECODE_FAILED,
+                    SOURCE + "#chunkis$restoreChunkDelta",
+                    "base NBT decode "
+                            + (protoSectionsBeforeRestore > 0 ? "completed" : "failed")
+                            + ": sections=" + protoSectionsBeforeRestore
+                            + ", nonAirBlocks=" + protoNonAirBlocksAfterBase,
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(pos.x, pos.z),
+                    null,
+                    operationId,
+                    delta.isDirty(),
+                    null
+            );
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.PROTO_CHUNK_SECTIONS_AFTER_BASE,
+                    protoSectionsBeforeRestore > 0 ? ChunkTraceSeverity.INFO : ChunkTraceSeverity.ERROR,
+                    protoSectionsBeforeRestore > 0 ? ChunkTraceReason.NONE : ChunkTraceReason.DECODE_FAILED,
+                    SOURCE + "#chunkis$restoreChunkDelta",
+                    "proto summary after base decode: " + ChunkSectionDebugUtil.summarize(chunk),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(pos.x, pos.z),
+                    null,
+                    operationId,
+                    delta.isDirty(),
+                    null
+            );
+        }
+
+        chunkis$attachDeltaToChunk(
+                chunk,
+                delta,
+                operationId,
+                resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE
+        );
+        if (!hasPersistedBaseChunk) {
+            chunk.setStatus(ChunkStatus.EMPTY);
+        }
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.LOAD_TX_END,
                 ChunkTraceSeverity.INFO,
                 resolved.reason(),
                 SOURCE + "#chunkis$restoreChunkDelta",
-                "attached delta to proto chunk and reset status to EMPTY",
+                hasPersistedBaseChunk
+                        ? "attached delta to proto chunk and kept persisted base baseline"
+                        : "attached delta to proto chunk and reset status to EMPTY",
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
@@ -243,10 +344,12 @@ public class ChunkSerializerMixin {
     private static void chunkis$attachDeltaToChunk(
             final ProtoChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
-            final String operationId) {
+            final String operationId,
+            final boolean restoreLoadedFromStorage) {
         if (chunk instanceof ChunkisDeltaDuck deltaDuck) {
             deltaDuck.chunkis$setDelta(delta);
             deltaDuck.chunkis$setRestoreOperationId(operationId);
+            deltaDuck.chunkis$setRestoreLoadedFromStorage(restoreLoadedFromStorage);
         }
     }
 

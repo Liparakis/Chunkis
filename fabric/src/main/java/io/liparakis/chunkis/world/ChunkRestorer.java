@@ -5,6 +5,7 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceInvariants;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
@@ -136,6 +137,13 @@ public final class ChunkRestorer {
                 runtimeDelta
         );
         final ChunkPos chunkPos = chunk.getPos();
+        final boolean hasPersistedBaseChunk =
+                CisNbtUtil.hasPersistedBaseChunkNbt(protoDelta.getChunkMetadata());
+        final boolean invalidBlockEntityOnlyPayloadWithoutBase =
+                ChunkTraceInvariants.hasInvalidBlockEntityOnlyPayloadWithoutBase(
+                        protoDelta,
+                        hasPersistedBaseChunk
+                );
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -143,7 +151,9 @@ public final class ChunkRestorer {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 RESTORE_SOURCE,
-                "starting restore with decoded payload: " + describeReplayPayload(protoDelta),
+                "starting restore with decoded payload: " + describeReplayPayload(protoDelta)
+                        + ", baseChunkNbt="
+                        + (hasPersistedBaseChunk ? "used" : "missing"),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(chunkPos.x, chunkPos.z),
                 null,
@@ -151,9 +161,58 @@ public final class ChunkRestorer {
                 protoDelta.isDirty(),
                 null
         );
+        if (hasPersistedBaseChunk) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.SNAPSHOT_BACKED_RESTORE,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    RESTORE_SOURCE,
+                    "restoring chunk from persisted base snapshot plus sparse delta",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    operationId,
+                    protoDelta.isDirty(),
+                    null
+            );
+        }
+        if (invalidBlockEntityOnlyPayloadWithoutBase) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.INVALID_PAYLOAD,
+                    RESTORE_SOURCE,
+                    "blockEntities without blockChanges require persisted base chunk NBT",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    operationId,
+                    protoDelta.isDirty(),
+                    null
+            );
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.RESTORE_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.INVALID_PAYLOAD,
+                    RESTORE_SOURCE,
+                    "skipped restore because sparse block-entity payload had no base snapshot",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    operationId,
+                    protoDelta.isDirty(),
+                    null
+            );
+            return;
+        }
 
         try {
-            clearChunkToAir(chunk);
+            if (!hasPersistedBaseChunk) {
+                clearChunkToAir(chunk);
+            }
             visitor.cleanupReplayedEntities(protoDelta);
             protoDelta.accept(visitor);
             visitor.finishRestoration();
@@ -178,13 +237,46 @@ public final class ChunkRestorer {
         final int appliedCount = visitor.appliedBlocksCount()
                 + visitor.restoredBlockEntitiesCount()
                 + visitor.restoredEntitiesCount();
+        final boolean restoreEmptyResult = ChunkTraceInvariants.shouldReportRestoreEmptyResult(
+                protoDelta,
+                appliedCount,
+                hasPersistedBaseChunk
+        );
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SPARSE_DELTA_APPLIED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                RESTORE_SOURCE,
+                "sparse delta replay: blocks=" + visitor.appliedBlocksCount()
+                        + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
+                        + ", entities=" + visitor.restoredEntitiesCount(),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                operationId,
+                runtimeDelta != null && runtimeDelta.isDirty(),
+                null
+        );
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.PROTO_CHUNK_SECTIONS_AFTER_DELTA,
+                ChunkTraceSeverity.INFO,
+                restoreEmptyResult ? ChunkTraceReason.RESTORE_EMPTY_RESULT : ChunkTraceReason.NONE,
+                RESTORE_SOURCE,
+                "server chunk after sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                operationId,
+                runtimeDelta != null && runtimeDelta.isDirty(),
+                null
+        );
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.RESTORE_COMPLETED,
                 ChunkTraceSeverity.INFO,
-                appliedCount > 0
-                        ? ChunkTraceReason.NONE
-                        : ChunkTraceReason.RESTORE_EMPTY_RESULT,
+                restoreEmptyResult ? ChunkTraceReason.RESTORE_EMPTY_RESULT : ChunkTraceReason.NONE,
                 RESTORE_SOURCE,
                 "restore completed: blocks=" + visitor.appliedBlocksCount()
                         + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
@@ -198,7 +290,11 @@ public final class ChunkRestorer {
                 null
         );
 
-        if (ChunkTraceInvariants.shouldAssertNonEmptyRestore(protoDelta, appliedCount)) {
+        if (ChunkTraceInvariants.shouldAssertNonEmptyRestore(
+                protoDelta,
+                appliedCount,
+                hasPersistedBaseChunk
+        )) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.ASSERTIONS,
                     ChunkTraceEventType.ASSERTION_FAILED,
