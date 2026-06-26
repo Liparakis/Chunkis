@@ -163,7 +163,7 @@ public final class ChunkRestorer {
                 protoDelta.isDirty(),
                 null
         );
-        PayloadWatchTracer.traceRestoreStarted(world, chunkPos, protoDelta, operationId);
+        PayloadWatchTracer.traceRestoreStarted(world, chunkPos, chunk, protoDelta, operationId);
         if (hasPersistedBaseChunk) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -388,10 +388,29 @@ public final class ChunkRestorer {
             final int localZ,
             final BlockState state,
             final BlockPos worldPosition,
-            final BlockApplyFailureCounters counters
+            final BlockApplyFailureCounters counters,
+            @org.jetbrains.annotations.Nullable final String operationId
     ) {
+        final BlockState previousState = chunk.getBlockState(worldPosition);
+        PayloadWatchTracer.traceRestoreApplyAttempt(
+                chunk,
+                worldPosition,
+                previousState,
+                state,
+                operationId,
+                "ChunkRestorer#applyBlockChange"
+        );
         if (localY < chunk.getBottomY() || localY > chunk.getTopYInclusive()) {
             counters.recordOutOfBoundsY();
+            PayloadWatchTracer.traceRestoreApplyFailed(
+                    chunk,
+                    worldPosition,
+                    previousState,
+                    state,
+                    operationId,
+                    "ChunkRestorer#applyBlockChange",
+                    "out-of-bounds-y"
+            );
             LOGGER.warn(
                     "Skipping out-of-bounds restored block at {} in chunk {}",
                     worldPosition,
@@ -405,6 +424,15 @@ public final class ChunkRestorer {
 
             if (sectionIndex < 0 || sectionIndex >= chunk.getSectionArray().length) {
                 counters.recordInvalidSectionIndex();
+                PayloadWatchTracer.traceRestoreApplyFailed(
+                        chunk,
+                        worldPosition,
+                        previousState,
+                        state,
+                        operationId,
+                        "ChunkRestorer#applyBlockChange",
+                        "invalid-section-index"
+                );
                 LOGGER.warn(
                         "Skipping restored block at {} in chunk {} with invalid section index {}",
                         worldPosition,
@@ -418,6 +446,15 @@ public final class ChunkRestorer {
 
             if (section == null) {
                 counters.recordNullSection();
+                PayloadWatchTracer.traceRestoreApplyFailed(
+                        chunk,
+                        worldPosition,
+                        previousState,
+                        state,
+                        operationId,
+                        "ChunkRestorer#applyBlockChange",
+                        "null-section"
+                );
                 LOGGER.warn(
                         "Skipping restored block at {} in chunk {} because section {} is null",
                         worldPosition,
@@ -428,6 +465,22 @@ public final class ChunkRestorer {
             }
 
             section.setBlockState(localX, localY & SECTION_Y_MASK, localZ, state);
+            PayloadWatchTracer.traceRestoreSetBlockReturned(
+                    chunk,
+                    worldPosition,
+                    previousState,
+                    state,
+                    operationId,
+                    "ChunkRestorer#applyBlockChange"
+            );
+            PayloadWatchTracer.traceRestoreStateAfterSetBlock(
+                    chunk,
+                    worldPosition,
+                    previousState,
+                    state,
+                    operationId,
+                    "ChunkRestorer#applyBlockChange"
+            );
 
             if (!state.hasBlockEntity()) {
                 removeStaleBlockEntityData(chunk, worldPosition);
@@ -436,6 +489,15 @@ public final class ChunkRestorer {
             return true;
         } catch (final Exception e) {
             counters.recordException();
+            PayloadWatchTracer.traceRestoreApplyFailed(
+                    chunk,
+                    worldPosition,
+                    previousState,
+                    state,
+                    operationId,
+                    "ChunkRestorer#applyBlockChange",
+                    "exception"
+            );
             LOGGER.error(
                     "Failed to restore block at {} in chunk {}",
                     worldPosition,
@@ -626,6 +688,15 @@ public final class ChunkRestorer {
             }
 
             final BlockPos worldPos = chunkPosition.getBlockPos(localX, localY, localZ);
+            final BlockState previousState = chunk.getBlockState(worldPos);
+            PayloadWatchTracer.traceRestoreInstructionVisited(
+                    chunk,
+                    worldPos,
+                    previousState,
+                    state,
+                    operationId,
+                    "ChunkRestorer.RestorationVisitor#visitBlock"
+            );
 
             if (!applyBlockChange(
                     chunk,
@@ -635,7 +706,8 @@ public final class ChunkRestorer {
                     localZ,
                     state,
                     worldPos,
-                    blockApplyFailureCounters
+                    blockApplyFailureCounters,
+                    operationId
             )) {
                 PayloadWatchTracer.traceRestoreBlockFailure(
                         world,
@@ -650,7 +722,7 @@ public final class ChunkRestorer {
             copyBlockToRuntimeDelta(localX, localY, localZ, state);
             blockApplyFailureCounters.recordAppliedBlock();
             appliedBlocksCount++;
-            PayloadWatchTracer.traceRestoredBlock(world, chunkPosition, worldPos, state, operationId);
+            PayloadWatchTracer.traceRestoredBlock(chunk, worldPos, state, operationId);
         }
 
         /**

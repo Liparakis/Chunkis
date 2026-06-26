@@ -9,6 +9,7 @@ import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.network.FabricNetworkCodecFactory;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkDecoder;
@@ -223,6 +224,14 @@ public final class ClientDeltaNetworking {
                 (ChunkDelta<BlockState, NbtCompound>) ((ChunkisDeltaDuck) chunk).chunkis$getDelta();
 
         applyDelta(clientDelta, receivedDelta, world, chunkX, chunkZ);
+        PayloadWatchTracer.traceLiveChunkState(
+                chunk,
+                ChunkTraceEventType.WATCH_PRESENT_IN_CLIENT_WORLD,
+                "client-world",
+                APPLY_SOURCE,
+                operationId,
+                receivedDelta
+        );
         return receivedDelta.getBlockInstructions().size();
     }
 

@@ -7,6 +7,7 @@ import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.network.ChunkisNetworking;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
@@ -88,10 +89,34 @@ public abstract class ChunkHolderMixin {
                 null,
                 null
         );
+        PayloadWatchTracer.traceLiveChunkState(
+                chunk,
+                ChunkTraceEventType.WATCH_PRESENT_AFTER_CHUNK_FULL,
+                "chunk-full",
+                "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
+                null,
+                null
+        );
+        PayloadWatchTracer.traceLiveChunkState(
+                chunk,
+                ChunkTraceEventType.WATCH_PRESENT_BEFORE_CLIENT_SEND,
+                "before-client-send",
+                "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
+                null,
+                null
+        );
 
         for (final ServerPlayerEntity player : players) {
             ChunkisNetworking.sendDelta(player, chunk);
         }
+        PayloadWatchTracer.traceLiveChunkState(
+                chunk,
+                ChunkTraceEventType.WATCH_PRESENT_AFTER_CLIENT_SEND,
+                "client-send",
+                "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
+                null,
+                null
+        );
     }
 
     /**

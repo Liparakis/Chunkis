@@ -8,6 +8,7 @@ import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
 import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
@@ -87,7 +88,7 @@ public final class GlobalChunkTracker {
                 delta,
                 null
         );
-        putDeltaIfNeeded(keyOf(chunk.getWorld().getRegistryKey(), chunk.getPos()), delta, source);
+        putDeltaIfNeeded(keyOf(chunk.getWorld().getRegistryKey(), chunk.getPos()), delta, source, chunk);
     }
 
     @SuppressWarnings("unused")
@@ -123,7 +124,7 @@ public final class GlobalChunkTracker {
             return;
         }
         delta.markDirty(source);
-        putDeltaIfNeeded(keyOf(world.getRegistryKey(), pos), delta, source);
+        putDeltaIfNeeded(keyOf(world.getRegistryKey(), pos), delta, source, null);
     }
 
     static void addDelta(
@@ -155,7 +156,7 @@ public final class GlobalChunkTracker {
         final ChunkDelta<?, ?> existing = dirtyDeltas.get(key);
 
         if (existing == delta) {
-            putInUnloadCache(key, delta, false);
+            putInUnloadCache(key, delta, false, null);
             return;
         }
 
@@ -168,7 +169,7 @@ public final class GlobalChunkTracker {
                     source,
                     null
             );
-            putInUnloadCache(key, existing, true);
+            putInUnloadCache(key, existing, true, null);
             return;
         }
 
@@ -181,7 +182,7 @@ public final class GlobalChunkTracker {
                 source,
                 null
         );
-        putInUnloadCache(key, delta, false);
+        putInUnloadCache(key, delta, false, null);
     }
 
     public static void markSaved(final World world, final ChunkPos position) {
@@ -348,7 +349,8 @@ public final class GlobalChunkTracker {
     private static void putDeltaIfNeeded(
             final DimensionChunkKey key,
             final ChunkDelta<?, ?> delta,
-            final String source
+            final String source,
+            final WorldChunk chunk
     ) {
         if (!dirtyDeltas.containsKey(key)) {
             traceFirstDirtyMutation(key, delta, source);
@@ -357,7 +359,7 @@ public final class GlobalChunkTracker {
         final ChunkDelta<?, ?> existing = dirtyDeltas.get(key);
 
         if (existing == delta) {
-            putInUnloadCache(key, delta, false);
+            putInUnloadCache(key, delta, false, null);
             return;
         }
 
@@ -367,7 +369,7 @@ public final class GlobalChunkTracker {
                     ChunkTraceReason.AUTHORITATIVE_DELTA_KEPT,
                     "kept authoritative tracked delta over weaker replacement"
             );
-            putInUnloadCache(key, existing, true);
+            putInUnloadCache(key, existing, true, null);
             return;
         }
 
@@ -378,13 +380,34 @@ public final class GlobalChunkTracker {
                 "CLAIMED",
                 source + "#dirtyMapPut"
         );
+        PayloadWatchTracer.traceDeltaStage(
+                key.dimension.getValue().toString(),
+                new ChunkPos(unpackChunkX(key.chunkKey), unpackChunkZ(key.chunkKey)),
+                castBlockDelta(delta),
+                null,
+                ChunkTraceEventType.WATCH_CAPTURED,
+                "dirty-tracker",
+                source,
+                "delta entered dirty tracker",
+                null
+        );
+        if (chunk != null) {
+            PayloadWatchTracer.traceLiveChunkState(
+                    chunk,
+                    ChunkTraceEventType.WATCH_CAPTURED,
+                    "dirty-tracker-live",
+                    source,
+                    null,
+                    castBlockDelta(delta)
+            );
+        }
         traceTracker(
                 key,
                 ChunkTraceReason.TRACKER_DIRTY_MAP_PUT,
                 "registered dirty delta",
                 source
         );
-        putInUnloadCache(key, delta, true);
+        putInUnloadCache(key, delta, true, chunk);
     }
 
     private static void traceTracker(
@@ -484,7 +507,8 @@ public final class GlobalChunkTracker {
     private static void putInUnloadCache(
             final DimensionChunkKey key,
             final ChunkDelta<?, ?> delta,
-            final boolean tracePut
+            final boolean tracePut,
+            final WorldChunk chunk
     ) {
         synchronized (unloadCache) {
             unloadCache.put(key, delta);
@@ -495,6 +519,27 @@ public final class GlobalChunkTracker {
                 ChunkDeltaOwnership.hasChunkisOwnedState(delta) ? "CLAIMED" : "BYPASSED",
                 SOURCE + "#putInUnloadCache"
         );
+        PayloadWatchTracer.traceDeltaStage(
+                key.dimension.getValue().toString(),
+                new ChunkPos(unpackChunkX(key.chunkKey), unpackChunkZ(key.chunkKey)),
+                castBlockDelta(delta),
+                null,
+                ChunkTraceEventType.WATCH_CAPTURED,
+                "unload-cache",
+                SOURCE + "#putInUnloadCache",
+                "delta stored in unload cache",
+                null
+        );
+        if (chunk != null) {
+            PayloadWatchTracer.traceLiveChunkState(
+                    chunk,
+                    ChunkTraceEventType.WATCH_CAPTURED,
+                    "unload-cache-live",
+                    SOURCE + "#putInUnloadCache",
+                    null,
+                    castBlockDelta(delta)
+            );
+        }
         if (tracePut) {
             traceTracker(
                     key,
@@ -602,6 +647,13 @@ public final class GlobalChunkTracker {
                 delta,
                 null
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ChunkDelta<net.minecraft.block.BlockState, net.minecraft.nbt.NbtCompound> castBlockDelta(
+            final ChunkDelta<?, ?> delta
+    ) {
+        return (ChunkDelta<net.minecraft.block.BlockState, net.minecraft.nbt.NbtCompound>) delta;
     }
 
     private static DimensionChunkKey keyOf(

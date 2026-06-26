@@ -118,6 +118,17 @@ public final class AsyncCisSaveManager {
                 liveDelta.isDirty(),
                 null
         );
+        PayloadWatchTracer.traceDeltaStage(
+                world.getRegistryKey().getValue().toString(),
+                pos,
+                snapshot,
+                operationId,
+                ChunkTraceEventType.WATCH_CAPTURED,
+                "save-queued",
+                SUBMIT_SOURCE,
+                "delta queued for async save",
+                null
+        );
 
         workerFor(world).submit(new PendingSave(storage, pos, cisPos, liveDelta, snapshot, generation, operationId));
     }

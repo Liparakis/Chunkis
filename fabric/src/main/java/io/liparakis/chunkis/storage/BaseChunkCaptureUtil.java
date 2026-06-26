@@ -8,6 +8,7 @@ import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -157,6 +158,25 @@ public final class BaseChunkCaptureUtil {
                 delta.isDirty(),
                 null
         );
+        PayloadWatchTracer.traceLiveChunkState(
+                chunk,
+                ChunkTraceEventType.WATCH_LIVE_CHUNK_STATE_BEFORE_BASE_CAPTURE,
+                "before-base-capture",
+                "BaseChunkCaptureUtil#captureBaseChunk",
+                null,
+                delta
+        );
+        PayloadWatchTracer.traceDeltaStage(
+                world.getRegistryKey().getValue().toString(),
+                chunk.getPos(),
+                delta,
+                null,
+                ChunkTraceEventType.WATCH_CAPTURED,
+                "base-capture-before-clear",
+                "BaseChunkCaptureUtil#captureBaseChunk",
+                "delta state before base capture clear",
+                null
+        );
 
         final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 CisNbtUtil.extractPersistedStructureMetadata(delta.getChunkMetadata()),
@@ -176,6 +196,17 @@ public final class BaseChunkCaptureUtil {
                 "base metadata attached"
         );
         delta.clearBlockPayloads(false);
+        PayloadWatchTracer.traceDeltaStage(
+                world.getRegistryKey().getValue().toString(),
+                chunk.getPos(),
+                delta,
+                null,
+                ChunkTraceEventType.WATCH_CAPTURED,
+                "base-capture-after-clear",
+                "BaseChunkCaptureUtil#captureBaseChunk",
+                "delta state after base capture clear",
+                null
+        );
         delta.setSuppressInitialRepopulation(true);
         traceLifecycle(
                 world,

@@ -1,6 +1,11 @@
 package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.Chunkis;
+import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.ChunkTraceStore;
+import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.PendingVanillaSaveDecision;
 import net.minecraft.nbt.NbtCompound;
@@ -18,12 +23,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
 
 /**
- * Observes vanilla region-file boundaries and records whether Chunkis claims or
- * bypasses them.
- *
- * <p>The older blanket-cancel behavior made passive load/save traffic look
- * Chunkis-owned. These hooks now trace the decision and otherwise leave vanilla
- * storage alone unless an upper layer already made an ownership decision.</p>
+ * Hard-stops vanilla MCA writes.
  */
 @Mixin(RegionBasedStorage.class)
 public class StoragePreventionMixin {
@@ -33,9 +33,6 @@ public class StoragePreventionMixin {
     @Unique
     private static final String SOURCE = "StoragePreventionMixin";
 
-    /**
-     * Records whether a vanilla chunk write was claimed by Chunkis or bypassed.
-     */
     @Inject(
             method = "write(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/NbtCompound;)V",
             at = @At("HEAD"),
@@ -45,28 +42,46 @@ public class StoragePreventionMixin {
             final NbtCompound nbt,
             final CallbackInfo ci) {
         final PendingVanillaSaveDecision.Snapshot snapshot = PendingVanillaSaveDecision.take(pos);
+        final ChunkTraceReason reason = snapshot != null
+                ? snapshot.reason()
+                : ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
         if (snapshot == null) {
             ChunkOwnershipTraceHelper.traceDecision(
                     null,
                     pos,
                     "BYPASSED",
-                    ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
+                    reason,
                     SOURCE + "#chunkis$blockWrite",
                     null,
                     null
             );
-            return;
+        } else {
+            ChunkOwnershipTraceHelper.traceDecision(
+                    null,
+                    pos,
+                    "BYPASSED",
+                    reason,
+                    SOURCE + "#chunkis$blockWrite",
+                    snapshot.delta(),
+                    null
+            );
         }
 
-        ChunkOwnershipTraceHelper.traceDecision(
-                null,
-                pos,
-                "BYPASSED",
-                snapshot.reason(),
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.VANILLA_SAVE_CANCELLED,
+                ChunkTraceSeverity.INFO,
+                reason,
                 SOURCE + "#chunkis$blockWrite",
-                snapshot.delta(),
+                "blocked vanilla MCA write",
+                null,
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                null,
+                null,
                 null
         );
+        ci.cancel();
     }
 
     /**
@@ -88,6 +103,7 @@ public class StoragePreventionMixin {
                 null,
                 null
         );
+        cir.setReturnValue(null);
     }
 
     /**
@@ -110,6 +126,7 @@ public class StoragePreventionMixin {
                 null,
                 null
         );
+        ci.cancel();
     }
 
     /**

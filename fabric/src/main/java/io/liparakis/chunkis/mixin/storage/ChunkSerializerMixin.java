@@ -291,6 +291,7 @@ public class ChunkSerializerMixin {
         chunkis$attachDeltaToChunk(
                 chunk,
                 delta,
+                world.getRegistryKey().getValue().toString(),
                 operationId,
                 resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE
         );
@@ -434,12 +435,20 @@ public class ChunkSerializerMixin {
     private static void chunkis$attachDeltaToChunk(
             final ProtoChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
+            final String worldId,
             final String operationId,
             final boolean restoreLoadedFromStorage) {
         if (chunk instanceof ChunkisDeltaDuck deltaDuck) {
             deltaDuck.chunkis$setDelta(delta);
             deltaDuck.chunkis$setRestoreOperationId(operationId);
             deltaDuck.chunkis$setRestoreLoadedFromStorage(restoreLoadedFromStorage);
+            PayloadWatchTracer.traceProtoDeltaAttached(
+                    worldId,
+                    chunk.getPos(),
+                    delta,
+                    operationId,
+                    SOURCE + "#chunkis$attachDeltaToChunk"
+            );
         }
     }
 

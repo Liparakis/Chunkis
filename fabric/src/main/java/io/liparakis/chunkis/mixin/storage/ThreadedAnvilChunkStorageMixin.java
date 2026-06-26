@@ -384,6 +384,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     null
             );
             PendingVanillaSaveDecision.put(pos, delta, ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED, SAVE_SOURCE);
+            cir.setReturnValue(Boolean.TRUE);
             return;
         }
         ChunkOwnershipTraceHelper.traceDecision(
@@ -393,6 +394,17 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceReason.valueOf(delta.getOwnershipReason()),
                 SAVE_SOURCE,
                 delta,
+                null
+        );
+        PayloadWatchTracer.traceDeltaStage(
+                world.getRegistryKey().getValue().toString(),
+                pos,
+                delta,
+                operationId,
+                ChunkTraceEventType.WATCH_CAPTURED,
+                "save-start",
+                SAVE_SOURCE,
+                "delta entered save transaction",
                 null
         );
 
