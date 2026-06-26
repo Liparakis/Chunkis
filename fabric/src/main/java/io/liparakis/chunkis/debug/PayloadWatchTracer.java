@@ -10,6 +10,7 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
@@ -506,14 +507,14 @@ public final class PayloadWatchTracer {
                     resolvedOperationId,
                     target,
                     summarizeExpectedAndActual(
-                        target,
-                        expectedState,
-                        actualState,
-                        null,
-                        chunk.getStatus(),
-                        "ChunkRestorer#restore",
-                        Thread.currentThread().getName(),
-                        chunk
+                            target,
+                            expectedState,
+                            actualState,
+                            null,
+                            chunk.getStatus(),
+                            "ChunkRestorer#restore",
+                            Thread.currentThread().getName(),
+                            chunk
                     ),
                     null
             );
@@ -522,7 +523,7 @@ public final class PayloadWatchTracer {
 
     public static void traceProtoDeltaAttached(
             final String worldId,
-            final ChunkPos chunkPos,
+            final Chunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
@@ -530,6 +531,7 @@ public final class PayloadWatchTracer {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
+        final ChunkPos chunkPos = chunk.getPos();
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
@@ -541,17 +543,27 @@ public final class PayloadWatchTracer {
             if (expectedState == null) {
                 continue;
             }
-            final WatchTraceState state = WATCH_TRACE_STATE.get(new WatchTraceKey(
+            final WatchTraceKey key = new WatchTraceKey(
                     worldId,
                     chunkPos.x,
                     chunkPos.z,
                     target.blockX(),
                     target.blockY(),
                     target.blockZ()
-            ));
+            );
+            final WatchTraceState state = WATCH_TRACE_STATE.get(key);
             if (state != null && operationId.equals(state.operationId)) {
                 state.protoAttachedSeen = true;
             }
+            traceChunkIdentityAndStatus(
+                    worldId,
+                    chunkPos,
+                    target,
+                    operationId,
+                    "proto-attach",
+                    source,
+                    chunk
+            );
             traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_ATTACHED,
                     "proto-attach",
@@ -562,11 +574,224 @@ public final class PayloadWatchTracer {
                     operationId,
                     target,
                     "expectedState=" + expectedState
-                            + " chunkStatus=PROTO_CHUNK"
+                            + " chunkStatus=" + chunk.getStatus()
                             + " source=" + source
                             + " thread=" + Thread.currentThread().getName(),
                     null
             );
+        }
+    }
+
+    public static void traceProtoDeltaPresentBeforeConversion(
+            final String worldId,
+            final Chunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId,
+            final String source
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
+            return;
+        }
+        final ChunkPos chunkPos = chunk.getPos();
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
+                worldId,
+                new DebugChunkKey(chunkPos.x, chunkPos.z)
+        )) {
+            if (target.type() != PayloadWatchType.BLOCK) {
+                continue;
+            }
+            final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
+            if (expectedState == null) {
+                continue;
+            }
+            traceChunkIdentityAndStatus(
+                    worldId,
+                    chunkPos,
+                    target,
+                    operationId,
+                    "conversion-before",
+                    source,
+                    chunk
+            );
+            traceWatch(
+                    ChunkTraceEventType.WATCH_PROTO_DELTA_PRESENT_BEFORE_CONVERSION,
+                    "conversion-before",
+                    source,
+                    "watched payload delta present on proto chunk before conversion",
+                    worldId,
+                    chunkPos,
+                    operationId,
+                    target,
+                    "expectedState=" + expectedState
+                            + " chunkStatus=" + chunk.getStatus()
+                            + " source=" + source
+                            + " thread=" + Thread.currentThread().getName(),
+                    null
+            );
+        }
+    }
+
+    public static void traceProtoDeltaPresentAfterConversion(
+            final String worldId,
+            final Chunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId,
+            final String source
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
+            return;
+        }
+        final ChunkPos chunkPos = chunk.getPos();
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
+                worldId,
+                new DebugChunkKey(chunkPos.x, chunkPos.z)
+        )) {
+            if (target.type() != PayloadWatchType.BLOCK) {
+                continue;
+            }
+            final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
+            if (expectedState == null) {
+                continue;
+            }
+            traceChunkIdentityAndStatus(
+                    worldId,
+                    chunkPos,
+                    target,
+                    operationId,
+                    "conversion-after",
+                    source,
+                    chunk
+            );
+            traceWatch(
+                    ChunkTraceEventType.WATCH_PROTO_DELTA_PRESENT_AFTER_CONVERSION,
+                    "conversion-after",
+                    source,
+                    "watched payload delta present on proto chunk after conversion",
+                    worldId,
+                    chunkPos,
+                    operationId,
+                    target,
+                    "expectedState=" + expectedState
+                            + " chunkStatus=" + chunk.getStatus()
+                            + " source=" + source
+                            + " thread=" + Thread.currentThread().getName(),
+                    null
+            );
+        }
+    }
+
+    public static void traceWorldChunkDeltaAttached(
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId,
+            final String source
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
+            return;
+        }
+        final String worldId = worldId(chunk);
+        final ChunkPos chunkPos = chunk.getPos();
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
+                worldId,
+                new DebugChunkKey(chunkPos.x, chunkPos.z)
+        )) {
+            if (target.type() != PayloadWatchType.BLOCK) {
+                continue;
+            }
+            final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
+            if (expectedState == null) {
+                continue;
+            }
+            traceChunkIdentityAndStatus(
+                    worldId,
+                    chunkPos,
+                    target,
+                    operationId,
+                    "worldchunk-attach",
+                    source,
+                    chunk
+            );
+            traceWatch(
+                    ChunkTraceEventType.WATCH_WORLDCHUNK_DELTA_ATTACHED,
+                    "worldchunk-attach",
+                    source,
+                    "watched payload delta attached to WorldChunk",
+                    worldId,
+                    chunkPos,
+                    operationId,
+                    target,
+                    "expectedState=" + expectedState
+                            + " chunkStatus=" + chunk.getStatus()
+                            + " source=" + source
+                            + " thread=" + Thread.currentThread().getName(),
+                    null
+            );
+        }
+    }
+
+    public static void traceWorldChunkDeltaMissing(
+            final WorldChunk chunk,
+            final String operationId,
+            final String source
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
+            return;
+        }
+        final String worldId = worldId(chunk);
+        final ChunkPos chunkPos = chunk.getPos();
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
+                worldId,
+                new DebugChunkKey(chunkPos.x, chunkPos.z)
+        )) {
+            if (target.type() != PayloadWatchType.BLOCK) {
+                continue;
+            }
+            traceChunkIdentityAndStatus(
+                    worldId,
+                    chunkPos,
+                    target,
+                    operationId,
+                    "worldchunk-missing",
+                    source,
+                    chunk
+            );
+            traceWatch(
+                    ChunkTraceEventType.WATCH_WORLDCHUNK_DELTA_MISSING,
+                    "worldchunk-missing",
+                    source,
+                    "watched payload delta missing from WorldChunk",
+                    worldId,
+                    chunkPos,
+                    operationId,
+                    target,
+                    "chunkStatus=" + chunk.getStatus()
+                            + " source=" + source
+                            + " thread=" + Thread.currentThread().getName(),
+                    null
+            );
+        }
+    }
+
+    public static void checkUnrestoredAssertions() {
+        for (final java.util.Map.Entry<WatchTraceKey, WatchTraceState> entry : WATCH_TRACE_STATE.entrySet()) {
+            final WatchTraceState state = entry.getValue();
+            if (state.protoAttachedSeen && !state.restoreDecisionSeen && !state.decodedPayloadNotAppliedAsserted) {
+                state.decodedPayloadNotAppliedAsserted = true;
+                ChunkTraceStore.trace(
+                        ChunkisDebugDomain.ASSERTIONS,
+                        ChunkTraceEventType.ASSERTION_FAILED,
+                        ChunkTraceSeverity.ERROR,
+                        ChunkTraceReason.PROTO_DELTA_NOT_RESTORED,
+                        "PayloadWatchTracer#checkUnrestoredAssertions",
+                        "watched payload was attached to proto chunk but never reached restore (no restore decision)",
+                        entry.getKey().worldId,
+                        new DebugChunkKey(entry.getKey().chunkX, entry.getKey().chunkZ),
+                        null,
+                        state.operationId,
+                        null,
+                        null
+                );
+            }
         }
     }
 
@@ -710,7 +935,8 @@ public final class PayloadWatchTracer {
                 null
         );
         final String worldId = worldId(chunk);
-        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedBlock(worldId, pos.getX(), pos.getY(), pos.getZ());
+        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedBlock(worldId, pos.getX(), pos.getY(),
+                pos.getZ());
         if (target == null || expectedState == null || Objects.equals(chunk.getBlockState(pos), expectedState)) {
             return;
         }
@@ -1164,7 +1390,7 @@ public final class PayloadWatchTracer {
             final int chunkStartZ,
             final String worldId
     ) {
-        final boolean[] found = {false};
+        final boolean[] found = { false };
 
         if (target.type() == PayloadWatchType.BLOCK) {
             delta.forEachBlock((x, y, z, state) -> {
@@ -1210,7 +1436,7 @@ public final class PayloadWatchTracer {
             final ChunkPos chunkPos,
             final String worldId
     ) {
-        final BlockState[] found = {null};
+        final BlockState[] found = { null };
         delta.forEachBlock((x, y, z, state) -> {
             if (found[0] != null) {
                 return;
@@ -1298,9 +1524,9 @@ public final class PayloadWatchTracer {
             @Nullable final WorldChunk chunk
     ) {
         return "pos=" + target.blockX() + ',' + target.blockY() + ',' + target.blockZ()
-                + " expectedState=" + String.valueOf(expectedState)
-                + " actualServerState=" + String.valueOf(actualServerState)
-                + " actualClientState=" + String.valueOf(actualClientState)
+                + " expectedState=" + expectedState
+                + " actualServerState=" + actualServerState
+                + " actualClientState=" + actualClientState
                 + " chunkInstanceId=" + chunkInstanceId(chunk)
                 + " chunkStatus=" + chunkStatus
                 + " source=" + source
@@ -1382,7 +1608,8 @@ public final class PayloadWatchTracer {
                         ChunkTraceSeverity.ERROR,
                         ChunkTraceReason.DECODED_PAYLOAD_NOT_CONSUMED_BY_WORLD_CONSTRUCTOR,
                         "PayloadWatchTracer#registerDecodedWatchTargets",
-                        "decoded watched payload was attached to proto chunk but never consumed by world chunk constructor",
+                        "decoded watched payload was attached to proto chunk but never consumed by world chunk " +
+                                "constructor",
                         worldId,
                         new DebugChunkKey(chunkPos.x, chunkPos.z),
                         null,
@@ -1570,7 +1797,7 @@ public final class PayloadWatchTracer {
             @Nullable final String operationId,
             final String stage,
             final String source,
-            @Nullable final WorldChunk chunk
+            @Nullable final Chunk chunk
     ) {
         final String chunkInstanceId = chunkInstanceId(chunk);
         final String chunkStatus = chunk != null ? String.valueOf(chunk.getStatus()) : "UNAVAILABLE";
@@ -1620,7 +1847,8 @@ public final class PayloadWatchTracer {
             return;
         }
         final String worldId = worldId(chunk);
-        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedBlock(worldId, pos.getX(), pos.getY(), pos.getZ());
+        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedBlock(worldId, pos.getX(), pos.getY(),
+                pos.getZ());
         if (target == null) {
             return;
         }
@@ -1806,7 +2034,7 @@ public final class PayloadWatchTracer {
         return chunk.getWorld().getRegistryKey().getValue().toString();
     }
 
-    private static String chunkInstanceId(@Nullable final WorldChunk chunk) {
+    private static String chunkInstanceId(@Nullable final Chunk chunk) {
         return chunk != null
                 ? chunk.getClass().getSimpleName() + '@' + Integer.toHexString(System.identityHashCode(chunk))
                 : "UNAVAILABLE";

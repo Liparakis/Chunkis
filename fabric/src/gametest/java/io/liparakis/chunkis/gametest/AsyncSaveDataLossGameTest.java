@@ -7,6 +7,8 @@ import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.debug.PayloadWatchTarget;
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
 import io.liparakis.chunkis.storage.CisNbtUtil;
@@ -52,8 +54,14 @@ public final class AsyncSaveDataLossGameTest {
         ChunkTraceStore.clear();
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
-        final ServerWorld world = context.getWorld();
         final ChunkTargets targets = createTargets(context);
+        final ServerWorld world = context.getWorld();
+
+        ChunkTraceWatchpoints.clear();
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.nearPrimary().getX(), targets.nearPrimary().getY(), targets.nearPrimary().getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.nearSecondary().getX(), targets.nearSecondary().getY(), targets.nearSecondary().getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.farPrimary().getX(), targets.farPrimary().getY(), targets.farPrimary().getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.farSecondary().getX(), targets.farSecondary().getY(), targets.farSecondary().getZ()));
 
         forceAndLoad(world, targets.nearChunk());
         forceAndLoad(world, targets.farChunk());
@@ -89,6 +97,7 @@ public final class AsyncSaveDataLossGameTest {
 
             context.runAtTick(
                     teleportTick + 1L, () -> {
+                        world.getChunk(destination.x, destination.z);
                         context.assertTrue(
                                 isMarkerPatternPresent(world, destinationPrimary, destinationSecondary),
                                 Text.literal("Lost edited blocks after round trip " + roundTrip

@@ -71,19 +71,35 @@ public final class CisFixtureMigrationGameTest {
     @SuppressWarnings("unused")
     @GameTest(maxTicks = 400)
     public void migratesV8FixturesWithoutChangingLogicalChunkContents(final TestContext context) throws IOException {
+        io.liparakis.chunkis.debug.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.ChunkisDebugLevel.LIFECYCLE);
         final ServerWorld world = context.getWorld();
-        final Path storageRoot = Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT).resolve("chunkis");
+        final Path storageRoot = Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT).resolve("chunkis_migration_test");
         final Path regionsDir = storageRoot.resolve("regions");
 
-        FabricCisStorageHelper.closeStorage(world);
         deleteRecursively(storageRoot);
         copyFixtures(storageRoot, regionsDir);
 
         final List<CisChunkPos> populatedChunks = collectPopulatedChunks(regionsDir);
         context.assertTrue(!populatedChunks.isEmpty(), Text.literal("Expected at least one populated V8 fixture chunk."));
 
+        final Path mappingFile = storageRoot.resolve("global_ids.json");
+        final io.liparakis.chunkis.storage.mapping.PropertyPacker<Block, BlockState, Property<?>> packer =
+                new io.liparakis.chunkis.storage.mapping.PropertyPacker<>(new io.liparakis.chunkis.adapter.FabricBlockStateAdapter());
+        final io.liparakis.chunkis.storage.mapping.CisMapping<Block, BlockState, Property<?>> mapping =
+                new io.liparakis.chunkis.storage.mapping.CisMapping<>(
+                        mappingFile,
+                        new io.liparakis.chunkis.adapter.FabricBlockRegistryAdapter(),
+                        new io.liparakis.chunkis.adapter.FabricBlockStateAdapter(),
+                        packer
+                );
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
-                FabricCisStorageHelper.getStorage(world);
+                new CisStorage<>(
+                        regionsDir,
+                        mapping,
+                        new io.liparakis.chunkis.adapter.FabricBlockStateAdapter(),
+                        new io.liparakis.chunkis.adapter.FabricNbtAdapter(),
+                        net.minecraft.block.Blocks.AIR.getDefaultState()
+                );
 
         try {
             final Map<CisChunkPos, ChunkSnapshot> before =
@@ -109,7 +125,9 @@ public final class CisFixtureMigrationGameTest {
                     Text.literal("Migrated chunk contents did not match the original fixture snapshot."));
             context.complete();
         } finally {
-            FabricCisStorageHelper.closeStorage(world);
+            io.liparakis.chunkis.debug.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.ChunkisDebugLevel.OFF);
+            storage.close();
+            deleteRecursively(storageRoot);
         }
     }
 

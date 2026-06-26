@@ -10,6 +10,7 @@ Chunkis must load chunk data without vanilla `.mca` storage, yet still reuse van
 - Build synthetic load NBT rooted in Chunkis data.
 - Resolve whether the source is tracker memory, storage, or neither.
 - Attach decoded deltas to proto chunks.
+- Handle both normal proto promotion and already-live wrapped proto chunks.
 - Restore data into live `WorldChunk` instances.
 - Keep portal-related auxiliary state aligned after restore.
 
@@ -39,9 +40,12 @@ flowchart TD
     D --> E
     E --> F["Vanilla deserializes to SerializedChunk/ProtoChunk"]
     F --> G["ChunkSerializerMixin attaches ChunkDelta"]
-    G --> H["WorldChunk promotion"]
-    H --> I["ChunkRestorer replays data"]
-    I --> J["Portal POI + portal index resync"]
+    G --> H{"Wrapped live chunk already exists?"}
+    H -->|yes| I["Restore directly into wrapped WorldChunk"]
+    H -->|no| J["WorldChunk promotion"]
+    J --> K["Restore from constructor path"]
+    I --> L["Portal POI + portal index resync"]
+    K --> L
 ```
 
 ## Source selection
@@ -76,9 +80,14 @@ It attaches the resolved `ChunkDelta` through `ChunkisDeltaDuck` and then:
 - keeps the persisted base baseline if base chunk NBT existed
 - otherwise resets the proto status to `ChunkStatus.EMPTY` so terrain will regenerate before sparse replay
 
+If the returned proto is a full `WrapperProtoChunk` that already wraps a live `WorldChunk`, Chunkis now restores immediately into that wrapped chunk instead of waiting for a later `WorldChunk(ProtoChunk, ...)` constructor path that may never run for that load.
+
 ## Restore stage
 
-`WorldChunkMixin` triggers restore when a `WorldChunk` is constructed from a `ProtoChunk`.
+There are now two valid restore entry points:
+
+- `ChunkSerializerMixin` restores immediately when decode lands on a wrapped full proto chunk that already owns a live `WorldChunk`
+- `WorldChunkMixin` restores when a `WorldChunk` is constructed from a `ProtoChunk`
 
 `ChunkRestorer` then:
 
@@ -116,6 +125,7 @@ Those are intentionally outside core sparse replay, so failures there are traced
 
 - storage decode or decompression failure causing an entry clear
 - restore skipped because a block-entity-only sparse payload had no base snapshot
+- decoded payload attached to a proto chunk but never crossed into a live world chunk
 - restore succeeds but portal follow-up fails later
 - clean unload-cache delta being mistakenly treated as authoritative until invalidated
 

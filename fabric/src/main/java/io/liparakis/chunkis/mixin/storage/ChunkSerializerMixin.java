@@ -17,6 +17,7 @@ import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
+import io.liparakis.chunkis.world.ChunkRestorer;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
@@ -26,6 +27,7 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.ProtoChunk;
 import net.minecraft.world.chunk.SerializedChunk;
+import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.poi.PointOfInterestStorage;
 import net.minecraft.world.storage.StorageKey;
 import org.spongepowered.asm.mixin.Mixin;
@@ -37,6 +39,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.lang.reflect.Method;
 
 /**
  * Intercepts {@link SerializedChunk#convert} to attach Chunkis delta data to
@@ -295,6 +298,23 @@ public class ChunkSerializerMixin {
                 operationId,
                 resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE
         );
+        if (chunkis$restoreWrappedFullChunk(world, chunk, delta, operationId, resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE)) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.LOAD_TX_END,
+                    ChunkTraceSeverity.INFO,
+                    resolved.reason(),
+                    SOURCE + "#chunkis$restoreChunkDelta",
+                    "attached delta to wrapped live chunk and restored immediately",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(pos.x, pos.z),
+                    null,
+                    operationId,
+                    delta.isDirty(),
+                    null
+            );
+            return;
+        }
         if (!hasPersistedBaseChunk) {
             if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
                 ChunkTraceStore.trace(
@@ -444,11 +464,87 @@ public class ChunkSerializerMixin {
             deltaDuck.chunkis$setRestoreLoadedFromStorage(restoreLoadedFromStorage);
             PayloadWatchTracer.traceProtoDeltaAttached(
                     worldId,
-                    chunk.getPos(),
+                    chunk,
                     delta,
                     operationId,
                     SOURCE + "#chunkis$attachDeltaToChunk"
             );
+        }
+    }
+
+    @Unique
+    @SuppressWarnings("unchecked")
+    private static boolean chunkis$restoreWrappedFullChunk(
+            final ServerWorld world,
+            final ProtoChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> protoDelta,
+            final String operationId,
+            final boolean restoreLoadedFromStorage
+    ) {
+        final WorldChunk wrappedChunk = chunkis$resolveWrappedWorldChunk(chunk);
+        if (wrappedChunk == null) {
+            return false;
+        }
+
+        final ChunkDelta<BlockState, NbtCompound> runtimeDelta;
+        final ChunkisDeltaDuck wrappedDuck = (ChunkisDeltaDuck) wrappedChunk;
+        final ChunkDelta<?, ?> existingDelta = wrappedDuck.chunkis$getDelta();
+        if (existingDelta instanceof ChunkDelta<?, ?> typedExisting) {
+            runtimeDelta = (ChunkDelta<BlockState, NbtCompound>) typedExisting;
+        } else {
+            runtimeDelta = new ChunkDelta<>(BlockState::isAir);
+            wrappedDuck.chunkis$setDelta(runtimeDelta);
+        }
+
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(runtimeDelta)) {
+            ChunkOwnershipTraceHelper.claimOwnership(
+                    runtimeDelta,
+                    ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+                    SOURCE + "#chunkis$restoreWrappedFullChunk"
+            );
+        }
+
+        wrappedDuck.chunkis$setRestoreOperationId(operationId);
+        wrappedDuck.chunkis$setRestoreLoadedFromStorage(restoreLoadedFromStorage);
+        runtimeDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());
+        runtimeDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
+        PayloadWatchTracer.traceWorldChunkDeltaAttached(
+                wrappedChunk,
+                runtimeDelta,
+                operationId,
+                SOURCE + "#chunkis$restoreWrappedFullChunk"
+        );
+        ChunkRestorer.restore(world, wrappedChunk, protoDelta, runtimeDelta, operationId);
+        PayloadWatchTracer.traceLiveChunkState(
+                wrappedChunk,
+                ChunkTraceEventType.WATCH_PRESENT_AFTER_RESTORE,
+                "restore-live",
+                SOURCE + "#chunkis$restoreWrappedFullChunk",
+                operationId,
+                protoDelta
+        );
+        PayloadWatchTracer.traceLiveChunkState(
+                wrappedChunk,
+                ChunkTraceEventType.WATCH_LIVE_CHUNK_STATE_AFTER_RESTORE,
+                "after-restore-live-chunk",
+                SOURCE + "#chunkis$restoreWrappedFullChunk",
+                operationId,
+                protoDelta
+        );
+        if (restoreLoadedFromStorage || !protoDelta.isDirty()) {
+            protoDelta.markSaved();
+        }
+        return true;
+    }
+
+    @Unique
+    private static WorldChunk chunkis$resolveWrappedWorldChunk(final ProtoChunk chunk) {
+        try {
+            final Method method = chunk.getClass().getMethod("getWrappedChunk");
+            final Object wrapped = method.invoke(chunk);
+            return wrapped instanceof WorldChunk worldChunk ? worldChunk : null;
+        } catch (final ReflectiveOperationException ignored) {
+            return null;
         }
     }
 

@@ -3,10 +3,13 @@ package io.liparakis.chunkis.mixin.world;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
+import net.minecraft.block.BlockState;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Mixin;
@@ -56,6 +59,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     @Override
     public void chunkis$setDelta(final ChunkDelta<?, ?> delta) {
         this.chunkis$delta = Objects.requireNonNull(delta, "ChunkDelta cannot be null");
+        chunkis$traceWorldChunkDeltaAttachment();
     }
 
     @Override
@@ -66,6 +70,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     @Override
     public void chunkis$setRestoreOperationId(final String operationId) {
         this.chunkis$restoreOperationId = operationId;
+        chunkis$traceWorldChunkDeltaAttachment();
     }
 
     @Override
@@ -105,9 +110,8 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
                 && guardDuck.chunkis$getMutationTrackingScope().currentCause() != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
-        if ((Object) this instanceof WorldChunk worldChunk
-                && PendingChunkMutationSuppression.currentCause(worldChunk) != ChunkMutationTrackingScope.Cause.NONE) {
-            return;
+        if ((Object) this instanceof WorldChunk worldChunk) {
+            PendingChunkMutationSuppression.currentCause(worldChunk);
         }
         if (this.chunkis$delta == null) {
             return;
@@ -151,6 +155,23 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
         if ((Object) this instanceof WorldChunk worldChunk) {
             GlobalChunkTracker.markDirty(worldChunk);
         }
+    }
+
+    @Unique
+    @SuppressWarnings("unchecked")
+    private void chunkis$traceWorldChunkDeltaAttachment() {
+        if (!((Object) this instanceof WorldChunk worldChunk)) {
+            return;
+        }
+        if (chunkis$restoreOperationId == null || chunkis$delta == null) {
+            return;
+        }
+        PayloadWatchTracer.traceWorldChunkDeltaAttached(
+                worldChunk,
+                (ChunkDelta<BlockState, NbtCompound>) chunkis$delta,
+                chunkis$restoreOperationId,
+                "CommonChunkMixin#chunkis$traceWorldChunkDeltaAttachment"
+        );
     }
 }
 

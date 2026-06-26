@@ -362,32 +362,15 @@ class CisStorageMigratorTest {
         }
 
         private static byte[] inflate(final byte[] compressed) throws Exception {
-            final Inflater inflater = new Inflater();
-            inflater.setInput(compressed);
-
-            final byte[] buffer = new byte[IO_BUFFER_SIZE];
-            final ByteArrayOutputStream output = new ByteArrayOutputStream();
-            while (!inflater.finished()) {
-                final int read = inflater.inflate(buffer);
-                if (read == 0 && inflater.needsInput()) {
-                    break;
-                }
-                output.write(buffer, 0, read);
+            final long decompressedSize = com.github.luben.zstd.Zstd.decompressedSize(compressed);
+            if (com.github.luben.zstd.Zstd.isError(decompressedSize)) {
+                throw new IOException("Failed to read Zstd size: " + com.github.luben.zstd.Zstd.getErrorName(decompressedSize));
             }
-            return output.toByteArray();
+            return com.github.luben.zstd.Zstd.decompress(compressed, (int) decompressedSize);
         }
 
         private static byte[] deflate(final byte[] raw) {
-            final Deflater deflater = new Deflater(1);
-            deflater.setInput(raw);
-            deflater.finish();
-
-            final byte[] buffer = new byte[IO_BUFFER_SIZE];
-            final ByteArrayOutputStream output = new ByteArrayOutputStream();
-            while (!deflater.finished()) {
-                output.write(buffer, 0, deflater.deflate(buffer));
-            }
-            return output.toByteArray();
+            return com.github.luben.zstd.Zstd.compress(raw, 3);
         }
 
         private static int readInt(final byte[] data, final int offset) {

@@ -7,6 +7,8 @@ import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.debug.PayloadWatchTarget;
 import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
@@ -42,12 +44,19 @@ public final class PersistedBaseChunkReloadGameTest {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
         final ServerWorld world = context.getWorld();
-        final ChunkPos targetChunk = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
+        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
+        // Move 10,000 blocks away to ensure it's not kept loaded by the gametest structure
+        final ChunkPos targetChunk = new ChunkPos(new ChunkPos(anchor).x + 600, new ChunkPos(anchor).z + 600);
         final BlockPos targetArrival = targetChunk.getBlockPos(8, 100, 8);
         final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
         final BlockPos primary = targetChunk.getBlockPos(8, 64, 8);
         final BlockPos secondary = targetChunk.getBlockPos(9, 64, 8);
         final BlockPos chestPos = targetChunk.getBlockPos(10, 64, 8);
+
+        ChunkTraceWatchpoints.clear();
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", primary.getX(), primary.getY(), primary.getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", secondary.getX(), secondary.getY(), secondary.getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", chestPos.getX(), chestPos.getY(), chestPos.getZ()));
 
         world.setChunkForced(targetChunk.x, targetChunk.z, true);
         final WorldChunk chunk = world.getChunk(targetChunk.x, targetChunk.z);

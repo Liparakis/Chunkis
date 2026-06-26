@@ -343,6 +343,15 @@ public final class ChunkTraceStore {
                     "delta marked clean before confirmed flush"
             )
                     : null;
+            case TRACKER_STATE_UPDATED -> event.reason() == ChunkTraceReason.TRACKER_CHUNK_UNLOADED
+                    && Boolean.TRUE.equals(event.dirtyState())
+                    && !hadQueuedOrFlushedSinceDirty(event.chunkKey(), event.eventId())
+                    ? new Suspicion(
+                    ChunkTraceReason.TRACKER_CHUNK_UNLOADED,
+                    ChunkTraceSeverity.ERROR,
+                    "dirty chunk unloaded without queued or flushed save evidence"
+            )
+                    : null;
             default -> null;
         };
     }
@@ -362,6 +371,41 @@ public final class ChunkTraceStore {
             }
         }
         return false;
+    }
+
+    private static boolean hadQueuedOrFlushedSinceDirty(final DebugChunkKey chunkKey, final long beforeEventId) {
+        boolean dirtyWindowOpen = false;
+        boolean queuedOrFlushed = false;
+
+        synchronized (MONITOR) {
+            for (int i = size - 1; i >= 0; i--) {
+                final int index = (writeIndex - 1 - i + capacity) % capacity;
+                final ChunkTraceEvent event = ring[index];
+                if (event == null || event.eventId() >= beforeEventId || !chunkKey.equals(event.chunkKey())) {
+                    continue;
+                }
+
+                if (event.eventType() == ChunkTraceEventType.DELTA_MARKED_DIRTY
+                        || (event.eventType() == ChunkTraceEventType.TRACKER_STATE_UPDATED
+                        && event.reason() == ChunkTraceReason.TRACKER_DIRTY_MAP_PUT)) {
+                    dirtyWindowOpen = true;
+                    queuedOrFlushed = false;
+                    continue;
+                }
+
+                if (!dirtyWindowOpen) {
+                    continue;
+                }
+
+                if (event.eventType() == ChunkTraceEventType.SAVE_QUEUED
+                        || event.eventType() == ChunkTraceEventType.REGION_WRITE_TX_END
+                        || event.eventType() == ChunkTraceEventType.SAVE_FLUSH_COMPLETED) {
+                    queuedOrFlushed = true;
+                }
+            }
+        }
+
+        return queuedOrFlushed;
     }
 
     private static boolean hasConfirmedFlush(

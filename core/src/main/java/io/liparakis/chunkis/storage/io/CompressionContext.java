@@ -32,6 +32,26 @@ final class CompressionContext {
      * @throws IOException if decompression fails
      */
     byte[] decompress(byte[] data) throws IOException {
+        if (data.length > 0 && data[0] == 0x78) {
+            try {
+                final java.util.zip.Inflater inflater = new java.util.zip.Inflater();
+                inflater.setInput(data);
+                final byte[] buffer = new byte[8192];
+                final java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+                while (!inflater.finished()) {
+                    final int read = inflater.inflate(buffer);
+                    if (read == 0 && inflater.needsInput()) {
+                        break;
+                    }
+                    output.write(buffer, 0, read);
+                }
+                inflater.end();
+                return output.toByteArray();
+            } catch (final Exception e) {
+                throw new IOException("Failed to decompress CIS legacy Zlib payload", e);
+            }
+        }
+
         final long decompressedSize = Zstd.decompressedSize(data);
         if (Zstd.isError(decompressedSize)) {
             throw new IOException("Failed to read CIS Zstd size: " + Zstd.getErrorName(decompressedSize));

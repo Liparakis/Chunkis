@@ -6,7 +6,11 @@
   "environment": "*",
   "entrypoints": {
     "fabric-gametest": [
-      "io.liparakis.chunkis.gametest.CisFixtureMigrationGameTest"
+      "io.liparakis.chunkis.gametest.AsyncSaveDataLossGameTest",
+      "io.liparakis.chunkis.gametest.CisFixtureMigrationGameTest",
+      "io.liparakis.chunkis.gametest.LegacyEntityStorageHandoffGameTest",
+      "io.liparakis.chunkis.gametest.PersistedBaseChunkReloadGameTest",
+      "io.liparakis.chunkis.gametest.StructureMetadataExtractorGameTest"
     ]
   },
   "depends": {

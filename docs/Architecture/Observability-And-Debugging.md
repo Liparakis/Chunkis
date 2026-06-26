@@ -11,7 +11,7 @@ Chunk persistence bugs are usually timeline bugs: a chunk was mutated, queued, u
 - Surface high-value invariant failures as explicit assertion events.
 - Promote suspicious chunks into retained suspect snapshots.
 - Expose debug, watchpoint, export, and durability commands.
-- Follow one watched payload through the persistence pipeline.
+- Follow one watched payload through decode, proto attach, live restore, and client visibility.
 
 ## What it does not do
 
@@ -40,6 +40,7 @@ The event model is built around boundaries that matter when persistence goes wro
 - load started / source resolved / ended
 - region read/write
 - restore started / completed / failed
+- proto attach / world-chunk attach / restore-apply boundaries
 - tracker state transitions
 - client sync boundaries
 - assertion failures
@@ -54,6 +55,14 @@ The event model is built around boundaries that matter when persistence goes wro
 - `DELTA_MARKED_CLEAN` must report `dirtyState=false`
 
 That is intentionally narrower than full causal proof.
+
+Payload Watch adds a second layer on top of that chunk timeline: it can now prove the difference between:
+
+- payload exists in decoded storage data
+- payload is only attached to a proto chunk
+- payload reached a live `WorldChunk`
+- payload was applied and later overwritten
+- payload is correct on the server but not on the client
 
 ## Suspect model
 
@@ -95,6 +104,15 @@ The usual order is:
 4. correlate save request, vanilla cancellation, queue/flush, load source, and restore result
 5. check pending-save and deferred-base-capture snapshots for watched chunks
 
+For watched payloads, ask these in order:
+
+1. did `WATCH_DECODED` prove the payload exists in the decoded delta?
+2. did `WATCH_PROTO_DELTA_ATTACHED` prove the payload reached the proto chunk?
+3. did `WATCH_WORLDCHUNK_DELTA_ATTACHED` or `WATCH_WORLD_CHUNK_CONSTRUCTOR_CONSUMED` prove the payload reached a live chunk handoff?
+4. did `WATCH_RESTORE_APPLIED` prove live replay?
+5. did `WATCH_OVERWRITTEN_AFTER_RESTORE` prove a later overwrite?
+6. did client-send or client-visible events diverge from server state?
+
 ## Invariants
 
 - Debug off means most event construction is skipped, not merely hidden.
@@ -117,6 +135,7 @@ The usual order is:
 - assuming a clean delta implies a confirmed flush without the matching operation id
 - missing unload-cache or deferred-base-capture state while debugging durability
 - watching the chunk when the bug is really payload-local; use a payload watch first
+- treating `WATCH_DECODED` as proof of live-world restore; it only proves decoded-delta contents
 
 ## See also
 

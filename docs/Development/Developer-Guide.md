@@ -31,7 +31,7 @@ If you miss that, you will patch the wrong layer.
 3. `GlobalChunkTracker` tracks dirty and recently unloaded deltas.
 4. `ThreadedAnvilChunkStorageMixin` intercepts save/load.
 5. Save path captures an authoritative snapshot, encodes it, compresses it, and writes to CIS storage.
-6. Load path builds synthetic NBT, attaches a decoded delta to a proto chunk, and restores into the promoted world chunk.
+6. Load path builds synthetic NBT, attaches a decoded delta to a proto chunk, and restores either through direct wrapped-live-chunk handoff or through promoted-world-chunk construction.
 
 ## How to debug
 
@@ -88,8 +88,9 @@ Ask these in order:
 4. Was async save queued and flushed for the same generation?
 5. Did storage decode succeed on the next load?
 6. Was the source memory, storage, or neither?
-7. Did restore apply meaningful data?
-8. Did post-restore follow-up fail?
+7. Did decoded payload reach only proto state, or did it cross into a live `WorldChunk`?
+8. Did restore apply meaningful data?
+9. Did post-restore follow-up fail?
 
 That sequence is usually more useful than staring at the codec first.
 

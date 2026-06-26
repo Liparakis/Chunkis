@@ -8,7 +8,7 @@ Chunk-level traces answer "what happened to this chunk?" but persistence regress
 - why was this block never restored?
 - why did this villager vanish?
 
-Payload Watch extends the existing observability pipeline so one watched block, block entity, or entity can be followed across capture, encode, storage, decode, and restore.
+Payload Watch extends the existing observability pipeline so one watched block, block entity, or entity can be followed across capture, encode, storage, decode, proto attach, live restore, and post-restore visibility.
 
 ## Responsibilities
 
@@ -50,8 +50,28 @@ Primary event types:
 - `WATCH_STORAGE_WRITE`
 - `WATCH_STORAGE_READ`
 - `WATCH_DECODED`
+- `WATCH_DECODED_DELTA_STATE`
+- `WATCH_PROTO_DELTA_ATTACHED`
+- `WATCH_PROTO_DELTA_PRESENT_BEFORE_CONVERSION`
+- `WATCH_PROTO_DELTA_PRESENT_AFTER_CONVERSION`
+- `WATCH_WORLDCHUNK_DELTA_ATTACHED`
+- `WATCH_WORLDCHUNK_DELTA_MISSING`
+- `WATCH_WORLD_CHUNK_CONSTRUCTOR_CONSUMED`
 - `WATCH_RESTORE_STARTED`
-- `WATCH_RESTORED`
+- `WATCH_RESTORE_INSTRUCTION_VISITED`
+- `WATCH_RESTORE_APPLY_ATTEMPT`
+- `WATCH_RESTORE_SETBLOCK_RETURNED`
+- `WATCH_RESTORE_STATE_AFTER_SETBLOCK`
+- `WATCH_RESTORE_APPLIED`
+- `WATCH_RESTORE_APPLY_FAILED`
+- `WATCH_RESTORE_SKIPPED`
+- `WATCH_PRESENT_AFTER_RESTORE`
+- `WATCH_PRESENT_AFTER_CHUNK_FULL`
+- `WATCH_PRESENT_BEFORE_CLIENT_SEND`
+- `WATCH_PRESENT_AFTER_CLIENT_SEND`
+- `WATCH_CLIENT_SEES_EXPECTED_STATE`
+- `WATCH_OVERWRITTEN_AFTER_RESTORE`
+- `WATCH_TRACE_INCOMPLETE`
 - `WATCH_FAILED`
 - `WATCH_SKIPPED`
 
@@ -68,8 +88,15 @@ Primary event types:
 
 1. storage read
 2. delta decode
-3. restore start
-4. live-world restore
+3. decoded-delta inspection
+4. proto attach
+5. world-chunk attach or constructor consumption
+6. restore start
+7. block-level apply attempts
+8. live-world visibility
+9. client-send/client-visible checks when available
+
+The important distinction is that `WATCH_DECODED` only proves the payload exists in the decoded `ChunkDelta`. It does not prove the payload reached the live `WorldChunk`.
 
 ## Payload summaries
 
@@ -122,12 +149,14 @@ Recommended order:
 Examples:
 
 - captured -> encoded -> serialized -> storage write -> storage read -> `WATCH_FAILED` at decode
-- decoded -> restore started -> `WATCH_SKIPPED` with `missing block state`
+- decoded -> proto attach -> no world-chunk attach -> assertion for missing restore handoff
+- decoded -> restore started -> `WATCH_RESTORE_APPLY_FAILED`
+- restore applied -> `WATCH_OVERWRITTEN_AFTER_RESTORE`
 
 ## Performance model
 
 - No payload summaries are built when no payload watches exist.
-- Watch checks are explicit guards at a few pipeline boundaries, not deep instrumentation everywhere.
+- Watch checks are explicit guards at persistence and restore boundaries, plus a narrow set of watched restore/apply probes.
 - Matching is expected to stay small because watches are developer-driven, not automatic.
 
 ## See also

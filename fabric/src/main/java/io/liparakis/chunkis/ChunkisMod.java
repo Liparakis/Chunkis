@@ -65,6 +65,9 @@ public final class ChunkisMod implements ModInitializer {
         registerPayloads();
         registerCommands();
         registerEvents();
+        io.liparakis.chunkis.debug.ChunkTraceWatchpoints.watchPayload(
+                io.liparakis.chunkis.debug.PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8)
+        );
     }
 
     /**
@@ -156,6 +159,7 @@ public final class ChunkisMod implements ModInitializer {
         }
 
         PortalLinkManager.close(server);
+        io.liparakis.chunkis.debug.PayloadWatchTracer.checkUnrestoredAssertions();
     }
 
     /**
