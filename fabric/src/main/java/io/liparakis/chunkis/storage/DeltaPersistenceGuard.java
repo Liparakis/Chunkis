@@ -47,6 +47,16 @@ public final class DeltaPersistenceGuard {
                 && !CisNbtUtil.hasFullBlockBaseline(meta);
     }
 
+    public static boolean shouldRejectSparseDeltaWithoutBase(final ChunkDelta<?, ?> delta, final boolean trustV11SnapshotPayload) {
+        if (delta == null) {
+            return false;
+        }
+        if (trustV11SnapshotPayload && hasAuthoritativeV11SnapshotPayload(delta)) {
+            return false;
+        }
+        return shouldRejectSparseDeltaWithoutBase(delta);
+    }
+
     public static boolean hasInvalidBlockEntityOnlyPayloadWithoutBase(final ChunkDelta<?, ?> delta) {
         if (delta == null) {
             return false;
@@ -99,6 +109,7 @@ public final class DeltaPersistenceGuard {
                 + ", sections=" + countSections(delta)
                 + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(meta)
                 + ", fullBaseline=" + CisNbtUtil.hasFullBlockBaseline(meta)
+                + ", authoritativeV11Snapshot=" + hasAuthoritativeV11SnapshotPayload(delta)
                 + ", metadataKeys=" + describeMetadataKeys(meta)
                 + ", sourceVersion=" + delta.getSourceVersion()
                 + ", mutationGeneration=" + delta.getMutationGeneration()
@@ -115,10 +126,17 @@ public final class DeltaPersistenceGuard {
         return "mutationGeneration=" + delta.getMutationGeneration()
                 + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(meta)
                 + ", fullBaseline=" + CisNbtUtil.hasFullBlockBaseline(meta)
+                + ", authoritativeV11Snapshot=" + hasAuthoritativeV11SnapshotPayload(delta)
                 + ", metadataKeys=" + describeMetadataKeys(meta)
                 + ", suppressInitialRepopulation=" + delta.shouldSuppressInitialRepopulation()
                 + ", blockChanges=" + delta.getBlockInstructions().size()
                 + ", blockEntities=" + delta.getBlockEntities().size();
+    }
+
+    public static boolean hasAuthoritativeV11SnapshotPayload(final ChunkDelta<?, ?> delta) {
+        return delta != null
+                && delta.getSourceVersion() >= io.liparakis.chunkis.storage.model.CisConstants.VERSION
+                && !delta.getBlockInstructions().isEmpty();
     }
 
     /**

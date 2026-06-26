@@ -13,20 +13,27 @@ public final class ChunkDeltaOwnership {
     }
 
     public static boolean hasChunkisOwnedState(final ChunkDelta<?, ?> delta) {
-        return delta != null && (hasReplayPayload(delta) || hasChunkisPersistenceAnchor(delta));
+        return delta != null && delta.hasOwnershipClaim();
     }
 
     public static boolean shouldMirrorVanillaDirtyState(final ChunkDelta<?, ?> delta) {
-        return delta != null && (delta.isDirty() || hasChunkisOwnedState(delta));
+        return hasChunkisOwnedState(delta);
     }
 
     public static boolean hasChunkisPersistenceAnchor(final ChunkDelta<?, ?> delta) {
         if (delta == null) {
             return false;
         }
-        final Object metadata = delta.getChunkMetadata();
-        return CisNbtUtil.hasPersistedBaseChunkNbt(metadata)
-                || CisNbtUtil.hasFullBlockBaseline(metadata);
+        return hasChunkisPersistenceAnchorBaseOnly(delta.getChunkMetadata())
+                || hasChunkisFullBaselineOnly(delta.getChunkMetadata());
+    }
+
+    public static boolean hasChunkisPersistenceAnchorBaseOnly(final Object metadata) {
+        return CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
+    }
+
+    public static boolean hasChunkisFullBaselineOnly(final Object metadata) {
+        return CisNbtUtil.hasFullBlockBaseline(metadata);
     }
 
     public static boolean hasReplayPayload(final ChunkDelta<?, ?> delta) {
@@ -34,5 +41,9 @@ public final class ChunkDeltaOwnership {
                 && (!delta.getBlockInstructions().isEmpty()
                 || !delta.getBlockEntities().isEmpty()
                 || delta.countNonNullEntities() > 0);
+    }
+
+    public static boolean hasRestorableChunkisState(final ChunkDelta<?, ?> delta) {
+        return delta != null && (hasReplayPayload(delta) || hasChunkisPersistenceAnchor(delta));
     }
 }

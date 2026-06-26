@@ -49,6 +49,24 @@ public final class ChunkTraceJsonl {
         if (event.byteSize() != null) {
             root.addProperty("byteSize", event.byteSize());
         }
+        if (event.payloadWatchTarget() != null) {
+            root.addProperty("payloadType", event.payloadWatchTarget().type().name());
+            root.addProperty("payloadWorldId", event.payloadWatchTarget().worldId());
+            if (event.payloadWatchTarget().blockX() != null) {
+                root.addProperty("payloadX", event.payloadWatchTarget().blockX());
+                root.addProperty("payloadY", event.payloadWatchTarget().blockY());
+                root.addProperty("payloadZ", event.payloadWatchTarget().blockZ());
+            }
+            if (event.payloadWatchTarget().entityUuid() != null) {
+                root.addProperty("payloadUuid", event.payloadWatchTarget().entityUuid());
+            }
+        }
+        if (event.payloadWatchStage() != null) {
+            root.addProperty("payloadStage", event.payloadWatchStage());
+        }
+        if (event.payloadWatchSummary() != null) {
+            root.addProperty("payloadSummary", event.payloadWatchSummary());
+        }
 
         return root.toString();
     }

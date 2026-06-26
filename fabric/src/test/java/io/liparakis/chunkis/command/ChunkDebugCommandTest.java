@@ -9,6 +9,7 @@ import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.debug.DebugRegionKey;
+import io.liparakis.chunkis.debug.PayloadWatchTarget;
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
 import org.junit.jupiter.api.AfterEach;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkDebugCommandTest {
@@ -42,7 +44,10 @@ class ChunkDebugCommandTest {
                 new DebugRegionKey(0, -1),
                 "save-12--8-7",
                 Boolean.FALSE,
-                512
+                512,
+                PayloadWatchTarget.block("minecraft:overworld", 200, 70, -120),
+                "restore",
+                "pos=200,70,-120 state=minecraft:chest section=4"
         );
 
         final String formatted = ChunkDebugCommand.formatEvent(event);
@@ -56,6 +61,9 @@ class ChunkDebugCommandTest {
         assertTrue(formatted.contains("dirty=false"));
         assertTrue(formatted.contains("bytes=512"));
         assertTrue(formatted.contains("op=save-12--8-7"));
+        assertTrue(formatted.contains("payload=block@200,70,-120 world=minecraft:overworld"));
+        assertTrue(formatted.contains("stage=restore"));
+        assertTrue(formatted.contains("payloadSummary=pos=200,70,-120 state=minecraft:chest section=4"));
         assertTrue(formatted.contains("src=CisStorage#writePrepared"));
         assertTrue(formatted.contains("thread=Server thread"));
         assertTrue(formatted.contains("msg=flush completed"));
@@ -65,11 +73,13 @@ class ChunkDebugCommandTest {
     void formatsWatchpointSummary() {
         ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(7, -2));
         ChunkTraceWatchpoints.watchRegion(new DebugRegionKey(0, -1));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.entity("minecraft:overworld", "1234"));
 
         final String formatted = ChunkDebugCommand.formatWatchpointSummary();
 
         assertTrue(formatted.contains("chunks=7,-2"));
         assertTrue(formatted.contains("regions=0,-1"));
+        assertTrue(formatted.contains("payloads=entity@1234 world=minecraft:overworld"));
     }
 
     @Test
@@ -98,6 +108,25 @@ class ChunkDebugCommandTest {
         assertTrue(formatted.contains("asyncOp=save-7--2-4"));
         assertTrue(formatted.contains("asyncGeneration=4"));
         assertTrue(formatted.contains("baseCaptureDirty=true"));
+    }
+
+    @Test
+    void truncatesOversizedChatOutput() {
+        final String oversized = "x".repeat(20_000);
+
+        final ChunkDebugCommand.ChatMessage chatMessage = ChunkDebugCommand.truncateForChat(oversized);
+
+        assertTrue(chatMessage.truncated());
+        assertTrue(chatMessage.text().contains("[truncated; full trace written to log/file]"));
+        assertTrue(chatMessage.text().length() < oversized.length());
+    }
+
+    @Test
+    void leavesSmallChatOutputUntouched() {
+        final ChunkDebugCommand.ChatMessage chatMessage = ChunkDebugCommand.truncateForChat("small");
+
+        assertFalse(chatMessage.truncated());
+        assertTrue("small".equals(chatMessage.text()));
     }
 
     @Test

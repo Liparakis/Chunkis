@@ -32,7 +32,10 @@ class ChunkTraceJsonlTest {
                 new DebugRegionKey(0, -1),
                 "save-7",
                 Boolean.FALSE,
-                512
+                512,
+                PayloadWatchTarget.blockEntity("minecraft:overworld", 200, 64, -120),
+                "restore",
+                "pos=200,64,-120 type=minecraft:chest nbtBytes=88"
         );
 
         final String json = ChunkTraceJsonl.toJsonLine(event);
@@ -50,6 +53,12 @@ class ChunkTraceJsonlTest {
         assertThat(json).contains("\"operationId\":\"save-7\"");
         assertThat(json).contains("\"dirtyState\":false");
         assertThat(json).contains("\"byteSize\":512");
+        assertThat(json).contains("\"payloadType\":\"BLOCK_ENTITY\"");
+        assertThat(json).contains("\"payloadX\":200");
+        assertThat(json).contains("\"payloadY\":64");
+        assertThat(json).contains("\"payloadZ\":-120");
+        assertThat(json).contains("\"payloadStage\":\"restore\"");
+        assertThat(json).contains("\"payloadSummary\":\"pos=200,64,-120 type=minecraft:chest nbtBytes=88\"");
     }
 
     @Test

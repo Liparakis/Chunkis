@@ -2,6 +2,7 @@ package io.liparakis.chunkis.mixin.world;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
+import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
@@ -11,11 +12,15 @@ import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
+import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
+import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import io.liparakis.chunkis.world.ChunkBlockEntityCapture;
+import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.ChunkRestorer;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import io.liparakis.chunkis.world.LeafTickContext;
+import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.LeavesBlock;
@@ -45,7 +50,7 @@ import java.util.function.Predicate;
  * Tracks live chunk changes and restores saved CIS snapshots.
  */
 @Mixin(WorldChunk.class)
-public class WorldChunkMixin {
+public class WorldChunkMixin implements ChunkisMutationGuardDuck {
 
     @Unique
     private static final String SOURCE = "WorldChunkMixin";
@@ -72,11 +77,8 @@ public class WorldChunkMixin {
     private static final Predicate<BlockState> NETHER_PORTAL_BLOCK_PREDICATE =
             state -> state.isOf(Blocks.NETHER_PORTAL);
 
-    /**
-     * Suppresses mutation tracking while Chunkis is restoring a saved snapshot.
-     */
     @Unique
-    private volatile boolean chunkis$isRestoring;
+    private final ChunkMutationTrackingScope chunkis$mutationTrackingScope = new ChunkMutationTrackingScope();
 
     /**
      * Cached dedicated/integrated server thread used to reject off-thread chunk mutations.
@@ -103,6 +105,11 @@ public class WorldChunkMixin {
             final BlockPos pos, final BlockState state, final int flags,
             final CallbackInfoReturnable<BlockState> cir) {
         final WorldChunk chunk = chunkis$self();
+        final ChunkMutationTrackingScope.Cause suppressionCause = chunkis$getSuppressionCause(chunk);
+        if (suppressionCause != ChunkMutationTrackingScope.Cause.NONE) {
+            chunkis$traceSuppressedMutation(chunk, suppressionCause, SET_BLOCK_STATE_SOURCE, pos);
+            return;
+        }
         if (chunkis$shouldNotTrackChunkMutation(chunk)) {
             return;
         }
@@ -112,10 +119,13 @@ public class WorldChunkMixin {
             return;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> delta = chunkis$getBlockDelta();
+        final ChunkDelta<BlockState, NbtCompound> delta =
+                chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT, SET_BLOCK_STATE_SOURCE);
+        final boolean becameDirty = !delta.isDirty();
         if (chunk.getWorld() instanceof ServerWorld serverWorld) {
             BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
         }
+        delta.prepareForMutation(SET_BLOCK_STATE_SOURCE);
         delta.addBlockChange(
                 pos.getX() & CisConstants.COORD_MASK, pos.getY(), pos.getZ() & CisConstants.COORD_MASK,
                 state
@@ -128,6 +138,9 @@ public class WorldChunkMixin {
             );
         }
 
+        if (becameDirty) {
+            chunkis$traceAcceptedRealEdit(chunk, pos, suppressionCause);
+        }
         GlobalChunkTracker.markDirty(chunk, SET_BLOCK_STATE_SOURCE);
     }
 
@@ -142,7 +155,8 @@ public class WorldChunkMixin {
             final BlockPos pos, final BlockState state, final int flags,
             final CallbackInfoReturnable<BlockState> cir) {
         final WorldChunk chunk = chunkis$self();
-        if (chunkis$shouldNotTrackChunkMutation(chunk)) {
+        if (chunkis$getSuppressionCause(chunk) != ChunkMutationTrackingScope.Cause.NONE
+                || chunkis$shouldNotTrackChunkMutation(chunk)) {
             return;
         }
 
@@ -164,6 +178,11 @@ public class WorldChunkMixin {
     @Inject(method = "setBlockEntity", at = @At("RETURN"))
     private void chunkis$onSetBlockEntity(final BlockEntity blockEntity, final CallbackInfo ci) {
         final WorldChunk chunk = chunkis$self();
+        final ChunkMutationTrackingScope.Cause suppressionCause = chunkis$getSuppressionCause(chunk);
+        if (suppressionCause != ChunkMutationTrackingScope.Cause.NONE) {
+            chunkis$traceSuppressedMutation(chunk, suppressionCause, SET_BLOCK_ENTITY_SOURCE, blockEntity.getPos());
+            return;
+        }
         if (chunkis$shouldNotTrackChunkMutation(chunk)) {
             return;
         }
@@ -176,9 +195,11 @@ public class WorldChunkMixin {
             return;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> delta = chunkis$getBlockDelta();
+        final ChunkDelta<BlockState, NbtCompound> delta =
+                chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT, SET_BLOCK_ENTITY_SOURCE);
         try {
             BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
+            delta.prepareForMutation(SET_BLOCK_ENTITY_SOURCE);
             ChunkBlockEntityCapture.captureBlockEntity(
                     blockEntity, serverWorld.getRegistryManager(),
                     delta
@@ -195,11 +216,19 @@ public class WorldChunkMixin {
     @Inject(method = "removeBlockEntity", at = @At("HEAD"))
     private void chunkis$onRemoveBlockEntity(final BlockPos pos, final CallbackInfo ci) {
         final WorldChunk chunk = chunkis$self();
+        final ChunkMutationTrackingScope.Cause suppressionCause = chunkis$getSuppressionCause(chunk);
+        if (suppressionCause != ChunkMutationTrackingScope.Cause.NONE) {
+            chunkis$traceSuppressedMutation(chunk, suppressionCause, REMOVE_BLOCK_ENTITY_SOURCE, pos);
+            return;
+        }
         if (chunkis$shouldNotTrackChunkMutation(chunk)) {
             return;
         }
 
-        chunkis$getBlockDelta().removeBlockEntityData(
+        final ChunkDelta<BlockState, NbtCompound> delta =
+                chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT, REMOVE_BLOCK_ENTITY_SOURCE);
+        delta.prepareForMutation(REMOVE_BLOCK_ENTITY_SOURCE);
+        delta.removeBlockEntityData(
                 pos.getX() & CisConstants.COORD_MASK, pos.getY(),
                 pos.getZ() & CisConstants.COORD_MASK
         );
@@ -217,9 +246,25 @@ public class WorldChunkMixin {
             final WorldChunk.EntityLoader entityLoader, final CallbackInfo ci) {
         final ChunkDelta<BlockState, NbtCompound> protoDelta = chunkis$resolveProtoDelta(protoChunk);
         if (protoDelta == null || protoDelta.isEmpty()) {
+            PendingChunkMutationSuppression.end(world.getRegistryKey(), chunkis$self().getPos());
             return;
         }
-        chunkis$restoreChunkFromDelta(world, chunkis$self(), protoChunk, protoDelta);
+        ChunkOwnershipTraceHelper.traceDecision(
+                world.getRegistryKey(),
+                chunkis$self().getPos(),
+                "CLAIMED",
+                ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+                RESTORE_SOURCE,
+                protoDelta,
+                ChunkMutationTrackingScope.Cause.RESTORE
+        );
+        chunkis$mutationTrackingScope.push(ChunkMutationTrackingScope.Cause.RESTORE);
+        try {
+            chunkis$restoreChunkFromDelta(world, chunkis$self(), protoChunk, protoDelta);
+        } finally {
+            chunkis$mutationTrackingScope.pop(ChunkMutationTrackingScope.Cause.RESTORE);
+            PendingChunkMutationSuppression.end(world.getRegistryKey(), chunkis$self().getPos());
+        }
     }
 
     /**
@@ -231,10 +276,6 @@ public class WorldChunkMixin {
      */
     @Unique
     private boolean chunkis$shouldNotTrackChunkMutation(final WorldChunk chunk) {
-        if (chunkis$isRestoring) {
-            return true;
-        }
-
         final World world = chunk.getWorld();
         if (world.isClient() || !ChunkStatus.FULL.equals(chunk.getStatus())) {
             return true;
@@ -258,6 +299,93 @@ public class WorldChunkMixin {
         }
 
         return false;
+    }
+
+    @Unique
+    private ChunkMutationTrackingScope.Cause chunkis$getSuppressionCause(final WorldChunk chunk) {
+        if (chunk instanceof ChunkisMutationGuardDuck guardDuck) {
+            final ChunkMutationTrackingScope.Cause liveCause =
+                    guardDuck.chunkis$getMutationTrackingScope().currentCause();
+            if (liveCause != ChunkMutationTrackingScope.Cause.NONE) {
+                return liveCause;
+            }
+        }
+        return PendingChunkMutationSuppression.currentCause(chunk);
+    }
+
+    @Unique
+    private void chunkis$traceSuppressedMutation(
+            final WorldChunk chunk,
+            final ChunkMutationTrackingScope.Cause cause,
+            final String source,
+            final BlockPos pos) {
+        final ChunkMutationTrackingScope scope = chunkis$getMutationTrackingScope();
+        final boolean shouldTrace = scope.currentCause() == cause
+                ? scope.shouldTraceSuppression(cause)
+                : PendingChunkMutationSuppression.shouldTrace(
+                chunk.getWorld().getRegistryKey(),
+                chunk.getPos(),
+                cause
+        );
+        if (!shouldTrace) {
+            return;
+        }
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkMutationTrackingScope.suppressionEventType(cause),
+                ChunkTraceSeverity.INFO,
+                cause == ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
+                        ? ChunkTraceReason.PASSIVE_CHUNK_DIRTIED
+                        : ChunkTraceReason.NONE,
+                source,
+                "suppressed chunk mutation ownership during "
+                        + cause.name().toLowerCase().replace('_', '-')
+                        + (pos != null ? " at " + pos.toShortString() : ""),
+                chunk.getWorld().getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                null,
+                null,
+                false,
+                null
+        );
+    }
+
+    @Unique
+    private void chunkis$traceAcceptedRealEdit(
+            final WorldChunk chunk,
+            final BlockPos pos,
+            final ChunkMutationTrackingScope.Cause suppressionCause) {
+        if (suppressionCause != ChunkMutationTrackingScope.Cause.NONE) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.PASSIVE_CHUNK_DIRTIED,
+                    SET_BLOCK_STATE_SOURCE,
+                    "passive context produced first dirty mutation at " + pos.toShortString(),
+                    chunk.getWorld().getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                    null,
+                    null,
+                    true,
+                    null
+            );
+        }
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.MUTATION_ACCEPTED_REAL_EDIT,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                SET_BLOCK_STATE_SOURCE,
+                "accepted real chunk edit at " + pos.toShortString(),
+                chunk.getWorld().getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                null,
+                null,
+                true,
+                null
+        );
     }
 
     /**
@@ -308,12 +436,14 @@ public class WorldChunkMixin {
             final ServerWorld world, final WorldChunk chunk,
             final ProtoChunk proto,
             final ChunkDelta<BlockState, NbtCompound> protoDelta) {
-        final ChunkDelta<BlockState, NbtCompound> selfDelta = chunkis$getBlockDelta();
+        final ChunkDelta<BlockState, NbtCompound> selfDelta =
+                chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE, RESTORE_SOURCE);
         final String operationId = chunkis$takeRestoreOperationId((ChunkisDeltaDuck) proto);
         boolean coreRestoreCompleted = false;
         String failedStage = "chunk-restore";
         selfDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());
         selfDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
+        chunkis$traceLiveDeltaMetadata(world, chunk, protoDelta, selfDelta, operationId);
         final boolean hasPersistedBaseChunk =
                 io.liparakis.chunkis.storage.CisNbtUtil.hasPersistedBaseChunkNbt(protoDelta.getChunkMetadata());
 
@@ -335,7 +465,6 @@ public class WorldChunkMixin {
         }
 
         try {
-            chunkis$isRestoring = true;
             ChunkRestorer.restore(world, chunk, protoDelta, selfDelta, operationId);
             coreRestoreCompleted = true;
             failedStage = "portal-poi-resync";
@@ -350,8 +479,6 @@ public class WorldChunkMixin {
                 );
             }
             Chunkis.LOGGER.error("Chunkis: Failed to restore chunk {}", proto.getPos(), e);
-        } finally {
-            chunkis$isRestoring = false;
         }
 
         if (hasPersistedBaseChunk) {
@@ -393,6 +520,41 @@ public class WorldChunkMixin {
         if (chunkis$shouldMarkRestoredDeltaSaved((ChunkisDeltaDuck) proto, protoDelta)) {
             protoDelta.markSaved();
         }
+    }
+
+    @Unique
+    private void chunkis$traceLiveDeltaMetadata(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> protoDelta,
+            final ChunkDelta<BlockState, NbtCompound> liveDelta,
+            final String operationId
+    ) {
+        final boolean protoHasBase = io.liparakis.chunkis.storage.CisNbtUtil.hasPersistedBaseChunkNbt(protoDelta.getChunkMetadata());
+        final boolean liveHasBase = io.liparakis.chunkis.storage.CisNbtUtil.hasPersistedBaseChunkNbt(liveDelta.getChunkMetadata());
+        final boolean protoHasAnchor = io.liparakis.chunkis.storage.ChunkDeltaOwnership.hasChunkisPersistenceAnchor(protoDelta);
+        final boolean liveHasAnchor = io.liparakis.chunkis.storage.ChunkDeltaOwnership.hasChunkisPersistenceAnchor(liveDelta);
+        final boolean lostAnchor = protoHasAnchor && !liveHasAnchor;
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                lostAnchor
+                        ? ChunkTraceEventType.BASE_METADATA_LOST_DURING_RESTORE
+                        : ChunkTraceEventType.BASE_METADATA_ATTACHED_TO_LIVE_DELTA,
+                lostAnchor ? ChunkTraceSeverity.ERROR : ChunkTraceSeverity.INFO,
+                lostAnchor ? ChunkTraceReason.RESTORE_EXCEPTION : ChunkTraceReason.NONE,
+                RESTORE_SOURCE,
+                "live delta metadata after attach: proto=" + io.liparakis.chunkis.storage.DeltaPersistenceGuard.describeLifecycleState(protoDelta)
+                        + ", live=" + io.liparakis.chunkis.storage.DeltaPersistenceGuard.describeLifecycleState(liveDelta)
+                        + ", protoHasBase=" + protoHasBase
+                        + ", liveHasBase=" + liveHasBase,
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                null,
+                operationId,
+                liveDelta.isDirty(),
+                null
+        );
     }
 
     @Unique
@@ -474,6 +636,11 @@ public class WorldChunkMixin {
         return count;
     }
 
+    @Override
+    public ChunkMutationTrackingScope chunkis$getMutationTrackingScope() {
+        return chunkis$mutationTrackingScope;
+    }
+
     /**
      * Returns the live mutable Chunkis delta attached to this chunk.
      */
@@ -481,6 +648,41 @@ public class WorldChunkMixin {
     @SuppressWarnings("unchecked")
     private ChunkDelta<BlockState, NbtCompound> chunkis$getBlockDelta() {
         return (ChunkDelta<BlockState, NbtCompound>) ((ChunkisDeltaDuck) this).chunkis$getDelta();
+    }
+
+    @Unique
+    private ChunkDelta<BlockState, NbtCompound> chunkis$getOrCreateOwnedBlockDelta(
+            final WorldChunk chunk,
+            final ChunkTraceReason ownershipReason,
+            final String source
+    ) {
+        ChunkDelta<BlockState, NbtCompound> delta = chunkis$getBlockDelta();
+        if (delta == null) {
+            delta = new ChunkDelta<>(BlockState::isAir);
+            ((ChunkisDeltaDuck) chunk).chunkis$setDelta(delta);
+            ChunkOwnershipTraceHelper.traceDecision(
+                    chunk.getWorld().getRegistryKey(),
+                    chunk.getPos(),
+                    "CLAIMED",
+                    ownershipReason,
+                    source + "#createDelta",
+                    delta,
+                    chunkis$getSuppressionCause(chunk)
+            );
+        }
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+            ChunkOwnershipTraceHelper.claimOwnership(delta, ownershipReason, source);
+            ChunkOwnershipTraceHelper.traceDecision(
+                    chunk.getWorld().getRegistryKey(),
+                    chunk.getPos(),
+                    "CLAIMED",
+                    ownershipReason,
+                    source,
+                    delta,
+                    chunkis$getSuppressionCause(chunk)
+            );
+        }
+        return delta;
     }
 
     /**

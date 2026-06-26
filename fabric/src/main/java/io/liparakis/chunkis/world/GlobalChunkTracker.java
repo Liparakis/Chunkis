@@ -9,6 +9,8 @@ import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.storage.CisNbtUtil;
+import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
+import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.DeltaPersistenceGuard;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.ChunkPos;
@@ -64,6 +66,27 @@ public final class GlobalChunkTracker {
         if (shouldSkipDelta(delta)) {
             return;
         }
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+            ChunkOwnershipTraceHelper.traceDecision(
+                    chunk.getWorld().getRegistryKey(),
+                    chunk.getPos(),
+                    "BYPASSED",
+                    ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
+                    source,
+                    delta,
+                    null
+            );
+            return;
+        }
+        ChunkOwnershipTraceHelper.traceDecision(
+                chunk.getWorld().getRegistryKey(),
+                chunk.getPos(),
+                "CLAIMED",
+                ChunkTraceReason.valueOf(delta.getOwnershipReason()),
+                source,
+                delta,
+                null
+        );
         putDeltaIfNeeded(keyOf(chunk.getWorld().getRegistryKey(), chunk.getPos()), delta, source);
     }
 
@@ -87,7 +110,19 @@ public final class GlobalChunkTracker {
         if (delta == null) {
             return;
         }
-        delta.markDirty();
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+            ChunkOwnershipTraceHelper.traceDecision(
+                    world.getRegistryKey(),
+                    pos,
+                    "BYPASSED",
+                    ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
+                    source,
+                    delta,
+                    null
+            );
+            return;
+        }
+        delta.markDirty(source);
         putDeltaIfNeeded(keyOf(world.getRegistryKey(), pos), delta, source);
     }
 
@@ -101,7 +136,19 @@ public final class GlobalChunkTracker {
         if (delta == null) {
             return;
         }
-        delta.markDirty();
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+            ChunkOwnershipTraceHelper.traceDecision(
+                    dimension,
+                    new ChunkPos(chunkX, chunkZ),
+                    "BYPASSED",
+                    ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
+                    source,
+                    delta,
+                    null
+            );
+            return;
+        }
+        delta.markDirty(source);
         final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
         assertInvalidSparsePayloadWithoutBase(key, delta, source);
         final DebugChunkKey debugKey = new DebugChunkKey(chunkX, chunkZ);
@@ -325,6 +372,12 @@ public final class GlobalChunkTracker {
         }
 
         dirtyDeltas.put(key, delta);
+        traceOwnershipBoundaryDecision(
+                key,
+                delta,
+                "CLAIMED",
+                source + "#dirtyMapPut"
+        );
         traceTracker(
                 key,
                 ChunkTraceReason.TRACKER_DIRTY_MAP_PUT,
@@ -436,6 +489,12 @@ public final class GlobalChunkTracker {
         synchronized (unloadCache) {
             unloadCache.put(key, delta);
         }
+        traceOwnershipBoundaryDecision(
+                key,
+                delta,
+                ChunkDeltaOwnership.hasChunkisOwnedState(delta) ? "CLAIMED" : "BYPASSED",
+                SOURCE + "#putInUnloadCache"
+        );
         if (tracePut) {
             traceTracker(
                     key,
@@ -521,6 +580,26 @@ public final class GlobalChunkTracker {
                 null,
                 null,
                 delta.isDirty(),
+                null
+        );
+    }
+
+    private static void traceOwnershipBoundaryDecision(
+            final DimensionChunkKey key,
+            final ChunkDelta<?, ?> delta,
+            final String decision,
+            final String source
+    ) {
+        final ChunkTraceReason reason = ChunkDeltaOwnership.hasChunkisOwnedState(delta)
+                ? ChunkTraceReason.valueOf(delta.getOwnershipReason())
+                : ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
+        ChunkOwnershipTraceHelper.traceDecision(
+                key.dimension,
+                new DebugChunkKey(unpackChunkX(key.chunkKey), unpackChunkZ(key.chunkKey)),
+                decision,
+                reason,
+                source,
+                delta,
                 null
         );
     }

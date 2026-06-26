@@ -89,4 +89,34 @@ class ChunkTraceWatchpointsTest {
                 .extracting(ChunkTraceEvent::message)
                 .containsExactly("hit-2", "hit-1");
     }
+
+    @Test
+    void matchesWatchedPayloadEvents() {
+        final PayloadWatchTarget blockTarget = PayloadWatchTarget.block("minecraft:overworld", 10, 64, -3);
+        ChunkTraceWatchpoints.watchPayload(blockTarget);
+
+        final ChunkTraceEvent payloadEvent = new ChunkTraceEvent(
+                0L, 4L, "main",
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.WATCH_CAPTURED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "TestSource", "payload",
+                "minecraft:overworld",
+                new DebugChunkKey(0, -1),
+                null,
+                "save-1",
+                null,
+                null,
+                blockTarget,
+                "capture",
+                "summary"
+        );
+
+        assertThat(ChunkTraceWatchpoints.matches(payloadEvent)).isTrue();
+        assertThat(ChunkTraceWatchpoints.watchedPayloadsForChunk(
+                "minecraft:overworld",
+                new DebugChunkKey(0, -1)
+        )).containsExactly(blockTarget);
+    }
 }

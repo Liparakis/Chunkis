@@ -2,6 +2,7 @@ package io.liparakis.chunkis.world;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
@@ -71,18 +72,42 @@ public final class ChunkBlockEntityCapture {
         Objects.requireNonNull(registryManager, "registryManager");
         Objects.requireNonNull(delta, "delta");
 
+        final BlockPos pos = blockEntity.getPos();
         if (blockEntity.isRemoved()) {
+            if (blockEntity.getWorld() instanceof net.minecraft.server.world.ServerWorld serverWorld) {
+                PayloadWatchTracer.traceSkippedBlockEntityCapture(
+                        serverWorld,
+                        new net.minecraft.util.math.ChunkPos(pos),
+                        pos,
+                        "capture skipped: block entity removed"
+                );
+            }
             return;
         }
-
-        final BlockPos pos = blockEntity.getPos();
         final NbtCompound nbt = trySerializeBlockEntity(blockEntity, registryManager);
 
         if (isEmptyNbt(nbt)) {
+            if (blockEntity.getWorld() instanceof net.minecraft.server.world.ServerWorld serverWorld) {
+                PayloadWatchTracer.traceSkippedBlockEntityCapture(
+                        serverWorld,
+                        new net.minecraft.util.math.ChunkPos(pos),
+                        pos,
+                        "capture skipped: block entity serialized empty NBT"
+                );
+            }
             return;
         }
 
         storeInDelta(pos, nbt, delta);
+        if (blockEntity.getWorld() instanceof net.minecraft.server.world.ServerWorld serverWorld) {
+            PayloadWatchTracer.traceCapturedBlockEntity(
+                    serverWorld.getRegistryKey().getValue().toString(),
+                    new net.minecraft.util.math.ChunkPos(pos),
+                    pos,
+                    blockEntity,
+                    nbt
+            );
+        }
     }
 
     /**
@@ -137,16 +162,39 @@ public final class ChunkBlockEntityCapture {
 
         if (!state.hasBlockEntity()) {
             removeFromDelta(pos, delta);
+            if (chunk.getWorld() instanceof net.minecraft.server.world.ServerWorld serverWorld) {
+                PayloadWatchTracer.traceSkippedBlockEntityCapture(
+                        serverWorld,
+                        chunk.getPos(),
+                        pos,
+                        "capture skipped: current block state has no block entity"
+                );
+            }
             return;
         }
 
         final NbtCompound nbt = trySerializeBlockEntity(blockEntity, registryManager);
 
         if (isEmptyNbt(nbt)) {
+            if (chunk.getWorld() instanceof net.minecraft.server.world.ServerWorld serverWorld) {
+                PayloadWatchTracer.traceSkippedBlockEntityCapture(
+                        serverWorld,
+                        chunk.getPos(),
+                        pos,
+                        "capture skipped: block entity serialized empty NBT"
+                );
+            }
             return;
         }
 
         storeInDelta(pos, nbt, delta);
+        PayloadWatchTracer.traceCapturedBlockEntity(
+                chunk.getWorld().getRegistryKey().getValue().toString(),
+                chunk.getPos(),
+                pos,
+                blockEntity,
+                nbt
+        );
     }
 
     /**

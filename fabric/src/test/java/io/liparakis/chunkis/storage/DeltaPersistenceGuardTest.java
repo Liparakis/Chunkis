@@ -53,4 +53,14 @@ class DeltaPersistenceGuardTest {
 
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
     }
+
+    @Test
+    void allowsV11AuthoritativeSnapshotPayloadWithoutBaseMetadata() {
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.setSourceVersion(io.liparakis.chunkis.storage.model.CisConstants.VERSION);
+        delta.addBlockChange(1, 64, 1, "stone");
+
+        assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true));
+        assertTrue(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
+    }
 }

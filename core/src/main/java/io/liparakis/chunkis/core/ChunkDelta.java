@@ -157,6 +157,26 @@ public final class ChunkDelta<S, N> {
     private boolean suppressInitialRepopulation;
 
     /**
+     * First valid reason that made this delta Chunkis-owned.
+     */
+    private String ownershipReason;
+
+    /**
+     * Caller that first claimed Chunkis ownership for this delta.
+     */
+    private String ownershipSource;
+
+    /**
+     * First caller that caused this delta to become dirty.
+     */
+    private String firstMutationSource;
+
+    /**
+     * Scratch source carried into the next mutation transition.
+     */
+    private String pendingMutationSource;
+
+    /**
      * Predicate used to identify states that should clear block entity payloads.
      */
     private final Predicate<S> isEmptyState;
@@ -182,6 +202,10 @@ public final class ChunkDelta<S, N> {
         this.savedGeneration = 0L;
         this.sourceVersion = CisConstants.VERSION;
         this.suppressInitialRepopulation = false;
+        this.ownershipReason = null;
+        this.ownershipSource = null;
+        this.firstMutationSource = null;
+        this.pendingMutationSource = null;
         this.isEmptyState = Objects.requireNonNull(isEmptyState, "isEmptyState");
     }
 
@@ -266,6 +290,9 @@ public final class ChunkDelta<S, N> {
         snap.savedGeneration = this.savedGeneration;
         snap.sourceVersion = this.sourceVersion;
         snap.suppressInitialRepopulation = this.suppressInitialRepopulation;
+        snap.ownershipReason = this.ownershipReason;
+        snap.ownershipSource = this.ownershipSource;
+        snap.firstMutationSource = this.firstMutationSource;
 
         return snap;
     }
@@ -294,6 +321,9 @@ public final class ChunkDelta<S, N> {
         final boolean wasDirty = isDirty();
         mutationGeneration++;
         if (!wasDirty) {
+            if (firstMutationSource == null) {
+                firstMutationSource = pendingMutationSource != null ? pendingMutationSource : SOURCE;
+            }
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.DIRTY_TRACKING,
                     ChunkTraceEventType.DELTA_MARKED_DIRTY,
@@ -309,6 +339,7 @@ public final class ChunkDelta<S, N> {
                     null
             );
         }
+        pendingMutationSource = null;
     }
 
     /**
@@ -1164,6 +1195,11 @@ public final class ChunkDelta<S, N> {
         markDirtyInternal();
     }
 
+    public void markDirty(final String source) {
+        prepareForMutation(source);
+        markDirtyInternal();
+    }
+
     /**
      * Marks this delta dirty only if it was previously clean.
      *
@@ -1174,6 +1210,16 @@ public final class ChunkDelta<S, N> {
             return false;
         }
 
+        markDirtyInternal();
+        return true;
+    }
+
+    public boolean markDirtyIfClean(final String source) {
+        if (isDirty()) {
+            return false;
+        }
+
+        prepareForMutation(source);
         markDirtyInternal();
         return true;
     }
@@ -1278,5 +1324,37 @@ public final class ChunkDelta<S, N> {
      */
     public void setSuppressInitialRepopulation(final boolean suppressInitialRepopulation) {
         this.suppressInitialRepopulation = suppressInitialRepopulation;
+    }
+
+    public boolean claimOwnership(final String reason, final String source) {
+        if (reason == null || reason.isBlank()) {
+            return false;
+        }
+        if (ownershipReason != null) {
+            return false;
+        }
+        ownershipReason = reason;
+        ownershipSource = source;
+        return true;
+    }
+
+    public boolean hasOwnershipClaim() {
+        return ownershipReason != null && !ownershipReason.isBlank();
+    }
+
+    public String getOwnershipReason() {
+        return ownershipReason;
+    }
+
+    public String getOwnershipSource() {
+        return ownershipSource;
+    }
+
+    public String getFirstMutationSource() {
+        return firstMutationSource;
+    }
+
+    public void prepareForMutation(final String source) {
+        pendingMutationSource = source;
     }
 }

@@ -89,16 +89,18 @@ class GlobalChunkTrackerTest {
                 Identifier.of("minecraft", "overworld")
         );
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
         GlobalChunkTracker.addDelta(overworld, 7, 9, delta, "WorldChunkMixin#setBlockState");
 
-        final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(1);
-        assertEquals(1, latest.size());
-        assertEquals(ChunkTraceReason.TRACKER_DIRTY_MAP_PUT, latest.getFirst().reason());
-        assertEquals("WorldChunkMixin#setBlockState", latest.getFirst().source());
-        assertEquals("minecraft:overworld", latest.getFirst().worldId());
-        assertEquals(7, latest.getFirst().chunkKey().x());
-        assertEquals(9, latest.getFirst().chunkKey().z());
+        final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(6);
+        assertTrue(latest.stream().anyMatch(event ->
+                event.reason() == ChunkTraceReason.TRACKER_DIRTY_MAP_PUT
+                        && "WorldChunkMixin#setBlockState".equals(event.source())
+                        && "minecraft:overworld".equals(event.worldId())
+                        && event.chunkKey() != null
+                        && event.chunkKey().x() == 7
+                        && event.chunkKey().z() == 9));
     }
 
     @Test
@@ -109,6 +111,7 @@ class GlobalChunkTrackerTest {
                 Identifier.of("minecraft", "overworld")
         );
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
         GlobalChunkTracker.addDelta(overworld, 7, 9, delta, "test");
 
@@ -134,6 +137,7 @@ class GlobalChunkTrackerTest {
         );
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
         delta.addBlockEntityData(1, 64, 1, new NbtCompound());
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
         GlobalChunkTracker.addDelta(overworld, 6, 85, delta, "WorldChunkMixin#setBlockEntity");
 

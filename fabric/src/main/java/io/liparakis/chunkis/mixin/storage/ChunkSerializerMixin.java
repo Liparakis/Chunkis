@@ -10,10 +10,15 @@ import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.CisNbtUtil;
+import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
+import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
+import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
+import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
@@ -174,7 +179,17 @@ public class ChunkSerializerMixin {
                 null
         );
 
-        if (chunkis$isDeltaAbsent(resolved.delta())) {
+        if (chunkis$isDeltaAbsent(resolved.delta())
+                || !ChunkDeltaOwnership.hasRestorableChunkisState(resolved.delta())) {
+            ChunkOwnershipTraceHelper.traceDecision(
+                    world.getRegistryKey(),
+                    pos,
+                    "BYPASSED",
+                    ChunkTraceReason.PASSIVE_VANILLA_LOAD,
+                    SOURCE + "#chunkis$restoreChunkDelta",
+                    resolved.delta(),
+                    ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
+            );
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     ChunkTraceEventType.LOAD_TX_END,
@@ -193,6 +208,26 @@ public class ChunkSerializerMixin {
         }
 
         final ChunkDelta<BlockState, NbtCompound> delta = resolved.delta();
+        chunkis$traceBaseMetadataAfterDecode(world, pos, delta, operationId);
+        ChunkOwnershipTraceHelper.claimOwnership(
+                delta,
+                ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+                SOURCE + "#chunkis$restoreChunkDelta"
+        );
+        ChunkOwnershipTraceHelper.traceDecision(
+                world.getRegistryKey(),
+                pos,
+                "CLAIMED",
+                ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+                SOURCE + "#chunkis$restoreChunkDelta",
+                delta,
+                ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
+        );
+        PendingChunkMutationSuppression.begin(
+                world.getRegistryKey(),
+                pos,
+                ChunkMutationTrackingScope.initialCauseForLoad(delta)
+        );
         delta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(delta));
         final boolean hasPersistedBaseChunk =
                 CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
@@ -260,6 +295,31 @@ public class ChunkSerializerMixin {
                 resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE
         );
         if (!hasPersistedBaseChunk) {
+            if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+                ChunkTraceStore.trace(
+                        ChunkisDebugDomain.ASSERTIONS,
+                        ChunkTraceEventType.ASSERTION_FAILED,
+                        ChunkTraceSeverity.ERROR,
+                        ChunkTraceReason.RESET_EMPTY_WITHOUT_OWNERSHIP,
+                        SOURCE + "#chunkis$restoreChunkDelta",
+                        "attempted to reset proto chunk to EMPTY without ownership",
+                        world.getRegistryKey().getValue().toString(),
+                        new DebugChunkKey(pos.x, pos.z),
+                        null,
+                        operationId,
+                        delta.isDirty(),
+                        null
+                );
+            }
+            ChunkOwnershipTraceHelper.traceDecision(
+                    world.getRegistryKey(),
+                    pos,
+                    "CLAIMED",
+                    ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+                    SOURCE + "#chunkis$restoreChunkDelta#setStatusEmpty",
+                    delta,
+                    ChunkMutationTrackingScope.initialCauseForLoad(delta)
+            );
             chunk.setStatus(ChunkStatus.EMPTY);
         }
         ChunkTraceStore.trace(
@@ -271,6 +331,32 @@ public class ChunkSerializerMixin {
                 hasPersistedBaseChunk
                         ? "attached delta to proto chunk and kept persisted base baseline"
                         : "attached delta to proto chunk and reset status to EMPTY",
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(pos.x, pos.z),
+                null,
+                operationId,
+                delta.isDirty(),
+                null
+        );
+    }
+
+    @Unique
+    private static void chunkis$traceBaseMetadataAfterDecode(
+            final ServerWorld world,
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId
+    ) {
+        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                hasBase
+                        ? ChunkTraceEventType.BASE_METADATA_PRESENT_AFTER_DECODE
+                        : ChunkTraceEventType.BASE_METADATA_MISSING_AFTER_DECODE,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                SOURCE + "#chunkis$traceBaseMetadataAfterDecode",
+                "decoded delta metadata: " + io.liparakis.chunkis.storage.DeltaPersistenceGuard.describeLifecycleState(delta),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
@@ -327,8 +413,12 @@ public class ChunkSerializerMixin {
             final ServerWorld world,
             final ChunkPos pos,
             final String operationId) {
-        return FabricCisStorageHelper.getStorage(world)
-                .load(new CisChunkPos(pos.x, pos.z), operationId);
+        final var storage = FabricCisStorageHelper.getStorage(world);
+        final CisChunkPos cisPos = new CisChunkPos(pos.x, pos.z);
+        final boolean storageEntryPresent = storage.contains(cisPos);
+        final ChunkDelta<BlockState, NbtCompound> delta = storage.load(cisPos, operationId);
+        PayloadWatchTracer.traceDecodeOutcome(world, pos, delta, operationId, storageEntryPresent);
+        return delta;
     }
 
     /**

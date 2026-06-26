@@ -303,7 +303,7 @@ public final class BaseChunkCaptureScheduler {
                     null
             );
         }
-        if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
+        if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true)) {
             return false;
         }
         ChunkTraceStore.trace(

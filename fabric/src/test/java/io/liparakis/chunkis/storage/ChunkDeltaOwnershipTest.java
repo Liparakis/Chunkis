@@ -19,7 +19,18 @@ class ChunkDeltaOwnershipTest {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
         delta.addBlockChange(1, 64, 1, "stone");
 
+        assertFalse(ChunkDeltaOwnership.hasChunkisOwnedState(delta));
+        assertFalse(ChunkDeltaOwnership.shouldMirrorVanillaDirtyState(delta));
+    }
+
+    @Test
+    void explicitOwnershipClaimMakesDeltaChunkisOwned() {
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+
         assertTrue(ChunkDeltaOwnership.hasChunkisOwnedState(delta));
+        assertTrue(ChunkDeltaOwnership.shouldMirrorVanillaDirtyState(delta));
     }
 
     @Test
@@ -37,8 +48,26 @@ class ChunkDeltaOwnershipTest {
                 false
         );
 
-        assertTrue(ChunkDeltaOwnership.hasChunkisOwnedState(delta));
-        assertTrue(ChunkDeltaOwnership.shouldMirrorVanillaDirtyState(delta));
+        assertFalse(ChunkDeltaOwnership.hasChunkisOwnedState(delta));
+        assertFalse(ChunkDeltaOwnership.shouldMirrorVanillaDirtyState(delta));
+    }
+
+    @Test
+    void restorableStateRemainsDetectableWithoutOwnershipClaim() {
+        final NbtCompound baseChunk = new NbtCompound();
+        baseChunk.putString("Status", "full");
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.setChunkMetadata(
+                CisNbtUtil.createChunkMetadataTakingOwnership(
+                        null,
+                        true,
+                        false,
+                        baseChunk
+                ),
+                false
+        );
+
+        assertTrue(ChunkDeltaOwnership.hasRestorableChunkisState(delta));
     }
 
     @Test

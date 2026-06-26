@@ -9,6 +9,7 @@ import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
@@ -356,7 +357,7 @@ public final class AsyncCisSaveManager {
                             null
                     );
                 }
-                if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(save.snapshot())) {
+                if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(save.snapshot(), true)) {
                     DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(
                             world,
                             save.pos(),
@@ -369,10 +370,43 @@ public final class AsyncCisSaveManager {
 
                 //Encode on the background thread!
                 final CisStorage.PreparedSave preparedSave = save.storage().prepareSave(save.cisPos(), save.snapshot());
+                PayloadWatchTracer.traceDeltaStage(
+                        world.getRegistryKey().getValue().toString(),
+                        save.pos(),
+                        save.snapshot(),
+                        save.operationId(),
+                        ChunkTraceEventType.WATCH_ENCODED,
+                        "encode",
+                        PROCESS_SOURCE,
+                        "payload encoded",
+                        preparedSave.clearChunk() ? 0 : preparedSave.rawData().length
+                );
+                PayloadWatchTracer.traceDeltaStage(
+                        world.getRegistryKey().getValue().toString(),
+                        save.pos(),
+                        save.snapshot(),
+                        save.operationId(),
+                        ChunkTraceEventType.WATCH_SERIALIZED,
+                        "serialize",
+                        PROCESS_SOURCE,
+                        "payload serialized",
+                        preparedSave.clearChunk() ? 0 : preparedSave.rawData().length
+                );
 
                 if (!save.storage().writePrepared(save.cisPos(), preparedSave, save.operationId())) {
                     return;
                 }
+                PayloadWatchTracer.traceDeltaStage(
+                        world.getRegistryKey().getValue().toString(),
+                        save.pos(),
+                        save.snapshot(),
+                        save.operationId(),
+                        ChunkTraceEventType.WATCH_STORAGE_WRITE,
+                        "storage-write",
+                        PROCESS_SOURCE,
+                        "payload written to storage",
+                        null
+                );
 
                 save.liveDelta().setSourceVersion(CisConstants.VERSION);
                 GlobalChunkTracker.markSavedIfUnchanged(world, save.pos(), save.liveDelta(), save.generation());

@@ -227,7 +227,7 @@ public final class ChunkisMod implements ModInitializer {
             return;
         }
 
-        if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
+        if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true)) {
             DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(
                     world,
                     pos,

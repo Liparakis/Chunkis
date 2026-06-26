@@ -68,6 +68,42 @@ public final class ChunkTraceStore {
             final Boolean dirtyState,
             final Integer byteSize
     ) {
+        trace(
+                domain,
+                eventType,
+                severity,
+                reason,
+                source,
+                message,
+                worldId,
+                chunkKey,
+                regionKey,
+                operationId,
+                dirtyState,
+                byteSize,
+                null,
+                null,
+                null
+        );
+    }
+
+    public static void trace(
+            final ChunkisDebugDomain domain,
+            final ChunkTraceEventType eventType,
+            final ChunkTraceSeverity severity,
+            final ChunkTraceReason reason,
+            final String source,
+            final String message,
+            final String worldId,
+            final DebugChunkKey chunkKey,
+            final DebugRegionKey regionKey,
+            final String operationId,
+            final Boolean dirtyState,
+            final Integer byteSize,
+            final PayloadWatchTarget payloadWatchTarget,
+            final String payloadWatchStage,
+            final String payloadWatchSummary
+    ) {
         if (!ChunkisDebugConfig.allows(domain, severity)) {
             return;
         }
@@ -87,7 +123,10 @@ public final class ChunkTraceStore {
                 regionKey,
                 operationId,
                 dirtyState,
-                byteSize
+                byteSize,
+                payloadWatchTarget,
+                payloadWatchStage,
+                payloadWatchSummary
         ));
     }
 
@@ -252,7 +291,10 @@ public final class ChunkTraceStore {
                 event.regionKey(),
                 event.operationId(),
                 event.dirtyState(),
-                event.byteSize()
+                event.byteSize(),
+                event.payloadWatchTarget(),
+                event.payloadWatchStage(),
+                event.payloadWatchSummary()
         ));
     }
 

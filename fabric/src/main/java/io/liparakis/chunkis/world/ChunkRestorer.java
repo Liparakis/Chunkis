@@ -10,6 +10,7 @@ import io.liparakis.chunkis.debug.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.ChunkTraceStore;
 import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import net.minecraft.block.BlockState;
@@ -134,7 +135,8 @@ public final class ChunkRestorer {
                 world,
                 chunk,
                 protoDelta,
-                runtimeDelta
+                runtimeDelta,
+                operationId
         );
         final ChunkPos chunkPos = chunk.getPos();
         final boolean hasPersistedBaseChunk =
@@ -161,6 +163,7 @@ public final class ChunkRestorer {
                 protoDelta.isDirty(),
                 null
         );
+        PayloadWatchTracer.traceRestoreStarted(world, chunkPos, protoDelta, operationId);
         if (hasPersistedBaseChunk) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -514,6 +517,7 @@ public final class ChunkRestorer {
         private final ChunkPos chunkPosition;
         private final ChunkDelta<BlockState, NbtCompound> runtimeDelta;
         private final boolean replayLegacyEntities;
+        private final String operationId;
         private final BlockApplyFailureCounters blockApplyFailureCounters;
         private int appliedBlocksCount;
         private int restoredBlockEntitiesCount;
@@ -523,13 +527,15 @@ public final class ChunkRestorer {
                 final ServerWorld world,
                 final WorldChunk chunk,
                 final ChunkDelta<BlockState, NbtCompound> sourceDelta,
-                final ChunkDelta<BlockState, NbtCompound> runtimeDelta
+                final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
+                final String operationId
         ) {
             this.world = world;
             this.chunk = chunk;
             this.chunkPosition = chunk.getPos();
             this.runtimeDelta = runtimeDelta;
             this.replayLegacyEntities = shouldReplayLegacyEntities(sourceDelta);
+            this.operationId = operationId;
             this.blockApplyFailureCounters = new BlockApplyFailureCounters();
         }
 
@@ -631,12 +637,20 @@ public final class ChunkRestorer {
                     worldPos,
                     blockApplyFailureCounters
             )) {
+                PayloadWatchTracer.traceRestoreBlockFailure(
+                        world,
+                        chunkPosition,
+                        worldPos,
+                        operationId,
+                        "restore failed before block reached live world"
+                );
                 return;
             }
 
             copyBlockToRuntimeDelta(localX, localY, localZ, state);
             blockApplyFailureCounters.recordAppliedBlock();
             appliedBlocksCount++;
+            PayloadWatchTracer.traceRestoredBlock(world, chunkPosition, worldPos, state, operationId);
         }
 
         /**
@@ -729,10 +743,24 @@ public final class ChunkRestorer {
             final BlockState currentState = chunk.getBlockState(worldPos);
 
             if (!currentState.hasBlockEntity()) {
+                PayloadWatchTracer.traceRestoreBlockEntitySkipped(
+                        world,
+                        chunkPosition,
+                        worldPos,
+                        operationId,
+                        "restore skipped: missing block state"
+                );
                 return;
             }
 
             if (!isBlockEntityNbtCompatibleWithState(nbt, currentState)) {
+                PayloadWatchTracer.traceRestoreBlockEntitySkipped(
+                        world,
+                        chunkPosition,
+                        worldPos,
+                        operationId,
+                        "restore skipped: block entity type incompatible with current block state"
+                );
                 return;
             }
 
@@ -745,6 +773,13 @@ public final class ChunkRestorer {
 
             if (blockEntity == null) {
                 LOGGER.warn("Failed to create block entity from NBT at {}", worldPos);
+                PayloadWatchTracer.traceRestoreBlockEntitySkipped(
+                        world,
+                        chunkPosition,
+                        worldPos,
+                        operationId,
+                        "restore skipped: block entity could not be created from NBT"
+                );
                 return;
             }
 
@@ -755,6 +790,7 @@ public final class ChunkRestorer {
                 runtimeDelta.addBlockEntityData(localX, localY, localZ, nbt, false);
             }
             restoredBlockEntitiesCount++;
+            PayloadWatchTracer.traceRestoredBlockEntity(world, chunkPosition, worldPos, blockEntity, nbt, operationId);
         }
 
         /**
@@ -803,6 +839,15 @@ public final class ChunkRestorer {
                         if (!isEntityAlreadySpawned(entity.getUuid())) {
                             world.spawnEntity(entity);
                             restoredEntitiesCount++;
+                            PayloadWatchTracer.traceRestoredEntity(world, chunkPosition, entity, nbt, operationId);
+                        } else {
+                            PayloadWatchTracer.traceRestoreEntitySkipped(
+                                    world,
+                                    chunkPosition,
+                                    entity.getUuidAsString(),
+                                    operationId,
+                                    "restore skipped: entity already present in world"
+                            );
                         }
 
                         return entity;

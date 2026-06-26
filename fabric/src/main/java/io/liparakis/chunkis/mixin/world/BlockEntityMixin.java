@@ -2,11 +2,17 @@ package io.liparakis.chunkis.mixin.world;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
+import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.ChunkTraceReason;
 
 import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
+import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
+import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
+import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.ChunkBlockEntityCapture;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
+import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.nbt.NbtCompound;
@@ -72,6 +78,13 @@ public abstract class BlockEntityMixin {
         if (chunk == null) {
             return;
         }
+        if (chunk instanceof ChunkisMutationGuardDuck guardDuck
+                && guardDuck.chunkis$getMutationTrackingScope().currentCause() != ChunkMutationTrackingScope.Cause.NONE) {
+            return;
+        }
+        if (PendingChunkMutationSuppression.currentCause(chunk) != ChunkMutationTrackingScope.Cause.NONE) {
+            return;
+        }
         handleChunkDelta(chunk, serverWorld);
         GlobalChunkTracker.markDirty(chunk);
     }
@@ -97,11 +110,31 @@ public abstract class BlockEntityMixin {
         if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)) {
             return;
         }
-        final ChunkDelta<BlockState, NbtCompound> delta =
+        ChunkDelta<BlockState, NbtCompound> delta =
                 (ChunkDelta<BlockState, NbtCompound>) deltaDuck.chunkis$getDelta();
+        if (delta == null) {
+            delta = new ChunkDelta<>(BlockState::isAir);
+            deltaDuck.chunkis$setDelta(delta);
+        }
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+            ChunkOwnershipTraceHelper.claimOwnership(
+                    delta,
+                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+                    "BlockEntityMixin#handleChunkDelta"
+            );
+            ChunkOwnershipTraceHelper.traceDecision(
+                    chunk.getWorld().getRegistryKey(),
+                    chunk.getPos(),
+                    "CLAIMED",
+                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+                    "BlockEntityMixin#handleChunkDelta",
+                    delta,
+                    PendingChunkMutationSuppression.currentCause(chunk)
+            );
+        }
 
         BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
-        delta.markDirty();
+        delta.markDirty("BlockEntityMixin#handleChunkDelta");
         chunk.markNeedsSaving();
         captureBlockEntityNbt(serverWorld, delta);
     }

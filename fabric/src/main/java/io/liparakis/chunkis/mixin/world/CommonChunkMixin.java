@@ -1,9 +1,12 @@
 package io.liparakis.chunkis.mixin.world;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
+import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
+import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
+import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Mixin;
@@ -31,7 +34,7 @@ import java.util.Objects;
 public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
 
     @Unique
-    private volatile ChunkDelta<?, ?> chunkis$delta = new ChunkDelta<>();
+    private volatile ChunkDelta<?, ?> chunkis$delta;
     @Unique
     private volatile String chunkis$restoreOperationId;
     @Unique
@@ -98,11 +101,22 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      */
     @Inject(method = "markNeedsSaving", at = @At("HEAD"))
     private void chunkis$onMarkNeedsSaving(final CallbackInfo ci) {
+        if ((Object) this instanceof ChunkisMutationGuardDuck guardDuck
+                && guardDuck.chunkis$getMutationTrackingScope().currentCause() != ChunkMutationTrackingScope.Cause.NONE) {
+            return;
+        }
+        if ((Object) this instanceof WorldChunk worldChunk
+                && PendingChunkMutationSuppression.currentCause(worldChunk) != ChunkMutationTrackingScope.Cause.NONE) {
+            return;
+        }
+        if (this.chunkis$delta == null) {
+            return;
+        }
         if (!ChunkDeltaOwnership.shouldMirrorVanillaDirtyState(this.chunkis$delta)) {
             return;
         }
 
-        if (!this.chunkis$delta.markDirtyIfClean()) {
+        if (!this.chunkis$delta.markDirtyIfClean("CommonChunkMixin#chunkis$onMarkNeedsSaving")) {
             return;
         }
 
@@ -120,7 +134,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      */
     @Unique
     private boolean shouldOverrideSavingFlag(final boolean currentlySaving) {
-        return !currentlySaving && chunkis$delta.isDirty();
+        return !currentlySaving && chunkis$delta != null && chunkis$delta.isDirty();
     }
 
     /**

@@ -153,6 +153,20 @@ If you prefer direct contact first, Discord is `Liparakis`.
 
 ---
 
+## Architecture Docs
+
+The permanent architecture documentation lives under [docs/Architecture](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/README.md).
+
+Recommended reading order:
+
+1. [System Overview](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/System-Overview.md)
+2. [Delta And Ownership Model](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Delta-And-Ownership-Model.md)
+3. [Save Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Save-Pipeline.md)
+4. [Load And Restore Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Load-And-Restore-Pipeline.md)
+5. [Tracking, Guards, And Durability](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Tracking-Guards-And-Durability.md)
+
+---
+
 ## Contributing
 
 Contributions are welcome. The most valuable contributions are:
