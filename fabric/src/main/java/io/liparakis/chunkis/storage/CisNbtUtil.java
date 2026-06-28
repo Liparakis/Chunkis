@@ -495,58 +495,13 @@ public final class CisNbtUtil {
             final NbtCompound baseChunkNbt,
             final boolean portalChunk
     ) {
-        final NbtCompound metadata = new NbtCompound();
-
-        if (structureData != null && !structureData.isEmpty()) {
-            metadata.put(STRUCTURES_KEY, structureData);
-        }
-
-        if (baseChunkNbt != null && !baseChunkNbt.isEmpty()) {
-            metadata.put(BASE_CHUNK_NBT_KEY, baseChunkNbt);
-        }
-
-        metadata.put(
-                CHUNKIS_METADATA_KEY,
-                createChunkisMetadata(
-                        suppressInitialRepopulation,
-                        fullBlockBaseline,
-                        portalChunk
-                )
-        );
-
-        return metadata;
-    }
-
-    /**
-     * Creates the nested Chunkis-owned metadata compound.
-     *
-     * @param suppressInitialRepopulation replay suppression flag
-     * @param fullBlockBaseline           full generated block baseline flag
-     * @return Chunkis metadata compound
-     */
-    private static NbtCompound createChunkisMetadata(
-            final boolean suppressInitialRepopulation,
-            final boolean fullBlockBaseline,
-            final boolean portalChunk
-    ) {
-        final NbtCompound chunkisMetadata = new NbtCompound();
-
-        chunkisMetadata.putBoolean(
-                SUPPRESS_INITIAL_REPOPULATION_KEY,
-                suppressInitialRepopulation
-        );
-
-        chunkisMetadata.putBoolean(
-                FULL_BLOCK_BASELINE_KEY,
-                fullBlockBaseline
-        );
-
-        chunkisMetadata.putBoolean(
-                PORTAL_CHUNK_KEY,
+        return ChunkMetadataEnvelope.create(
+                structureData,
+                suppressInitialRepopulation,
+                fullBlockBaseline,
+                baseChunkNbt,
                 portalChunk
         );
-
-        return chunkisMetadata;
     }
 
     /**
@@ -658,16 +613,7 @@ public final class CisNbtUtil {
      * @return copied base chunk NBT, or {@code null}
      */
     public static NbtCompound extractPersistedBaseChunkNbt(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata) || metadata.isEmpty()) {
-            return null;
-        }
-
-        final NbtCompound baseChunkNbt =
-                getCompoundOrNull(metadata, BASE_CHUNK_NBT_KEY);
-
-        return baseChunkNbt != null && !baseChunkNbt.isEmpty()
-                ? baseChunkNbt.copy()
-                : null;
+        return PersistedBaseChunkAccess.extractCopiedBaseChunkNbt(chunkMetadata);
     }
 
     /**
@@ -680,14 +626,7 @@ public final class CisNbtUtil {
      * @return {@code true} if a non-empty base chunk payload exists
      */
     public static boolean hasPersistedBaseChunkNbt(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata) || metadata.isEmpty()) {
-            return false;
-        }
-
-        final NbtCompound baseChunkNbt =
-                getCompoundOrNull(metadata, BASE_CHUNK_NBT_KEY);
-
-        return baseChunkNbt != null && !baseChunkNbt.isEmpty();
+        return PersistedBaseChunkAccess.hasPersistedBaseChunkNbt(chunkMetadata);
     }
 
     /**
@@ -704,8 +643,7 @@ public final class CisNbtUtil {
      * authoritative block baseline is present
      */
     public static boolean shouldUsePersistedBaseChunkForBlockBaseline(final Object chunkMetadata) {
-        return hasPersistedBaseChunkNbt(chunkMetadata)
-                && !hasFullBlockBaseline(chunkMetadata);
+        return PersistedBaseChunkAccess.shouldUsePersistedBaseChunkForBlockBaseline(chunkMetadata);
     }
 
     /**
@@ -747,7 +685,7 @@ public final class CisNbtUtil {
             return explicit;
         }
 
-        return hasChunkisDeltaMarker(root);
+        return SyntheticChunkisLoadMarker.hasDeltaMarker(root);
     }
 
     /**
@@ -777,7 +715,7 @@ public final class CisNbtUtil {
      * @return {@code true} when the synthetic Chunkis marker is present
      */
     public static boolean hasSyntheticChunkisLoadMarker(final NbtCompound root) {
-        return root != null && hasChunkisDeltaMarker(root);
+        return root != null && SyntheticChunkisLoadMarker.hasDeltaMarker(root);
     }
 
     /**
@@ -801,10 +739,7 @@ public final class CisNbtUtil {
      * @return {@code true} if the marker exists and is true
      */
     private static boolean hasChunkisDeltaMarker(final NbtCompound root) {
-        final NbtCompound chunkisData = getCompoundOrNull(root, CHUNKIS_DATA_KEY);
-
-        return chunkisData != null
-                && chunkisData.getBoolean(HAS_DELTA_KEY).orElse(false);
+        return SyntheticChunkisLoadMarker.hasDeltaMarker(root);
     }
 
     /**
@@ -819,9 +754,7 @@ public final class CisNbtUtil {
     ) {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(baseChunkUsage, "baseChunkUsage");
-
-        final NbtCompound chunkisData = getOrCreateCompound(root, CHUNKIS_DATA_KEY);
-        chunkisData.putString(LOAD_BASE_CHUNK_USAGE_KEY, baseChunkUsage.name());
+        SyntheticChunkisLoadMarker.putLoadBaseChunkUsage(root, baseChunkUsage);
     }
 
     /**
@@ -880,10 +813,7 @@ public final class CisNbtUtil {
     private static Boolean readSuppressInitialRepopulationFlag(
             final NbtCompound chunkMetadata
     ) {
-        return readChunkisBooleanFlag(
-                chunkMetadata,
-                SUPPRESS_INITIAL_REPOPULATION_KEY
-        );
+        return ChunkisMetadataFlags.readSuppressInitialRepopulationFlag(chunkMetadata);
     }
 
     /**
@@ -893,10 +823,7 @@ public final class CisNbtUtil {
      * @return explicit flag, or {@code null}
      */
     private static Boolean readFullBlockBaselineFlag(final NbtCompound chunkMetadata) {
-        return readChunkisBooleanFlag(
-                chunkMetadata,
-                FULL_BLOCK_BASELINE_KEY
-        );
+        return ChunkisMetadataFlags.readFullBlockBaselineFlag(chunkMetadata);
     }
 
     /**
@@ -906,31 +833,7 @@ public final class CisNbtUtil {
      * @return explicit flag, or {@code null}
      */
     private static Boolean readPortalChunkFlag(final NbtCompound chunkMetadata) {
-        return readChunkisBooleanFlag(
-                chunkMetadata,
-                PORTAL_CHUNK_KEY
-        );
-    }
-
-    /**
-     * Reads a boolean flag from the nested Chunkis metadata envelope.
-     *
-     * @param chunkMetadata persisted metadata payload
-     * @param key           flag key
-     * @return explicit boolean value, or {@code null}
-     */
-    private static Boolean readChunkisBooleanFlag(
-            final NbtCompound chunkMetadata,
-            final String key
-    ) {
-        final NbtCompound chunkisMetadata =
-                getCompoundOrNull(chunkMetadata, CHUNKIS_METADATA_KEY);
-
-        if (chunkisMetadata == null || !chunkisMetadata.contains(key)) {
-            return null;
-        }
-
-        return chunkisMetadata.getBoolean(key).orElse(null);
+        return ChunkisMetadataFlags.readPortalChunkFlag(chunkMetadata);
     }
 
     /**
@@ -943,7 +846,7 @@ public final class CisNbtUtil {
      * @param key    nested compound key
      * @return nested compound, or {@code null}
      */
-    private static NbtCompound getCompoundOrNull(
+    static NbtCompound getCompoundOrNull(
             final NbtCompound parent,
             final String key
     ) {
@@ -952,27 +855,6 @@ public final class CisNbtUtil {
         }
 
         return parent.getCompound(key).orElse(null);
-    }
-
-    /**
-     * Returns an existing nested compound or creates and installs a new one.
-     *
-     * @param parent parent compound
-     * @param key    nested compound key
-     * @return mutable nested compound
-     */
-    private static NbtCompound getOrCreateCompound(
-            final NbtCompound parent,
-            final String key
-    ) {
-        final NbtCompound existing = getCompoundOrNull(parent, key);
-        if (existing != null) {
-            return existing;
-        }
-
-        final NbtCompound created = new NbtCompound();
-        parent.put(key, created);
-        return created;
     }
 
     @SuppressWarnings("unchecked")

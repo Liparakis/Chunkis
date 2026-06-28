@@ -92,17 +92,7 @@ public final class ChunkBlockEntityCapture {
             return;
         }
 
-        storeInDelta(pos, nbt, delta);
-
-        if (serverWorld != null) {
-            PayloadWatchTracer.traceCapturedBlockEntity(
-                    serverWorld.getRegistryKey().getValue().toString(),
-                    chunkPos,
-                    pos,
-                    blockEntity,
-                    nbt
-            );
-        }
+        storeCapturedBlockEntity(serverWorld, chunkPos, pos, blockEntity, nbt, delta);
     }
 
     /**
@@ -178,17 +168,7 @@ public final class ChunkBlockEntityCapture {
             return;
         }
 
-        storeInDelta(pos, nbt, delta);
-
-        if (serverWorld != null) {
-            PayloadWatchTracer.traceCapturedBlockEntity(
-                    serverWorld.getRegistryKey().getValue().toString(),
-                    chunkPos,
-                    pos,
-                    blockEntity,
-                    nbt
-            );
-        }
+        storeCapturedBlockEntity(serverWorld, chunkPos, pos, blockEntity, nbt, delta);
     }
 
     /**
@@ -275,6 +255,36 @@ public final class ChunkBlockEntityCapture {
                 worldPos.getZ() & CisConstants.COORD_MASK,
                 nbt
         );
+    }
+
+    /**
+     * Stores block entity data in the delta and emits the corresponding capture trace.
+     *
+     * @param serverWorld resolved server world, or {@code null} when tracing is unavailable
+     * @param chunkPos    chunk position containing the block entity
+     * @param worldPos    absolute block position
+     * @param blockEntity captured block entity
+     * @param nbt         serialized block entity payload
+     * @param delta       destination delta
+     */
+    private static void storeCapturedBlockEntity(
+            @Nullable final ServerWorld serverWorld,
+            @Nullable final ChunkPos chunkPos,
+            final BlockPos worldPos,
+            final BlockEntity blockEntity,
+            final NbtCompound nbt,
+            final ChunkDelta<?, NbtCompound> delta
+    ) {
+        storeInDelta(worldPos, nbt, delta);
+        if (serverWorld != null && chunkPos != null) {
+            PayloadWatchTracer.traceCapturedBlockEntity(
+                    serverWorld.getRegistryKey().getValue().toString(),
+                    chunkPos,
+                    worldPos,
+                    blockEntity,
+                    nbt
+            );
+        }
     }
 
     /**

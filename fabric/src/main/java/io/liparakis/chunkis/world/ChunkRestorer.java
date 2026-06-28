@@ -18,8 +18,6 @@ import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
@@ -366,16 +364,6 @@ public final class ChunkRestorer {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             @org.jetbrains.annotations.Nullable final String operationId,
-            final String entityUuid
-    ) {
-        return replayPendingEntityIfNeeded(world, chunk, runtimeDelta, operationId, entityUuid, null);
-    }
-
-    public static ReplayResult replayPendingEntityIfNeeded(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
-            @org.jetbrains.annotations.Nullable final String operationId,
             final String entityUuid,
             @org.jetbrains.annotations.Nullable final NbtCompound fallbackEntityNbt
     ) {
@@ -650,7 +638,6 @@ public final class ChunkRestorer {
         private final boolean replayLegacyEntities;
         private final String operationId;
         private final BlockApplyFailureCounters blockApplyFailureCounters;
-        private int failedEntityRestores;
         private int appliedBlocksCount;
         private int restoredBlockEntitiesCount;
         private int restoredEntitiesCount;
@@ -993,62 +980,6 @@ public final class ChunkRestorer {
         }
 
         /**
-         * Deserializes and spawns an entity from legacy entity NBT.
-         *
-         * <p>{@link EntityType#loadEntityWithPassengers} handles all vanilla entity
-         * types, including vehicles with passengers. UUID checks prevent duplicate
-         * spawning if the same delta is applied more than once.</p>
-         *
-         * @param nbt serialized entity NBT
-         */
-        private boolean restoreEntity(final NbtCompound nbt) {
-            PayloadWatchTracer.traceRestoreEntityApplyAttempt(
-                    world,
-                    chunkPosition,
-                    nbt,
-                    operationId,
-                    "ChunkRestorer.RestorationVisitor#restoreEntity"
-            );
-            final boolean[] restored = {false};
-            EntityType.loadEntityWithPassengers(
-                    nbt,
-                    world,
-                    SpawnReason.LOAD,
-                    entity -> {
-                        if (!isEntityAlreadySpawned(entity.getUuid())) {
-                            if (world.spawnEntity(entity)) {
-                                restoredEntitiesCount++;
-                                restored[0] = true;
-                                ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
-                                PayloadWatchTracer.traceRestoredEntity(world, chunkPosition, entity, nbt, operationId);
-                            } else {
-                                PayloadWatchTracer.traceRestoreEntitySkipped(
-                                        world,
-                                        chunkPosition,
-                                        entity.getUuidAsString(),
-                                        operationId,
-                                        "restore skipped: ServerWorld.spawnEntity returned false"
-                                );
-                            }
-                        } else {
-                            restored[0] = true;
-                            ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
-                            PayloadWatchTracer.traceRestoreEntitySkipped(
-                                    world,
-                                    chunkPosition,
-                                    entity.getUuidAsString(),
-                                    operationId,
-                                    "restore skipped: entity already present in world"
-                            );
-                        }
-
-                        return entity;
-                    }
-            );
-            return restored[0];
-        }
-
-        /**
          * Returns whether the source delta still carries legacy entity payloads that
          * must be replayed once before vanilla entity storage takes over.
          *
@@ -1060,16 +991,6 @@ public final class ChunkRestorer {
         ) {
             return sourceDelta != null
                     && sourceDelta.countNonNullEntities() > 0;
-        }
-
-        /**
-         * Returns whether an entity UUID already exists in the world.
-         *
-         * @param uuid entity UUID
-         * @return {@code true} if already present
-         */
-        private boolean isEntityAlreadySpawned(final UUID uuid) {
-            return isLiveEntityPresent(world, uuid);
         }
 
         /**
@@ -1170,14 +1091,6 @@ public final class ChunkRestorer {
             first = false;
         }
         return builder.append(']').toString();
-    }
-
-    private static boolean isLiveEntityPresent(final ServerWorld world, final UUID uuid) {
-        if (world == null || uuid == null) {
-            return false;
-        }
-        final Entity entity = world.getEntity(uuid);
-        return entity != null && entity.isAlive() && !entity.isRemoved();
     }
 
     static final class BlockApplyFailureCounters {

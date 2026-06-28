@@ -66,6 +66,19 @@ public final class AsyncCisSaveManager {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Snapshots the live delta, assigns it an async save worker, and queues it for background
+     * compression and region-file I/O.
+     *
+     * <p>Encoding prerequisites are captured on the server thread by taking a delta snapshot.
+     * The expensive compression and write stages then happen on the per-world worker thread.</p>
+     *
+     * @param world       world that owns the chunk
+     * @param storage     storage instance used to encode and persist the snapshot
+     * @param pos         chunk position being saved
+     * @param liveDelta   mutable live delta to snapshot
+     * @param operationId trace correlation id
+     */
     public static void submit(
             final ServerWorld world,
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
@@ -139,6 +152,15 @@ public final class AsyncCisSaveManager {
         WORKERS.clear();
     }
 
+    /**
+     * Returns a stable snapshot of currently queued async saves for {@code world}.
+     *
+     * <p>The result is intended for diagnostics and debug commands. It is detached from
+     * the live queue and will not reflect later worker activity.</p>
+     *
+     * @param world world whose queue should be inspected; {@code null} returns an empty map
+     * @return queued saves keyed by chunk position
+     */
     public static Map<DebugChunkKey, PendingSaveSnapshot> snapshot(final ServerWorld world) {
         if (world == null) {
             return Map.of();
@@ -160,37 +182,95 @@ public final class AsyncCisSaveManager {
     }
 
     /**
-     * Daemon thread that drains a dimension-local FIFO queue of {@link PendingSave}
-     * entries, coalescing duplicate chunk positions so only the latest save for a
-     * given position is written.
+     * Coalescing FIFO queue for pending async saves belonging to one world.
      *
-     * <p>The {@link LinkedHashMap} provides O(1) coalescing (key replacement) while
-     * preserving insertion order for FIFO draining.  All mutations to the map are
-     * guarded by {@link #monitor}.</p>
+     * <p>Later submissions replace earlier ones for the same chunk position while
+     * preserving FIFO ordering for distinct positions.</p>
      */
-    private static final class SaveWorker implements Runnable {
-
-        private final ServerWorld world;
+    private static final class PendingSaveQueue {
 
         /**
-         * Lock object for the {@link #pending} map and the {@link #closed} flag.
-         * A dedicated object is used instead of {@code this} to keep the monitor
-         * scope minimal and to prevent accidental external synchronization.
+         * Lock object guarding {@link #pending} and {@link #closed}.
          */
         private final Object monitor = new Object();
 
         /**
-         * Coalescing FIFO queue.  Key is the packed long chunk position
-         * ({@link ChunkPos#toLong()}); value is the latest pending save for that
-         * position.  Guarded by {@link #monitor}.
+         * Coalescing FIFO queue keyed by {@link ChunkPos#toLong()}.
          */
         private final LinkedHashMap<Long, PendingSave> pending = new LinkedHashMap<>();
 
         /**
-         * Set to {@code true} by {@link #close()} to signal the worker to exit.
+         * Set when the owning worker is shutting down.
          */
-        private volatile boolean closed;
+        private boolean closed;
 
+        void submit(final PendingSave save) {
+            synchronized (monitor) {
+                if (closed) {
+                    return;
+                }
+                pending.remove(save.posKey());
+                pending.put(save.posKey(), save);
+                monitor.notify();
+            }
+        }
+
+        PendingSave poll() {
+            synchronized (monitor) {
+                while (pending.isEmpty()) {
+                    if (closed) {
+                        return null;
+                    }
+                    try {
+                        monitor.wait();
+                    } catch (final InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                }
+
+                final Map.Entry<Long, PendingSave> head = pending.entrySet().iterator().next();
+                pending.remove(head.getKey());
+                return head.getValue();
+            }
+        }
+
+        void close() {
+            synchronized (monitor) {
+                closed = true;
+                monitor.notifyAll();
+            }
+        }
+
+        Map<DebugChunkKey, PendingSaveSnapshot> snapshot() {
+            synchronized (monitor) {
+                final Map<DebugChunkKey, PendingSaveSnapshot> snapshots = new LinkedHashMap<>(pending.size());
+                for (final PendingSave save : pending.values()) {
+                    final DebugChunkKey chunkKey = new DebugChunkKey(save.pos().x, save.pos().z);
+                    snapshots.put(chunkKey, new PendingSaveSnapshot(
+                            chunkKey,
+                            save.operationId(),
+                            save.generation(),
+                            save.liveDelta().isDirty()
+                    ));
+                }
+                return snapshots;
+            }
+        }
+    }
+
+    /**
+     * Daemon thread that drains a dimension-local FIFO queue of {@link PendingSave}
+     * entries, coalescing duplicate chunk positions so only the latest save for a
+     * given position is written.
+     *
+     * <p>Queue bookkeeping lives in {@link PendingSaveQueue}; this worker is only
+     * responsible for thread lifecycle and save processing.</p>
+     */
+    private static final class SaveWorker implements Runnable {
+
+        private final ServerWorld world;
+        private final PendingSaveQueue queue = new PendingSaveQueue();
         private final Thread thread;
 
         /**
@@ -212,17 +292,7 @@ public final class AsyncCisSaveManager {
          * @param save the prepared save to enqueue
          */
         void submit(final PendingSave save) {
-            synchronized (monitor) {
-                if (closed) {
-                    return;
-                }
-                // LinkedHashMap.put replaces the value but preserves the existing
-                // key's insertion order, so we remove first to promote the entry to
-                // the tail (most-recent position), keeping drain order meaningful.
-                pending.remove(save.posKey());
-                pending.put(save.posKey(), save);
-                monitor.notify(); // wake worker; only one thread waits
-            }
+            queue.submit(save);
         }
 
         /**
@@ -230,10 +300,7 @@ public final class AsyncCisSaveManager {
          * ensuring all already-queued saves are drained before returning.
          */
         void close() {
-            synchronized (monitor) {
-                closed = true;
-                monitor.notifyAll();
-            }
+            queue.close();
             try {
                 thread.join();
             } catch (final InterruptedException e) {
@@ -246,24 +313,12 @@ public final class AsyncCisSaveManager {
         }
 
         Map<DebugChunkKey, PendingSaveSnapshot> snapshot() {
-            synchronized (monitor) {
-                final Map<DebugChunkKey, PendingSaveSnapshot> snapshots = new LinkedHashMap<>(pending.size());
-                for (final PendingSave save : pending.values()) {
-                    final DebugChunkKey chunkKey = new DebugChunkKey(save.pos().x, save.pos().z);
-                    snapshots.put(chunkKey, new PendingSaveSnapshot(
-                            chunkKey,
-                            save.operationId(),
-                            save.generation(),
-                            save.liveDelta().isDirty()
-                    ));
-                }
-                return snapshots;
-            }
+            return queue.snapshot();
         }
 
         /**
          * Worker loop: waits for entries, drains them one at a time.
-         * Exits when {@link #closed} is {@code true} and the queue is empty,
+         * Exits when the queue has been closed and drained,
          * ensuring in-flight saves complete before the thread dies.
          */
         @Override
@@ -284,22 +339,7 @@ public final class AsyncCisSaveManager {
          * @return the next save to process, or {@code null} if the worker should exit
          */
         private PendingSave poll() {
-            synchronized (monitor) {
-                while (pending.isEmpty()) {
-                    if (closed) {
-                        return null;
-                    }
-                    try {
-                        monitor.wait();
-                    } catch (final InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        return null;
-                    }
-                }
-                final Map.Entry<Long, PendingSave> head = pending.entrySet().iterator().next();
-                pending.remove(head.getKey());
-                return head.getValue();
-            }
+            return queue.poll();
         }
 
         /**

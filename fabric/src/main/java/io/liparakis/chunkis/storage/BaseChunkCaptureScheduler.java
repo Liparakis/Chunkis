@@ -134,6 +134,15 @@ public final class BaseChunkCaptureScheduler {
         SCHEDULERS.clear();
     }
 
+    /**
+     * Returns a detached snapshot of queued deferred base captures for {@code world}.
+     *
+     * <p>The result is intended for diagnostics and debug reporting. It does not stay
+     * in sync with the live scheduler after this method returns.</p>
+     *
+     * @param world world whose queue should be inspected; {@code null} returns an empty map
+     * @return queued captures keyed by chunk position
+     */
     public static Map<DebugChunkKey, QueuedCaptureSnapshot> snapshot(final ServerWorld world) {
         if (world == null) {
             return Map.of();
@@ -342,6 +351,44 @@ public final class BaseChunkCaptureScheduler {
     }
 
     /**
+     * FIFO queue of deferred base captures for one dimension.
+     *
+     * <p>Later submissions replace earlier ones for the same chunk position while
+     * preserving insertion order for distinct positions.</p>
+     */
+    private static final class QueuedCaptureQueue {
+
+        private final LinkedHashMap<Long, WorldChunk> queuedChunks = new LinkedHashMap<>();
+
+        synchronized void clear() {
+            queuedChunks.clear();
+        }
+
+        synchronized WorldChunk pollNext() {
+            final Iterator<Map.Entry<Long, WorldChunk>> it = queuedChunks.entrySet().iterator();
+            if (!it.hasNext()) {
+                return null;
+            }
+            final WorldChunk chunk = it.next().getValue();
+            it.remove();
+            return chunk;
+        }
+
+        synchronized Map<DebugChunkKey, QueuedCaptureSnapshot> snapshot() {
+            final Map<DebugChunkKey, QueuedCaptureSnapshot> snapshots = new LinkedHashMap<>(queuedChunks.size());
+            for (final WorldChunk chunk : queuedChunks.values()) {
+                final ChunkDelta<BlockState, NbtCompound> delta = deltaFrom(chunk);
+                final DebugChunkKey chunkKey = new DebugChunkKey(chunk.getPos().x, chunk.getPos().z);
+                snapshots.put(chunkKey, new QueuedCaptureSnapshot(
+                        chunkKey,
+                        delta != null && delta.isDirty()
+                ));
+            }
+            return snapshots;
+        }
+    }
+
+    /**
      * Selects the persistence strategy used after a deferred base capture.
      */
     private enum SaveMode {
@@ -372,32 +419,17 @@ public final class BaseChunkCaptureScheduler {
      */
     private static final class SchedulerState {
 
-        /**
-         * FIFO queue of chunks awaiting base-capture, keyed by packed chunk position
-         * ({@link ChunkPos#toLong()}).
-         */
-        private final LinkedHashMap<Long, WorldChunk> queuedChunks = new LinkedHashMap<>();
+        private final QueuedCaptureQueue queue = new QueuedCaptureQueue();
 
         /**
          * Drops every queued chunk from this dimension-local state.
          */
-        synchronized void clear() {
-            queuedChunks.clear();
+        void clear() {
+            queue.clear();
         }
 
-        synchronized Map<DebugChunkKey, QueuedCaptureSnapshot> snapshot() {
-            final Map<DebugChunkKey, QueuedCaptureSnapshot> snapshots = new LinkedHashMap<>(queuedChunks.size());
-            for (final WorldChunk chunk : queuedChunks.values()) {
-                final ChunkDelta<BlockState, NbtCompound> delta = deltaFrom(chunk);
-                final DebugChunkKey chunkKey = new DebugChunkKey(chunk.getPos().x, chunk.getPos().z);
-                snapshots.put(
-                        chunkKey, new QueuedCaptureSnapshot(
-                                chunkKey,
-                                delta != null && delta.isDirty()
-                        )
-                );
-            }
-            return snapshots;
+        Map<DebugChunkKey, QueuedCaptureSnapshot> snapshot() {
+            return queue.snapshot();
         }
 
         /**
@@ -434,14 +466,8 @@ public final class BaseChunkCaptureScheduler {
          *
          * @return the next chunk awaiting capture, or {@code null} if the queue is empty
          */
-        private synchronized WorldChunk pollNext() {
-            final Iterator<Map.Entry<Long, WorldChunk>> it = queuedChunks.entrySet().iterator();
-            if (!it.hasNext()) {
-                return null;
-            }
-            final WorldChunk chunk = it.next().getValue();
-            it.remove();
-            return chunk;
+        private WorldChunk pollNext() {
+            return queue.pollNext();
         }
 
         /**

@@ -59,11 +59,8 @@ public final class CisRegionInspector {
     /**
      * Parses and inspects one canonical region path.
      */
-    private static void inspectRegionPath(
-            final Path storageDir,
-            final Path path,
-            final List<RegionSpaceUsage> regions
-    ) {
+    private static void inspectRegionPath(final Path storageDir, final Path path,
+                                          final List<RegionSpaceUsage> regions) {
         final RegionKey regionKey = CisRegionPaths.parseRegionKey(path);
         if (regionKey == null) {
             return;
@@ -79,37 +76,18 @@ public final class CisRegionInspector {
     /**
      * Converts RegionFile's authoritative accounting into the public inspector model.
      */
-    private static RegionSpaceUsage toRegionSpaceUsage(
-            final Path path,
-            final RegionFile.RegionSpaceStats stats
-    ) {
-        return new RegionSpaceUsage(
-                path.getFileName().toString(),
-                stats.physicalBytes(),
-                stats.liveBytes(),
-                stats.reusableBytes(),
-                stats.metadataBytes(),
-                stats.freeBlockCount(),
-                stats.largestFreeBlock(),
-                stats.reuseHits(),
-                stats.reuseMisses()
-        );
+    private static RegionSpaceUsage toRegionSpaceUsage(final Path path, final RegionFile.RegionSpaceStats stats) {
+        return new RegionSpaceUsage(path.getFileName().toString(), stats.physicalBytes(), stats.liveBytes(),
+                stats.reusableBytes(), stats.metadataBytes(), stats.freeBlockCount(), stats.largestFreeBlock(),
+                stats.reuseHits(), stats.reuseMisses());
     }
 
     /**
      * Region-level space accounting used by storage diagnostics.
      */
-    public record RegionSpaceUsage(
-            String name,
-            long physicalBytes,
-            long liveBytes,
-            long reusableBytes,
-            int metadataBytes,
-            int freeBlockCount,
-            int largestFreeBlock,
-            long reuseHits,
-            long reuseMisses
-    ) {
+    public record RegionSpaceUsage(String name, long physicalBytes, long liveBytes, long reusableBytes,
+                                   int metadataBytes, int freeBlockCount, int largestFreeBlock, long reuseHits,
+                                   long reuseMisses) {
         /**
          * Returns non-live bytes excluding the fixed header and persisted metadata footer.
          */

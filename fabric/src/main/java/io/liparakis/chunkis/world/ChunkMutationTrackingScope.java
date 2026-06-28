@@ -31,15 +31,55 @@ public final class ChunkMutationTrackingScope {
         RESTORE
     }
 
-    // Re-entrant depth counters incremented on push, decremented on pop.
+    /**
+     * Re-entrant depth for passive-load suppression scopes.
+     *
+     * <p>Incremented by {@link #push(Cause)} and decremented by {@link #pop(Cause)}.
+     * A value greater than zero means passive-load suppression is currently active.</p>
+     */
     private int passiveLoadDepth;
+
+    /**
+     * Re-entrant depth for base-apply suppression scopes.
+     *
+     * <p>Incremented by {@link #push(Cause)} and decremented by {@link #pop(Cause)}.
+     * A value greater than zero means Chunkis base-apply suppression is active.</p>
+     */
     private int baseApplyDepth;
+
+    /**
+     * Re-entrant depth for restore suppression scopes.
+     *
+     * <p>Incremented by {@link #push(Cause)} and decremented by {@link #pop(Cause)}.
+     * A value greater than zero means restore suppression is currently active.</p>
+     */
     private int restoreDepth;
 
-    // "Trace once" flags cleared when depth returns to zero so the next
-    // entry into a scope can emit a trace event again.
+    /**
+     * Whether the passive-load suppression trace has already been emitted for the
+     * current passive-load scope entry.
+     *
+     * <p>Cleared when {@link #passiveLoadDepth} returns to zero so the next entry
+     * can emit a fresh trace event.</p>
+     */
     private boolean passiveLoadTraced;
+
+    /**
+     * Whether the base-apply suppression trace has already been emitted for the
+     * current base-apply scope entry.
+     *
+     * <p>Cleared when {@link #baseApplyDepth} returns to zero so the next entry
+     * can emit a fresh trace event.</p>
+     */
     private boolean baseApplyTraced;
+
+    /**
+     * Whether the restore suppression trace has already been emitted for the
+     * current restore scope entry.
+     *
+     * <p>Cleared when {@link #restoreDepth} returns to zero so the next entry
+     * can emit a fresh trace event.</p>
+     */
     private boolean restoreTraced;
 
     /**

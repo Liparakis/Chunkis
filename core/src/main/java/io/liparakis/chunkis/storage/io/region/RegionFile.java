@@ -15,11 +15,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -34,7 +30,7 @@ import java.util.List;
  *
  * <p>The metadata footer is written after every mutating operation. If a write
  * is interrupted after the footer is truncated but before the new one is written,
- * the next open falls back to {@link #rebuildLegacyFreeBlocks()}.
+ * the next open falls back to legacy free-list reconstruction from the header.
  *
  * @author Liparakis
  * @version 2.0
@@ -56,7 +52,7 @@ public final class RegionFile implements AutoCloseable {
     /**
      * Fixed number of chunk slots tracked by one region header.
      */
-    private static final int CHUNKS_PER_REGION = 1024;
+    static final int CHUNKS_PER_REGION = 1024;
 
     /**
      * Total header size: 1024 chunk entries — 8 bytes per entry.
@@ -111,7 +107,7 @@ public final class RegionFile implements AutoCloseable {
     /**
      * In-memory free blocks available for best-fit reuse. Always sorted and non-overlapping.
      */
-    private final List<FreeBlock> freeBlocks = new ArrayList<>();
+    private final RegionAllocationMetadata allocationMetadata = new RegionAllocationMetadata();
 
     /**
      * Reusable direct buffer for single-entry header writes.
@@ -122,16 +118,6 @@ public final class RegionFile implements AutoCloseable {
      * Whether in-memory state has writes not yet forced to disk.
      */
     private boolean dirty = false;
-
-    /**
-     * Number of successful allocations satisfied from the free list.
-     */
-    private long reuseHits = 0L;
-
-    /**
-     * Number of writes that had to append because no reusable hole fit.
-     */
-    private long reuseMisses = 0L;
 
     /**
      * Offset where trailing metadata starts, or {@link #NO_FOOTER} when unknown.
@@ -195,38 +181,16 @@ public final class RegionFile implements AutoCloseable {
 
     public synchronized byte[] read(CisChunkPos pos, String operationId) throws IOException {
         final DebugChunkKey chunkKey = chunkKey(pos);
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.REGION_STORAGE,
-                ChunkTraceEventType.REGION_READ_TX_START,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.STORAGE_READ,
-                READ_SOURCE,
-                "region file read started",
-                null,
-                chunkKey,
-                regionKey(),
-                operationId,
-                null,
-                null
-        );
+        ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_START,
+                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read started", null
+                , chunkKey, regionKey(), operationId, null, null);
 
         final int index = getChunkIndex(pos);
 
         if (offsets[index] == 0) {
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.REGION_STORAGE,
-                    ChunkTraceEventType.REGION_READ_TX_END,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.MISSING_ENTRY,
-                    READ_SOURCE,
-                    "region file entry missing",
-                    null,
-                    chunkKey,
-                    regionKey(),
-                    operationId,
-                    null,
-                    null
-            );
+            ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_END,
+                    ChunkTraceSeverity.INFO, ChunkTraceReason.MISSING_ENTRY, READ_SOURCE, "region file entry missing"
+                    , null, chunkKey, regionKey(), operationId, null, null);
             return null;
         }
 
@@ -237,20 +201,9 @@ public final class RegionFile implements AutoCloseable {
 
         final ByteBuffer buffer = ByteBuffer.allocate(lengths[index]);
         readFully(channel, buffer, offsets[index]);
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.REGION_STORAGE,
-                ChunkTraceEventType.REGION_READ_TX_END,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.STORAGE_READ,
-                READ_SOURCE,
-                "region file read completed",
-                null,
-                chunkKey,
-                regionKey(),
-                operationId,
-                null,
-                lengths[index]
-        );
+        ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_END,
+                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read completed",
+                null, chunkKey, regionKey(), operationId, null, lengths[index]);
         return buffer.array();
     }
 
@@ -271,7 +224,7 @@ public final class RegionFile implements AutoCloseable {
      *
      * <p>The footer is always truncated before any payload write and rewritten
      * afterward. If the metadata write is interrupted, the next open rebuilds
-     * the free list from the header via {@link #rebuildLegacyFreeBlocks()}.
+     * the free list from the header using the legacy reconstruction path.
      *
      * @param pos  the chunk position
      * @param data the data to write, or {@code null} to clear the chunk
@@ -283,20 +236,9 @@ public final class RegionFile implements AutoCloseable {
 
     public synchronized void write(CisChunkPos pos, byte[] data, String operationId) throws IOException {
         final DebugChunkKey chunkKey = chunkKey(pos);
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.REGION_STORAGE,
-                ChunkTraceEventType.REGION_WRITE_TX_START,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.STORAGE_WRITE,
-                WRITE_SOURCE,
-                "region write started",
-                null,
-                chunkKey,
-                regionKey(),
-                operationId,
-                null,
-                data == null ? 0 : data.length
-        );
+        ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_START,
+                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write started", null,
+                chunkKey, regionKey(), operationId, null, data == null ? 0 : data.length);
 
         final int index = getChunkIndex(pos);
         final int oldOffset = offsets[index];
@@ -309,24 +251,13 @@ public final class RegionFile implements AutoCloseable {
         if (dataLength == 0) {
             if (oldLength > 0) {
                 updateHeader(index, 0, 0);
-                addFreeBlock(oldOffset, oldLength);
+                allocationMetadata.addFreeBlock(oldOffset, oldLength);
             }
             writeMetadata();
             dirty = true;
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.REGION_STORAGE,
-                    ChunkTraceEventType.REGION_WRITE_TX_END,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.STORAGE_WRITE,
-                    WRITE_SOURCE,
-                    "region clear completed",
-                    null,
-                    chunkKey,
-                    regionKey(),
-                    operationId,
-                    null,
-                    0
-            );
+            ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
+                    ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region clear completed",
+                    null, chunkKey, regionKey(), operationId, null, 0);
             return;
         }
 
@@ -335,24 +266,13 @@ public final class RegionFile implements AutoCloseable {
             writeFully(channel, ByteBuffer.wrap(data), oldOffset);
             updateHeader(index, oldOffset, dataLength);
             if (oldLength > dataLength) {
-                addFreeBlock(oldOffset + dataLength, oldLength - dataLength);
+                allocationMetadata.addFreeBlock(oldOffset + dataLength, oldLength - dataLength);
             }
             writeMetadata();
             dirty = true;
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.REGION_STORAGE,
-                    ChunkTraceEventType.REGION_WRITE_TX_END,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.STORAGE_WRITE,
-                    WRITE_SOURCE,
-                    "region write completed",
-                    null,
-                    chunkKey,
-                    regionKey(),
-                    operationId,
-                    null,
-                    dataLength
-            );
+            ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
+                    ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed",
+                    null, chunkKey, regionKey(), operationId, null, dataLength);
             return;
         }
 
@@ -361,24 +281,13 @@ public final class RegionFile implements AutoCloseable {
         writeFully(channel, ByteBuffer.wrap(data), allocation.offset());
         updateHeader(index, allocation.offset(), dataLength);
         if (oldLength > 0) {
-            addFreeBlock(oldOffset, oldLength);
+            allocationMetadata.addFreeBlock(oldOffset, oldLength);
         }
         writeMetadata();
         dirty = true;
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.REGION_STORAGE,
-                ChunkTraceEventType.REGION_WRITE_TX_END,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.STORAGE_WRITE,
-                WRITE_SOURCE,
-                "region write completed",
-                null,
-                chunkKey,
-                regionKey(),
-                operationId,
-                null,
-                dataLength
-        );
+        ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
+                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed", null
+                , chunkKey, regionKey(), operationId, null, dataLength);
     }
 
     /**
@@ -436,12 +345,11 @@ public final class RegionFile implements AutoCloseable {
         flush();
 
         final long physicalBytesBefore = channel.size();
-        final int maxChunkLen = maxLiveChunkLength();
         final long liveBytes = sumLiveBytes();
-        final Path tempPath = writeCompactedTempFile(maxChunkLen, liveBytes);
+        final Path tempPath = writeCompactedTempFile(liveBytes);
 
         try {
-            validateCompactedFile(tempPath, maxChunkLen, liveBytes);
+            validateCompactedFile(tempPath, liveBytes);
             final long physicalBytesAfter = Files.size(tempPath);
             swapCompactedFile(tempPath);
             dirty = false;
@@ -459,75 +367,9 @@ public final class RegionFile implements AutoCloseable {
      * <p>{@code maxChunkLen} and {@code liveBytes} are passed in to avoid
      * recomputing them inside the compaction loop.</p>
      */
-    private Path writeCompactedTempFile(final int maxChunkLen, final long liveBytes) throws IOException {
-        final Path tempPath = path.resolveSibling(path.getFileName() + ".tmp");
-        Files.deleteIfExists(tempPath);
-
-        try (FileChannel dest = FileChannel.open(
-                tempPath, StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE
-        )) {
-
-            writeFully(dest, ByteBuffer.allocate(HEADER_SIZE), 0);
-            final ByteBuffer newHeader = writeLiveChunks(dest, maxChunkLen);
-            writeFully(dest, newHeader.flip(), 0);
-            writeMetadata(dest, HEADER_SIZE + liveBytes, List.of(), reuseHits, reuseMisses);
-            dest.force(true);
-        }
-
-        return tempPath;
-    }
-
-    /**
-     * Copies all live chunks into the compacted file and builds the replacement
-     * header in memory.
-     *
-     * @param maxChunkLen scratch buffer size must be &ge; the largest live payload
-     */
-    private ByteBuffer writeLiveChunks(final FileChannel dest, final int maxChunkLen) throws IOException {
-        int currentOffset = HEADER_SIZE;
-        final ByteBuffer newHeader = ByteBuffer.allocate(HEADER_SIZE);
-        // One scratch buffer reused for every chunk copy to avoid per-chunk allocation.
-        final ByteBuffer chunkData = ByteBuffer.allocate(maxChunkLen);
-
-        for (int i = 0; i < CHUNKS_PER_REGION; i++) {
-            if (offsets[i] != 0 && lengths[i] > 0) {
-                currentOffset = copyLiveChunk(dest, newHeader, chunkData, i, currentOffset);
-            } else {
-                writeEmptyHeaderEntry(newHeader);
-            }
-        }
-
-        return newHeader;
-    }
-
-    /**
-     * Copies one live chunk payload into the compacted file and appends its
-     * updated header entry.
-     */
-    private int copyLiveChunk(
-            final FileChannel dest,
-            final ByteBuffer newHeader,
-            final ByteBuffer chunkData,
-            final int index,
-            final int currentOffset) throws IOException {
-        chunkData.clear();
-        chunkData.limit(lengths[index]);
-        readFully(channel, chunkData, offsets[index]);
-        chunkData.flip();
-        writeFully(dest, chunkData, currentOffset);
-
-        newHeader.putInt(currentOffset);
-        newHeader.putInt(lengths[index]);
-        return currentOffset + lengths[index];
-    }
-
-    /**
-     * Appends an empty (zeroed) chunk entry to a header buffer being built in memory.
-     */
-    private static void writeEmptyHeaderEntry(final ByteBuffer header) {
-        header.putInt(0);
-        header.putInt(0);
+    private Path writeCompactedTempFile(final long liveBytes) throws IOException {
+        return RegionCompactionIO.writeCompactedTempFile(path, channel, offsets, lengths, liveBytes,
+                allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
     }
 
     /**
@@ -536,16 +378,7 @@ public final class RegionFile implements AutoCloseable {
      * then reloads the in-memory header state.
      */
     private void swapCompactedFile(final Path tempPath) throws IOException {
-        channel.close();
-        try {
-            Files.move(
-                    tempPath, path,
-                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING
-            );
-        } catch (final IOException atomicFailure) {
-            Files.move(tempPath, path, StandardCopyOption.REPLACE_EXISTING);
-        }
-        channel = openChannel();
+        channel = RegionCompactionRecovery.swapCompactedFile(channel, tempPath, path);
         loadHeader();
     }
 
@@ -557,16 +390,13 @@ public final class RegionFile implements AutoCloseable {
      * the original channel is still valid and no recovery is needed.</p>
      */
     private void recoverChannel() {
-        if (channel.isOpen()) {
-            return;
-        }
+        channel = RegionCompactionRecovery.recoverChannel(channel, path);
         try {
-            channel = openChannel();
-            if (channel.size() >= HEADER_SIZE) {
+            if (channel.isOpen() && channel.size() >= HEADER_SIZE) {
                 loadHeader();
             }
         } catch (final IOException ex) {
-            Chunkis.LOGGER.error("CRITICAL: Failed to reopen region after failed compaction: {}", path, ex);
+            Chunkis.LOGGER.error("CRITICAL: Failed to reload region header after failed compaction: {}", path, ex);
         }
     }
 
@@ -575,23 +405,19 @@ public final class RegionFile implements AutoCloseable {
      * from the header for legacy files that predate the footer format.
      */
     private void loadAllocationMetadata() throws IOException {
-        freeBlocks.clear();
-        reuseHits = 0L;
-        reuseMisses = 0L;
+        allocationMetadata.reset();
 
         final int footerStart = discoverFooterStart();
         if (footerStart == NO_FOOTER) {
             metadataOffset = (int) channel.size();
-            rebuildLegacyFreeBlocks();
+            allocationMetadata.rebuildLegacy(offsets, lengths, dataEndWithoutMetadata());
             return;
         }
 
         metadataOffset = footerStart;
         if (!readFooterMetadata(footerStart)) {
             // Footer was present but invalid; start with an empty free list.
-            freeBlocks.clear();
-            reuseHits = 0L;
-            reuseMisses = 0L;
+            allocationMetadata.reset();
         }
     }
 
@@ -601,27 +427,7 @@ public final class RegionFile implements AutoCloseable {
      * @return footer payload offset, or {@link #NO_FOOTER} when absent or malformed
      */
     private int discoverFooterStart() throws IOException {
-        final long size = channel.size();
-        if (size < HEADER_SIZE + (Integer.BYTES * 2L)) {
-            return NO_FOOTER;
-        }
-
-        final ByteBuffer footer = ByteBuffer.allocate(Integer.BYTES * 2);
-        readFully(channel, footer, size - (Integer.BYTES * 2L));
-        footer.flip();
-
-        final int payloadLength = footer.getInt();
-        final int footerMagic = footer.getInt();
-        if (footerMagic != FOOTER_MAGIC) {
-            return NO_FOOTER;
-        }
-
-        final long footerStart = size - (Integer.BYTES * 2L) - payloadLength;
-        if (payloadLength < 0 || footerStart < HEADER_SIZE) {
-            return NO_FOOTER;
-        }
-
-        return (int) footerStart;
+        return RegionFooterIO.discoverFooterStart(channel, HEADER_SIZE, FOOTER_MAGIC, NO_FOOTER);
     }
 
     /**
@@ -631,118 +437,9 @@ public final class RegionFile implements AutoCloseable {
      * @return {@code true} when the footer is well-formed and accepted
      */
     private boolean readFooterMetadata(final int footerStart) throws IOException {
-        final long size = channel.size();
-        final int payloadLength = (int) (size - footerStart - (Integer.BYTES * 2L));
-        final ByteBuffer payload = ByteBuffer.allocate(payloadLength);
-        readFully(channel, payload, footerStart);
-        payload.flip();
-
-        if (payload.remaining() < Integer.BYTES * 3 + Long.BYTES * 2) {
-            return false;
-        }
-        if (payload.getInt() != METADATA_MAGIC || payload.getInt() != METADATA_VERSION) {
-            return false;
-        }
-
-        final int freeCount = payload.getInt();
-        if (freeCount < 0 || payload.remaining() != Long.BYTES * 2 + (freeCount * HEADER_ENTRY_SIZE)) {
-            return false;
-        }
-
-        final long parsedHits = payload.getLong();
-        final long parsedMisses = payload.getLong();
-        final List<FreeBlock> parsed = new ArrayList<>(freeCount);
-        for (int i = 0; i < freeCount; i++) {
-            parsed.add(new FreeBlock(payload.getInt(), payload.getInt()));
-        }
-
-        if (!validateFreeBlocks(parsed)) {
-            return false;
-        }
-
-        freeBlocks.clear();
-        freeBlocks.addAll(mergeAdjacent(parsed));
-        reuseHits = parsedHits;
-        reuseMisses = parsedMisses;
-        return true;
-    }
-
-    /**
-     * Reconstructs reusable gaps for legacy region files that predate the footer
-     * format, by scanning the header for live spans and recording the spaces
-     * between them.
-     */
-    private void rebuildLegacyFreeBlocks() {
-        final List<FreeBlock> liveBlocks = new ArrayList<>();
-        final int dataEnd = dataEndWithoutMetadata();
-
-        for (int i = 0; i < CHUNKS_PER_REGION; i++) {
-            if (offsets[i] > 0 && lengths[i] > 0
-                    && offsets[i] >= HEADER_SIZE
-                    && offsets[i] + lengths[i] <= dataEnd) {
-                liveBlocks.add(new FreeBlock(offsets[i], lengths[i]));
-            }
-        }
-
-        liveBlocks.sort(Comparator.comparingInt(FreeBlock::offset));
-
-        final List<FreeBlock> gaps = new ArrayList<>();
-        int cursor = HEADER_SIZE;
-        for (final FreeBlock live : liveBlocks) {
-            if (live.offset() > cursor) {
-                gaps.add(new FreeBlock(cursor, live.offset() - cursor));
-            }
-            cursor = Math.max(cursor, live.offset() + live.length());
-        }
-        if (cursor < dataEnd) {
-            gaps.add(new FreeBlock(cursor, dataEnd - cursor));
-        }
-
-        freeBlocks.clear();
-        freeBlocks.addAll(mergeAdjacent(gaps));
-    }
-
-    /**
-     * Validates that parsed free blocks are ordered, non-overlapping, within the
-     * payload area, and disjoint from all live chunk spans.
-     */
-    private boolean validateFreeBlocks(final List<FreeBlock> blocks) {
-        final List<FreeBlock> sorted = new ArrayList<>(blocks);
-        sorted.sort(Comparator.comparingInt(FreeBlock::offset));
-        int previousEnd = HEADER_SIZE;
-
-        for (final FreeBlock block : sorted) {
-            if (block.length() <= 0 || block.offset() < HEADER_SIZE) {
-                return false;
-            }
-            final int end = block.offset() + block.length();
-            if (end > metadataOffset || block.offset() < previousEnd) {
-                return false;
-            }
-            if (overlapsLiveBlock(block.offset(), end)) {
-                return false;
-            }
-            previousEnd = end;
-        }
-
-        return true;
-    }
-
-    /**
-     * Returns {@code true} if the candidate range {@code [freeOffset, freeEnd)}
-     * overlaps any currently indexed live payload.
-     */
-    private boolean overlapsLiveBlock(final int freeOffset, final int freeEnd) {
-        for (int i = 0; i < CHUNKS_PER_REGION; i++) {
-            if (offsets[i] == 0 || lengths[i] == 0) {
-                continue;
-            }
-            final int liveEnd = offsets[i] + lengths[i];
-            if (freeOffset < liveEnd && offsets[i] < freeEnd) {
-                return true;
-            }
-        }
-        return false;
+        final ByteBuffer payload = RegionFooterIO.readFooterPayload(channel, footerStart);
+        return allocationMetadata.loadFromFooter(payload, metadataOffset, offsets, lengths, HEADER_ENTRY_SIZE,
+                METADATA_MAGIC, METADATA_VERSION);
     }
 
     /**
@@ -751,9 +448,7 @@ public final class RegionFile implements AutoCloseable {
      */
     private void truncateFooter() throws IOException {
         final int dataEnd = dataEndWithoutMetadata();
-        if (channel.size() > dataEnd) {
-            channel.truncate(dataEnd);
-        }
+        RegionFooterIO.truncateFooter(channel, dataEnd);
         metadataOffset = dataEnd;
     }
 
@@ -761,74 +456,33 @@ public final class RegionFile implements AutoCloseable {
      * Chooses an allocation target for a new payload using best-fit reuse before
      * falling back to append.
      *
-     * <p>The free list is always kept sorted by offset (via {@link #addFreeBlock}
-     * â†’ {@link #mergeAdjacent}), so a linear scan for best-fit is sufficient for
-     * typical free-list sizes (&lt;1024 entries).</p>
+     * <p>The free list is always kept sorted by offset by
+     * {@link RegionAllocationMetadata#addFreeBlock(int, int)}, so a linear
+     * scan for best-fit is sufficient for typical free-list sizes
+     * (&lt;1024 entries).</p>
      */
     private Allocation allocate(final int dataLength) throws IOException {
-        int bestIndex = -1;
-        int bestLength = Integer.MAX_VALUE;
-
-        for (int i = 0; i < freeBlocks.size(); i++) {
-            final FreeBlock block = freeBlocks.get(i);
-            if (block.length() >= dataLength && block.length() < bestLength) {
-                bestIndex = i;
-                bestLength = block.length();
-            }
-        }
-
-        if (bestIndex == -1) {
-            reuseMisses++;
-            return new Allocation((int) channel.size(), false);
-        }
-
-        final FreeBlock block = freeBlocks.remove(bestIndex);
-        if (block.length() > dataLength) {
-            // Re-insert the remainder; mergeAdjacent in addFreeBlock keeps the list normalized.
-            addFreeBlock(block.offset() + dataLength, block.length() - dataLength);
-        }
-        reuseHits++;
-        return new Allocation(block.offset(), true);
-    }
-
-    /**
-     * Adds a reusable hole and normalizes the in-memory free list.
-     *
-     * <p>{@link #writeMetadata} trusts that this method already merged adjacent
-     * blocks, so it does not call {@link #mergeAdjacent} again.</p>
-     */
-    private void addFreeBlock(final int offset, final int length) {
-        if (length <= 0 || offset < HEADER_SIZE) {
-            return;
-        }
-
-        freeBlocks.add(new FreeBlock(offset, length));
-        final List<FreeBlock> merged = mergeAdjacent(freeBlocks);
-        freeBlocks.clear();
-        freeBlocks.addAll(merged);
+        return allocationMetadata.allocate(dataLength, (int) channel.size());
     }
 
     /**
      * Rewrites the normalized allocation metadata footer at the current end of
-     * the file. The free list is already merged by {@link #addFreeBlock}; no
-     * second merge pass is needed here.
+     * the file. The free list is already normalized by
+     * {@link RegionAllocationMetadata#addFreeBlock(int, int)}, so no second
+     * merge pass is needed here.
      */
     private void writeMetadata() throws IOException {
         metadataOffset = (int) channel.size();
-        writeMetadata(channel, metadataOffset, freeBlocks, reuseHits, reuseMisses);
+        writeMetadata(channel, metadataOffset, allocationMetadata.freeBlocks(), allocationMetadata.reuseHits(),
+                allocationMetadata.reuseMisses());
     }
 
     /**
      * Writes the allocation metadata payload plus trailing footer marker to
      * {@code target} at {@code metadataStart}.
      */
-    private static void writeMetadata(
-            final FileChannel target,
-            final long metadataStart,
-            final List<FreeBlock> freeBlocks,
-            final long reuseHits,
-            final long reuseMisses
-    ) throws IOException {
+    static void writeMetadata(final FileChannel target, final long metadataStart,
+                              final List<RegionFreeBlock> freeBlocks, final long reuseHits, final long reuseMisses) throws IOException {
         final int payloadLength = (Integer.BYTES * 3) + (Long.BYTES * 2) + (freeBlocks.size() * HEADER_ENTRY_SIZE);
         final ByteBuffer buffer = ByteBuffer.allocate(payloadLength + (Integer.BYTES * 2));
         buffer.putInt(METADATA_MAGIC);
@@ -836,7 +490,7 @@ public final class RegionFile implements AutoCloseable {
         buffer.putInt(freeBlocks.size());
         buffer.putLong(reuseHits);
         buffer.putLong(reuseMisses);
-        for (final FreeBlock block : freeBlocks) {
+        for (final RegionFreeBlock block : freeBlocks) {
             buffer.putInt(block.offset());
             buffer.putInt(block.length());
         }
@@ -850,74 +504,21 @@ public final class RegionFile implements AutoCloseable {
      * Verifies that the compacted temp file preserves every live entry exactly
      * and that all offsets fall within the expected compacted payload span.
      *
-     * @param maxChunkLen scratch buffer size must be &ge; the largest live payload
-     * @param liveBytes   expected total payload bytes after compaction
+     * @param liveBytes expected total payload bytes after compaction
      */
-    private void validateCompactedFile(
-            final Path tempPath,
-            final int maxChunkLen,
-            final long liveBytes
-    ) throws IOException {
-        final int compactedDataEnd = HEADER_SIZE + (int) liveBytes;
-
-        try (FileChannel compacted = FileChannel.open(tempPath, StandardOpenOption.READ)) {
-            final ByteBuffer header = ByteBuffer.allocate(HEADER_SIZE);
-            readFully(compacted, header, 0L);
-            header.flip();
-
-            // Two scratch arrays reused across all slots to avoid per-chunk allocation.
-            final byte[] originalChunk = new byte[maxChunkLen];
-            final byte[] compactedChunk = new byte[maxChunkLen];
-
-            for (int i = 0; i < CHUNKS_PER_REGION; i++) {
-                final int newOffset = header.getInt();
-                final int newLength = header.getInt();
-
-                if (offsets[i] == 0 || lengths[i] == 0) {
-                    if (newOffset != 0 || newLength != 0) {
-                        throw new IOException("Compacted header unexpectedly populated empty slot " + i);
-                    }
-                    continue;
-                }
-
-                if (newLength != lengths[i] || newOffset < HEADER_SIZE || newOffset + newLength > compactedDataEnd) {
-                    throw new IOException("Compacted header mismatch for slot " + i);
-                }
-
-                readChunkBytes(channel, offsets[i], lengths[i], originalChunk);
-                readChunkBytes(compacted, newOffset, newLength, compactedChunk);
-
-                if (!Arrays.equals(originalChunk, 0, newLength, compactedChunk, 0, newLength)) {
-                    throw new IOException("Compacted payload mismatch for slot " + i);
-                }
-            }
-        }
+    private void validateCompactedFile(final Path tempPath, final long liveBytes) throws IOException {
+        RegionCompactionIO.validateCompactedFile(tempPath, channel, offsets, lengths, liveBytes);
     }
 
     /**
      * Captures space accounting for diagnostics and operator reports.
      */
     public synchronized RegionSpaceStats spaceStats() {
-        long reusableBytes = 0L;
-        int largestFreeBlock = 0;
-        for (final FreeBlock block : freeBlocks) {
-            reusableBytes += block.length();
-            largestFreeBlock = Math.max(largestFreeBlock, block.length());
-        }
-
         final long physicalBytes = safeChannelSize();
         final int metadataBytes = Math.max(0, (int) physicalBytes - dataEndWithoutMetadata());
-        return new RegionSpaceStats(
-                path,
-                physicalBytes,
-                sumLiveBytes(),
-                reusableBytes,
-                metadataBytes,
-                freeBlocks.size(),
-                largestFreeBlock,
-                reuseHits,
-                reuseMisses
-        );
+        return new RegionSpaceStats(path, physicalBytes, sumLiveBytes(), allocationMetadata.reusableBytes(),
+                metadataBytes, allocationMetadata.freeBlockCount(), allocationMetadata.largestFreeBlock(),
+                allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
     }
 
     /**
@@ -966,19 +567,6 @@ public final class RegionFile implements AutoCloseable {
     }
 
     /**
-     * Returns the largest currently referenced chunk payload size in the region.
-     */
-    private int maxLiveChunkLength() {
-        int maxLength = 0;
-        for (int i = 0; i < CHUNKS_PER_REGION; i++) {
-            if (offsets[i] != 0 && lengths[i] > maxLength) {
-                maxLength = lengths[i];
-            }
-        }
-        return maxLength;
-    }
-
-    /**
      * Sums the payload bytes referenced by the current header.
      */
     private long sumLiveBytes() {
@@ -995,10 +583,7 @@ public final class RegionFile implements AutoCloseable {
      * Opens the backing region file channel with read/write/create semantics.
      */
     private FileChannel openChannel() throws IOException {
-        return FileChannel.open(
-                path, StandardOpenOption.READ, StandardOpenOption.WRITE,
-                StandardOpenOption.CREATE
-        );
+        return FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
     }
 
     private static DebugChunkKey chunkKey(final CisChunkPos pos) {
@@ -1014,8 +599,7 @@ public final class RegionFile implements AutoCloseable {
     /**
      * Reads exactly {@code target.remaining()} bytes or throws on unexpected EOF.
      */
-    private static void readFully(final FileChannel source, final ByteBuffer target, final long position)
-            throws IOException {
+    static void readFully(final FileChannel source, final ByteBuffer target, final long position) throws IOException {
         long currentPosition = position;
         while (target.hasRemaining()) {
             final int bytesRead = source.read(target, currentPosition);
@@ -1029,8 +613,7 @@ public final class RegionFile implements AutoCloseable {
     /**
      * Writes all bytes in {@code source}, retrying until none remain.
      */
-    private static void writeFully(final FileChannel target, final ByteBuffer source, final long position)
-            throws IOException {
+    static void writeFully(final FileChannel target, final ByteBuffer source, final long position) throws IOException {
         long currentPosition = position;
         while (source.hasRemaining()) {
             final int bytesWritten = target.write(source, currentPosition);
@@ -1044,48 +627,8 @@ public final class RegionFile implements AutoCloseable {
     /**
      * Reads one chunk payload into a caller-provided scratch buffer.
      */
-    private static void readChunkBytes(
-            final FileChannel source,
-            final int offset,
-            final int length,
-            final byte[] target
-    ) throws IOException {
+    static void readChunkBytes(final FileChannel source, final int offset, final int length, final byte[] target) throws IOException {
         readFully(source, ByteBuffer.wrap(target, 0, length), offset);
-    }
-
-    /**
-     * Coalesces overlapping or touching free blocks into a minimal sorted list.
-     * Zero-length entries are discarded.
-     */
-    private static List<FreeBlock> mergeAdjacent(final List<FreeBlock> blocks) {
-        final List<FreeBlock> sorted = new ArrayList<>();
-        for (final FreeBlock block : blocks) {
-            if (block.length() > 0) {
-                sorted.add(block);
-            }
-        }
-        sorted.sort(Comparator.comparingInt(FreeBlock::offset));
-        if (sorted.isEmpty()) {
-            return List.of();
-        }
-
-        final List<FreeBlock> merged = new ArrayList<>();
-        FreeBlock current = sorted.getFirst();
-        for (int i = 1; i < sorted.size(); i++) {
-            final FreeBlock next = sorted.get(i);
-            final int currentEnd = current.offset() + current.length();
-            if (next.offset() <= currentEnd) {
-                current = new FreeBlock(
-                        current.offset(),
-                        Math.max(currentEnd, next.offset() + next.length()) - current.offset()
-                );
-            } else {
-                merged.add(current);
-                current = next;
-            }
-        }
-        merged.add(current);
-        return merged;
     }
 
     /**
@@ -1098,35 +641,16 @@ public final class RegionFile implements AutoCloseable {
     /**
      * Immutable compaction result for one region file.
      */
-    public record RegionCompactReport(
-            Path path,
-            long physicalBytesBefore,
-            long physicalBytesAfter,
-            long liveBytes
-    ) {}
+    public record RegionCompactReport(Path path, long physicalBytesBefore, long physicalBytesAfter, long liveBytes) {}
 
     /**
      * Immutable space-usage snapshot for one region file.
      */
-    public record RegionSpaceStats(
-            Path path,
-            long physicalBytes,
-            long liveBytes,
-            long reusableBytes,
-            int metadataBytes,
-            int freeBlockCount,
-            int largestFreeBlock,
-            long reuseHits,
-            long reuseMisses
-    ) {}
-
-    /**
-     * One reusable byte range inside a region payload area.
-     */
-    private record FreeBlock(int offset, int length) {}
+    public record RegionSpaceStats(Path path, long physicalBytes, long liveBytes, long reusableBytes, int metadataBytes,
+                                   int freeBlockCount, int largestFreeBlock, long reuseHits, long reuseMisses) {}
 
     /**
      * Allocation decision returned by best-fit lookup.
      */
-    private record Allocation(int offset, boolean reused) {}
+    record Allocation(int offset, boolean reused) {}
 }
