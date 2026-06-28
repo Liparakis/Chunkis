@@ -215,7 +215,7 @@ public final class StorageReportCommand {
             final Path regionPath,
             final CisRegionInspector.RegionSpaceUsage regionSpace
     ) throws IOException {
-        final RegionCoordinates coordinates = parseRegionCoordinates(regionPath);
+        final RegionCoordinates coordinates = RegionFileReader.parseCoordinates(regionPath);
         final long physicalBytes = regionSpace == null ? Files.size(regionPath) : regionSpace.physicalBytes();
         final RegionScanAccumulator accumulator = new RegionScanAccumulator(
                 regionPath.getFileName().toString(),
@@ -237,14 +237,14 @@ public final class StorageReportCommand {
                     continue;
                 }
 
-                validateChunkRange(regionPath, offset, length, channelBytes);
+                RegionFileReader.validateChunkRange(regionPath, offset, length, channelBytes);
                 final CisChunkPos pos = new CisChunkPos(
                         (coordinates.x() << 5) + (slot & 31),
                         (coordinates.z() << 5) + (slot >>> 5)
                 );
 
-                final byte[] compressed = readChunkBytes(channel, offset, length);
-                final byte[] raw = decompressChunkPayload(compressed);
+                final byte[] compressed = RegionFileReader.readChunkBytes(channel, offset, length);
+                final byte[] raw = RegionFileReader.decompressChunkPayload(compressed);
                 final ChunkPayloadDiagnostics payload = inspectChunkPayload(raw);
 
                 final ChunkDelta<BlockState, NbtCompound> delta = storage.loadWithoutClearing(pos);
@@ -797,30 +797,6 @@ public final class StorageReportCommand {
     }
 
     /**
-     * Reads one compressed chunk payload directly from the raw region file.
-     */
-    private static byte[] readChunkBytes(final FileChannel channel, final int offset, final int length)
-            throws IOException {
-        final ByteBuffer buffer = ByteBuffer.allocate(length);
-        readFully(channel, buffer, offset);
-        return buffer.array();
-    }
-
-    /**
-     * Decompresses the Zstd-compressed chunk payload stored in the region file.
-     */
-    private static byte[] decompressChunkPayload(final byte[] compressed) throws IOException {
-        final long decompressedSize = Zstd.decompressedSize(compressed);
-        if (Zstd.isError(decompressedSize)) {
-            throw new IOException("Failed to read CIS Zstd size: " + Zstd.getErrorName(decompressedSize));
-        }
-        if (decompressedSize <= 0L || decompressedSize > Integer.MAX_VALUE) {
-            throw new IOException("Invalid CIS Zstd payload size: " + decompressedSize);
-        }
-        return Zstd.decompress(compressed, (int) decompressedSize);
-    }
-
-    /**
      * Sums the size of all vanilla region files in {@code dir}.
      */
     private static long sumFiles(final Path dir) throws IOException {
@@ -923,34 +899,6 @@ public final class StorageReportCommand {
             return 0.0;
         }
         return (100.0 * slackBytes) / physicalBytes;
-    }
-
-    private static RegionCoordinates parseRegionCoordinates(final Path regionPath) throws IOException {
-        final Matcher matcher = REGION_FILE_PATTERN.matcher(regionPath.getFileName().toString());
-        if (!matcher.matches()) {
-            throw new IOException("Unexpected region filename: " + regionPath.getFileName());
-        }
-
-        try {
-            return new RegionCoordinates(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
-        } catch (final NumberFormatException e) {
-            throw new IOException("Region coordinates out of integer range: " + regionPath.getFileName(), e);
-        }
-    }
-
-    private static void validateChunkRange(
-            final Path regionPath,
-            final int offset,
-            final int length,
-            final long fileBytes
-    ) throws IOException {
-        final long end = (long) offset + length;
-        if (offset < HEADER_BYTES || end > fileBytes) {
-            throw new IOException("Invalid chunk range in " + regionPath.getFileName()
-                    + ": offset=" + offset
-                    + ", length=" + length
-                    + ", fileBytes=" + fileBytes);
-        }
     }
 
     private static int checkedByteCount(final int count, final int bytesPerEntry, final String field)
@@ -1553,6 +1501,78 @@ public final class StorageReportCommand {
                         + " but only " + buffer.remaining()
                         + " bytes remain");
             }
+        }
+    }
+
+    /**
+     * Reads and validates raw CIS region-file payload ranges.
+     *
+     * <p>This isolates low-level region-file IO from the higher-level storage
+     * diagnostics so {@link #inspectRegion} can stay focused on aggregation.</p>
+     */
+    private static final class RegionFileReader {
+        private RegionFileReader() {
+        }
+
+        /**
+         * Parses region coordinates from a Chunkis region filename.
+         */
+        private static RegionCoordinates parseCoordinates(final Path regionPath) throws IOException {
+            final Matcher matcher = REGION_FILE_PATTERN.matcher(regionPath.getFileName().toString());
+            if (!matcher.matches()) {
+                throw new IOException("Unexpected region filename: " + regionPath.getFileName());
+            }
+
+            try {
+                return new RegionCoordinates(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
+            } catch (final NumberFormatException e) {
+                throw new IOException("Region coordinates out of integer range: " + regionPath.getFileName(), e);
+            }
+        }
+
+        /**
+         * Rejects header entries whose payload range points outside the file body.
+         */
+        private static void validateChunkRange(
+                final Path regionPath,
+                final int offset,
+                final int length,
+                final long fileBytes
+        ) throws IOException {
+            final long end = (long) offset + length;
+            if (offset < HEADER_BYTES || end > fileBytes) {
+                throw new IOException("Invalid chunk range in " + regionPath.getFileName()
+                        + ": offset=" + offset
+                        + ", length=" + length
+                        + ", fileBytes=" + fileBytes);
+            }
+        }
+
+        /**
+         * Reads one compressed chunk payload directly from the raw region file.
+         */
+        private static byte[] readChunkBytes(
+                final FileChannel channel,
+                final int offset,
+                final int length
+        ) throws IOException {
+            final ByteBuffer buffer = ByteBuffer.allocate(length);
+            readFully(channel, buffer, offset);
+            return buffer.array();
+        }
+
+        /**
+         * Decompresses the Zstd-compressed chunk payload stored in the region file.
+         */
+        private static byte[] decompressChunkPayload(final byte[] compressed) throws IOException {
+            final long decompressedSize = Zstd.decompressedSize(compressed);
+            if (Zstd.isError(decompressedSize)) {
+                throw new IOException("Failed to read CIS Zstd size: " + Zstd.getErrorName(decompressedSize));
+            }
+            if (decompressedSize <= 0L || decompressedSize > Integer.MAX_VALUE) {
+                throw new IOException("Invalid CIS Zstd payload size: " + decompressedSize);
+            }
+            return Zstd.decompress(compressed, (int) decompressedSize);
         }
     }
 
