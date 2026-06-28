@@ -52,7 +52,6 @@ import java.util.TreeSet;
  */
 public final class ChunkRestorer {
 
-    private static final Logger LOGGER = Chunkis.LOGGER;
     private static final String RESTORE_SOURCE = "ChunkRestorer#restore";
 
     /**

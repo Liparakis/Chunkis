@@ -33,7 +33,7 @@ final class ChunkLoadNbtBuilder {
             root = baseChunkNbt;
             baseChunkUsage = CisNbtUtil.PersistedBaseChunkUsage.USED;
 
-            if (delta != null && delta.countNonNullEntities() > 0) {
+            if (delta.countNonNullEntities() > 0) {
                 replaceChunkEntitiesFromDelta(root, castDelta(delta));
             }
         } else {

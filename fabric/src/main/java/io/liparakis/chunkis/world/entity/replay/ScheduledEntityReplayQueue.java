@@ -24,20 +24,21 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Entries are keyed by {@code worldId|chunkX,chunkZ|entityUuid}. Each tick,
  * {@link #tick} drains entries whose target chunk is loaded and attempts to
  * replay them via {@link ChunkRestorer}. Successfully replayed or already-present
- * entities are removed; failures are retained for the next tick.</p>
+ * entities are removed; entries that fail transiently are retained for the next
+ * tick.</p>
  *
  * <p><b>Threading:</b> the backing map is a {@link ConcurrentHashMap} so
  * {@link #schedule} and {@link #acknowledge} are safe to call from any thread.
  * {@link #tick} is expected to run on the server thread. The {@code queueBefore}
  * snapshot captured at the start of each tick is used across all trace calls in
- * that tick for consistency; individual {@code queueAfter} values reflect live
+ * that tick for consistency; individual {@code queueAfter} values reflect the live
  * map size at the moment of each trace call.</p>
  */
 public final class ScheduledEntityReplayQueue {
 
     /**
-     * Map from composite key ({@code worldId|chunkX,chunkZ|entityUuid}) to
-     * the scheduled replay entry. {@link ConcurrentHashMap} allows concurrent
+     * Map from composite key ({@code worldId|chunkX,chunkZ|entityUuid}) to the
+     * scheduled replay entry. {@link ConcurrentHashMap} allows concurrent
      * {@link #schedule}/{@link #acknowledge} calls while {@link #tick} iterates.
      */
     private static final ConcurrentHashMap<String, ScheduledEntityReplay> QUEUE = new ConcurrentHashMap<>();
@@ -49,9 +50,9 @@ public final class ScheduledEntityReplayQueue {
     /**
      * Schedules an entity for replay, optionally with a fallback NBT payload.
      *
-     * <p>If an entry for the same key already exists it is replaced (idempotent
-     * re-schedule). The NBT is deep-copied so the caller's compound can be safely
-     * mutated after this call.</p>
+     * <p>If an entry for the same key already exists it is replaced, making this
+     * call idempotent for re-schedules. The NBT is deep-copied so the caller's
+     * compound can be safely mutated after this call.</p>
      *
      * @param world      world the entity belongs to; null-checked
      * @param chunkPos   chunk the entity should appear in; null-checked
@@ -59,18 +60,30 @@ public final class ScheduledEntityReplayQueue {
      * @param entityNbt  fallback entity NBT to use if the chunk delta has no
      *                   matching pending entry; may be {@code null}
      */
-    public static void schedule(final ServerWorld world, final ChunkPos chunkPos, final String entityUuid,
-                                final NbtCompound entityNbt) {
+    public static void schedule(
+            final ServerWorld world,
+            final ChunkPos chunkPos,
+            final String entityUuid,
+            final NbtCompound entityNbt
+    ) {
         if (world == null || chunkPos == null || entityUuid == null || entityUuid.isBlank()) {
             return;
         }
         final String worldId = world.getRegistryKey().getValue().toString();
         final int before = QUEUE.size();
-        QUEUE.put(key(worldId, chunkPos, entityUuid), new ScheduledEntityReplay(worldId, chunkPos.x, chunkPos.z,
-                entityUuid, entityNbt == null ? null : entityNbt.copy()));
-        Chunkis.LOGGER.info("Chunkis entity replay scheduled: dimension={} chunk={},{} uuid={} queueBefore={} " +
-                "queueAfter={} " + "thread={}", worldId, chunkPos.x, chunkPos.z, entityUuid, before, QUEUE.size(),
-                Thread.currentThread().getName());
+        QUEUE.put(
+                key(worldId, chunkPos, entityUuid),
+                new ScheduledEntityReplay(
+                        worldId, chunkPos.x, chunkPos.z,
+                        entityUuid,
+                        entityNbt == null ? null : entityNbt.copy()
+                )
+        );
+        Chunkis.LOGGER.info(
+                "Chunkis entity replay scheduled: dimension={} chunk={},{} uuid={} queueBefore={} queueAfter={} thread={}",
+                worldId, chunkPos.x, chunkPos.z, entityUuid, before, QUEUE.size(),
+                Thread.currentThread().getName()
+        );
     }
 
     /**
@@ -81,7 +94,9 @@ public final class ScheduledEntityReplayQueue {
      * ({@link ChunkRestorer.ReplayStatus#SPAWNED} or
      * {@link ChunkRestorer.ReplayStatus#ALREADY_PRESENT}) are removed and the
      * corresponding pending entity is cleared from the chunk delta. Entries that
-     * fail transiently are retained for the next tick.</p>
+     * fail transiently are retained for the next tick. Entries with permanently
+     * malformed UUIDs are removed immediately with a warning, since they can never
+     * succeed.</p>
      *
      * @param world the server world whose entries should be drained; null-checked
      */
@@ -101,12 +116,17 @@ public final class ScheduledEntityReplayQueue {
             }
             visited++;
 
+            // Malformed UUIDs can never succeed. Remove them immediately rather than
+            // retaining them forever, which would cause them to be iterated on every
+            // tick indefinitely.
             try {
                 UUID.fromString(replay.entityUuid);
             } catch (final IllegalArgumentException ignored) {
-                // Malformed UUID — cannot ever succeed; retain to avoid silent loss,
-                // but log so it is visible. A future cleanup pass could remove these.
-                traceDrain(world, replay, "INVALID_UUID_RETAINED", queueBefore);
+                iterator.remove();
+                Chunkis.LOGGER.warn(
+                        "Chunkis entity replay: removed entry with malformed UUID dimension={} chunk={},{} uuid={}",
+                        replay.worldId, replay.chunkX, replay.chunkZ, replay.entityUuid
+                );
                 continue;
             }
 
@@ -120,16 +140,27 @@ public final class ScheduledEntityReplayQueue {
             // used only for the diagnostic trace below.
             final boolean entityTicking = world.shouldTickEntityAt(liveChunk.getPos().getStartPos());
 
+            // Require that the chunk supports the Chunkis delta API, and that at least
+            // one payload source (pending delta or fallback NBT) is available.
+            if (!(liveChunk instanceof ChunkisDeltaDuck deltaDuck)) {
+                traceDrain(world, replay, "PENDING_PAYLOAD_MISSING_RETRY", queueBefore);
+                continue;
+            }
             final ChunkDelta<BlockState, NbtCompound> delta = getChunkDelta(liveChunk);
-            if (!(liveChunk instanceof ChunkisDeltaDuck deltaDuck) || (delta == null && replay.entityNbt == null) || (delta != null && delta.countPendingEntities() == 0 && replay.entityNbt == null)) {
+            final boolean hasPendingPayload = delta != null && delta.countPendingEntities() > 0;
+            final boolean hasFallback = replay.entityNbt != null;
+            if (!hasPendingPayload && !hasFallback) {
                 traceDrain(world, replay, "PENDING_PAYLOAD_MISSING_RETRY", queueBefore);
                 continue;
             }
 
-            final ChunkRestorer.ReplayResult result = ChunkRestorer.replayPendingEntityIfNeeded(world, liveChunk,
-                    delta, deltaDuck.chunkis$getRestoreOperationId(), replay.entityUuid, replay.entityNbt);
+            final ChunkRestorer.ReplayResult result = ChunkRestorer.replayPendingEntityIfNeeded(
+                    world, liveChunk, delta, deltaDuck.chunkis$getRestoreOperationId(),
+                    replay.entityUuid, replay.entityNbt
+            );
 
-            if (result.status() == ChunkRestorer.ReplayStatus.SPAWNED || result.status() == ChunkRestorer.ReplayStatus.ALREADY_PRESENT) {
+            if (result.status() == ChunkRestorer.ReplayStatus.SPAWNED
+                    || result.status() == ChunkRestorer.ReplayStatus.ALREADY_PRESENT) {
                 removeMaterializedPendingEntity(liveChunk, replay.entityUuid);
                 iterator.remove();
                 traceDrain(world, replay, result.status() + "_CONSUMED", queueBefore);
@@ -141,9 +172,12 @@ public final class ScheduledEntityReplayQueue {
         }
 
         if (visited != 0) {
-            Chunkis.LOGGER.info("Chunkis entity replay drain finished: dimension={} visited={} queueBefore={} " +
-                    "queueAfter={} " + "serverThread={} thread={}", worldId, visited, queueBefore, QUEUE.size(),
-                    world.getServer() == null || world.getServer().isOnThread(), Thread.currentThread().getName());
+            Chunkis.LOGGER.info(
+                    "Chunkis entity replay drain finished: dimension={} visited={} queueBefore={} queueAfter={} serverThread={} thread={}",
+                    worldId, visited, queueBefore, QUEUE.size(),
+                    world.getServer() == null || world.getServer().isOnThread(),
+                    Thread.currentThread().getName()
+            );
         }
     }
 
@@ -151,9 +185,10 @@ public final class ScheduledEntityReplayQueue {
      * Removes all queue entries matching {@code entityUuid}, regardless of world
      * or chunk.
      *
-     * <p>Called when an entity has been confirmed present so its retry entry is
-     * no longer needed. Scans the entire map (O(n)) because the key includes
-     * world and chunk context that is not available at acknowledgement time.</p>
+     * <p>Called when an entity has been confirmed present so its retry entry is no
+     * longer needed. This scans the entire map (O(n)) because the composite key
+     * includes world and chunk context that is not available at acknowledgement
+     * time.</p>
      *
      * @param entityUuid UUID string to remove; null/blank-checked
      */
@@ -165,7 +200,7 @@ public final class ScheduledEntityReplayQueue {
     }
 
     /**
-     * Clears all pending replay entries.
+     * Clears all pending replay entries across all worlds.
      */
     public static void clear() {
         QUEUE.clear();
@@ -189,45 +224,51 @@ public final class ScheduledEntityReplayQueue {
      */
     @SuppressWarnings("unchecked")
     private static ChunkDelta<BlockState, NbtCompound> getChunkDelta(final Chunk chunk) {
-        return chunk instanceof ChunkisDeltaDuck duck ?
-                (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta() : null;
+        return chunk instanceof ChunkisDeltaDuck duck
+                ? (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta()
+                : null;
     }
 
     /**
-     * Removes the pending entity entry matching {@code entityUuid} from the
-     * chunk delta, but only when the delta is marked as suppressing initial
-     * repopulation (i.e. the payload is a legacy entry that should not persist).
+     * Removes the pending entity entry matching {@code entityUuid} from the chunk
+     * delta, but only when the delta is marked as suppressing initial repopulation.
      *
-     * <p>{@link Uuids#toUuid} can throw {@link IllegalArgumentException} on
-     * malformed arrays; those are silently skipped so one bad NBT entry does
-     * not prevent cleaning up the rest.</p>
+     * <p>Only suppressed deltas hold "legacy" pending entries that should be cleaned
+     * up after materialization. Active deltas retain their pending list for future
+     * replays. Malformed UUID arrays in NBT are silently skipped so that one bad
+     * entry does not block cleanup of valid entries.</p>
      *
      * @param liveChunk  chunk whose delta is updated
      * @param entityUuid UUID string of the entity whose pending entry should be removed
      */
-    private static void removeMaterializedPendingEntity(final WorldChunk liveChunk, final String entityUuid) {
+    private static void removeMaterializedPendingEntity(
+            final WorldChunk liveChunk,
+            final String entityUuid
+    ) {
         final ChunkDelta<BlockState, NbtCompound> delta = getChunkDelta(liveChunk);
         if (delta == null || !delta.shouldSuppressInitialRepopulation()) {
             return;
         }
-        delta.removePendingEntitiesMatching(nbt -> {
-            return EntityPayloadNbt.hasUuid(nbt, entityUuid);
-        });
+        delta.removePendingEntitiesMatching(nbt -> EntityPayloadNbt.hasUuid(nbt, entityUuid));
     }
 
     /**
      * Builds the composite map key for a scheduled replay entry.
      *
-     * <p>Format: {@code worldId|chunkX,chunkZ|entityUuid}. The {@code |} separator
-     * is safe because Minecraft resource locations use {@code namespace:path} and
-     * never contain {@code |}.</p>
+     * <p>Format: {@code worldId|chunkX,chunkZ|entityUuid}. The {@code |}
+     * separator is safe because Minecraft resource locations use
+     * {@code namespace:path} and never contain {@code |}.</p>
      *
      * @param worldId    world registry key string
      * @param chunkPos   chunk coordinates
      * @param entityUuid entity UUID string
      * @return composite key
      */
-    private static String key(final String worldId, final ChunkPos chunkPos, final String entityUuid) {
+    private static String key(
+            final String worldId,
+            final ChunkPos chunkPos,
+            final String entityUuid
+    ) {
         return worldId + '|' + chunkPos.x + ',' + chunkPos.z + '|' + entityUuid;
     }
 
@@ -243,12 +284,19 @@ public final class ScheduledEntityReplayQueue {
      * @param decision    short label describing the outcome for this entry
      * @param queueBefore queue size at the start of the current tick
      */
-    private static void traceDrain(final ServerWorld world, final ScheduledEntityReplay replay, final String decision
-            , final int queueBefore) {
-        Chunkis.LOGGER.info("Chunkis entity replay drain: dimension={} chunk={},{} uuid={} decision={} queueBefore={}" +
-                " " + "queueAfter={} serverThread={} thread={}", world.getRegistryKey().getValue(), replay.chunkX,
-                replay.chunkZ, replay.entityUuid, decision, queueBefore, QUEUE.size(),
-                world.getServer() == null || world.getServer().isOnThread(), Thread.currentThread().getName());
+    private static void traceDrain(
+            final ServerWorld world,
+            final ScheduledEntityReplay replay,
+            final String decision,
+            final int queueBefore
+    ) {
+        Chunkis.LOGGER.info(
+                "Chunkis entity replay drain: dimension={} chunk={},{} uuid={} decision={} queueBefore={} queueAfter={} serverThread={} thread={}",
+                world.getRegistryKey().getValue(), replay.chunkX, replay.chunkZ, replay.entityUuid,
+                decision, queueBefore, QUEUE.size(),
+                world.getServer() == null || world.getServer().isOnThread(),
+                Thread.currentThread().getName()
+        );
     }
 
     /**
@@ -261,7 +309,11 @@ public final class ScheduledEntityReplayQueue {
      * @param entityNbt  fallback entity NBT, or {@code null} if the chunk delta
      *                   should be consulted at retry time
      */
-    private record ScheduledEntityReplay(String worldId, int chunkX, int chunkZ, String entityUuid,
-                                         NbtCompound entityNbt) {}
+    private record ScheduledEntityReplay(
+            String worldId,
+            int chunkX,
+            int chunkZ,
+            String entityUuid,
+            NbtCompound entityNbt
+    ) {}
 }
-

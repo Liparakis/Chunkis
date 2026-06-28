@@ -18,7 +18,6 @@ import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
-import io.liparakis.chunkis.world.entity.capture.ChunkEntityNbtCapture;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
@@ -533,71 +532,9 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 null
         );
         final Chunk chunk = chunkis$resolveChunkForSaving(chunkHolder);
-
-        ChunkDelta<BlockState, NbtCompound> delta = chunkis$getActiveDelta(pos);
-        if (delta == null) {
-            delta = chunkis$getChunkDelta(chunk);
-        }
-        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)
-                && chunk instanceof WorldChunk worldChunk
-                && LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk) > 0) {
-            delta = chunkis$captureLiveEntities(chunk, delta, null);
-            ChunkOwnershipTraceHelper.claimOwnership(
-                    delta,
-                    ChunkTraceReason.EXPLICIT_CHUNKIS_MUTATION,
-                    SAVE_SOURCE + "#entityCapture"
-            );
-        }
+        ChunkDelta<BlockState, NbtCompound> delta = chunkis$resolveDeltaForSave(chunk, pos);
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
-            final int liveSavableEntities = chunk instanceof WorldChunk worldChunk
-                    ? LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk)
-                    : 0;
-            if (delta != null && delta.isDirty()) {
-                ChunkTraceStore.trace(
-                        ChunkisDebugDomain.ASSERTIONS,
-                        ChunkTraceEventType.ASSERTION_FAILED,
-                        ChunkTraceSeverity.ERROR,
-                        ChunkTraceReason.SAVE_WITHOUT_OWNERSHIP,
-                        SAVE_SOURCE,
-                        "save hook saw dirty delta without ownership",
-                        world.getRegistryKey().getValue().toString(),
-                        new DebugChunkKey(pos.x, pos.z),
-                        null,
-                        operationId,
-                        true,
-                        null
-                );
-            }
-            if (liveSavableEntities > 0) {
-                ChunkTraceStore.trace(
-                        ChunkisDebugDomain.ASSERTIONS,
-                        ChunkTraceEventType.ASSERTION_FAILED,
-                        ChunkTraceSeverity.ERROR,
-                        ChunkTraceReason.SAVE_WITHOUT_OWNERSHIP,
-                        SAVE_SOURCE,
-                        "save hook bypassed chunk with " + liveSavableEntities
-                                + " savable live entit"
-                                + (liveSavableEntities == 1 ? "y" : "ies")
-                                + " before Chunkis entity capture",
-                        world.getRegistryKey().getValue().toString(),
-                        new DebugChunkKey(pos.x, pos.z),
-                        null,
-                        operationId,
-                        delta != null && delta.isDirty(),
-                        null
-                );
-            }
-            ChunkOwnershipTraceHelper.traceDecision(
-                    world.getRegistryKey(),
-                    pos,
-                    "BYPASSED",
-                    ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
-                    SAVE_SOURCE,
-                    delta,
-                    null
-            );
-            PendingVanillaSaveDecision.put(pos, delta, ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED, SAVE_SOURCE);
-            cir.setReturnValue(Boolean.TRUE);
+            chunkis$finishBypassedSave(pos, delta, chunk, operationId, cir);
             return;
         }
         ChunkOwnershipTraceHelper.traceDecision(
@@ -650,6 +587,115 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             chunk.tryMarkSaved();
         }
 
+        cir.setReturnValue(Boolean.TRUE);
+    }
+
+    /**
+     * Resolves the delta the save hook should operate on.
+     *
+     * <p>The active tracked delta wins. If none exists, the chunk-attached delta is
+     * used as a fallback. As a last recovery step, a chunk with live savable
+     * entities but no Chunkis ownership is promoted into an owned delta by
+     * capturing those entities.</p>
+     *
+     * @param chunk chunk being saved; may be {@code null}
+     * @param pos   chunk position for tracker lookup
+     * @return delta to use for save processing, or {@code null}
+     */
+    @Unique
+    private ChunkDelta<BlockState, NbtCompound> chunkis$resolveDeltaForSave(
+            final Chunk chunk,
+            final ChunkPos pos
+    ) {
+        ChunkDelta<BlockState, NbtCompound> delta = chunkis$getActiveDelta(pos);
+        if (delta == null) {
+            delta = chunkis$getChunkDelta(chunk);
+        }
+        if (ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
+            return delta;
+        }
+        if (!(chunk instanceof WorldChunk worldChunk)) {
+            return delta;
+        }
+        if (LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk) == 0) {
+            return delta;
+        }
+
+        delta = chunkis$captureLiveEntities(chunk, delta, null);
+        ChunkOwnershipTraceHelper.claimOwnership(
+                delta,
+                ChunkTraceReason.EXPLICIT_CHUNKIS_MUTATION,
+                SAVE_SOURCE + "#entityCapture"
+        );
+        return delta;
+    }
+
+    /**
+     * Records the reason a save stayed on the vanilla-bypassed path and stops the
+     * hook without queueing a Chunkis save.
+     *
+     * @param pos         chunk position being saved
+     * @param delta       resolved delta, if any
+     * @param chunk       resolved chunk, if any
+     * @param operationId trace correlation ID
+     * @param cir         callback whose return value is forced to {@code true}
+     */
+    @Unique
+    private void chunkis$finishBypassedSave(
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final Chunk chunk,
+            final String operationId,
+            final CallbackInfoReturnable<Boolean> cir
+    ) {
+        final int liveSavableEntities = chunk instanceof WorldChunk worldChunk
+                ? LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk)
+                : 0;
+        if (delta != null && delta.isDirty()) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.SAVE_WITHOUT_OWNERSHIP,
+                    SAVE_SOURCE,
+                    "save hook saw dirty delta without ownership",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(pos.x, pos.z),
+                    null,
+                    operationId,
+                    true,
+                    null
+            );
+        }
+        if (liveSavableEntities > 0) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.SAVE_WITHOUT_OWNERSHIP,
+                    SAVE_SOURCE,
+                    "save hook bypassed chunk with " + liveSavableEntities
+                            + " savable live entit"
+                            + (liveSavableEntities == 1 ? "y" : "ies")
+                            + " before Chunkis entity capture",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(pos.x, pos.z),
+                    null,
+                    operationId,
+                    delta != null && delta.isDirty(),
+                    null
+            );
+        }
+        ChunkOwnershipTraceHelper.traceDecision(
+                world.getRegistryKey(),
+                pos,
+                "BYPASSED",
+                ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
+                SAVE_SOURCE,
+                delta,
+                null
+        );
+        PendingVanillaSaveDecision.put(pos, delta, ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED, SAVE_SOURCE);
         cir.setReturnValue(Boolean.TRUE);
     }
 
@@ -831,34 +877,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 operationId,
                 "ThreadedAnvilChunkStorageMixin#chunkis$captureLiveEntities"
         );
-    }
-
-    @Unique
-    private static List<NbtCompound> chunkis$mergePendingEntities(
-            final ChunkDelta<?, NbtCompound> existingDelta,
-            final List<NbtCompound> liveEntities
-    ) {
-        final List<NbtCompound> merged = new java.util.ArrayList<>(liveEntities);
-        final java.util.Set<String> liveEntityUuids = new java.util.HashSet<>();
-        for (final NbtCompound liveEntity : liveEntities) {
-            final String uuid = ChunkEntityNbtCapture.entityUuid(liveEntity);
-            if (uuid != null) {
-                liveEntityUuids.add(uuid);
-            }
-        }
-        if (existingDelta == null) {
-            return merged;
-        }
-        existingDelta.forEachEntity(entityNbt -> {
-            if (entityNbt == null) {
-                return;
-            }
-            final String uuid = ChunkEntityNbtCapture.entityUuid(entityNbt);
-            if (uuid == null || !liveEntityUuids.contains(uuid)) {
-                merged.add(entityNbt);
-            }
-        });
-        return merged;
     }
 
     /**
