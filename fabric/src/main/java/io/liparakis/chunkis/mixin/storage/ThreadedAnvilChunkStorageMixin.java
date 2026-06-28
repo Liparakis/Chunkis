@@ -969,13 +969,60 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId) {
-        ChunkDelta<BlockState, NbtCompound> deltaToQueue = delta;
-        if (deltaToQueue == null || !deltaToQueue.isDirty()) {
-            if (deltaToQueue != null) {
+        ChunkDelta<BlockState, NbtCompound> deltaToQueue = chunkis$prepareDeltaForQueueing(pos, delta, operationId);
+        if (deltaToQueue == null) {
+            return;
+        }
+        deltaToQueue = chunkis$prepareDeltaForPersistence(
+                pos,
+                deltaToQueue,
+                "save-hook-async",
+                "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
+                operationId
+        );
+        if (deltaToQueue == null) {
+            PayloadWatchTracer.traceDeltaStage(
+                    world.getRegistryKey().getValue().toString(),
+                    pos,
+                    delta,
+                    operationId,
+                    ChunkTraceEventType.WATCH_SKIPPED,
+                    "save-rejected-sparse",
+                    "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
+                    "delta was rejected by sparse persistence guard; async save not queued",
+                    null
+            );
+            return;
+        }
+
+        AsyncCisSaveManager.submit(world, storage, pos, deltaToQueue, operationId);
+    }
+
+    /**
+     * Runs the non-persistence preflight checks for async save queue submission.
+     *
+     * <p>This covers the policy decisions specific to queueing: skip clean deltas,
+     * reject unowned deltas with assertion tracing, and emit the queue-requested
+     * lifecycle trace for owned dirty deltas.</p>
+     *
+     * @param pos         chunk position being queued
+     * @param delta       candidate delta
+     * @param operationId trace correlation ID
+     * @return delta ready for persistence preparation, or {@code null} if queueing
+     *         should stop
+     */
+    @Unique
+    private ChunkDelta<BlockState, NbtCompound> chunkis$prepareDeltaForQueueing(
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId
+    ) {
+        if (delta == null || !delta.isDirty()) {
+            if (delta != null) {
                 PayloadWatchTracer.traceDeltaStage(
                         world.getRegistryKey().getValue().toString(),
                         pos,
-                        deltaToQueue,
+                        delta,
                         operationId,
                         ChunkTraceEventType.WATCH_SKIPPED,
                         "save-not-queued-clean",
@@ -984,13 +1031,13 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                         null
                 );
             }
-            return;
+            return null;
         }
-        if (!ChunkDeltaOwnership.hasChunkisOwnedState(deltaToQueue)) {
+        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             PayloadWatchTracer.traceDeltaStage(
                     world.getRegistryKey().getValue().toString(),
                     pos,
-                    deltaToQueue,
+                    delta,
                     operationId,
                     ChunkTraceEventType.WATCH_SKIPPED,
                     "save-bypassed-without-ownership",
@@ -1018,18 +1065,19 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     "BYPASSED",
                     ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
                     "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
-                    deltaToQueue,
+                    delta,
                     null
             );
-            return;
+            return null;
         }
+
         ChunkOwnershipTraceHelper.traceDecision(
                 world.getRegistryKey(),
                 pos,
                 "CLAIMED",
-                ChunkTraceReason.valueOf(deltaToQueue.getOwnershipReason()),
+                ChunkTraceReason.valueOf(delta.getOwnershipReason()),
                 "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
-                deltaToQueue,
+                delta,
                 null
         );
         ChunkTraceStore.trace(
@@ -1038,37 +1086,15 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
-                "save queue requested: " + DeltaPersistenceGuard.describeLifecycleState(deltaToQueue),
+                "save queue requested: " + DeltaPersistenceGuard.describeLifecycleState(delta),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
                 operationId,
-                deltaToQueue.isDirty(),
+                delta.isDirty(),
                 null
         );
-        deltaToQueue = chunkis$prepareDeltaForPersistence(
-                pos,
-                deltaToQueue,
-                "save-hook-async",
-                "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
-                operationId
-        );
-        if (deltaToQueue == null) {
-            PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey().getValue().toString(),
-                    pos,
-                    delta,
-                    operationId,
-                    ChunkTraceEventType.WATCH_SKIPPED,
-                    "save-rejected-sparse",
-                    "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
-                    "delta was rejected by sparse persistence guard; async save not queued",
-                    null
-            );
-            return;
-        }
-
-        AsyncCisSaveManager.submit(world, storage, pos, deltaToQueue, operationId);
+        return delta;
     }
 
     /**
