@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.world;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;

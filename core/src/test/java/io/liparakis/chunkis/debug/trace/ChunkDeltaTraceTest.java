@@ -1,4 +1,9 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.trace;
+
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import org.junit.jupiter.api.AfterEach;

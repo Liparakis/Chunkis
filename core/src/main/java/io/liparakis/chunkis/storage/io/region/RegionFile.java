@@ -1,14 +1,14 @@
-package io.liparakis.chunkis.storage.io;
+package io.liparakis.chunkis.storage.io.region;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
-import io.liparakis.chunkis.debug.DebugRegionKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -23,11 +23,11 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Region file handler for 32×32 chunks.
+ * Region file handler for 32—32 chunks.
  *
  * <p>Layout (byte offsets):
  * <pre>
- *   [0, 8192)        fixed header — 1024 × (offset:int, length:int)
+ *   [0, 8192)        fixed header 1024 — (offset:int, length:int)
  *   [8192, dataEnd)  chunk payloads, potentially with gaps reused by the allocator
  *   [dataEnd, EOF)   allocation metadata footer (optional; absent in legacy files)
  * </pre>
@@ -39,16 +39,27 @@ import java.util.List;
  * @author Liparakis
  * @version 2.0
  */
-final class RegionFile implements AutoCloseable {
+public final class RegionFile implements AutoCloseable {
 
+    /**
+     * Trace source label used for read-side region events.
+     */
     private static final String READ_SOURCE = "RegionFile#read";
+    /**
+     * Trace source label used for write-side region events.
+     */
     private static final String WRITE_SOURCE = "RegionFile#write";
-
+    /**
+     * Bitmask used to fold world chunk coordinates into their 0-31 local slot.
+     */
     private static final int REGION_MASK = 31;
+    /**
+     * Fixed number of chunk slots tracked by one region header.
+     */
     private static final int CHUNKS_PER_REGION = 1024;
 
     /**
-     * Total header size: 1024 chunk entries × 8 bytes per entry.
+     * Total header size: 1024 chunk entries — 8 bytes per entry.
      */
     static final int HEADER_SIZE = 8192;
 
@@ -136,7 +147,7 @@ final class RegionFile implements AutoCloseable {
      * @param regionZ region Z coordinate
      * @throws IOException if the file cannot be opened
      */
-    RegionFile(Path dir, int regionX, int regionZ) throws IOException {
+    public RegionFile(Path dir, int regionX, int regionZ) throws IOException {
         this.path = dir.resolve("r." + regionX + '.' + regionZ + ".cis");
         this.channel = openChannel();
 
@@ -178,11 +189,12 @@ final class RegionFile implements AutoCloseable {
      * @return the raw bytes, or {@code null} if the chunk is not present
      * @throws IOException if a read error occurs
      */
-    synchronized byte[] read(CisChunkPos pos) throws IOException {
+    public synchronized byte[] read(CisChunkPos pos) throws IOException {
         return read(pos, null);
     }
 
-    synchronized byte[] read(CisChunkPos pos, String operationId) throws IOException {
+    public synchronized byte[] read(CisChunkPos pos, String operationId) throws IOException {
+        final DebugChunkKey chunkKey = chunkKey(pos);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE,
                 ChunkTraceEventType.REGION_READ_TX_START,
@@ -191,7 +203,7 @@ final class RegionFile implements AutoCloseable {
                 READ_SOURCE,
                 "region file read started",
                 null,
-                new DebugChunkKey(pos.x(), pos.z()),
+                chunkKey,
                 regionKey(),
                 operationId,
                 null,
@@ -209,7 +221,7 @@ final class RegionFile implements AutoCloseable {
                     READ_SOURCE,
                     "region file entry missing",
                     null,
-                    new DebugChunkKey(pos.x(), pos.z()),
+                    chunkKey,
                     regionKey(),
                     operationId,
                     null,
@@ -233,7 +245,7 @@ final class RegionFile implements AutoCloseable {
                 READ_SOURCE,
                 "region file read completed",
                 null,
-                new DebugChunkKey(pos.x(), pos.z()),
+                chunkKey,
                 regionKey(),
                 operationId,
                 null,
@@ -242,7 +254,7 @@ final class RegionFile implements AutoCloseable {
         return buffer.array();
     }
 
-    synchronized boolean hasChunk(CisChunkPos pos) {
+    public synchronized boolean hasChunk(CisChunkPos pos) {
         final int index = getChunkIndex(pos);
         return offsets[index] != 0 && lengths[index] > 0;
     }
@@ -252,9 +264,9 @@ final class RegionFile implements AutoCloseable {
      *
      * <p>Three allocation strategies in priority order:
      * <ol>
-     *   <li><b>In-place</b> — new data fits within the old slot; old tail bytes become a free block.</li>
-     *   <li><b>Best-fit reuse</b> — a free hole large enough is found; old slot becomes a free block.</li>
-     *   <li><b>Append</b> — no hole fits; data is appended at end of file.</li>
+     *   <li><b>In-place</b> new data fits within the old slot; old tail bytes become a free block.</li>
+     *   <li><b>Best-fit reuse</b> a free hole large enough is found; old slot becomes a free block.</li>
+     *   <li><b>Append</b> no hole fits; data is appended at end of file.</li>
      * </ol>
      *
      * <p>The footer is always truncated before any payload write and rewritten
@@ -265,11 +277,12 @@ final class RegionFile implements AutoCloseable {
      * @param data the data to write, or {@code null} to clear the chunk
      * @throws IOException if a write error occurs
      */
-    synchronized void write(CisChunkPos pos, byte[] data) throws IOException {
+    public synchronized void write(CisChunkPos pos, byte[] data) throws IOException {
         write(pos, data, null);
     }
 
-    synchronized void write(CisChunkPos pos, byte[] data, String operationId) throws IOException {
+    public synchronized void write(CisChunkPos pos, byte[] data, String operationId) throws IOException {
+        final DebugChunkKey chunkKey = chunkKey(pos);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE,
                 ChunkTraceEventType.REGION_WRITE_TX_START,
@@ -278,7 +291,7 @@ final class RegionFile implements AutoCloseable {
                 WRITE_SOURCE,
                 "region write started",
                 null,
-                new DebugChunkKey(pos.x(), pos.z()),
+                chunkKey,
                 regionKey(),
                 operationId,
                 null,
@@ -308,7 +321,7 @@ final class RegionFile implements AutoCloseable {
                     WRITE_SOURCE,
                     "region clear completed",
                     null,
-                    new DebugChunkKey(pos.x(), pos.z()),
+                    chunkKey,
                     regionKey(),
                     operationId,
                     null,
@@ -334,7 +347,7 @@ final class RegionFile implements AutoCloseable {
                     WRITE_SOURCE,
                     "region write completed",
                     null,
-                    new DebugChunkKey(pos.x(), pos.z()),
+                    chunkKey,
                     regionKey(),
                     operationId,
                     null,
@@ -360,7 +373,7 @@ final class RegionFile implements AutoCloseable {
                 WRITE_SOURCE,
                 "region write completed",
                 null,
-                new DebugChunkKey(pos.x(), pos.z()),
+                chunkKey,
                 regionKey(),
                 operationId,
                 null,
@@ -371,7 +384,7 @@ final class RegionFile implements AutoCloseable {
     /**
      * Forces pending writes to disk. Silently no-ops if already clean.
      */
-    void flush() {
+    public void flush() {
         if (!dirty) {
             return;
         }
@@ -404,7 +417,7 @@ final class RegionFile implements AutoCloseable {
      * <p>{@code compact} and {@code compactWithReport} are both {@code synchronized}.
      * Java's intrinsic locks are reentrant, so the inner call from here is safe.
      */
-    synchronized void compact() {
+    public synchronized void compact() {
         try {
             flush();
             compactWithReport();
@@ -419,7 +432,7 @@ final class RegionFile implements AutoCloseable {
      *
      * @throws IOException if compaction or validation fails
      */
-    synchronized RegionCompactReport compactWithReport() throws IOException {
+    public synchronized RegionCompactReport compactWithReport() throws IOException {
         flush();
 
         final long physicalBytesBefore = channel.size();
@@ -469,7 +482,7 @@ final class RegionFile implements AutoCloseable {
      * Copies all live chunks into the compacted file and builds the replacement
      * header in memory.
      *
-     * @param maxChunkLen scratch buffer size — must be &ge; the largest live payload
+     * @param maxChunkLen scratch buffer size must be &ge; the largest live payload
      */
     private ByteBuffer writeLiveChunks(final FileChannel dest, final int maxChunkLen) throws IOException {
         int currentOffset = HEADER_SIZE;
@@ -539,7 +552,7 @@ final class RegionFile implements AutoCloseable {
     /**
      * Attempts to reopen the backing channel after a failed compaction.
      *
-     * <p>Only acts when the channel is closed — if the compaction failure
+     * <p>Only acts when the channel is closed if the compaction failure
      * happened before {@link #swapCompactedFile} called {@code channel.close()},
      * the original channel is still valid and no recovery is needed.</p>
      */
@@ -749,7 +762,7 @@ final class RegionFile implements AutoCloseable {
      * falling back to append.
      *
      * <p>The free list is always kept sorted by offset (via {@link #addFreeBlock}
-     * → {@link #mergeAdjacent}), so a linear scan for best-fit is sufficient for
+     * â†’ {@link #mergeAdjacent}), so a linear scan for best-fit is sufficient for
      * typical free-list sizes (&lt;1024 entries).</p>
      */
     private Allocation allocate(final int dataLength) throws IOException {
@@ -837,7 +850,7 @@ final class RegionFile implements AutoCloseable {
      * Verifies that the compacted temp file preserves every live entry exactly
      * and that all offsets fall within the expected compacted payload span.
      *
-     * @param maxChunkLen scratch buffer size — must be &ge; the largest live payload
+     * @param maxChunkLen scratch buffer size must be &ge; the largest live payload
      * @param liveBytes   expected total payload bytes after compaction
      */
     private void validateCompactedFile(
@@ -884,7 +897,7 @@ final class RegionFile implements AutoCloseable {
     /**
      * Captures space accounting for diagnostics and operator reports.
      */
-    synchronized RegionSpaceStats spaceStats() {
+    public synchronized RegionSpaceStats spaceStats() {
         long reusableBytes = 0L;
         int largestFreeBlock = 0;
         for (final FreeBlock block : freeBlocks) {
@@ -927,7 +940,7 @@ final class RegionFile implements AutoCloseable {
 
     /**
      * Returns the local slot index for a chunk position within this region
-     * (0–1023, row-major in Z).
+     * (0â€“1023, row-major in Z).
      */
     private static int getChunkIndex(final CisChunkPos pos) {
         return (pos.x() & REGION_MASK) + (pos.z() & REGION_MASK) * 32;
@@ -986,6 +999,10 @@ final class RegionFile implements AutoCloseable {
                 path, StandardOpenOption.READ, StandardOpenOption.WRITE,
                 StandardOpenOption.CREATE
         );
+    }
+
+    private static DebugChunkKey chunkKey(final CisChunkPos pos) {
+        return new DebugChunkKey(pos.x(), pos.z());
     }
 
     private DebugRegionKey regionKey() {
@@ -1074,14 +1091,14 @@ final class RegionFile implements AutoCloseable {
     /**
      * Exposes the backing path for tests and storage-level compaction plumbing.
      */
-    Path path() {
+    public Path path() {
         return path;
     }
 
     /**
      * Immutable compaction result for one region file.
      */
-    record RegionCompactReport(
+    public record RegionCompactReport(
             Path path,
             long physicalBytesBefore,
             long physicalBytesAfter,
@@ -1091,7 +1108,7 @@ final class RegionFile implements AutoCloseable {
     /**
      * Immutable space-usage snapshot for one region file.
      */
-    record RegionSpaceStats(
+    public record RegionSpaceStats(
             Path path,
             long physicalBytes,
             long liveBytes,

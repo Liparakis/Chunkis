@@ -5,7 +5,9 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.storage.CisNbtUtil;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
+import io.liparakis.chunkis.storage.ChunkEntityNbtCapture;
 import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
@@ -17,8 +19,6 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.storage.NbtWriteView;
-import net.minecraft.util.ErrorReporter;
 import net.minecraft.util.Uuids;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
@@ -72,7 +72,7 @@ public abstract class ServerWorldMixin {
                     world.getRegistryKey(),
                     chunkPos,
                     "BYPASSED",
-                    io.liparakis.chunkis.debug.ChunkTraceReason.CHUNK_NOT_DELTA_CAPABLE,
+                    ChunkTraceReason.CHUNK_NOT_DELTA_CAPABLE,
                     SOURCE,
                     null,
                     null
@@ -90,14 +90,14 @@ public abstract class ServerWorldMixin {
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             ChunkOwnershipTraceHelper.claimOwnership(
                     delta,
-                    io.liparakis.chunkis.debug.ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
                     SOURCE
             );
             ChunkOwnershipTraceHelper.traceDecision(
                     world.getRegistryKey(),
                     chunkPos,
                     "CLAIMED",
-                    io.liparakis.chunkis.debug.ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
                     SOURCE,
                     delta,
                     null
@@ -105,7 +105,7 @@ public abstract class ServerWorldMixin {
         }
         BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(world, chunk, delta);
 
-        final NbtCompound entityNbt = chunkis$serializeEntityNbt(entity);
+        final NbtCompound entityNbt = ChunkEntityNbtCapture.serializeEntityNbt(entity);
         if (entityNbt == null || entityNbt.isEmpty()) {
             return;
         }
@@ -119,21 +119,4 @@ public abstract class ServerWorldMixin {
         GlobalChunkTracker.markDirty(chunk, SOURCE);
     }
 
-    @Unique
-    private static NbtCompound chunkis$serializeEntityNbt(final Entity entity) {
-        try (final ErrorReporter.Logging logging = new ErrorReporter.Logging(
-                entity.getErrorReporterContext(), Chunkis.LOGGER)) {
-            final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
-            entity.writeData(writeView);
-            final NbtCompound nbt = writeView.getNbt();
-            CisNbtUtil.ensureEntityIdPresent(nbt, entity);
-            return nbt;
-        } catch (final Exception e) {
-            Chunkis.LOGGER.debug(
-                    "Chunkis: Skipped entity capture for {} in chunk {}",
-                    entity.getType(), entity.getChunkPos(), e
-            );
-            return null;
-        }
-    }
 }

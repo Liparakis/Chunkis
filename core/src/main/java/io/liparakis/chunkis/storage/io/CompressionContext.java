@@ -52,7 +52,7 @@ final class CompressionContext {
             }
         }
 
-        final long decompressedSize = Zstd.decompressedSize(data);
+        final long decompressedSize = Zstd.getFrameContentSize(data);
         if (Zstd.isError(decompressedSize)) {
             throw new IOException("Failed to read CIS Zstd size: " + Zstd.getErrorName(decompressedSize));
         }

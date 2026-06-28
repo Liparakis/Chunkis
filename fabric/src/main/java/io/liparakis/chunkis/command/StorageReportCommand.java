@@ -10,7 +10,7 @@ import io.liparakis.chunkis.storage.ChunkisStoragePaths;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.bits.BitReader;
-import io.liparakis.chunkis.storage.io.CisRegionInspector;
+import io.liparakis.chunkis.storage.io.region.CisRegionInspector;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.model.CisChunk;
 import io.liparakis.chunkis.storage.model.CisConstants;

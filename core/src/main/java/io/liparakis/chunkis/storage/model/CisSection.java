@@ -61,11 +61,6 @@ public final class CisSection<S> {
     public Object[] denseBlocks;
 
     /**
-     * Number of non-air blocks in dense storage.
-     */
-    int denseCount;
-
-    /**
      * Creates a new empty section.
      */
     public CisSection() {
@@ -76,6 +71,7 @@ public final class CisSection<S> {
      *
      * @return true if empty
      */
+    @SuppressWarnings("unused") // used from the fabric module
     public boolean isEmpty() {
         return mode == MODE_EMPTY;
     }
@@ -179,7 +175,6 @@ public final class CisSection<S> {
             denseBlocks[sparseKeys[i] & COORD_MASK] = sparseValues[i];
         }
 
-        denseCount = sparseSize;
         sparseKeys = null;
         sparseValues = null;
         mode = MODE_DENSE;

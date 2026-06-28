@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.client;
 
-import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import org.junit.jupiter.api.Test;
 

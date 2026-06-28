@@ -52,13 +52,13 @@ public final class CisFixtureMigrationGameTest {
             "regions/r.0.1.cis"
     };
 
-    /** Total chunk slots covered by {@link #FIXTURE_REGION_FILES} (4 × 1024). */
+    /** Total chunk slots covered by {@link #FIXTURE_REGION_FILES} (4 — 1024). */
     private static final int EXPECTED_SCANNED_CHUNKS = FIXTURE_REGION_FILES.length * 1024;
 
     /** Bytes per chunk header entry (offset int + length int). */
     private static final int HEADER_ENTRY_BYTES = 8;
 
-    /** Number of chunk slots per region file (32 × 32). */
+    /** Number of chunk slots per region file (32 Ã— 32). */
     private static final int REGION_SLOTS = 1024;
 
     /**
@@ -71,7 +71,7 @@ public final class CisFixtureMigrationGameTest {
     @SuppressWarnings("unused")
     @GameTest(maxTicks = 400)
     public void migratesV8FixturesWithoutChangingLogicalChunkContents(final TestContext context) throws IOException {
-        io.liparakis.chunkis.debug.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.ChunkisDebugLevel.LIFECYCLE);
+        io.liparakis.chunkis.debug.config.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.config.ChunkisDebugLevel.LIFECYCLE);
         final ServerWorld world = context.getWorld();
         final Path storageRoot = Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT).resolve("chunkis_migration_test");
         final Path regionsDir = storageRoot.resolve("regions");
@@ -125,7 +125,7 @@ public final class CisFixtureMigrationGameTest {
                     Text.literal("Migrated chunk contents did not match the original fixture snapshot."));
             context.complete();
         } finally {
-            io.liparakis.chunkis.debug.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.ChunkisDebugLevel.OFF);
+            io.liparakis.chunkis.debug.config.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.config.ChunkisDebugLevel.OFF);
             storage.close();
             deleteRecursively(storageRoot);
         }

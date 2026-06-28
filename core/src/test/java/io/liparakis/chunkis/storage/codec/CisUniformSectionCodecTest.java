@@ -207,19 +207,7 @@ class CisUniformSectionCodecTest {
     @Test
     void preservesLogicalSectionAcrossRepeatedSaveReload() throws Exception {
         final CodecHarness harness = newHarness();
-        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
-
-        for (int y = 64; y < 80; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    if ((x * 31 + y * 7 + z) % 23 == 0) {
-                        delta.addBlockChange(x, y, z, "block:" + ((x + z) & 7));
-                    } else if ((x + z) % 9 != 0) {
-                        delta.addBlockChange(x, y, z, "stone");
-                    }
-                }
-            }
-        }
+        final ChunkDelta<String, String> delta = createMixedSectionDelta();
 
         final ChunkDelta<String, String> decoded1 = harness.decoder.decode(harness.encoder.encode(delta));
         final ChunkDelta<String, String> decoded2 = harness.decoder.decode(harness.encoder.encode(decoded1));
@@ -243,6 +231,22 @@ class CisUniformSectionCodecTest {
     }
 
     private record CodecHarness(CisEncoder<String, String> encoder, CisDecoder<String, String> decoder) {
+    }
+
+    private static ChunkDelta<String, String> createMixedSectionDelta() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        for (int y = 64; y < 80; y++) {
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    if ((x * 31 + y * 7 + z) % 23 == 0) {
+                        delta.addBlockChange(x, y, z, "block:" + ((x + z) & 7));
+                    } else if ((x + z) % 9 != 0) {
+                        delta.addBlockChange(x, y, z, "stone");
+                    }
+                }
+            }
+        }
+        return delta;
     }
 
     private Map<Long, String> snapshot(final ChunkDelta<String, String> delta) {

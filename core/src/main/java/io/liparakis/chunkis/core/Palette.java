@@ -101,24 +101,6 @@ public class Palette<T> {
     }
 
     /**
-     * Returns the complete list of all entries in the palette.
-     * <p>
-     * The returned list is the internal list used by the palette. Entries are
-     * ordered by their assigned IDs (index 0 = ID 0, index 1 = ID 1, etc.).
-     * </p>
-     * <p>
-     * <b>Warning:</b> Modifying the returned list will corrupt the palette's state.
-     * This method returns the internal list for performance reasons (avoiding copies
-     * during serialization), so callers must treat it as read-only.
-     * </p>
-     *
-     * @return the internal list of palette entries in ID order
-     */
-    public List<T> getAll() {
-        return idToEntry;
-    }
-
-    /**
      * Creates a shallow copy of this palette.
      * <p>
      * The new palette contains the same entries and ID mappings as this one,

@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.trace;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import org.junit.jupiter.api.Test;

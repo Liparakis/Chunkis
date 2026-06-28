@@ -78,7 +78,6 @@ public record BlockInstruction(byte x, int y, byte z, int paletteIndex) {
      *
      * @param packed the packed long containing all instruction data
      * @return a new BlockInstruction with unpacked coordinates and palette index
-     * @see #pack()
      */
     public static BlockInstruction fromPacked(long packed) {
         byte z = (byte) unpackZ(packed);
@@ -104,7 +103,6 @@ public record BlockInstruction(byte x, int y, byte z, int paletteIndex) {
      * @param y the y-coordinate (world height)
      * @param z the z-coordinate (0-15)
      * @return a packed long containing the position data
-     * @see #pack()
      */
     public static long packPos(int x, int y, int z) {
         return ((long) (y & 0xFFFFF) << 12) |
@@ -152,28 +150,5 @@ public record BlockInstruction(byte x, int y, byte z, int paletteIndex) {
      */
     public static int unpackZ(long packed) {
         return (int) ((packed >> 4) & 0xF);
-    }
-
-    /**
-     * Packs this instruction into a single long for compact storage.
-     * <p>
-     * The packed format is:
-     * {@code [paletteIndex: 32 bits][y: 20 bits][x: 4 bits][z: 4 bits][reserved: 4 bits]}
-     * </p>
-     * <p>
-     * This allows storing complete block change instructions in just 8 bytes,
-     * significantly reducing memory usage compared to object-based storage.
-     * The packed representation is also ideal for network transmission and
-     * disk serialization.
-     * </p>
-     *
-     * @return a packed long representation of this instruction
-     * @see #fromPacked(long)
-     */
-    public long pack() {
-        return ((long) paletteIndex << 32) |
-                ((long) (y & 0xFFFFF) << 12) |
-                ((long) (x & 0xF) << 8) |
-                ((long) (z & 0xF) << 4);
     }
 }

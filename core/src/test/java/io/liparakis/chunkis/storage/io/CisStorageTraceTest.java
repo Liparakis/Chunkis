@@ -2,12 +2,12 @@ package io.liparakis.chunkis.storage.io;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.debug.ChunkTraceEvent;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugConfig;
-import io.liparakis.chunkis.debug.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;

@@ -1,11 +1,11 @@
 package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.Chunkis;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.PendingVanillaSaveDecision;
 import net.minecraft.nbt.NbtCompound;
@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 
 /**
  * Hard-stops vanilla MCA writes.

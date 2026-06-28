@@ -3,13 +3,13 @@ package io.liparakis.chunkis.mixin.storage;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
@@ -149,7 +149,7 @@ public class ChunkSerializerMixin {
      *
      * <p>Restore order:</p>
      * <ol>
-     *   <li>Load delta (memory → disk).</li>
+     *   <li>Load delta (memory â†’ disk).</li>
      *   <li>Trace log.</li>
      *   <li>Set suppression flag from persisted metadata.</li>
      *   <li>Attach delta to chunk via {@link ChunkisDeltaDuck}.</li>

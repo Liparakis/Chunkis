@@ -5,6 +5,9 @@ import io.liparakis.chunkis.command.ChunkDebugCommand;
 import io.liparakis.chunkis.command.StorageReportCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.migration.CisWorldMigrator;
 import io.liparakis.chunkis.migration.McaMigrator;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
@@ -66,8 +69,8 @@ public final class ChunkisMod implements ModInitializer {
         registerPayloads();
         registerCommands();
         registerEvents();
-        io.liparakis.chunkis.debug.ChunkTraceWatchpoints.watchPayload(
-                io.liparakis.chunkis.debug.PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8)
+        ChunkTraceWatchpoints.watchPayload(
+                PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8)
         );
     }
 
@@ -123,7 +126,7 @@ public final class ChunkisMod implements ModInitializer {
         );
 
         ServerTickEvents.END_SERVER_TICK.register(
-                server -> io.liparakis.chunkis.debug.PayloadWatchTracer.tickEntityReloadAssertions()
+                server -> PayloadWatchTracer.tickEntityReloadAssertions()
         );
 
         ServerLifecycleEvents.SERVER_STOPPING.register(
@@ -167,7 +170,7 @@ public final class ChunkisMod implements ModInitializer {
         }
 
         PortalLinkManager.close(server);
-        io.liparakis.chunkis.debug.PayloadWatchTracer.checkUnrestoredAssertions();
+        PayloadWatchTracer.checkUnrestoredAssertions();
     }
 
     /**

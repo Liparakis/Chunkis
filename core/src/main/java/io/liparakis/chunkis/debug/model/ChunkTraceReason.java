@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.model;
 
 public enum ChunkTraceReason {
     NONE,
@@ -16,14 +16,14 @@ public enum ChunkTraceReason {
     STALE_GENERATION_IGNORED,
     STORAGE_WRITE,
     STORAGE_READ,
-    MISSING_REGION,
+    MISSING_REGION, // TODO: emit when region-level load/store paths start tracing missing-region boundaries
     MISSING_ENTRY,
     TRACKER_MEMORY,
     CHUNKIS_STORAGE,
     BOTH,
     NEITHER,
     SPARSE_DELTA_REJECTED,
-    VANILLA_STORAGE_BLOCKED,
+    VANILLA_STORAGE_BLOCKED, // TODO: emit when vanilla-storage suppression paths are fully traced
     EMPTY_DELTA,
     PLAYER_UNAVAILABLE,
     PAYLOAD_TOO_LARGE,
@@ -46,16 +46,16 @@ public enum ChunkTraceReason {
     PLAYER_OR_COMMAND_EDIT,
     EXPLICIT_CHUNKIS_MUTATION,
     RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
-    BASE_CAPTURE_FOR_EXISTING_CHUNKIS_CHUNK,
-    MIGRATION_OF_EXISTING_CHUNKIS_DATA,
+    BASE_CAPTURE_FOR_EXISTING_CHUNKIS_CHUNK, // TODO: emit when existing-Chunkis base-capture boundaries are traced
+    MIGRATION_OF_EXISTING_CHUNKIS_DATA, // TODO: emit when legacy Chunkis migration boundaries are traced
     PASSIVE_VANILLA_LOAD,
-    VANILLA_GENERATION,
-    VANILLA_POPULATION,
-    TELEPORT_ONLY_LOAD_UNLOAD,
-    CHUNK_SEND_TO_CLIENT,
+    VANILLA_GENERATION, // TODO: emit when vanilla generation boundaries are traced
+    VANILLA_POPULATION, // TODO: emit when vanilla population boundaries are traced
+    TELEPORT_ONLY_LOAD_UNLOAD, // TODO: emit when teleport-only load/unload boundaries are traced
+    CHUNK_SEND_TO_CLIENT, // TODO: emit when client-send boundaries are traced
     VANILLA_AUTOSAVE_UNTOUCHED,
     INTERNAL_RESTORE_BASE_APPLY,
-    VANILLA_CANCELLED_WITHOUT_OWNERSHIP,
+    VANILLA_CANCELLED_WITHOUT_OWNERSHIP, // TODO: emit when ownershipless vanilla-cancel boundaries are traced
     SAVE_WITHOUT_OWNERSHIP,
     RESET_EMPTY_WITHOUT_OWNERSHIP,
     BASE_SNAPSHOT_NOT_APPLIED,

@@ -84,6 +84,10 @@ public final class CisChunk<S> {
         return section;
     }
 
+    /**
+     * Inserts a newly created section Y into {@link #sectionOrder} while keeping
+     * the active prefix sorted in ascending order.
+     */
     private void insertSectionOrder(final int sectionY) {
         if (sectionOrderSize >= sectionOrder.length) {
             sectionOrder = Arrays.copyOf(sectionOrder, sectionOrder.length << 1);

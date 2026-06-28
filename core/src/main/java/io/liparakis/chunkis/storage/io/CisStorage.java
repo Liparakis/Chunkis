@@ -3,19 +3,21 @@ package io.liparakis.chunkis.storage.io;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugConfig;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.ChunkisDebugLevel;
-import io.liparakis.chunkis.debug.DebugChunkKey;
-import io.liparakis.chunkis.debug.DebugRegionKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.codec.CisDecoder;
 import io.liparakis.chunkis.storage.codec.CisEncoder;
+import io.liparakis.chunkis.storage.io.region.RegionFile;
+import io.liparakis.chunkis.storage.io.region.RegionKey;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
@@ -34,7 +36,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * Region-based storage system for Chunkis chunk deltas.
  *
  * <ul>
- *   <li>32×32 chunk region files</li>
+ *   <li>32—32 chunk region files</li>
  *   <li>bounded LRU cache of open region files</li>
  *   <li>thread-local encoder, decoder, and compression state</li>
  *   <li>automatic region lookup by chunk position</li>
@@ -63,7 +65,7 @@ public final class CisStorage<B, S, P, N> {
     private static final String LOAD_SOURCE = "CisStorage#load";
 
     /**
-     * Bit shift used to convert chunk coordinates into 32×32 region coordinates.
+     * Bit shift used to convert chunk coordinates into 32—32 region coordinates.
      */
     private static final int REGION_SHIFT = 5;
 
@@ -239,19 +241,6 @@ public final class CisStorage<B, S, P, N> {
         final byte[] rawData = encoder.get().encode(delta);
         mapping.flush();
         return PreparedSave.write(rawData);
-    }
-
-    /**
-     * Compresses and writes a previously prepared payload.
-     *
-     * @param pos          chunk position
-     * @param preparedSave prepared save payload
-     * @return {@code true} if the write or clear succeeded
-     * @throws IOException if region I/O fails
-     */
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    public boolean writePrepared(final CisChunkPos pos, final PreparedSave preparedSave) throws IOException {
-        return writePrepared(pos, preparedSave, ChunkTraceStore.nextOperationId("flush"));
     }
 
     public boolean writePrepared(
@@ -578,7 +567,7 @@ public final class CisStorage<B, S, P, N> {
     }
 
     /**
-     * Converts a chunk position to its owning 32×32 region key.
+     * Converts a chunk position to its owning 32—32 region key.
      */
     private static RegionKey getRegionKey(final CisChunkPos pos) {
         return new RegionKey(pos.x() >> REGION_SHIFT, pos.z() >> REGION_SHIFT);

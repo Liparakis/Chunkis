@@ -4,12 +4,12 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import net.minecraft.block.Block;
@@ -80,7 +80,7 @@ public final class BaseChunkCaptureScheduler {
             new ConcurrentHashMap<>();
 
     /**
-     * Utility class – not instantiable.
+     * Utility class â€“ not instantiable.
      */
     private BaseChunkCaptureScheduler() {
         throw new AssertionError("Utility class");
@@ -450,9 +450,9 @@ public final class BaseChunkCaptureScheduler {
          *
          * <p>Behaviour differences by mode:</p>
          * <ul>
-         *   <li><b>ASYNC</b> – skips the save entirely when the base chunk already
+         *   <li><b>ASYNC</b> â€“ skips the save entirely when the base chunk already
          *       exists; a previous cycle already handled it.</li>
-         *   <li><b>SYNCHRONOUS</b> – saves even when the base chunk exists, ensuring
+         *   <li><b>SYNCHRONOUS</b> â€“ saves even when the base chunk exists, ensuring
          *       shutdown captures every dirty delta regardless of prior state.</li>
          * </ul>
          *

@@ -3,12 +3,12 @@ package io.liparakis.chunkis.storage;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.model.CisConstants;
@@ -60,7 +60,7 @@ public final class AsyncCisSaveManager {
             new ConcurrentHashMap<>();
 
     /**
-     * Utility class – construction is forbidden.
+     * Utility class â€“ construction is forbidden.
      */
     private AsyncCisSaveManager() {
         throw new AssertionError("Utility class");
@@ -271,7 +271,7 @@ public final class AsyncCisSaveManager {
             while (true) {
                 final PendingSave save = poll();
                 if (save == null) {
-                    return; // closed and empty – clean exit
+                    return; // closed and empty â€“ clean exit
                 }
                 process(save);
             }
@@ -477,7 +477,7 @@ public final class AsyncCisSaveManager {
             long posKey
     ) {
         /**
-         * Canonical constructor – derives {@link #posKey} from {@code pos}.
+         * Canonical constructor â€“ derives {@link #posKey} from {@code pos}.
          */
         PendingSave(
                 final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,

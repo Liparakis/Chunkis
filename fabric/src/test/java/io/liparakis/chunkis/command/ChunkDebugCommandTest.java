@@ -1,15 +1,15 @@
 package io.liparakis.chunkis.command;
 
-import io.liparakis.chunkis.debug.ChunkTraceEvent;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceSuspect;
-import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
-import io.liparakis.chunkis.debug.DebugRegionKey;
-import io.liparakis.chunkis.debug.PayloadWatchTarget;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
+import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
+import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
 import org.junit.jupiter.api.AfterEach;

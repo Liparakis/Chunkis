@@ -4,16 +4,17 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.storage.CisNbtUtil;
+import io.liparakis.chunkis.storage.ChunkEntityNbtCapture;
 import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
 import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.model.CisConstants;
@@ -33,10 +34,8 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.storage.NbtWriteView;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.Uuids;
-import net.minecraft.util.ErrorReporter;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.ProtoChunk;
@@ -326,7 +325,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
             return;
         }
 
-        final NbtCompound entityNbt = chunkis$serializeEntityNbt(entity);
+        final NbtCompound entityNbt = ChunkEntityNbtCapture.serializeEntityNbt(entity);
         if (entityNbt == null || entityNbt.isEmpty()) {
             return;
         }
@@ -880,21 +879,4 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         return (WorldChunk) (Object) this;
     }
 
-    @Unique
-    private static NbtCompound chunkis$serializeEntityNbt(final Entity entity) {
-        try (final ErrorReporter.Logging logging = new ErrorReporter.Logging(
-                entity.getErrorReporterContext(), Chunkis.LOGGER)) {
-            final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
-            entity.writeData(writeView);
-            final NbtCompound nbt = writeView.getNbt();
-            CisNbtUtil.ensureEntityIdPresent(nbt, entity);
-            return nbt;
-        } catch (final Exception e) {
-            Chunkis.LOGGER.debug(
-                    "Chunkis: Skipped entity capture for {} in chunk {}",
-                    entity.getType(), entity.getChunkPos(), e
-            );
-            return null;
-        }
-    }
 }

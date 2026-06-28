@@ -1,6 +1,14 @@
 package io.liparakis.chunkis.debug;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.AfterEach;

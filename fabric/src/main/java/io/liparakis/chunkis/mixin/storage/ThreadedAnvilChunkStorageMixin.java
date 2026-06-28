@@ -5,12 +5,12 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
@@ -18,9 +18,12 @@ import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.storage.CisNbtUtil;
 import io.liparakis.chunkis.storage.CisSnapshotCapture;
 import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
+import io.liparakis.chunkis.storage.ChunkEntityNbtCapture;
 import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.storage.DeltaPersistenceGuard;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
+import io.liparakis.chunkis.storage.LiveEntitySnapshotCapture;
+import io.liparakis.chunkis.storage.SnapshotSafetyChecker;
 import io.liparakis.chunkis.storage.PendingVanillaSaveDecision;
 import io.liparakis.chunkis.storage.StructureMetadataExtractor;
 import io.liparakis.chunkis.storage.io.CisStorage;
@@ -38,8 +41,6 @@ import net.minecraft.server.world.ChunkHolder;
 import net.minecraft.server.world.ServerChunkLoadingManager;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
-import net.minecraft.storage.NbtWriteView;
-import net.minecraft.util.ErrorReporter;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.Chunk;
@@ -55,7 +56,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.*;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -92,24 +96,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     @Unique
     private static final String ENTITY_REPLAY_SOURCE =
             "ThreadedAnvilChunkStorageMixin#chunkis$scheduleEntityReplay";
-
-    /**
-     * Stable comparator for sorting live entities by UUID before NBT capture.
-     * Deterministic order prevents spurious delta diffs across save cycles.
-     */
-    @Unique
-    private static final Comparator<Entity> ENTITY_UUID_COMPARATOR =
-            Comparator.comparing(Entity::getUuid);
-
-    /**
-     * Game data version captured once at class-init time.
-     *
-     * <p>The version is process-stable, so reading it once avoids repeated
-     * {@link SharedConstants} traversal when constructing synthetic chunk NBT.</p>
-     */
-    @Unique
-    private static final int GAME_DATA_VERSION =
-            SharedConstants.getGameVersion().dataVersion().id();
 
     /**
      * The server world that owns this chunk loading manager.
@@ -433,7 +419,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         );
 
         final CisNbtUtil.LoadChunkNbtResult loadNbt =
-                CisNbtUtil.buildLoadChunkNbt(chunkPos, GAME_DATA_VERSION, delta);
+                CisNbtUtil.buildLoadChunkNbt(chunkPos, chunkis$getGameDataVersion(), delta);
         if (authoritativeFullBaseline
                 && loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.USED) {
             ChunkTraceStore.trace(
@@ -554,7 +540,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         }
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)
                 && chunk instanceof WorldChunk worldChunk
-                && !chunkis$collectSavableLiveEntities(worldChunk).isEmpty()) {
+                && LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk) > 0) {
             delta = chunkis$captureLiveEntities(chunk, delta, null);
             ChunkOwnershipTraceHelper.claimOwnership(
                     delta,
@@ -564,7 +550,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         }
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             final int liveSavableEntities = chunk instanceof WorldChunk worldChunk
-                    ? chunkis$collectSavableLiveEntities(worldChunk).size()
+                    ? LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk)
                     : 0;
             if (delta != null && delta.isDirty()) {
                 ChunkTraceStore.trace(
@@ -799,7 +785,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 || !ChunkStatus.FULL.equals(chunk.getStatus())) {
             return existingDelta;
         }
-        if (chunkis$isSnapshotUnsafe(worldChunk)) {
+        if (SnapshotSafetyChecker.isSnapshotUnsafe(worldChunk)) {
             PayloadWatchTracer.traceDeltaStage(
                     world.getRegistryKey().getValue().toString(),
                     worldChunk.getPos(),
@@ -820,21 +806,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         return CisSnapshotCapture.capture(worldChunk, delta, operationId);
     }
 
-    @Unique
-    private boolean chunkis$isSnapshotUnsafe(final WorldChunk chunk) {
-        if (PendingChunkMutationSuppression.currentCause(chunk)
-                != ChunkMutationTrackingScope.Cause.NONE) {
-            return true;
-        }
-        if (chunk instanceof ChunkisMutationGuardDuck guardDuck
-                && guardDuck.chunkis$getMutationTrackingScope().currentCause()
-                != ChunkMutationTrackingScope.Cause.NONE) {
-            return true;
-        }
-        return chunk instanceof ChunkisDeltaDuck deltaDuck
-                && deltaDuck.chunkis$getRestoreOperationId() != null;
-    }
-
     /**
      * Captures the current non-player entity set for the chunk before persistence.
      *
@@ -853,149 +824,41 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         if (!(chunk instanceof WorldChunk worldChunk)) {
             return existingDelta;
         }
-
-        final ChunkPos chunkPos = worldChunk.getPos();
-        final List<NbtCompound> pendingEntities = new ArrayList<>();
-        final List<Entity> live = chunkis$collectSavableLiveEntities(worldChunk);
-        if (chunkis$shouldSkipEntityCapture(worldChunk, existingDelta, live)) {
-            PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey().getValue().toString(),
-                    chunkPos,
-                    existingDelta,
-                    operationId,
-                    ChunkTraceEventType.WATCH_SKIPPED,
-                    "save-entity-capture-unsafe",
-                    "ThreadedAnvilChunkStorageMixin#chunkis$captureLiveEntities",
-                    "preserved existing entity payload because live entity state was transient or suspiciously empty",
-                    null
-            );
-            return existingDelta;
-        }
-        final Set<String> liveEntityUuids = new HashSet<>();
-        for (final Entity entity : live) {
-            final NbtCompound nbt = chunkis$serializeEntityNbt(entity);
-            if (nbt != null && !nbt.isEmpty()) {
-                pendingEntities.add(nbt);
-                final String uuid = chunkis$entityUuid(nbt);
-                if (uuid != null) {
-                    liveEntityUuids.add(uuid);
-                }
-            }
-        }
-
-        final ChunkDelta<BlockState, NbtCompound> delta =
-                existingDelta != null ? existingDelta : new ChunkDelta<>();
-        delta.clearActiveEntities();
-        for (final Entity entity : live) {
-            final NbtCompound nbt = chunkis$serializeEntityNbt(entity);
-            if (nbt != null && !nbt.isEmpty()) {
-                delta.putEntity(entity.getId(), nbt);
-            }
-        }
-        delta.clearPendingEntities();
-        chunkis$copyUnresolvedPendingEntities(existingDelta, liveEntityUuids, delta);
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.SAVE_TX_START,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.NONE,
-                "ThreadedAnvilChunkStorageMixin#chunkis$captureLiveEntities",
-                "entity capture scanned live=" + live.size()
-                        + ", serialized=" + pendingEntities.size()
-                        + ", retainedPending=" + delta.countPendingEntities(),
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
-                null,
-                null,
-                delta.isDirty(),
-                null
+        return LiveEntitySnapshotCapture.capture(
+                world,
+                worldChunk,
+                existingDelta,
+                operationId,
+                "ThreadedAnvilChunkStorageMixin#chunkis$captureLiveEntities"
         );
-        PayloadWatchTracer.traceCapturedEntities(world, chunkPos, pendingEntities);
-        if (existingDelta != null && delta.countPendingEntities() != 0) {
-            PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey().getValue().toString(),
-                    chunkPos,
-                    delta,
-                    null,
-                    ChunkTraceEventType.WATCH_CAPTURED,
-                    "entity-capture-merged-pending",
-                    "ThreadedAnvilChunkStorageMixin#chunkis$captureLiveEntities",
-                    "live entity capture preserved unresolved pending entity payloads",
-                    null
-            );
-        }
-        return delta;
     }
 
     @Unique
-    private List<Entity> chunkis$collectSavableLiveEntities(final WorldChunk worldChunk) {
-        final ChunkPos chunkPos = worldChunk.getPos();
-        final List<Entity> live = new ArrayList<>();
-        final Box searchBox = new Box(
-                chunkPos.getStartX(),
-                world.getBottomY(),
-                chunkPos.getStartZ(),
-                chunkPos.getEndX() + 1,
-                world.getTopYInclusive() + 1,
-                chunkPos.getEndZ() + 1
-        );
-        for (final Entity entity : world.getOtherEntities(null, searchBox)) {
-            if (entity == null
-                    || entity instanceof PlayerEntity
-                    || !entity.isAlive()
-                    || !entity.getChunkPos().equals(chunkPos)) {
-                continue;
+    private static List<NbtCompound> chunkis$mergePendingEntities(
+            final ChunkDelta<?, NbtCompound> existingDelta,
+            final List<NbtCompound> liveEntities
+    ) {
+        final List<NbtCompound> merged = new java.util.ArrayList<>(liveEntities);
+        final java.util.Set<String> liveEntityUuids = new java.util.HashSet<>();
+        for (final NbtCompound liveEntity : liveEntities) {
+            final String uuid = ChunkEntityNbtCapture.entityUuid(liveEntity);
+            if (uuid != null) {
+                liveEntityUuids.add(uuid);
             }
-            live.add(entity);
         }
-        live.sort(ENTITY_UUID_COMPARATOR);
-        return live;
-    }
-
-    @Unique
-    private boolean chunkis$shouldSkipEntityCapture(
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> existingDelta,
-            final List<Entity> live
-    ) {
-        if (chunkis$isSnapshotUnsafe(chunk)) {
-            return true;
+        if (existingDelta == null) {
+            return merged;
         }
-        return existingDelta != null
-                && existingDelta.countNonNullEntities() > 0
-                && live.isEmpty();
-    }
-
-    @Unique
-    private static void chunkis$copyUnresolvedPendingEntities(
-            final ChunkDelta<BlockState, NbtCompound> existingDelta,
-            final Set<String> liveEntityUuids,
-            final ChunkDelta<BlockState, NbtCompound> targetDelta
-    ) {
-        if (existingDelta == null || existingDelta.countPendingEntities() == 0) {
-            return;
-        }
-
-        existingDelta.forEachPendingEntity(entityNbt -> {
+        existingDelta.forEachEntity(entityNbt -> {
             if (entityNbt == null) {
                 return;
             }
-            final String uuid = chunkis$entityUuid(entityNbt);
+            final String uuid = ChunkEntityNbtCapture.entityUuid(entityNbt);
             if (uuid == null || !liveEntityUuids.contains(uuid)) {
-                targetDelta.addPendingEntity(entityNbt);
+                merged.add(entityNbt);
             }
         });
-    }
-
-    @Unique
-    private static String chunkis$entityUuid(final NbtCompound entityNbt) {
-        if (entityNbt == null) {
-            return null;
-        }
-        return entityNbt.getIntArray("UUID")
-                .map(net.minecraft.util.Uuids::toUuid)
-                .map(java.util.UUID::toString)
-                .orElse(null);
+        return merged;
     }
 
     /**
@@ -1352,7 +1215,12 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     private static NbtCompound chunkis$buildChunkNbt(
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
-        return CisNbtUtil.buildLoadChunkNbt(pos, GAME_DATA_VERSION, delta).root();
+        return CisNbtUtil.buildLoadChunkNbt(pos, chunkis$getGameDataVersion(), delta).root();
+    }
+
+    @Unique
+    private static int chunkis$getGameDataVersion() {
+        return SharedConstants.getGameVersion().dataVersion().id();
     }
 
     /**
@@ -1414,24 +1282,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      * @param entity the entity to serialize
      * @return the serialized NBT, or {@code null} if serialization failed
      */
-    @Unique
-    private static NbtCompound chunkis$serializeEntityNbt(final Entity entity) {
-        try (final ErrorReporter.Logging logging = new ErrorReporter.Logging(
-                entity.getErrorReporterContext(), Chunkis.LOGGER)) {
-            final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
-            entity.writeData(writeView);
-            final NbtCompound nbt = writeView.getNbt();
-            CisNbtUtil.ensureEntityIdPresent(nbt, entity);
-            return nbt;
-        } catch (final Exception e) {
-            Chunkis.LOGGER.debug(
-                    "Chunkis: Skipped entity capture for {} in chunk {}",
-                    entity.getType(), entity.getChunkPos(), e
-            );
-            return null;
-        }
-    }
-
     /**
      * Returns the CIS storage instance for {@link #world}.
      *
@@ -1447,7 +1297,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      * authoritative for load reconstruction and storage should be consulted instead.
      *
      * <p>An empty clean delta with no persisted base chunk or full-block baseline
-     * is not useful reconstruction state — preferring it over storage would cause
+     * is not useful reconstruction state preferring it over storage would cause
      * Chunkis to emit synthetic {@code STATUS_EMPTY} NBT and reroll terrain.</p>
      *
      * @param delta the tracked delta candidate; may be {@code null}

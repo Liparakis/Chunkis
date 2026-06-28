@@ -35,6 +35,8 @@ public final class CisNetworkEncoder<B, S, P, N> extends AbstractCisEncoder<S, N
 
     /** Registry adapter used to turn block identities into stable network ids. */
     private final BlockRegistryAdapter<B> registryAdapter;
+    /** Typed state adapter retained locally so palette writes do not need wildcard casts. */
+    private final BlockStateAdapter<B, S, P> typedStateAdapter;
     /** Property serializer used for the network global palette payload. */
     private final PropertyPacker<B, S, P> propertyPacker;
 
@@ -47,8 +49,9 @@ public final class CisNetworkEncoder<B, S, P, N> extends AbstractCisEncoder<S, N
             BlockStateAdapter<B, S, P> stateAdapter,
             NbtAdapter<N> nbtAdapter,
             S airState) {
-        super(stateAdapter, nbtAdapter, airState);
+        super(nbtAdapter, airState);
         this.registryAdapter = registryAdapter;
+        this.typedStateAdapter = stateAdapter;
         this.propertyPacker = propertyPacker;
     }
 
@@ -64,7 +67,7 @@ public final class CisNetworkEncoder<B, S, P, N> extends AbstractCisEncoder<S, N
             DataOutputStream dos,
             EncoderContext<S> ctx,
             S state) throws IOException {
-        B block = ((BlockStateAdapter<B, S, P>) stateAdapter).getBlock(state);
+        B block = typedStateAdapter.getBlock(state);
         dos.writeUTF(registryAdapter.getId(block));
 
         var metas = propertyPacker.getPropertyMetas(block);

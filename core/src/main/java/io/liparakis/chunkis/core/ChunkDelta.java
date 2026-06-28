@@ -1,10 +1,10 @@
 package io.liparakis.chunkis.core;
 
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
@@ -221,18 +221,6 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
-     * Creates a shallow payload snapshot of this delta.
-     *
-     * <p>Use {@link #snapshot(UnaryOperator)} when {@code N} is mutable and the
-     * snapshot will be read from another thread.</p>
-     *
-     * @return a new ChunkDelta instance representing this delta's current state
-     */
-    public ChunkDelta<S, N> snapshot() {
-        return snapshot(UnaryOperator.identity());
-    }
-
-    /**
      * Creates a snapshot of this delta, copying payload values with the supplied
      * copier.
      *
@@ -298,7 +286,7 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
-     * Private constructor used by {@link #snapshot()} to initialize final fields.
+     * Private constructor used by snapshot creation to initialize final fields.
      */
     private ChunkDelta(
             final Palette<S> blockPalette,
@@ -455,28 +443,6 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
-     * Removes a block change and associated block entity data.
-     *
-     * @param x local chunk X coordinate
-     * @param y block Y coordinate
-     * @param z local chunk Z coordinate
-     */
-    public void removeBlockChange(final int x, final int y, final int z) {
-        final long posKey = BlockInstruction.packPos(x, y, z);
-        final int index = positionMap.get(posKey);
-
-        if (index == -1) {
-            return;
-        }
-
-        positionMap.remove(posKey);
-        removeBlockEntityData(posKey);
-        swapWithLastAndShrink(index);
-
-        markDirtyInternal();
-    }
-
-    /**
      * Packs a palette id and position key into one block instruction.
      *
      * @param paletteId palette id
@@ -505,17 +471,6 @@ public final class ChunkDelta<S, N> {
      */
     private static int instructionPaletteId(final long instruction) {
         return (int) (instruction >>> Integer.SIZE);
-    }
-
-    /**
-     * Removes block entity data for a packed position without marking dirty.
-     *
-     * @param posKey packed local position
-     */
-    private void removeBlockEntityData(final long posKey) {
-        if (blockEntities != null) {
-            blockEntities.remove(posKey);
-        }
     }
 
     /**
@@ -578,27 +533,6 @@ public final class ChunkDelta<S, N> {
         if (markDirty) {
             markDirtyInternal();
         }
-    }
-
-    /**
-     * Removes an instruction in O(1) by swapping the last instruction into its slot.
-     *
-     * @param index instruction index to remove
-     */
-    private void swapWithLastAndShrink(final int index) {
-        instructionCount--;
-
-        if (index == instructionCount) {
-            packedInstructions[instructionCount] = 0L;
-            return;
-        }
-
-        final long lastInstruction = packedInstructions[instructionCount];
-        final long lastPosKey = instructionPosKey(lastInstruction);
-
-        packedInstructions[index] = lastInstruction;
-        packedInstructions[instructionCount] = 0L;
-        positionMap.put(lastPosKey, index);
     }
 
     /**
@@ -815,15 +749,6 @@ public final class ChunkDelta<S, N> {
 
         pendingEntities.add(nbt);
         markDirtyInternal();
-    }
-
-    /**
-     * Replaces pending entities and marks dirty if the list changed.
-     *
-     * @param newEntities new pending entity list
-     */
-    public void setEntities(final List<N> newEntities) {
-        setEntities(newEntities, true);
     }
 
     /**
@@ -1279,20 +1204,6 @@ public final class ChunkDelta<S, N> {
     public void markDirty(final String source) {
         prepareForMutation(source);
         markDirtyInternal();
-    }
-
-    /**
-     * Marks this delta dirty only if it was previously clean.
-     *
-     * @return {@code true} if this call changed the dirty state
-     */
-    public boolean markDirtyIfClean() {
-        if (isDirty()) {
-            return false;
-        }
-
-        markDirtyInternal();
-        return true;
     }
 
     public boolean markDirtyIfClean(final String source) {

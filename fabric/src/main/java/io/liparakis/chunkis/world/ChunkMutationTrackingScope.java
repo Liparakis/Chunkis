@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.world;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
 
 /**
@@ -31,12 +31,12 @@ public final class ChunkMutationTrackingScope {
         RESTORE
     }
 
-    // Re-entrant depth counters — incremented on push, decremented on pop.
+    // Re-entrant depth counters incremented on push, decremented on pop.
     private int passiveLoadDepth;
     private int baseApplyDepth;
     private int restoreDepth;
 
-    // "Trace once" flags — cleared when depth returns to zero so the next
+    // "Trace once" flags cleared when depth returns to zero so the next
     // entry into a scope can emit a trace event again.
     private boolean passiveLoadTraced;
     private boolean baseApplyTraced;

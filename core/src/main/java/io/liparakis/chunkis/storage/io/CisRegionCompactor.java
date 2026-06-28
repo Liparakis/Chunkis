@@ -1,6 +1,9 @@
 package io.liparakis.chunkis.storage.io;
 
 import io.liparakis.chunkis.Chunkis;
+import io.liparakis.chunkis.storage.io.region.CisRegionPaths;
+import io.liparakis.chunkis.storage.io.region.RegionFile;
+import io.liparakis.chunkis.storage.io.region.RegionKey;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -10,8 +13,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Compacts all CIS region files for one storage directory and aggregates the results.
@@ -23,16 +24,6 @@ import java.util.regex.Pattern;
  * @version 1
  */
 public final class CisRegionCompactor {
-
-    /**
-     * Matches canonical Chunkis region filenames and captures region X/Z coordinates.
-     */
-    private static final Pattern REGION_FILE_PATTERN = Pattern.compile("r\\.(-?\\d+)\\.(-?\\d+)\\.cis");
-
-    /**
-     * Glob used only for directory discovery. The regex above remains the canonical validator.
-     */
-    private static final String REGION_FILE_GLOB = "r.*.*.cis";
 
     /**
      * Temporary file suffix used by {@link RegionFile#compactWithReport()}.
@@ -90,7 +81,7 @@ public final class CisRegionCompactor {
             return 0;
         }
 
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(storageDir, REGION_FILE_GLOB)) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(storageDir, CisRegionPaths.REGION_FILE_GLOB)) {
             for (final Path path : stream) {
                 if (!processedPaths.add(dedupKey(path))) {
                     continue;
@@ -109,38 +100,18 @@ public final class CisRegionCompactor {
      * Opens and compacts one on-disk region that is not currently cached.
      */
     private static RegionCompaction compactRegionPath(final Path storageDir, final Path path) {
-        final RegionCoordinates coordinates = parseRegionCoordinates(path);
-        if (coordinates == null) {
+        final RegionKey regionKey = CisRegionPaths.parseRegionKey(path);
+        if (regionKey == null) {
             // Preserve the old failure shape for non-canonical names matched by the broad discovery glob.
             return new RegionCompaction(path, 0L, 0L, 0L, false);
         }
 
         try {
-            final RegionFile regionFile = new RegionFile(storageDir, coordinates.x(), coordinates.z());
+            final RegionFile regionFile = new RegionFile(storageDir, regionKey.x(), regionKey.z());
             return compactAndCloseRegion(regionFile);
         } catch (final IOException e) {
             Chunkis.LOGGER.error("Chunkis: Failed to compact CIS region {}", path, e);
             return failedRegionWithCurrentSize(path);
-        }
-    }
-
-    /**
-     * Parses canonical {@code r.<x>.<z>.cis} filenames.
-     */
-    private static RegionCoordinates parseRegionCoordinates(final Path path) {
-        final Matcher matcher = REGION_FILE_PATTERN.matcher(path.getFileName().toString());
-        if (!matcher.matches()) {
-            return null;
-        }
-
-        try {
-            return new RegionCoordinates(
-                    Integer.parseInt(matcher.group(1)),
-                    Integer.parseInt(matcher.group(2))
-            );
-        } catch (final NumberFormatException e) {
-            Chunkis.LOGGER.warn("Chunkis: Ignoring CIS region with out-of-range coordinates: {}", path, e);
-            return null;
         }
     }
 
@@ -261,12 +232,6 @@ public final class CisRegionCompactor {
     }
 
     /**
-     * Parsed region coordinates from a canonical CIS region filename.
-     */
-    private record RegionCoordinates(int x, int z) {
-    }
-
-    /**
      * Aggregate result for a full-directory compaction pass.
      */
     public record CompactionReport(
@@ -277,12 +242,6 @@ public final class CisRegionCompactor {
             long liveBytes,
             List<RegionCompaction> regions
     ) {
-        /**
-         * Returns total physical bytes removed by compaction.
-         */
-        public long slackRemovedBytes() {
-            return Math.max(0L, physicalBytesBefore - physicalBytesAfter);
-        }
     }
 
     /**

@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.model;
 
 public enum ChunkTraceEventType {
     SAVE_TX_START,

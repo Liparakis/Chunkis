@@ -112,7 +112,10 @@ public final class PropertyPacker<B, S, P> {
             writer.write(valueIndex, meta.bits);
         }
     }
-
+    /**
+     * Narrows a generic adapter reference once at construction time so the hot
+     * read path can avoid repeated instanceof checks.
+     */
     @SuppressWarnings("unchecked")
     private static <S, P> PropertyValueAdapter<S, P> castValueAdapter(final PropertyValueAdapter<?, ?> valueAdapter) {
         return (PropertyValueAdapter<S, P>) valueAdapter;
@@ -220,7 +223,10 @@ public final class PropertyPacker<B, S, P> {
             }
             return metas;
         }
-
+        /**
+         * Builds a stable value-to-index lookup using the adapter's canonical
+         * property-value ordering.
+         */
         private static <B, S, P> Map<Object, Integer> buildValueIndexMap(
                 final BlockStateAdapter<B, S, P> adapter,
                 final P property) {
@@ -231,12 +237,18 @@ public final class PropertyPacker<B, S, P> {
             }
             return indexMap;
         }
-
+        /**
+         * Returns the shared zero-length metadata array for property-less blocks.
+         */
         @SuppressWarnings("unchecked")
         private static <P> PropertyMeta<P>[] emptyArray() {
             return (PropertyMeta<P>[]) EMPTY_ARRAY;
         }
 
+        /**
+         * Allocates a typed metadata array without exposing raw generic array
+         * creation at each call site.
+         */
         @SuppressWarnings("unchecked")
         private static <P> PropertyMeta<P>[] newArray(int size) {
             return (PropertyMeta<P>[]) new PropertyMeta<?>[size];

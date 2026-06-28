@@ -29,6 +29,8 @@ class CisStorageCompactionTest {
 
     /** Size of one raw region header entry used by fixture inspection helpers. */
     private static final int HEADER_ENTRY_BYTES = 8;
+    /** Corrupt offset used to force compaction down the failure path. */
+    private static final int INVALID_CHUNK_OFFSET = Integer.MAX_VALUE - HEADER_ENTRY_BYTES - 1;
 
     /** Temporary filesystem sandbox for each compaction test. */
     @TempDir
@@ -69,7 +71,7 @@ class CisStorageCompactionTest {
 
         harness.saveChunk(pos, "stone", 4);
         final Path regionFile = harness.regionFile(pos);
-        harness.corruptChunkOffset(pos, Integer.MAX_VALUE - 8);
+        harness.corruptChunkOffset(pos);
         final int corruptedOffset = harness.headerOffset(pos);
 
         final CisRegionCompactor.CompactionReport report = CisRegionCompactor.compact(harness.storage());
@@ -204,12 +206,12 @@ class CisStorageCompactionTest {
          * Corrupts one chunk header offset and reopens storage so compaction sees
          * the damaged region on disk.
          */
-        private void corruptChunkOffset(final CisChunkPos pos, final int offset) throws Exception {
+        private void corruptChunkOffset(final CisChunkPos pos) throws Exception {
             storage.close();
             final Path regionFile = regionFile(pos);
             final byte[] bytes = Files.readAllBytes(regionFile);
             final int index = (pos.x() & 31) + (pos.z() & 31) * 32;
-            writeInt(bytes, index * HEADER_ENTRY_BYTES, offset);
+            writeInt(bytes, index * HEADER_ENTRY_BYTES, INVALID_CHUNK_OFFSET);
             Files.write(regionFile, bytes);
             storage = openStorage(storageRoot, regionsDir);
         }

@@ -1,4 +1,13 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.trace;
+
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
+import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

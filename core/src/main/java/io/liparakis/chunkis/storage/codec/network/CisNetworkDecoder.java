@@ -46,7 +46,7 @@ public final class CisNetworkDecoder<B, S, P, N> extends AbstractCisDecoder<S, N
             BlockStateAdapter<B, S, P> stateAdapter,
             NbtAdapter<N> nbtAdapter,
             S airState) {
-        super(stateAdapter, nbtAdapter, airState);
+        super(nbtAdapter, airState);
         this.registryAdapter = registryAdapter;
         this.propertyPacker = propertyPacker;
     }

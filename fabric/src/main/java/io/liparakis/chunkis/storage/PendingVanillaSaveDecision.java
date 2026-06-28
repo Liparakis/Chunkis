@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.storage;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import net.minecraft.util.math.ChunkPos;
 
 import java.util.HashMap;

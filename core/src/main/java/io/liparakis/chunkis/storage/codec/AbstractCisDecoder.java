@@ -4,7 +4,6 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.Palette;
-import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.bits.BitReader;
 import io.liparakis.chunkis.storage.model.CisConstants;
@@ -77,11 +76,6 @@ public abstract class AbstractCisDecoder<S, N> {
     protected List<S> globalPalette;
 
     /**
-     * Adapter used to rebuild concrete block states from decoded palette and property data.
-     */
-    protected final BlockStateAdapter<?, S, ?> stateAdapter;
-
-    /**
      * Adapter used to decode block entities, entities, and chunk metadata payloads.
      */
     protected final NbtAdapter<N> nbtAdapter;
@@ -91,8 +85,7 @@ public abstract class AbstractCisDecoder<S, N> {
      */
     protected final S airState;
 
-    protected AbstractCisDecoder(BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter, S airState) {
-        this.stateAdapter = stateAdapter;
+    protected AbstractCisDecoder(NbtAdapter<N> nbtAdapter, S airState) {
         this.nbtAdapter = nbtAdapter;
         this.airState = airState;
         this.propertyReader = new BitReader(new byte[0]);
@@ -115,7 +108,8 @@ public abstract class AbstractCisDecoder<S, N> {
             throw new IOException("CIS data too short: " + data.length + " bytes (minimum: " + HEADER_SIZE + ")");
         }
 
-        int offset = validateHeader(data);
+        validateHeader(data);
+        int offset = HEADER_SIZE;
         ChunkDelta<S, N> delta = new ChunkDelta<>();
         delta.setSourceVersion(decodedVersion);
         Palette<S> palette = delta.getBlockPalette();
@@ -132,7 +126,7 @@ public abstract class AbstractCisDecoder<S, N> {
      * Validates the fixed-width CIS header and returns the offset of the first
      * payload section.
      */
-    protected int validateHeader(byte[] data) throws IOException {
+    protected void validateHeader(byte[] data) throws IOException {
         int magic = readIntBE(data, 0);
         if (magic != CisConstants.MAGIC) {
             throw new IOException(String.format(
@@ -148,8 +142,6 @@ public abstract class AbstractCisDecoder<S, N> {
                     decodedVersion, CisConstants.VERSION
             ));
         }
-
-        return HEADER_SIZE;
     }
 
     /**

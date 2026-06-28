@@ -4,16 +4,16 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import io.liparakis.chunkis.Chunkis;
-import io.liparakis.chunkis.debug.ChunkTraceEvent;
-import io.liparakis.chunkis.debug.ChunkTraceJsonl;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkTraceSuspect;
-import io.liparakis.chunkis.debug.ChunkTraceWatchpoints;
-import io.liparakis.chunkis.debug.ChunkisDebugConfig;
-import io.liparakis.chunkis.debug.ChunkisDebugLevel;
-import io.liparakis.chunkis.debug.DebugChunkKey;
-import io.liparakis.chunkis.debug.DebugRegionKey;
-import io.liparakis.chunkis.debug.PayloadWatchTarget;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.trace.ChunkTraceJsonl;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
+import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
+import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.storage.AsyncCisSaveManager;
 import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
@@ -76,7 +76,7 @@ public final class ChunkDebugCommand {
 
     /**
      * Precomputed suffix with a leading space and its UTF-8 byte length.
-     * Both are constants — computed once here rather than on every truncation call.
+     * Both are constants computed once here rather than on every truncation call.
      */
     private static final String CHAT_TRUNCATION_SUFFIX_PADDED = " " + CHAT_TRUNCATION_SUFFIX;
     private static final int CHAT_TRUNCATION_SUFFIX_BYTES =
@@ -630,7 +630,7 @@ public final class ChunkDebugCommand {
      * by peeking at the most recent payload-watch event in the store.
      *
      * <p>Always returns a non-null, non-empty string. The {@code @SuppressWarnings} suppresses a
-     * false-positive IDE warning — this method returns two distinct strings depending on state.
+     * false-positive IDE warning this method returns two distinct strings depending on state.
      */
     @SuppressWarnings("SameReturnValue")
     static String formatNoWatchedTraceMessage() {
@@ -771,7 +771,7 @@ public final class ChunkDebugCommand {
      * <p><b>Performance:</b> the string is encoded to bytes once, then the byte boundary is found
      * by walking back from {@code targetBytes} to skip any UTF-8 continuation bytes
      * ({@code 10xxxxxx}, i.e. {@code (b & 0xC0) == 0x80}). This is O(n) with two allocations total,
-     * compared to the naive O(n²) approach of re-encoding a shrinking substring on every loop step.
+     * compared to the naive O(nÂ²) approach of re-encoding a shrinking substring on every loop step.
      *
      * @param message the message to evaluate; {@code null} is treated as an empty string
      * @return a {@link ChatMessage} containing the (possibly truncated) text and a truncation flag
@@ -785,7 +785,7 @@ public final class ChunkDebugCommand {
 
         final int targetBytes = Math.max(0, MAX_CHAT_MESSAGE_BYTES - CHAT_TRUNCATION_SUFFIX_BYTES);
         // Walk back from targetBytes to the nearest valid UTF-8 character boundary.
-        // Continuation bytes match the bit pattern 10xxxxxx (0x80–0xBF) and must not be split.
+        // Continuation bytes match the bit pattern 10xxxxxx (0x80â€“0xBF) and must not be split.
         int end = Math.min(targetBytes, encoded.length);
         while (end > 0 && (encoded[end] & 0xC0) == 0x80) {
             end--;

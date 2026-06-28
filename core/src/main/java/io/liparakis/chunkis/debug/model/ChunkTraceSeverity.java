@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.model;
 
 public enum ChunkTraceSeverity {
     INFO,

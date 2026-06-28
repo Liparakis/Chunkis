@@ -2,12 +2,12 @@ package io.liparakis.chunkis.storage;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import net.minecraft.block.Block;
@@ -42,7 +42,7 @@ public final class BaseChunkCaptureUtil {
 
 
     /**
-     * Utility class – not instantiable.
+     * Utility class â€“ not instantiable.
      */
     private BaseChunkCaptureUtil() {
         throw new AssertionError("Utility class");
@@ -52,7 +52,7 @@ public final class BaseChunkCaptureUtil {
      * Captures the base chunk if missing and immediately persists the delta
      * synchronously on the calling thread.
      *
-     * <p>Use this on paths where deferring to the async queue is unsafe — for
+     * <p>Use this on paths where deferring to the async queue is unsafe for
      * example, when a restored or newly-edited chunk may unload before vanilla's
      * next normal save pass.</p>
      *

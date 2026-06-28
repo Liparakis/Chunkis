@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.storage.io;
+package io.liparakis.chunkis.storage.io.region;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -11,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
  * @version 1
  * @author Liparakis
  */
-record RegionKey(int x, int z) {
+public record RegionKey(int x, int z) {
     @Override
     public @NotNull String toString() {
         return "r." + x + "." + z;

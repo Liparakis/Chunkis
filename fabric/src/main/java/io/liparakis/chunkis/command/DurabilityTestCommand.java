@@ -3,12 +3,12 @@ package io.liparakis.chunkis.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import io.liparakis.chunkis.debug.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.ChunkTraceStore;
-import io.liparakis.chunkis.debug.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import net.minecraft.command.argument.Vec3ArgumentType;
 import net.minecraft.command.permission.Permission;
 import net.minecraft.command.permission.PermissionLevel;
@@ -76,11 +76,11 @@ public final class DurabilityTestCommand {
     /**
      * Registers the {@code /durability_test} and {@code /durability_test_stop} commands.
      *
-     * <p>{@code /durability_test pos1 pos2 count delayMs} — starts a test that teleports the
+     * <p>{@code /durability_test pos1 pos2 count delayMs} starts a test that teleports the
      * executing player between {@code pos1} and {@code pos2}, {@code count} times, with
      * {@code delayMs} milliseconds between each teleport (minimum {@value #MIN_DELAY_MS} ms).
      *
-     * <p>{@code /durability_test_stop} — stops any currently-running test.
+     * <p>{@code /durability_test_stop} stops any currently-running test.
      *
      * @param dispatcher the Brigadier command dispatcher to register into
      */
@@ -142,7 +142,7 @@ public final class DurabilityTestCommand {
 
         // remaining starts at count and is decremented each server-thread tick.
         // Teleports fire while left >= 0 (i.e. exactly count times: count-1, count-2, ..., 0).
-        // The tick where left == -1 is the termination tick — no teleport, just cleanup.
+        // The tick where left == -1 is the termination tick no teleport, just cleanup.
         final AtomicInteger remaining = new AtomicInteger(count);
 
         // Guard flag: prevents a second server-thread task from being dispatched while the
@@ -212,7 +212,7 @@ public final class DurabilityTestCommand {
                                     target.x,
                                     target.y,
                                     target.z,
-                                    Set.of(),   // no relative movement flags — absolute teleport
+                                    Set.of(),   // no relative movement flags absolute teleport
                                     player.getYaw(),
                                     player.getPitch(),
                                     false
@@ -259,7 +259,7 @@ public final class DurabilityTestCommand {
      *
      * <p>This method reads {@link #executorRef} and {@link #runIdRef} by value, then uses a CAS
      * on {@code executorRef} to claim the "shutdown" role. Only the caller that wins the CAS
-     * emits the trace and returns {@code true}. This is the external variant of shutdown — called
+     * emits the trace and returns {@code true}. This is the external variant of shutdown called
      * from outside the scheduled loop, where direct references to the captured executor are not
      * available. See also {@link #shutdownAndClear} for the internal variant.
      *

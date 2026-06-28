@@ -34,7 +34,7 @@ public final class CisEncoder<S, N> extends AbstractCisEncoder<S, N> {
      */
     public CisEncoder(CisAdapter<S> cisAdapter, BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter,
             S airState) {
-        super(stateAdapter, nbtAdapter, airState);
+        super(nbtAdapter, airState);
         this.cisAdapter = cisAdapter;
     }
 

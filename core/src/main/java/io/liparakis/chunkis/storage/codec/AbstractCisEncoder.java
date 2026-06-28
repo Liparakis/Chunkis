@@ -2,7 +2,6 @@ package io.liparakis.chunkis.storage.codec;
 
 import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.bits.BitWriter;
 import io.liparakis.chunkis.storage.model.CisChunk;
@@ -43,11 +42,6 @@ public abstract class AbstractCisEncoder<S, N> {
     protected static final int SECTION_VOLUME = 4096;
 
     /**
-     * Adapter used to inspect block-state structure during palette and section encoding.
-     */
-    protected final BlockStateAdapter<?, S, ?> stateAdapter;
-
-    /**
      * Adapter used to serialize entity, block-entity, and chunk-metadata payloads.
      */
     protected final NbtAdapter<N> nbtAdapter;
@@ -58,8 +52,7 @@ public abstract class AbstractCisEncoder<S, N> {
      */
     protected final S airState;
 
-    protected AbstractCisEncoder(BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter, S airState) {
-        this.stateAdapter = stateAdapter;
+    protected AbstractCisEncoder(NbtAdapter<N> nbtAdapter, S airState) {
         this.nbtAdapter = nbtAdapter;
         this.airState = airState;
     }

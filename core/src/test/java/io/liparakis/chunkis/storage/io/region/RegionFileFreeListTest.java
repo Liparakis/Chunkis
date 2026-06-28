@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.storage.io;
+package io.liparakis.chunkis.storage.io.region;
 
 import io.liparakis.chunkis.core.CisChunkPos;
 import org.junit.jupiter.api.Test;
