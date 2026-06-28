@@ -298,125 +298,9 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
         );
 
-        final boolean hasPersistedBaseChunk =
-                delta != null && CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
-        final boolean authoritativeFullBaseline =
-                delta != null && CisNbtUtil.hasFullBlockBaseline(delta.getChunkMetadata());
-        if (hasPersistedBaseChunk) {
-            final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(delta.getChunkMetadata());
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                    ChunkTraceEventType.BASE_NBT_DECODE_STARTED,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.NONE,
-                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                    "base NBT decode started: loadSource="
-                            + (delta != null ? "delta-present" : "none")
-                            + ", storageEntryExists="
-                            + (delta != null && !delta.isEmpty())
-                            + ", metadataKeys="
-                            + (delta != null && delta.getChunkMetadata() != null
-                            ? delta.getChunkMetadata().getKeys()
-                            : List.of())
-                            + ", baseNbtKeys="
-                            + (baseChunkNbt != null ? baseChunkNbt.getKeys() : List.of())
-                            + ", baseNbtApproxBytes="
-                            + (baseChunkNbt != null ? baseChunkNbt.toString().length() : 0),
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
-                    null,
-                    null,
-                    delta != null && delta.isDirty(),
-                    null
-            );
-        }
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                hasPersistedBaseChunk
-                        ? ChunkTraceEventType.BASE_NBT_FOUND
-                        : ChunkTraceEventType.BASE_NBT_MISSING,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.NONE,
-                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                hasPersistedBaseChunk
-                        ? "found persisted base chunk NBT in delta metadata"
-                        : "no persisted base chunk NBT in delta metadata",
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
-                null,
-                null,
-                delta != null && delta.isDirty(),
-                null
-        );
-
         final CisNbtUtil.LoadChunkNbtResult loadNbt =
                 CisNbtUtil.buildLoadChunkNbt(chunkPos, chunkis$getGameDataVersion(), delta);
-        if (authoritativeFullBaseline
-                && loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.USED) {
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.ASSERTIONS,
-                    ChunkTraceEventType.ASSERTION_FAILED,
-                    ChunkTraceSeverity.ERROR,
-                    ChunkTraceReason.INVALID_PAYLOAD,
-                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                    "authoritative v11 full-baseline delta attempted to use persisted base chunk NBT as block baseline",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
-                    null,
-                    null,
-                    delta != null && delta.isDirty(),
-                    null
-            );
-        }
-        if (loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.USED) {
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                    ChunkTraceEventType.BASE_NBT_APPLIED,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.NONE,
-                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                    "applied persisted base chunk NBT to synthetic load root",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
-                    null,
-                    null,
-                    delta != null && delta.isDirty(),
-                    null
-            );
-        } else if (loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.SKIPPED) {
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                    ChunkTraceEventType.BASE_NBT_SKIPPED,
-                    ChunkTraceSeverity.WARN,
-                    ChunkTraceReason.NONE,
-                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                    authoritativeFullBaseline
-                            ? "persisted base chunk NBT was present but skipped because authoritative v11 payload " +
-                              "owns blocks"
-                            : "persisted base chunk NBT was present but skipped for load root",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
-                    null,
-                    null,
-                    delta != null && delta.isDirty(),
-                    null
-            );
-        }
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.LOAD_TX_START,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.NONE,
-                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                "built load NBT with baseChunkNbt="
-                        + loadNbt.baseChunkUsage().name().toLowerCase(Locale.ROOT),
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
-                null,
-                null,
-                delta != null && delta.isDirty(),
-                null
-        );
+        chunkis$traceLoadNbtSelection(chunkPos, delta, loadNbt);
         cir.setReturnValue(CompletableFuture.completedFuture(
                 Optional.of(loadNbt.root())));
     }
@@ -497,6 +381,141 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 resolvedReason,
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                 transactionEndMessage,
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                delta != null && delta.isDirty(),
+                null
+        );
+    }
+
+    /**
+     * Emits the base-NBT and load-root tracing associated with one synthetic load.
+     *
+     * @param chunkPos chunk position being loaded
+     * @param delta    resolved delta used to build the load root
+     * @param loadNbt  synthetic load NBT result
+     */
+    @Unique
+    private void chunkis$traceLoadNbtSelection(
+            final ChunkPos chunkPos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final CisNbtUtil.LoadChunkNbtResult loadNbt
+    ) {
+        final boolean hasPersistedBaseChunk = delta != null
+                && CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        final boolean authoritativeFullBaseline = delta != null
+                && CisNbtUtil.hasFullBlockBaseline(delta.getChunkMetadata());
+
+        if (hasPersistedBaseChunk) {
+            final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(delta.getChunkMetadata());
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_NBT_DECODE_STARTED,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                    "base NBT decode started: loadSource="
+                            + (delta != null ? "delta-present" : "none")
+                            + ", storageEntryExists="
+                            + (delta != null && !delta.isEmpty())
+                            + ", metadataKeys="
+                            + (delta != null && delta.getChunkMetadata() != null
+                            ? delta.getChunkMetadata().getKeys()
+                            : List.of())
+                            + ", baseNbtKeys="
+                            + (baseChunkNbt != null ? baseChunkNbt.getKeys() : List.of())
+                            + ", baseNbtApproxBytes="
+                            + (baseChunkNbt != null ? baseChunkNbt.toString().length() : 0),
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    null,
+                    delta != null && delta.isDirty(),
+                    null
+            );
+        }
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                hasPersistedBaseChunk
+                        ? ChunkTraceEventType.BASE_NBT_FOUND
+                        : ChunkTraceEventType.BASE_NBT_MISSING,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                hasPersistedBaseChunk
+                        ? "found persisted base chunk NBT in delta metadata"
+                        : "no persisted base chunk NBT in delta metadata",
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                delta != null && delta.isDirty(),
+                null
+        );
+
+        if (authoritativeFullBaseline
+                && loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.USED) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.INVALID_PAYLOAD,
+                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                    "authoritative v11 full-baseline delta attempted to use persisted base chunk NBT as block baseline",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    null,
+                    delta != null && delta.isDirty(),
+                    null
+            );
+        }
+
+        if (loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.USED) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_NBT_APPLIED,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                    "applied persisted base chunk NBT to synthetic load root",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    null,
+                    delta != null && delta.isDirty(),
+                    null
+            );
+        } else if (loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.SKIPPED) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_NBT_SKIPPED,
+                    ChunkTraceSeverity.WARN,
+                    ChunkTraceReason.NONE,
+                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                    authoritativeFullBaseline
+                            ? "persisted base chunk NBT was present but skipped because authoritative v11 payload owns blocks"
+                            : "persisted base chunk NBT was present but skipped for load root",
+                    world.getRegistryKey().getValue().toString(),
+                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    null,
+                    null,
+                    delta != null && delta.isDirty(),
+                    null
+            );
+        }
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.LOAD_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                "built load NBT with baseChunkNbt="
+                        + loadNbt.baseChunkUsage().name().toLowerCase(Locale.ROOT),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(chunkPos.x, chunkPos.z),
                 null,
