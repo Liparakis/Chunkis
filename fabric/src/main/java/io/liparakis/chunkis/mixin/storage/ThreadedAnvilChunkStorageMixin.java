@@ -104,6 +104,16 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     ServerWorld world;
 
     @Unique
+    private String chunkis$worldId() {
+        return world.getRegistryKey().getValue().toString();
+    }
+
+    @Unique
+    private static DebugChunkKey chunkis$debugChunkKey(final ChunkPos pos) {
+        return new DebugChunkKey(pos.x, pos.z);
+    }
+
+    @Unique
     private void chunkis$traceWatchedEntityTransfer(
             final Entity entity,
             final String stage,
@@ -358,8 +368,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 resolvedReason,
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                 resolvedMessage,
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(chunkPos),
                 null,
                 null,
                 delta != null && delta.isDirty(),
@@ -381,8 +391,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 resolvedReason,
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                 transactionEndMessage,
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(chunkPos),
                 null,
                 null,
                 delta != null && delta.isDirty(),
@@ -428,8 +438,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                             + (baseChunkNbt != null ? baseChunkNbt.getKeys() : List.of())
                             + ", baseNbtApproxBytes="
                             + (baseChunkNbt != null ? baseChunkNbt.toString().length() : 0),
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    chunkis$worldId(),
+                    chunkis$debugChunkKey(chunkPos),
                     null,
                     null,
                     delta != null && delta.isDirty(),
@@ -448,8 +458,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 hasPersistedBaseChunk
                         ? "found persisted base chunk NBT in delta metadata"
                         : "no persisted base chunk NBT in delta metadata",
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(chunkPos),
                 null,
                 null,
                 delta != null && delta.isDirty(),
@@ -465,8 +475,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     ChunkTraceReason.INVALID_PAYLOAD,
                     "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                     "authoritative v11 full-baseline delta attempted to use persisted base chunk NBT as block baseline",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    chunkis$worldId(),
+                    chunkis$debugChunkKey(chunkPos),
                     null,
                     null,
                     delta != null && delta.isDirty(),
@@ -482,8 +492,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     ChunkTraceReason.NONE,
                     "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                     "applied persisted base chunk NBT to synthetic load root",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    chunkis$worldId(),
+                    chunkis$debugChunkKey(chunkPos),
                     null,
                     null,
                     delta != null && delta.isDirty(),
@@ -499,8 +509,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     authoritativeFullBaseline
                             ? "persisted base chunk NBT was present but skipped because authoritative v11 payload owns blocks"
                             : "persisted base chunk NBT was present but skipped for load root",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    chunkis$worldId(),
+                    chunkis$debugChunkKey(chunkPos),
                     null,
                     null,
                     delta != null && delta.isDirty(),
@@ -516,8 +526,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                 "built load NBT with baseChunkNbt="
                         + loadNbt.baseChunkUsage().name().toLowerCase(Locale.ROOT),
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(chunkPos),
                 null,
                 null,
                 delta != null && delta.isDirty(),
@@ -1052,8 +1062,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     ChunkTraceReason.SAVE_WITHOUT_OWNERSHIP,
                     "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                     "attempted to queue Chunkis save without ownership",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(pos.x, pos.z),
+                    chunkis$worldId(),
+                    chunkis$debugChunkKey(pos),
                     null,
                     operationId,
                     true,
@@ -1087,8 +1097,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceReason.NONE,
                 "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                 "save queue requested: " + DeltaPersistenceGuard.describeLifecycleState(delta),
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(pos),
                 null,
                 operationId,
                 delta.isDirty(),
@@ -1161,8 +1171,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                           + DeltaPersistenceGuard.describeLifecycleState(liveDelta != null ? liveDelta : delta)
                         : "could not capture base snapshot on save guard because live chunk was unavailable: "
                           + DeltaPersistenceGuard.describeLifecycleState(delta),
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(pos),
                 null,
                 operationId,
                 delta.isDirty(),
@@ -1182,8 +1192,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceReason.NONE,
                 caller,
                 "retrying save after base capture: " + DeltaPersistenceGuard.describeLifecycleState(recoveredDelta),
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(pos),
                 null,
                 operationId,
                 recoveredDelta.isDirty(),
@@ -1209,8 +1219,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceReason.NONE,
                 caller,
                 "save guard precheck: " + DeltaPersistenceGuard.describeLifecycleState(delta),
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(pos),
                 null,
                 operationId,
                 delta.isDirty(),
@@ -1246,8 +1256,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     caller,
                     "attempted to persist sparse block-entity payload without persisted base chunk NBT on "
                             + path + ": " + DeltaPersistenceGuard.describeDeltaShape(delta),
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(pos.x, pos.z),
+                    chunkis$worldId(),
+                    chunkis$debugChunkKey(pos),
                     null,
                     operationId,
                     delta.isDirty(),
@@ -1264,8 +1274,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceReason.SPARSE_DELTA_REJECTED,
                 REJECT_SOURCE,
                 "rejected sparse delta on " + path,
-                world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                chunkis$worldId(),
+                chunkis$debugChunkKey(pos),
                 null,
                 operationId,
                 delta.isDirty(),
