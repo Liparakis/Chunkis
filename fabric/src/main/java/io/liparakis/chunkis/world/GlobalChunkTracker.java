@@ -198,6 +198,33 @@ public final class GlobalChunkTracker {
         markSavedIfUnchanged(world.getRegistryKey(), position.x, position.z, liveDelta, generation);
     }
 
+    public static boolean isCurrentDirtyDelta(
+            final World world,
+            final ChunkPos position,
+            final ChunkDelta<?, ?> expected,
+            final long generation
+    ) {
+        if (world == null || position == null || expected == null) {
+            return false;
+        }
+        return isCurrentDirtyDelta(world.getRegistryKey(), position.x, position.z, expected, generation);
+    }
+
+    static boolean isCurrentDirtyDelta(
+            final RegistryKey<World> dimension,
+            final int chunkX,
+            final int chunkZ,
+            final ChunkDelta<?, ?> expected,
+            final long generation
+    ) {
+        if (dimension == null || expected == null) {
+            return false;
+        }
+        final ChunkDelta<?, ?> active = dirtyDeltas.get(keyOf(dimension, chunkX, chunkZ));
+        return active == expected
+                && expected.getMutationGeneration() == generation;
+    }
+
     static void markSaved(
             final RegistryKey<World> dimension,
             final int chunkX,
@@ -281,6 +308,17 @@ public final class GlobalChunkTracker {
         dirtyDeltas.clear();
         synchronized (unloadCache) {
             unloadCache.clear();
+        }
+    }
+
+    public static void forgetChunk(final World world, final ChunkPos position) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(position, "position");
+
+        final DimensionChunkKey key = keyOf(world.getRegistryKey(), position);
+        dirtyDeltas.remove(key);
+        synchronized (unloadCache) {
+            unloadCache.remove(key);
         }
     }
 
@@ -468,15 +506,20 @@ public final class GlobalChunkTracker {
             final int chunkZ,
             final boolean hadActiveDirtyDelta
     ) {
+        final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
+        if (!hadActiveDirtyDelta) {
+            return;
+        }
+        if (getFromUnloadCache(key) != null) {
+            return;
+        }
         traceTracker(
                 dimension,
                 new DebugChunkKey(chunkX, chunkZ),
                 ChunkTraceReason.TRACKER_CHUNK_UNLOADED,
-                hadActiveDirtyDelta
-                        ? "world chunk unloaded while dirty delta remained tracked"
-                        : "world chunk unloaded without active dirty delta",
+                "world chunk unloaded while dirty delta remained tracked without unload-cache mirror",
                 SOURCE,
-                hadActiveDirtyDelta
+                true
         );
     }
 

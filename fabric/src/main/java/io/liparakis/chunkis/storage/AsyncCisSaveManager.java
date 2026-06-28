@@ -66,29 +66,6 @@ public final class AsyncCisSaveManager {
         throw new AssertionError("Utility class");
     }
 
-    /**
-     * Encodes {@code liveDelta} into a {@link CisStorage.PreparedSave} on the
-     * calling (server) thread, then hands it to the dimension's {@link SaveWorker}
-     * for asynchronous compression and disk I/O.
-     *
-     * <p>If the delta is not dirty this method is a no-op. If preparation fails
-     * the error is logged and the save is silently dropped – the chunk will be
-     * retried on the next dirty-save cycle.</p>
-     *
-     * @param world     the server world whose CIS storage should be written to
-     * @param storage   the CIS storage instance for {@code world}
-     * @param pos       the chunk position being saved
-     * @param liveDelta the live, mutable delta that tracks changes for {@code pos}
-     */
-    public static void submit(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
-            final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> liveDelta
-    ) {
-        submit(world, storage, pos, liveDelta, "save-" + pos.x + '-' + pos.z + '-' + liveDelta.getMutationGeneration());
-    }
-
     public static void submit(
             final ServerWorld world,
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
@@ -345,8 +322,16 @@ public final class AsyncCisSaveManager {
         @SuppressWarnings("All")
         private void process(final PendingSave save) {
             try {
-                //Stale generation: a newer write will supersede this one.
-                if (save.liveDelta().getMutationGeneration() != save.generation()) {
+                if (!GlobalChunkTracker.isCurrentDirtyDelta(
+                        world,
+                        save.pos(),
+                        save.liveDelta(),
+                        save.generation())) {
+                    Chunkis.LOGGER.debug(
+                            "[Chunkis/save:{}] Skipping stale async save before encode for {}",
+                            save.operationId(),
+                            save.cisPos()
+                    );
                     return;
                 }
 
@@ -381,6 +366,18 @@ public final class AsyncCisSaveManager {
 
                 //Encode on the background thread!
                 final CisStorage.PreparedSave preparedSave = save.storage().prepareSave(save.cisPos(), save.snapshot());
+                if (!GlobalChunkTracker.isCurrentDirtyDelta(
+                        world,
+                        save.pos(),
+                        save.liveDelta(),
+                        save.generation())) {
+                    Chunkis.LOGGER.debug(
+                            "[Chunkis/save:{}] Skipping stale async save before write for {}",
+                            save.operationId(),
+                            save.cisPos()
+                    );
+                    return;
+                }
                 PayloadWatchTracer.traceDeltaStage(
                         world.getRegistryKey().getValue().toString(),
                         save.pos(),
@@ -421,6 +418,19 @@ public final class AsyncCisSaveManager {
 
                 save.liveDelta().setSourceVersion(CisConstants.VERSION);
                 GlobalChunkTracker.markSavedIfUnchanged(world, save.pos(), save.liveDelta(), save.generation());
+                PayloadWatchTracer.traceDeltaStage(
+                        world.getRegistryKey().getValue().toString(),
+                        save.pos(),
+                        save.liveDelta(),
+                        save.operationId(),
+                        ChunkTraceEventType.WATCH_CAPTURED,
+                        save.liveDelta().isDirty() ? "save-completion-ignored" : "save-completion-applied",
+                        PROCESS_SOURCE,
+                        save.liveDelta().isDirty()
+                                ? "async save completion did not win live delta race"
+                                : "async save completion marked live delta saved",
+                        null
+                );
 
             } catch (final IOException e) {
                 traceAsyncFailure(save, "async save failed with I/O exception");

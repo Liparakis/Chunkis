@@ -129,6 +129,37 @@ class GlobalChunkTrackerTest {
     }
 
     @Test
+    void currentDirtyDeltaRequiresSameInstanceAndGeneration() {
+        final RegistryKey<World> overworld = RegistryKey.of(
+                RegistryKeys.WORLD,
+                Identifier.of("minecraft", "overworld")
+        );
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+        GlobalChunkTracker.addDelta(overworld, 3, 4, delta, "test");
+
+        assertTrue(GlobalChunkTracker.isCurrentDirtyDelta(
+                overworld,
+                3,
+                4,
+                delta,
+                delta.getMutationGeneration()
+        ));
+
+        final ChunkDelta<String, NbtCompound> replacement = new ChunkDelta<>();
+        replacement.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+        GlobalChunkTracker.addDelta(overworld, 3, 4, replacement, "test");
+
+        assertFalse(GlobalChunkTracker.isCurrentDirtyDelta(
+                overworld,
+                3,
+                4,
+                delta,
+                delta.getMutationGeneration()
+        ));
+    }
+
+    @Test
     void assertsImmediatelyWhenCachingBlockEntityOnlyPayloadWithoutBase() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
         final RegistryKey<World> overworld = RegistryKey.of(

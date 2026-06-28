@@ -893,6 +893,21 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
+     * Counts non-null pending entity payloads only.
+     *
+     * @return number of non-null pending entity payloads
+     */
+    public int countPendingEntities() {
+        int count = 0;
+        for (final N nbt : pendingEntities) {
+            if (nbt != null) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
      * Visits entity payloads in active-then-pending order.
      *
      * @param consumer entity payload consumer
@@ -912,11 +927,77 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
+     * Visits pending entity payloads only.
+     *
+     * @param consumer entity payload consumer
+     */
+    public void forEachPendingEntity(final Consumer<? super N> consumer) {
+        Objects.requireNonNull(consumer, "consumer");
+
+        for (final N nbt : pendingEntities) {
+            consumer.accept(nbt);
+        }
+    }
+
+    /**
      * Clears pending entities.
      */
     public void clearPendingEntities() {
         if (!pendingEntities.isEmpty()) {
             pendingEntities = Collections.emptyList();
+            markDirtyInternal();
+        }
+    }
+
+    /**
+     * Removes pending entity payloads matching {@code predicate}.
+     *
+     * @param predicate pending entity payload matcher
+     */
+    public void removePendingEntitiesMatching(final Predicate<? super N> predicate) {
+        Objects.requireNonNull(predicate, "predicate");
+
+        if (pendingEntities.isEmpty()) {
+            return;
+        }
+
+        final List<N> filtered = new ArrayList<>(pendingEntities.size());
+        for (final N nbt : pendingEntities) {
+            if (!predicate.test(nbt)) {
+                filtered.add(nbt);
+            }
+        }
+        if (filtered.size() != pendingEntities.size()) {
+            pendingEntities = filtered.isEmpty() ? Collections.emptyList() : filtered;
+            markDirtyInternal();
+        }
+    }
+
+    /**
+     * Removes entity payloads matching {@code predicate} from both active and pending sets.
+     *
+     * @param predicate entity payload matcher
+     */
+    public void removeEntitiesMatching(final Predicate<? super N> predicate) {
+        Objects.requireNonNull(predicate, "predicate");
+
+        boolean changed = false;
+        if (activeEntities != null && !activeEntities.isEmpty()) {
+            changed = activeEntities.values().removeIf(predicate);
+        }
+        if (!pendingEntities.isEmpty()) {
+            final List<N> filtered = new ArrayList<>(pendingEntities.size());
+            for (final N nbt : pendingEntities) {
+                if (!predicate.test(nbt)) {
+                    filtered.add(nbt);
+                }
+            }
+            if (filtered.size() != pendingEntities.size()) {
+                pendingEntities = filtered.isEmpty() ? Collections.emptyList() : filtered;
+                changed = true;
+            }
+        }
+        if (changed) {
             markDirtyInternal();
         }
     }

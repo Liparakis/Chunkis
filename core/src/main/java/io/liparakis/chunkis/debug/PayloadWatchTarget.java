@@ -75,6 +75,10 @@ public record PayloadWatchTarget(
                 && entityUuid.equals(otherEntityUuid);
     }
 
+    public boolean hasBlockCoordinates() {
+        return blockX != null && blockY != null && blockZ != null;
+    }
+
     public DebugChunkKey chunkKey() {
         if (type == PayloadWatchType.ENTITY || blockX == null || blockZ == null) {
             return null;

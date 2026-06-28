@@ -1,8 +1,12 @@
 package io.liparakis.chunkis.storage;
 
+import io.liparakis.chunkis.Chunkis;
+import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.world.ChunkBlockEntityCapture;
+import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.world.chunk.ChunkSection;
@@ -37,6 +41,34 @@ public final class CisSnapshotCapture {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> target
     ) {
+        return capture(chunk, target, null);
+    }
+
+    public static ChunkDelta<BlockState, NbtCompound> capture(
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> target,
+            final String operationId
+    ) {
+        final int previousNonAirBlocks = countPersistedNonAirBlocks(target);
+        final int liveNonAirBlocks = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
+        if (isSuspiciousBaselineShrink(previousNonAirBlocks, liveNonAirBlocks)) {
+            final String restoreOperationId = chunk instanceof ChunkisDeltaDuck deltaDuck
+                    ? deltaDuck.chunkis$getRestoreOperationId()
+                    : null;
+            Chunkis.LOGGER.warn(
+                    "Chunkis: Rejected suspicious full snapshot for {} in {}"
+                            + " previousNonAir={} liveNonAir={} suppressionCause={} restoreOperationId={} chunkStatus={} saveOperationId={}",
+                    chunk.getPos(),
+                    chunk.getWorld().getRegistryKey().getValue(),
+                    previousNonAirBlocks,
+                    liveNonAirBlocks,
+                    PendingChunkMutationSuppression.currentCause(chunk),
+                    restoreOperationId,
+                    chunk.getStatus(),
+                    operationId
+            );
+            return target;
+        }
         PayloadWatchTracer.traceCapturedBlocks(chunk);
         target.clearBlockPayloads(false);
         target.clearBlockEntityPayloads(false);
@@ -80,6 +112,22 @@ public final class CisSnapshotCapture {
         );
         target.setSuppressInitialRepopulation(true);
         return target;
+    }
+
+    static boolean isSuspiciousBaselineShrink(
+            final int previousNonAirBlocks,
+            final int liveNonAirBlocks
+    ) {
+        return previousNonAirBlocks > 0
+                && liveNonAirBlocks >= 0
+                && liveNonAirBlocks * 10 < previousNonAirBlocks * 6;
+    }
+
+    private static int countPersistedNonAirBlocks(final ChunkDelta<BlockState, NbtCompound> target) {
+        if (target == null || !CisNbtUtil.hasFullBlockBaseline(target.getChunkMetadata())) {
+            return 0;
+        }
+        return target.getBlockInstructions().size();
     }
 
     /**

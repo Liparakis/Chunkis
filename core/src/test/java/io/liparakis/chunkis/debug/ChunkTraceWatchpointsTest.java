@@ -93,7 +93,12 @@ class ChunkTraceWatchpointsTest {
     @Test
     void matchesWatchedPayloadEvents() {
         final PayloadWatchTarget blockTarget = PayloadWatchTarget.block("minecraft:overworld", 10, 64, -3);
+        final PayloadWatchTarget entityTarget = PayloadWatchTarget.entity(
+                "minecraft:overworld",
+                "123e4567-e89b-12d3-a456-426614174000"
+        );
         ChunkTraceWatchpoints.watchPayload(blockTarget);
+        ChunkTraceWatchpoints.watchPayload(entityTarget);
 
         final ChunkTraceEvent payloadEvent = new ChunkTraceEvent(
                 0L, 4L, "main",
@@ -118,5 +123,6 @@ class ChunkTraceWatchpointsTest {
                 "minecraft:overworld",
                 new DebugChunkKey(0, -1)
         )).containsExactly(blockTarget);
+        assertThat(ChunkTraceWatchpoints.watchedPayloads()).containsExactly(blockTarget, entityTarget);
     }
 }

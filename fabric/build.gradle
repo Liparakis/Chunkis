@@ -85,3 +85,10 @@ processResources {
 test {
     useJUnitPlatform()
 }
+
+tasks.named("runGameTest") {
+    def filter = providers.gradleProperty("gametestFilter").orNull
+    if (filter != null && !filter.isBlank()) {
+        systemProperty("fabric-api.gametest.filter", filter)
+    }
+}

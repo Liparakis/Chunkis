@@ -79,7 +79,7 @@ public final class ChunkTraceWatchpoints {
         synchronized (MONITOR) {
             return PAYLOAD_TARGETS.stream()
                     .filter(target -> target.matchesWorld(worldId))
-                    .filter(target -> target.type() == PayloadWatchType.ENTITY || chunkKey.equals(target.chunkKey()))
+                    .filter(target -> chunkKey.equals(target.chunkKey()))
                     .toList();
         }
     }

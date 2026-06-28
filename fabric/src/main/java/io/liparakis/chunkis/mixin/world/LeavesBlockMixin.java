@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Mixin for {@link LeavesBlock} to track when leaf decay or updates are
  * happening.
  * <p>
- * This mixin wraps the {@code scheduledTick} method with a leaf tick context,
+ * This mixin wraps the {@code scheduledTick} and {@code randomTick} methods with a leaf tick context,
  * allowing
  * Chunkis to differentiate between player-initiated block changes and automated
  * leaf
@@ -70,6 +70,26 @@ public class LeavesBlockMixin {
      */
     @Inject(method = "scheduledTick", at = @At("TAIL"))
     private void chunkis$afterLeafTick(
+            final BlockState state,
+            final ServerWorld world,
+            final BlockPos pos,
+            final Random random,
+            final CallbackInfo ci) {
+        LeafTickContext.exitDirect();
+    }
+
+    @Inject(method = "randomTick", at = @At("HEAD"))
+    private void chunkis$beforeLeafRandomTick(
+            final BlockState state,
+            final ServerWorld world,
+            final BlockPos pos,
+            final Random random,
+            final CallbackInfo ci) {
+        LeafTickContext.enterDirect();
+    }
+
+    @Inject(method = "randomTick", at = @At("TAIL"))
+    private void chunkis$afterLeafRandomTick(
             final BlockState state,
             final ServerWorld world,
             final BlockPos pos,

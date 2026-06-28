@@ -59,6 +59,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     @Override
     public void chunkis$setDelta(final ChunkDelta<?, ?> delta) {
         this.chunkis$delta = Objects.requireNonNull(delta, "ChunkDelta cannot be null");
+        notifyTrackerIfWorldChunk();
         chunkis$traceWorldChunkDeltaAttachment();
     }
 
@@ -174,4 +175,3 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
         );
     }
 }
-

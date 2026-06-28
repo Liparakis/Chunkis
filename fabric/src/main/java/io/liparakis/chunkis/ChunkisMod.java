@@ -16,6 +16,7 @@ import io.liparakis.chunkis.storage.DeltaPersistenceGuard;
 import io.liparakis.chunkis.storage.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
+import io.liparakis.chunkis.world.ScheduledEntityReplayQueue;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
@@ -116,6 +117,13 @@ public final class ChunkisMod implements ModInitializer {
 
         ServerTickEvents.END_WORLD_TICK.register(
                 BaseChunkCaptureScheduler::tick
+        );
+        ServerTickEvents.END_WORLD_TICK.register(
+                ScheduledEntityReplayQueue::tick
+        );
+
+        ServerTickEvents.END_SERVER_TICK.register(
+                server -> io.liparakis.chunkis.debug.PayloadWatchTracer.tickEntityReloadAssertions()
         );
 
         ServerLifecycleEvents.SERVER_STOPPING.register(
@@ -260,5 +268,6 @@ public final class ChunkisMod implements ModInitializer {
         BaseChunkCaptureScheduler.clear();
         PortalChunkIndexManager.clear();
         PortalLinkManager.clear();
+        ScheduledEntityReplayQueue.clear();
     }
 }

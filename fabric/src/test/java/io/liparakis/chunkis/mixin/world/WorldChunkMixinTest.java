@@ -118,7 +118,6 @@ class WorldChunkMixinTest {
             throw new AssertionError(e);
         }
     }
-
     private static final class FakeChunkisDeltaDuck implements ChunkisDeltaDuck {
 
         private final ChunkDelta<?, ?> delta = new ChunkDelta<>();

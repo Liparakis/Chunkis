@@ -104,7 +104,8 @@ public final class ChunkTraceStore {
             final String payloadWatchStage,
             final String payloadWatchSummary
     ) {
-        if (!ChunkisDebugConfig.allows(domain, severity)) {
+        final boolean watchedPayloadEvent = payloadWatchTarget != null;
+        if (!watchedPayloadEvent && !ChunkisDebugConfig.allows(domain, severity)) {
             return;
         }
 

@@ -140,6 +140,35 @@ class CisNbtUtilTest {
         assertEquals(1, entities.size());
     }
 
+    @Test
+    void buildLoadChunkNbtSkipsPersistedBaseForAuthoritativeFullBaseline() {
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
+        final NbtCompound baseChunk = new NbtCompound();
+        baseChunk.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
+        baseChunk.putInt(CisNbtUtil.X_POS_KEY, 3);
+        baseChunk.putInt(CisNbtUtil.Z_POS_KEY, 7);
+        baseChunk.putString("sentinel_block_from_stale_base", "minecraft:spruce_log");
+
+        delta.addBlockChange(0, 64, 0, "oak_planks", false);
+        delta.setChunkMetadata(
+                CisNbtUtil.createChunkMetadataTakingOwnership(
+                        null,
+                        true,
+                        true,
+                        baseChunk
+                ),
+                false
+        );
+
+        final CisNbtUtil.LoadChunkNbtResult result =
+                CisNbtUtil.buildLoadChunkNbt(3, 7, 3953, delta);
+
+        assertEquals(CisNbtUtil.PersistedBaseChunkUsage.SKIPPED, result.baseChunkUsage());
+        assertEquals(CisNbtUtil.STATUS_EMPTY, result.root().getString(CisNbtUtil.STATUS_KEY).orElseThrow());
+        assertFalse(result.root().contains("sentinel_block_from_stale_base"));
+        assertTrue(result.root().contains(CisNbtUtil.CHUNKIS_DATA_KEY));
+    }
+
     // -------------------------------------------------------------------------
     // Shared fixture builder
     // -------------------------------------------------------------------------

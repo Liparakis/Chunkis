@@ -51,13 +51,11 @@ public final class AsyncSaveDataLossGameTest {
 
     @GameTest(maxTicks = MAX_TICKS)
     public void survivesHundredFarChunkRoundTripsWithoutLosingEdits(final TestContext context) {
-        ChunkTraceStore.clear();
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
         final ChunkTargets targets = createTargets(context);
         final ServerWorld world = context.getWorld();
 
-        ChunkTraceWatchpoints.clear();
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.nearPrimary().getX(), targets.nearPrimary().getY(), targets.nearPrimary().getZ()));
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.nearSecondary().getX(), targets.nearSecondary().getY(), targets.nearSecondary().getZ()));
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.farPrimary().getX(), targets.farPrimary().getY(), targets.farPrimary().getZ()));
@@ -128,7 +126,6 @@ public final class AsyncSaveDataLossGameTest {
                     world.getChunkManager().save(false);
                     BaseChunkCaptureScheduler.flushAndClose(world);
                     AsyncCisSaveManager.flushAndClose(world);
-                    FabricCisStorageHelper.closeStorage(world);
 
                     assertPersistedBaseChunkPresent(context, world, targets.nearChunk(), "near");
                     assertPersistedBaseChunkPresent(context, world, targets.farChunk(), "far");
@@ -136,7 +133,6 @@ public final class AsyncSaveDataLossGameTest {
 
                     world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
                     world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
-                    ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
                     context.complete();
                 }
         );

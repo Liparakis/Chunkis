@@ -20,9 +20,11 @@ import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.ChunkRestorer;
 import io.liparakis.chunkis.world.GlobalChunkTracker;
 import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
+import io.liparakis.chunkis.world.ScheduledEntityReplayQueue;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Uuids;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.ProtoChunk;
@@ -229,11 +231,14 @@ public class ChunkSerializerMixin {
         PendingChunkMutationSuppression.begin(
                 world.getRegistryKey(),
                 pos,
-                ChunkMutationTrackingScope.initialCauseForLoad(delta)
+                ChunkMutationTrackingScope.Cause.PASSIVE_LOAD,
+                SOURCE + "#chunkis$restoreChunkDelta"
         );
         delta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(delta));
         final boolean hasPersistedBaseChunk =
                 CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        final boolean usePersistedBaseChunkForBlocks =
+                CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(delta.getChunkMetadata());
         final int protoSectionsBeforeRestore = ChunkSectionDebugUtil.countNonEmptySections(chunk);
         final int protoNonAirBlocksAfterBase = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
 
@@ -251,7 +256,7 @@ public class ChunkSerializerMixin {
                 delta.isDirty(),
                 null
         );
-        if (hasPersistedBaseChunk) {
+        if (usePersistedBaseChunkForBlocks) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     protoSectionsBeforeRestore > 0
@@ -299,6 +304,11 @@ public class ChunkSerializerMixin {
                 resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE
         );
         if (chunkis$restoreWrappedFullChunk(world, chunk, delta, operationId, resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE)) {
+            PendingChunkMutationSuppression.end(
+                    world.getRegistryKey(),
+                    pos,
+                    SOURCE + "#chunkis$restoreChunkDelta#wrappedFullChunk"
+            );
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     ChunkTraceEventType.LOAD_TX_END,
@@ -315,7 +325,7 @@ public class ChunkSerializerMixin {
             );
             return;
         }
-        if (!hasPersistedBaseChunk) {
+        if (!usePersistedBaseChunkForBlocks) {
             if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
                 ChunkTraceStore.trace(
                         ChunkisDebugDomain.ASSERTIONS,
@@ -349,7 +359,7 @@ public class ChunkSerializerMixin {
                 ChunkTraceSeverity.INFO,
                 resolved.reason(),
                 SOURCE + "#chunkis$restoreChunkDelta",
-                hasPersistedBaseChunk
+                usePersistedBaseChunkForBlocks
                         ? "attached delta to proto chunk and kept persisted base baseline"
                         : "attached delta to proto chunk and reset status to EMPTY",
                 world.getRegistryKey().getValue().toString(),
@@ -515,6 +525,7 @@ public class ChunkSerializerMixin {
                 SOURCE + "#chunkis$restoreWrappedFullChunk"
         );
         ChunkRestorer.restore(world, wrappedChunk, protoDelta, runtimeDelta, operationId);
+        chunkis$schedulePendingEntityReplay(world, wrappedChunk, runtimeDelta);
         PayloadWatchTracer.traceLiveChunkState(
                 wrappedChunk,
                 ChunkTraceEventType.WATCH_PRESENT_AFTER_RESTORE,
@@ -531,10 +542,33 @@ public class ChunkSerializerMixin {
                 operationId,
                 protoDelta
         );
+        wrappedDuck.chunkis$setRestoreOperationId(null);
+        if (world.getServer() != null) {
+            world.getServer().execute(() -> ChunkRestorer.replayPendingEntitiesIfNeeded(
+                    world,
+                    wrappedChunk,
+                    runtimeDelta,
+                    operationId
+            ));
+        }
         if (restoreLoadedFromStorage || !protoDelta.isDirty()) {
             protoDelta.markSaved();
         }
         return true;
+    }
+
+    @Unique
+    private static void chunkis$schedulePendingEntityReplay(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> runtimeDelta
+    ) {
+        if (runtimeDelta == null || runtimeDelta.countPendingEntities() == 0) {
+            return;
+        }
+        runtimeDelta.forEachPendingEntity(entityNbt -> entityNbt.getIntArray("UUID")
+                .map(Uuids::toUuid)
+                .ifPresent(uuid -> ScheduledEntityReplayQueue.schedule(world, chunk.getPos(), uuid.toString(), entityNbt)));
     }
 
     @Unique

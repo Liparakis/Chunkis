@@ -63,4 +63,29 @@ class DeltaPersistenceGuardTest {
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true));
         assertTrue(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
     }
+
+    @Test
+    void rejectsEntityOnlyPayloadWithoutBase() {
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.addPendingEntity(new NbtCompound());
+
+        assertTrue(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
+    }
+
+    @Test
+    void allowsEntityOnlyPayloadWhenPersistedBaseExists() {
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.addPendingEntity(new NbtCompound());
+        delta.setChunkMetadata(
+                CisNbtUtil.createChunkMetadataTakingOwnership(
+                        null,
+                        true,
+                        false,
+                        CisNbtUtil.createBaseNbt(1, 1, 1)
+                ),
+                false
+        );
+
+        assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
+    }
 }

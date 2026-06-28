@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.mixin.network;
 
+import io.liparakis.chunkis.api.ChunkisDeltaDuck;
+import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.ChunkTraceReason;
@@ -9,9 +11,13 @@ import io.liparakis.chunkis.debug.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.network.ChunkisNetworking;
+import io.liparakis.chunkis.world.ChunkRestorer;
+import net.minecraft.block.BlockState;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.server.world.ChunkHolder;
 import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Mixin;
@@ -74,6 +80,19 @@ public abstract class ChunkHolderMixin {
 
         final WorldChunk chunk = this.getWorldChunk();
         if (chunk == null) return;
+        if (chunk instanceof ChunkisDeltaDuck deltaDuck
+                && chunk.getWorld() instanceof ServerWorld serverWorld
+                && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
+            @SuppressWarnings("unchecked")
+            final ChunkDelta<BlockState, NbtCompound> delta =
+                    (ChunkDelta<BlockState, NbtCompound>) rawDelta;
+            ChunkRestorer.replayPendingEntitiesIfNeeded(
+                    serverWorld,
+                    chunk,
+                    delta,
+                    deltaDuck.chunkis$getRestoreOperationId()
+            );
+        }
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CLIENT_SYNC,
                 ChunkTraceEventType.CHUNK_SENT_TO_CLIENT_SUMMARY,
@@ -97,6 +116,20 @@ public abstract class ChunkHolderMixin {
                 null,
                 null
         );
+        if (chunk.getWorld() instanceof ServerWorld serverWorld
+                && chunk instanceof ChunkisDeltaDuck deltaDuck
+                && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
+            @SuppressWarnings("unchecked")
+            final ChunkDelta<BlockState, NbtCompound> delta =
+                    (ChunkDelta<BlockState, NbtCompound>) rawDelta;
+            PayloadWatchTracer.traceEntityPresenceAfterChunkFull(
+                    serverWorld,
+                    chunk,
+                    delta,
+                    deltaDuck.chunkis$getRestoreOperationId(),
+                    "ChunkHolderMixin#chunkis$onSendPacketToPlayers"
+            );
+        }
         PayloadWatchTracer.traceLiveChunkState(
                 chunk,
                 ChunkTraceEventType.WATCH_PRESENT_BEFORE_CLIENT_SEND,

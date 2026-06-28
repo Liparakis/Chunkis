@@ -210,10 +210,11 @@ public final class CisNbtUtil {
     /**
      * Builds the chunk NBT passed into vanilla load conversion.
      *
-     * <p>When persisted base chunk NBT exists, that base becomes the deserialization
+     * <p>When persisted base chunk NBT exists and the delta does not carry a full
+     * authoritative block baseline, that base becomes the deserialization
      * baseline and Chunkis only replays sparse post-capture deltas on top later.
-     * Without a base, Chunkis falls back to the synthetic empty-shell NBT that
-     * triggers regeneration before replay.</p>
+     * Without a block-baseline-eligible base, Chunkis falls back to the synthetic
+     * empty-shell NBT that triggers regeneration before replay.</p>
      *
      * @param pos         chunk position
      * @param dataVersion Minecraft data version
@@ -248,10 +249,12 @@ public final class CisNbtUtil {
 
         final Object metadata = delta != null ? delta.getChunkMetadata() : null;
         final NbtCompound baseChunkNbt = extractPersistedBaseChunkNbt(metadata);
+        final boolean usePersistedBaseChunkForBlocks =
+                shouldUsePersistedBaseChunkForBlockBaseline(metadata);
         final PersistedBaseChunkUsage baseChunkUsage;
         final NbtCompound root;
 
-        if (baseChunkNbt != null) {
+        if (baseChunkNbt != null && usePersistedBaseChunkForBlocks) {
             root = baseChunkNbt;
             baseChunkUsage = PersistedBaseChunkUsage.USED;
 
@@ -685,6 +688,24 @@ public final class CisNbtUtil {
                 getCompoundOrNull(metadata, BASE_CHUNK_NBT_KEY);
 
         return baseChunkNbt != null && !baseChunkNbt.isEmpty();
+    }
+
+    /**
+     * Returns whether persisted base chunk NBT should be used as the block
+     * deserialization baseline for this delta.
+     *
+     * <p>V11 authoritative full-baseline snapshots own block truth in the CIS
+     * payload. For those deltas, persisted base chunk NBT may still exist for
+     * metadata/bootstrap compatibility but must not supply blocks that can
+     * resurrect stale terrain.</p>
+     *
+     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @return {@code true} only when a persisted base exists and no full
+     * authoritative block baseline is present
+     */
+    public static boolean shouldUsePersistedBaseChunkForBlockBaseline(final Object chunkMetadata) {
+        return hasPersistedBaseChunkNbt(chunkMetadata)
+                && !hasFullBlockBaseline(chunkMetadata);
     }
 
     /**

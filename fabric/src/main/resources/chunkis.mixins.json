@@ -13,7 +13,9 @@
     "world.WorldChunkMixin",
     "network.ChunkHolderMixin",
     "world.SpawnHelperMixin",
+    "world.ServerWorldMixin",
     "world.BlockEntityMixin",
+    "world.EntityMixin",
     "world.ChunkRegionMixin",
     "world.PortalForcerMixin"
   ],

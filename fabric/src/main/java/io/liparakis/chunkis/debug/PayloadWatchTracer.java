@@ -7,6 +7,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
@@ -19,12 +20,17 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class PayloadWatchTracer {
 
+    private static final long ENTITY_RELOAD_TIMEOUT_TICKS = 40L;
     private static final ConcurrentHashMap<WatchTraceKey, WatchTraceState> WATCH_TRACE_STATE =
             new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<EntityWatchKey, EntityWatchState> ENTITY_WATCH_STATE =
+            new ConcurrentHashMap<>();
+    private static volatile long currentServerTick;
 
     private PayloadWatchTracer() {
         throw new AssertionError("Utility class");
@@ -101,7 +107,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
 
@@ -373,7 +379,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 chunkKey
         )) {
-            if (target.type() == PayloadWatchType.ENTITY) {
+            if (target.type() == PayloadWatchType.ENTITY || !target.hasBlockCoordinates()) {
                 continue;
             }
             if (!contains(delta, target, chunkStartX, chunkStartZ, worldId)) {
@@ -441,7 +447,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() == PayloadWatchType.ENTITY) {
+            if (target.type() == PayloadWatchType.ENTITY || !target.hasBlockCoordinates()) {
                 continue;
             }
             if (!contains(delta, target, chunkPos.getStartX(), chunkPos.getStartZ(), worldId)) {
@@ -477,7 +483,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
@@ -536,7 +542,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
@@ -597,7 +603,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
@@ -646,7 +652,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
@@ -695,7 +701,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
@@ -743,7 +749,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             traceChunkIdentityAndStatus(
@@ -795,6 +801,38 @@ public final class PayloadWatchTracer {
         }
     }
 
+    public static void tickEntityReloadAssertions() {
+        currentServerTick++;
+        for (final java.util.Map.Entry<EntityWatchKey, EntityWatchState> entry : ENTITY_WATCH_STATE.entrySet()) {
+            final EntityWatchState state = entry.getValue();
+            if (!state.unloadedWithoutReload
+                    || state.asserted
+                    || !state.hasKnownChunk
+                    || currentServerTick - state.unloadTick < ENTITY_RELOAD_TIMEOUT_TICKS) {
+                continue;
+            }
+            state.asserted = true;
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.ASSERTIONS,
+                    ChunkTraceEventType.ASSERTION_FAILED,
+                    ChunkTraceSeverity.ERROR,
+                    ChunkTraceReason.WATCHED_ENTITY_UNLOADED_NOT_RELOADED,
+                    "PayloadWatchTracer#tickEntityReloadAssertions",
+                    "watched entity was unloaded from the live server manager and no entity-manager-load or " +
+                            "entity-tracking-start followed within " + ENTITY_RELOAD_TIMEOUT_TICKS + " ticks",
+                    entry.getKey().worldId,
+                    new DebugChunkKey(state.lastKnownChunkX, state.lastKnownChunkZ),
+                    null,
+                    null,
+                    null,
+                    null,
+                    PayloadWatchTarget.entity(entry.getKey().worldId, entry.getKey().entityUuid),
+                    "entity-unload-timeout",
+                    "entity@" + entry.getKey().entityUuid + " world=" + entry.getKey().worldId
+            );
+        }
+    }
+
     public static void traceWorldChunkConstructorConsumed(
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
@@ -810,7 +848,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             final BlockState expectedState = resolveExpectedState(chunk, delta, target, chunkPos, worldId);
@@ -993,7 +1031,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             final BlockState expectedState = resolveExpectedState(chunk, expectedDelta, target, chunkPos, worldId);
@@ -1226,6 +1264,46 @@ public final class PayloadWatchTracer {
         );
     }
 
+    public static void traceRestoreEntityInstructionVisited(
+            final ServerWorld world,
+            final ChunkPos chunkPos,
+            final NbtCompound nbt,
+            final String operationId,
+            final String source
+    ) {
+        traceEntityRestoreStage(
+                world,
+                chunkPos,
+                nbt,
+                operationId,
+                ChunkTraceEventType.WATCH_RESTORE_INSTRUCTION_VISITED,
+                "restore-entity-visit",
+                source,
+                "decoded entity payload visited by restore",
+                null
+        );
+    }
+
+    public static void traceRestoreEntityApplyAttempt(
+            final ServerWorld world,
+            final ChunkPos chunkPos,
+            final NbtCompound nbt,
+            final String operationId,
+            final String source
+    ) {
+        traceEntityRestoreStage(
+                world,
+                chunkPos,
+                nbt,
+                operationId,
+                ChunkTraceEventType.WATCH_RESTORE_APPLY_ATTEMPT,
+                "restore-entity-attempt",
+                source,
+                "attempting to materialize decoded entity payload into live server world",
+                null
+        );
+    }
+
     public static void traceRestoreEntitySkipped(
             final ServerWorld world,
             final ChunkPos chunkPos,
@@ -1257,6 +1335,268 @@ public final class PayloadWatchTracer {
         );
     }
 
+    public static void traceEntityPresenceAfterChunkFull(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+            @Nullable final String operationId,
+            final String source
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
+            return;
+        }
+
+        final String worldId = worldId(world);
+        final ChunkPos chunkPos = chunk.getPos();
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloads()) {
+            if (target.type() != PayloadWatchType.ENTITY) {
+                continue;
+            }
+            if (!target.matchesWorld(worldId)) {
+                continue;
+            }
+            if (!shouldTraceEntityForChunk(worldId, chunkPos, target)) {
+                continue;
+            }
+
+            final String resolvedOperationId = resolveOperationId(worldId, chunkPos, target, operationId);
+            final Entity liveEntity = resolveWatchedEntity(world, target.entityUuid());
+            if (liveEntity != null && !liveEntity.getChunkPos().equals(chunkPos)) {
+                continue;
+            }
+            final NbtCompound expectedNbt = expectedDelta != null
+                    ? findWatchedEntityNbt(expectedDelta, target.entityUuid())
+                    : null;
+            assertEntityReloadedAfterUnload(worldId, chunkPos, target, resolvedOperationId, liveEntity);
+            traceWatch(
+                    liveEntity != null
+                            ? ChunkTraceEventType.WATCH_PRESENT_AFTER_CHUNK_FULL
+                            : ChunkTraceEventType.WATCH_FAILED,
+                    "chunk-full-entity",
+                    source,
+                    liveEntity != null
+                            ? "watched entity present after chunk became sendable"
+                            : "watched entity missing after chunk became sendable",
+                    worldId,
+                    chunkPos,
+                    resolvedOperationId,
+                    target,
+                    summarizeExpectedEntityAndPresence(target, expectedNbt, liveEntity, chunk),
+                    null
+            );
+        }
+    }
+
+    public static void traceEntityReplayState(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+            @Nullable final String operationId,
+            final ChunkTraceEventType eventType,
+            final String stage,
+            final String source,
+            final String message
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || chunk == null) {
+            return;
+        }
+
+        final String worldId = worldId(world);
+        final ChunkPos chunkPos = chunk.getPos();
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloads()) {
+            if (target.type() != PayloadWatchType.ENTITY) {
+                continue;
+            }
+            if (!target.matchesWorld(worldId)) {
+                continue;
+            }
+            if (!shouldTraceEntityForChunk(worldId, chunkPos, target)) {
+                continue;
+            }
+
+            final String resolvedOperationId = resolveOperationId(worldId, chunkPos, target, operationId);
+            final Entity liveEntity = resolveWatchedEntity(world, target.entityUuid());
+            if (liveEntity != null && !liveEntity.getChunkPos().equals(chunkPos)) {
+                continue;
+            }
+            final NbtCompound expectedNbt = expectedDelta != null
+                    ? findWatchedEntityNbt(expectedDelta, target.entityUuid())
+                    : null;
+            traceWatch(
+                    eventType,
+                    stage,
+                    source,
+                    message,
+                    worldId,
+                    chunkPos,
+                    resolvedOperationId,
+                    target,
+                    summarizeExpectedEntityAndPresence(target, expectedNbt, liveEntity, chunk),
+                    null
+            );
+        }
+    }
+
+    public static void traceLiveEntityRemoved(
+            final ServerWorld world,
+            final Entity entity,
+            final Entity.RemovalReason reason,
+            @Nullable final String operationId,
+            final String source
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || entity == null) {
+            return;
+        }
+
+        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
+                worldId(world),
+                entity.getUuidAsString()
+        );
+        if (target == null) {
+            return;
+        }
+
+        final ChunkPos chunkPos = entity.getChunkPos();
+        traceWatch(
+                ChunkTraceEventType.WATCH_ENTITY_REMOVED,
+                "live-remove",
+                source,
+                "watched entity removed from live server world",
+                worldId(world),
+                chunkPos,
+                operationId,
+                target,
+                summarizeRemovedEntity(target, entity, reason, source),
+                null
+        );
+    }
+
+    public static void traceEntityChunkTransfer(
+            final ServerWorld world,
+            final Entity entity,
+            @Nullable final String operationId,
+            final String stage,
+            final String source,
+            final String message
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || entity == null) {
+            return;
+        }
+
+        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
+                worldId(world),
+                entity.getUuidAsString()
+        );
+        if (target == null) {
+            return;
+        }
+        markEntityTransfer(target, stage, entity.getChunkPos());
+
+        traceWatch(
+                ChunkTraceEventType.WATCH_CAPTURED,
+                stage,
+                source,
+                message,
+                worldId(world),
+                entity.getChunkPos(),
+                operationId,
+                target,
+                summarizeLiveEntity(target, entity, source),
+                null
+        );
+    }
+
+    public static void traceEntityTrackingEvent(
+            final ServerWorld world,
+            final Entity entity,
+            final ServerPlayerEntity player,
+            final String stage,
+            final String source,
+            final String message
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || entity == null || player == null) {
+            return;
+        }
+
+        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
+                worldId(world),
+                entity.getUuidAsString()
+        );
+        if (target == null) {
+            return;
+        }
+        if ("entity-tracking-start".equals(stage)) {
+            clearPendingEntityReload(target);
+        }
+        rememberEntityChunk(target, entity.getChunkPos());
+
+        traceWatch(
+                ChunkTraceEventType.WATCH_CAPTURED,
+                stage,
+                source,
+                message,
+                worldId(world),
+                entity.getChunkPos(),
+                null,
+                target,
+                summarizeLiveEntity(target, entity, source)
+                        + " player=" + player.getName().getString()
+                        + " playerId=" + player.getUuidAsString(),
+                null
+        );
+    }
+
+    public static void traceEntityChunkReentry(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final String stage,
+            final String source,
+            final String message
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || chunk == null) {
+            return;
+        }
+
+        final String worldId = worldId(world);
+        final ChunkPos chunkPos = chunk.getPos();
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloads()) {
+            if (target.type() != PayloadWatchType.ENTITY) {
+                continue;
+            }
+            if (!target.matchesWorld(worldId)) {
+                continue;
+            }
+            if (!shouldTraceEntityForChunk(worldId, chunkPos, target)) {
+                continue;
+            }
+            final Entity liveEntity = resolveWatchedEntity(world, target.entityUuid());
+            if (liveEntity != null && !liveEntity.getChunkPos().equals(chunkPos)) {
+                continue;
+            }
+            assertEntityReloadedAfterUnload(worldId, chunkPos, target, null, liveEntity);
+            traceWatch(
+                    liveEntity != null
+                            ? ChunkTraceEventType.WATCH_CAPTURED
+                            : ChunkTraceEventType.WATCH_FAILED,
+                    stage,
+                    source,
+                    message,
+                    worldId,
+                    chunkPos,
+                    null,
+                    target,
+                    liveEntity != null
+                            ? summarizeLiveEntity(target, liveEntity, source)
+                            : target.describe()
+                                    + " chunkStatus=" + chunk.getStatus()
+                                    + " chunkInstanceId=" + chunkInstanceId(chunk)
+                                    + " source=" + source
+                                    + " thread=" + Thread.currentThread().getName(),
+                    null
+            );
+        }
+    }
+
     public static void traceLiveChunkState(
             final WorldChunk chunk,
             final ChunkTraceEventType presentEventType,
@@ -1277,7 +1617,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
 
@@ -1430,6 +1770,24 @@ public final class PayloadWatchTracer {
     }
 
     @Nullable
+    private static NbtCompound findWatchedEntityNbt(
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String entityUuid
+    ) {
+        final NbtCompound[] found = {null};
+        delta.forEachEntity(entityNbt -> {
+            if (found[0] != null || entityNbt == null) {
+                return;
+            }
+            final String uuid = entityUuid(entityNbt);
+            if (entityUuid.equals(uuid)) {
+                found[0] = entityNbt;
+            }
+        });
+        return found[0];
+    }
+
+    @Nullable
     private static BlockState findWatchedBlockState(
             final ChunkDelta<BlockState, NbtCompound> delta,
             final PayloadWatchTarget target,
@@ -1508,6 +1866,9 @@ public final class PayloadWatchTracer {
     }
 
     private static String summarizeBlock(final PayloadWatchTarget target, final BlockState state) {
+        if (!target.hasBlockCoordinates()) {
+            return target.describe() + " state=" + state;
+        }
         return "pos=" + target.blockX() + ',' + target.blockY() + ',' + target.blockZ()
                 + " state=" + state
                 + " section=" + (target.blockY() >> 4);
@@ -1523,6 +1884,16 @@ public final class PayloadWatchTracer {
             final String threadName,
             @Nullable final WorldChunk chunk
     ) {
+        if (!target.hasBlockCoordinates()) {
+            return target.describe()
+                    + " expectedState=" + expectedState
+                    + " actualServerState=" + actualServerState
+                    + " actualClientState=" + actualClientState
+                    + " chunkInstanceId=" + chunkInstanceId(chunk)
+                    + " chunkStatus=" + chunkStatus
+                    + " source=" + source
+                    + " thread=" + threadName;
+        }
         return "pos=" + target.blockX() + ',' + target.blockY() + ',' + target.blockZ()
                 + " expectedState=" + expectedState
                 + " actualServerState=" + actualServerState
@@ -1547,7 +1918,7 @@ public final class PayloadWatchTracer {
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
         )) {
-            if (target.type() != PayloadWatchType.BLOCK) {
+            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
             final BlockState expectedState = findWatchedBlockState(delta, target, chunkPos, worldId);
@@ -1630,6 +2001,9 @@ public final class PayloadWatchTracer {
     ) {
         if (operationId != null) {
             return operationId;
+        }
+        if (!target.hasBlockCoordinates()) {
+            return null;
         }
         final WatchTraceState state = WATCH_TRACE_STATE.get(new WatchTraceKey(
                 worldId,
@@ -2000,6 +2374,106 @@ public final class PayloadWatchTracer {
                 + " nbtBytes=" + nbtSize(nbt);
     }
 
+    private static void traceEntityRestoreStage(
+            final ServerWorld world,
+            final ChunkPos chunkPos,
+            final NbtCompound nbt,
+            final String operationId,
+            final ChunkTraceEventType eventType,
+            final String stage,
+            final String source,
+            final String message,
+            @Nullable final String suffix
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
+            return;
+        }
+        final String entityUuid = entityUuid(nbt);
+        if (entityUuid == null) {
+            return;
+        }
+        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(worldId(world), entityUuid);
+        if (target == null) {
+            return;
+        }
+        traceWatch(
+                eventType,
+                stage,
+                source,
+                message,
+                worldId(world),
+                chunkPos,
+                operationId,
+                target,
+                summarizeEntity(target, nbt)
+                        + " chunkStatus=entity-restore"
+                        + " source=" + source
+                        + " thread=" + Thread.currentThread().getName()
+                        + (suffix != null ? " " + suffix : ""),
+                null
+        );
+    }
+
+    @Nullable
+    private static Entity resolveWatchedEntity(final ServerWorld world, final String entityUuid) {
+        try {
+            return world.getEntity(UUID.fromString(entityUuid));
+        } catch (final IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private static String summarizeExpectedEntityAndPresence(
+            final PayloadWatchTarget target,
+            @Nullable final NbtCompound expectedNbt,
+            @Nullable final Entity liveEntity,
+            final WorldChunk chunk
+    ) {
+        return "uuid=" + target.entityUuid()
+                + " expectedType=" + (expectedNbt != null ? expectedNbt.getString("id").orElse("<missing-id>") : "<unknown>")
+                + " actualServerEntityPresent=" + (liveEntity != null)
+                + " actualServerEntityType=" + (liveEntity != null ? liveEntity.getType() : "<missing>")
+                + " chunkStatus=" + chunk.getStatus()
+                + " chunkInstanceId=" + chunkInstanceId(chunk)
+                + " thread=" + Thread.currentThread().getName();
+    }
+
+    private static String summarizeRemovedEntity(
+            final PayloadWatchTarget target,
+            final Entity entity,
+            final Entity.RemovalReason reason,
+            final String source
+    ) {
+        return "uuid=" + target.entityUuid()
+                + " actualServerEntityPresent=false"
+                + " actualServerEntityType=" + entity.getType()
+                + " removalReason=" + reason
+                + " pos=[" + entity.getX() + ',' + entity.getY() + ',' + entity.getZ() + ']'
+                + " blockPos=" + entity.getBlockPos().toShortString()
+                + " chunk=" + entity.getChunkPos().x + ',' + entity.getChunkPos().z
+                + " isAlive=" + entity.isAlive()
+                + " isRemoved=" + entity.isRemoved()
+                + " source=" + source
+                + " thread=" + Thread.currentThread().getName();
+    }
+
+    private static String summarizeLiveEntity(
+            final PayloadWatchTarget target,
+            final Entity entity,
+            final String source
+    ) {
+        return "uuid=" + target.entityUuid()
+                + " actualServerEntityPresent=" + !entity.isRemoved()
+                + " actualServerEntityType=" + entity.getType()
+                + " pos=[" + entity.getX() + ',' + entity.getY() + ',' + entity.getZ() + ']'
+                + " blockPos=" + entity.getBlockPos().toShortString()
+                + " chunk=" + entity.getChunkPos().x + ',' + entity.getChunkPos().z
+                + " isAlive=" + entity.isAlive()
+                + " isRemoved=" + entity.isRemoved()
+                + " source=" + source
+                + " thread=" + Thread.currentThread().getName();
+    }
+
     private static int nbtSize(@Nullable final NbtCompound nbt) {
         if (nbt == null) {
             return 0;
@@ -2040,6 +2514,96 @@ public final class PayloadWatchTracer {
                 : "UNAVAILABLE";
     }
 
+    private static void markEntityTransfer(
+            final PayloadWatchTarget target,
+            final String stage,
+            final ChunkPos chunkPos
+    ) {
+        final EntityWatchState state = ENTITY_WATCH_STATE.computeIfAbsent(
+                new EntityWatchKey(target.worldId(), target.entityUuid()),
+                ignored -> new EntityWatchState()
+        );
+        state.lastKnownChunkX = chunkPos.x;
+        state.lastKnownChunkZ = chunkPos.z;
+        state.hasKnownChunk = true;
+        if ("entity-manager-unload".equals(stage)) {
+            state.unloadedWithoutReload = true;
+            state.unloadTick = currentServerTick;
+            return;
+        }
+        if ("entity-manager-load".equals(stage)) {
+            state.unloadedWithoutReload = false;
+            state.asserted = false;
+        }
+    }
+
+    private static void clearPendingEntityReload(final PayloadWatchTarget target) {
+        final EntityWatchState state = ENTITY_WATCH_STATE.get(
+                new EntityWatchKey(target.worldId(), target.entityUuid())
+        );
+        if (state != null) {
+            state.unloadedWithoutReload = false;
+            state.asserted = false;
+        }
+    }
+
+    private static void rememberEntityChunk(final PayloadWatchTarget target, final ChunkPos chunkPos) {
+        final EntityWatchState state = ENTITY_WATCH_STATE.computeIfAbsent(
+                new EntityWatchKey(target.worldId(), target.entityUuid()),
+                ignored -> new EntityWatchState()
+        );
+        state.lastKnownChunkX = chunkPos.x;
+        state.lastKnownChunkZ = chunkPos.z;
+        state.hasKnownChunk = true;
+    }
+
+    private static boolean shouldTraceEntityForChunk(
+            final String worldId,
+            final ChunkPos chunkPos,
+            final PayloadWatchTarget target
+    ) {
+        final EntityWatchState state = ENTITY_WATCH_STATE.get(
+                new EntityWatchKey(worldId, target.entityUuid())
+        );
+        return state == null
+                || !state.hasKnownChunk
+                || (state.lastKnownChunkX == chunkPos.x && state.lastKnownChunkZ == chunkPos.z);
+    }
+
+    private static void assertEntityReloadedAfterUnload(
+            final String worldId,
+            final ChunkPos chunkPos,
+            final PayloadWatchTarget target,
+            @Nullable final String operationId,
+            @Nullable final Entity liveEntity
+    ) {
+        final EntityWatchState state = ENTITY_WATCH_STATE.get(
+                new EntityWatchKey(worldId, target.entityUuid())
+        );
+        if (state == null || !state.unloadedWithoutReload || liveEntity != null || state.asserted) {
+            return;
+        }
+        state.asserted = true;
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.ASSERTIONS,
+                ChunkTraceEventType.ASSERTION_FAILED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.WATCHED_ENTITY_UNLOADED_NOT_RELOADED,
+                "PayloadWatchTracer#assertEntityReloadedAfterUnload",
+                "watched entity was unloaded from the live server manager and chunk became sendable again without " +
+                        "entity-manager-load or entity-tracking-start",
+                worldId,
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                operationId,
+                null,
+                null,
+                target,
+                "chunk-full-entity",
+                target.describe()
+        );
+    }
+
     private record WatchTraceKey(
             String worldId,
             int chunkX,
@@ -2065,5 +2629,17 @@ public final class PayloadWatchTracer {
             this.operationId = operationId;
             this.expectedState = expectedState;
         }
+    }
+
+    private record EntityWatchKey(String worldId, String entityUuid) {
+    }
+
+    private static final class EntityWatchState {
+        private volatile boolean unloadedWithoutReload;
+        private volatile boolean asserted;
+        private volatile long unloadTick;
+        private volatile int lastKnownChunkX;
+        private volatile int lastKnownChunkZ;
+        private volatile boolean hasKnownChunk;
     }
 }
