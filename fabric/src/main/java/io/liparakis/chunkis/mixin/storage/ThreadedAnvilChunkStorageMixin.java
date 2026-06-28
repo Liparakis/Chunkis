@@ -258,96 +258,28 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos chunkPos,
             final CallbackInfoReturnable<CompletableFuture<Optional<NbtCompound>>> cir) {
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = chunkis$getStorage();
-
-        ChunkDelta<BlockState, NbtCompound> delta = chunkis$getTrackedDelta(chunkPos);
-
-        if (chunkis$shouldBypassTrackedDelta(delta)) {
-            final CisChunkPos cisPos = new CisChunkPos(chunkPos.x, chunkPos.z);
-            if (!storage.contains(cisPos)) {
-                ChunkTraceStore.trace(
-                        ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                        ChunkTraceEventType.LOAD_SOURCE_RESOLVED,
-                        ChunkTraceSeverity.INFO,
-                        ChunkTraceReason.NEITHER,
-                        "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                        "load source resolved: no tracker delta and no storage entry",
-                        world.getRegistryKey().getValue().toString(),
-                        new DebugChunkKey(chunkPos.x, chunkPos.z),
-                        null,
-                        null,
-                        false,
-                        null
-                );
-                ChunkOwnershipTraceHelper.traceDecision(
-                        world.getRegistryKey(),
-                        chunkPos,
-                        "BYPASSED",
-                        ChunkTraceReason.PASSIVE_VANILLA_LOAD,
-                        "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                        null,
-                        ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
-                );
-                ChunkTraceStore.trace(
-                        ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                        ChunkTraceEventType.LOAD_TX_END,
-                        ChunkTraceSeverity.INFO,
-                        ChunkTraceReason.NEITHER,
-                        "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                        "bypassed synthetic load because tracker and storage were empty",
-                        world.getRegistryKey().getValue().toString(),
-                        new DebugChunkKey(chunkPos.x, chunkPos.z),
-                        null,
-                        null,
-                        false,
-                        null
-                );
-                return;
-            }
-            delta = storage.load(cisPos);
-        } else {
-            chunkis$saveDirtyDelta(storage, chunkPos, delta);
+        final ChunkDelta<BlockState, NbtCompound> delta = chunkis$resolveDeltaForLoad(storage, chunkPos);
+        if (delta == null) {
+            chunkis$finishBypassedLoad(
+                    chunkPos,
+                    null,
+                    ChunkTraceReason.NEITHER,
+                    "load source resolved: no tracker delta and no storage entry",
+                    "bypassed synthetic load because tracker and storage were empty"
+            );
+            return;
         }
 
         if (!ChunkDeltaOwnership.hasRestorableChunkisState(delta)) {
             final ChunkTraceReason resolvedReason = chunkis$shouldBypassTrackedDelta(delta)
                     ? ChunkTraceReason.NEITHER
                     : ChunkTraceReason.TRACKER_MEMORY;
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                    ChunkTraceEventType.LOAD_SOURCE_RESOLVED,
-                    ChunkTraceSeverity.INFO,
-                    resolvedReason,
-                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                    "load source resolved but delta had no restorable Chunkis state",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
-                    null,
-                    null,
-                    delta != null && delta.isDirty(),
-                    null
-            );
-            ChunkOwnershipTraceHelper.traceDecision(
-                    world.getRegistryKey(),
+            chunkis$finishBypassedLoad(
                     chunkPos,
-                    "BYPASSED",
-                    ChunkTraceReason.PASSIVE_VANILLA_LOAD,
-                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                     delta,
-                    ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
-            );
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                    ChunkTraceEventType.LOAD_TX_END,
-                    ChunkTraceSeverity.INFO,
                     resolvedReason,
-                    "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                    "bypassed synthetic load because delta had no restorable state",
-                    world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
-                    null,
-                    null,
-                    delta != null && delta.isDirty(),
-                    null
+                    "load source resolved but delta had no restorable Chunkis state",
+                    "bypassed synthetic load because delta had no restorable state"
             );
             return;
         }
@@ -487,6 +419,91 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         );
         cir.setReturnValue(CompletableFuture.completedFuture(
                 Optional.of(loadNbt.root())));
+    }
+
+    /**
+     * Resolves the delta the load hook should use to build synthetic chunk NBT.
+     *
+     * <p>A tracked in-memory delta wins. When the tracked delta is too weak to
+     * rebuild the chunk, cold storage is consulted instead. Dirty tracked deltas
+     * are synchronously flushed before load NBT is built so the storage view stays
+     * coherent with the tracker.</p>
+     *
+     * @param storage  CIS storage backing the world
+     * @param chunkPos chunk position being loaded
+     * @return resolved load delta, or {@code null} when both tracker and storage
+     *         have no useful state
+     */
+    @Unique
+    private ChunkDelta<BlockState, NbtCompound> chunkis$resolveDeltaForLoad(
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos chunkPos
+    ) {
+        final ChunkDelta<BlockState, NbtCompound> trackedDelta = chunkis$getTrackedDelta(chunkPos);
+        if (!chunkis$shouldBypassTrackedDelta(trackedDelta)) {
+            chunkis$saveDirtyDelta(storage, chunkPos, trackedDelta);
+            return trackedDelta;
+        }
+
+        final CisChunkPos cisPos = new CisChunkPos(chunkPos.x, chunkPos.z);
+        return storage.contains(cisPos) ? storage.load(cisPos) : null;
+    }
+
+    /**
+     * Emits the standard bypass traces for a load that falls back to vanilla
+     * behavior and stops the synthetic-load path.
+     *
+     * @param chunkPos              chunk position being loaded
+     * @param delta                 resolved delta, if any
+     * @param resolvedReason        load-source reason used in lifecycle tracing
+     * @param resolvedMessage       source-resolution message
+     * @param transactionEndMessage final load-transaction message
+     */
+    @Unique
+    private void chunkis$finishBypassedLoad(
+            final ChunkPos chunkPos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkTraceReason resolvedReason,
+            final String resolvedMessage,
+            final String transactionEndMessage
+    ) {
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.LOAD_SOURCE_RESOLVED,
+                ChunkTraceSeverity.INFO,
+                resolvedReason,
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                resolvedMessage,
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                delta != null && delta.isDirty(),
+                null
+        );
+        ChunkOwnershipTraceHelper.traceDecision(
+                world.getRegistryKey(),
+                chunkPos,
+                "BYPASSED",
+                ChunkTraceReason.PASSIVE_VANILLA_LOAD,
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                delta,
+                ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
+        );
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.LOAD_TX_END,
+                ChunkTraceSeverity.INFO,
+                resolvedReason,
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                transactionEndMessage,
+                world.getRegistryKey().getValue().toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                delta != null && delta.isDirty(),
+                null
+        );
     }
 
     /**
