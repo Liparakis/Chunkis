@@ -39,23 +39,36 @@ import java.util.Set;
  */
 public final class PortalArrivalFallback {
 
-    /** Max height for portal creation in the Nether to avoid placing portals above the ceiling. */
+    /**
+     * Max height for portal creation in the Nether to avoid placing portals above the ceiling.
+     */
     private static final int NETHER_MAX_CREATED_PORTAL_Y = 127;
-    /** Width of the portal interior in blocks. */
+    /**
+     * Width of the portal interior in blocks.
+     */
     private static final int PORTAL_INTERIOR_WIDTH = 2;
-    /** Height of the portal interior in blocks. */
+    /**
+     * Height of the portal interior in blocks.
+     */
     private static final int PORTAL_INTERIOR_HEIGHT = 3;
-
-    /** Horizontal radius for searching portal placement sites. */
+    /**
+     * Horizontal radius for searching portal placement sites.
+     */
     private static final int PORTAL_SEARCH_RADIUS =
             Integer.getInteger("chunkis.portal.fallbackRadius", 20);
-    /** Vertical range around the target height to scan for portal sites. */
+    /**
+     * Vertical range around the target height to scan for portal sites.
+     */
     private static final int PORTAL_VERTICAL_RANGE =
             Integer.getInteger("chunkis.portal.fallbackVerticalRange", 24);
-    /** Horizontal radius for searching safe standing spots when portal placement fails. */
+    /**
+     * Horizontal radius for searching safe standing spots when portal placement fails.
+     */
     private static final int SAFE_SPOT_SEARCH_RADIUS =
             Integer.getInteger("chunkis.portal.safeSpotRadius", 20);
-    /** Ticks of portal cooldown applied after a fallback teleport. */
+    /**
+     * Ticks of portal cooldown applied after a fallback teleport.
+     */
     private static final int FALLBACK_PORTAL_COOLDOWN_TICKS =
             Integer.getInteger("chunkis.portal.fallbackCooldownTicks", 40);
 
@@ -76,7 +89,9 @@ public final class PortalArrivalFallback {
      */
     private static final int EGRESS_MIN_BFS_COUNT = 6;
 
-    /** Default state for obsidian blocks used in portal frames. */
+    /**
+     * Default state for obsidian blocks used in portal frames.
+     */
     private static final BlockState OBSIDIAN_STATE = Blocks.OBSIDIAN.getDefaultState();
 
     private PortalArrivalFallback() {
@@ -215,7 +230,8 @@ public final class PortalArrivalFallback {
 
                     final int surfaceY = MathHelper.clamp(
                             world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, worldX, worldZ),
-                            minY, maxY);
+                            minY, maxY
+                    );
                     final int startY = MathHelper.clamp(target.getY(), minY, surfaceY);
 
                     if (visitor.visit(worldX, worldZ, startY, surfaceY)) {
@@ -245,22 +261,28 @@ public final class PortalArrivalFallback {
     ) {
         final int minY = world.getBottomY() + 1;
         final int maxY = worldCeilingY(world) - PORTAL_INTERIOR_HEIGHT - 1;
-        final PortalSite[] best = {null};
+        final PortalSite[] best = { null };
 
-        searchColumns(world, target, PORTAL_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
-            best[0] = chooseBetter(best[0],
-                    validatePortalSiteBothAxes(world, target, worldX, startY, worldZ, axis));
+        searchColumns(
+                world, target, PORTAL_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
+                    best[0] = chooseBetter(
+                            best[0],
+                            validatePortalSiteBothAxes(world, target, worldX, startY, worldZ, axis)
+                    );
 
-            if (surfaceY != startY) {
-                best[0] = chooseBetter(best[0],
-                        validatePortalSiteBothAxes(world, target, worldX, surfaceY, worldZ, axis));
-            }
+                    if (surfaceY != startY) {
+                        best[0] = chooseBetter(
+                                best[0],
+                                validatePortalSiteBothAxes(world, target, worldX, surfaceY, worldZ, axis)
+                        );
+                    }
 
-            best[0] = searchVerticalPortalSites(
-                    world, target, worldX, startY, worldZ, minY, maxY, axis, best[0]);
+                    best[0] = searchVerticalPortalSites(
+                            world, target, worldX, startY, worldZ, minY, maxY, axis, best[0]);
 
-            return false;
-        });
+                    return false;
+                }
+        );
 
         return best[0];
     }
@@ -283,14 +305,18 @@ public final class PortalArrivalFallback {
         for (int deltaY = 1; deltaY <= PORTAL_VERTICAL_RANGE; deltaY++) {
             final int upwardY = startY + deltaY;
             if (upwardY <= maxY) {
-                bestSite = chooseBetter(bestSite,
-                        validatePortalSiteBothAxes(world, target, x, upwardY, z, axis));
+                bestSite = chooseBetter(
+                        bestSite,
+                        validatePortalSiteBothAxes(world, target, x, upwardY, z, axis)
+                );
             }
 
             final int downwardY = startY - deltaY;
             if (downwardY >= minY) {
-                bestSite = chooseBetter(bestSite,
-                        validatePortalSiteBothAxes(world, target, x, downwardY, z, axis));
+                bestSite = chooseBetter(
+                        bestSite,
+                        validatePortalSiteBothAxes(world, target, x, downwardY, z, axis)
+                );
             }
         }
 
@@ -391,7 +417,8 @@ public final class PortalArrivalFallback {
                 mutable.set(
                         lowerX + widthDirection.getOffsetX() * width,
                         lowerY + height,
-                        lowerZ + widthDirection.getOffsetZ() * width);
+                        lowerZ + widthDirection.getOffsetZ() * width
+                );
 
                 if (isUnsafeToReplace(world.getBlockState(mutable), world.getBlockEntity(mutable))) {
                     return false;
@@ -609,21 +636,23 @@ public final class PortalArrivalFallback {
     ) {
         final int minY = world.getBottomY() + 1;
         final int maxY = worldCeilingY(world) - 2;
-        final Vec3d[] result = {null};
+        final Vec3d[] result = { null };
 
-        searchColumns(world, target, SAFE_SPOT_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
-            result[0] = validateStandingSpot(world, worldX, startY, worldZ);
-            if (result[0] != null) {
-                return true;
-            }
+        searchColumns(
+                world, target, SAFE_SPOT_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
+                    result[0] = validateStandingSpot(world, worldX, startY, worldZ);
+                    if (result[0] != null) {
+                        return true;
+                    }
 
-            if (surfaceY != startY) {
-                result[0] = validateStandingSpot(world, worldX, surfaceY, worldZ);
-                return result[0] != null;
-            }
+                    if (surfaceY != startY) {
+                        result[0] = validateStandingSpot(world, worldX, surfaceY, worldZ);
+                        return result[0] != null;
+                    }
 
-            return false;
-        });
+                    return false;
+                }
+        );
 
         return result[0];
     }
@@ -895,7 +924,8 @@ public final class PortalArrivalFallback {
             mutable.set(
                     lowerX + widthDirection.getOffsetX() * width,
                     lowerY - 2,
-                    lowerZ + widthDirection.getOffsetZ() * width);
+                    lowerZ + widthDirection.getOffsetZ() * width
+            );
 
             if (world.getBlockState(mutable).isSideSolidFullSquare(world, mutable, Direction.UP)) {
                 support++;

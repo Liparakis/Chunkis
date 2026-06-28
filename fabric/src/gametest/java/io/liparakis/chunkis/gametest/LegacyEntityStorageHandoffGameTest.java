@@ -2,8 +2,8 @@ package io.liparakis.chunkis.gametest;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.storage.CisNbtUtil;
-import io.liparakis.chunkis.storage.FabricCisStorageHelper;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.ChunkRestorer;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -159,3 +159,5 @@ public final class LegacyEntityStorageHandoffGameTest {
     private record SerializedEntity(UUID uuid, NbtCompound nbt) {
     }
 }
+
+

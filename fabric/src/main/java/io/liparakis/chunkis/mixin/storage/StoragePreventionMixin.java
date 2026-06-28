@@ -6,8 +6,8 @@ import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
-import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
-import io.liparakis.chunkis.storage.PendingVanillaSaveDecision;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
+import io.liparakis.chunkis.world.tracking.ownership.PendingVanillaSaveDecision;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.scanner.NbtScanner;
 import net.minecraft.util.math.ChunkPos;
@@ -150,3 +150,5 @@ public class StoragePreventionMixin {
         }
     }
 }
+
+

@@ -11,16 +11,16 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
-import io.liparakis.chunkis.storage.CisNbtUtil;
-import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
-import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
-import io.liparakis.chunkis.storage.FabricCisStorageHelper;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
-import io.liparakis.chunkis.world.ChunkRestorer;
-import io.liparakis.chunkis.world.GlobalChunkTracker;
-import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
-import io.liparakis.chunkis.world.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
+import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
+import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
@@ -387,7 +387,7 @@ public class ChunkSerializerMixin {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 SOURCE + "#chunkis$traceBaseMetadataAfterDecode",
-                "decoded delta metadata: " + io.liparakis.chunkis.storage.DeltaPersistenceGuard.describeLifecycleState(delta),
+                "decoded delta metadata: " + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(delta),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
@@ -618,3 +618,5 @@ public class ChunkSerializerMixin {
     }
 
 }
+
+

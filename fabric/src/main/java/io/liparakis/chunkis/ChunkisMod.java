@@ -13,13 +13,13 @@ import io.liparakis.chunkis.migration.McaMigrator;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.portal.PortalChunkIndexManager;
 import io.liparakis.chunkis.portal.PortalLinkManager;
-import io.liparakis.chunkis.storage.AsyncCisSaveManager;
-import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
-import io.liparakis.chunkis.storage.DeltaPersistenceGuard;
-import io.liparakis.chunkis.storage.FabricCisStorageHelper;
+import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
+import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureScheduler;
+import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.GlobalChunkTracker;
-import io.liparakis.chunkis.world.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
@@ -105,8 +105,7 @@ public final class ChunkisMod implements ModInitializer {
     /**
      * Registers server and world lifecycle hooks.
      *
-     * <p>World load runs migration. World tick advances deferred base chunk
-     * capture. Server stopping flushes Chunkis runtime state while worlds and
+     * <p>World load runs migration. Server stopping flushes Chunkis runtime state while worlds and
      * storage are still available. Server stopped clears static managers.</p>
      */
     private static void registerEvents() {
@@ -118,9 +117,6 @@ public final class ChunkisMod implements ModInitializer {
                 (world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk)
         );
 
-        ServerTickEvents.END_WORLD_TICK.register(
-                BaseChunkCaptureScheduler::tick
-        );
         ServerTickEvents.END_WORLD_TICK.register(
                 ScheduledEntityReplayQueue::tick
         );
@@ -274,3 +270,5 @@ public final class ChunkisMod implements ModInitializer {
         ScheduledEntityReplayQueue.clear();
     }
 }
+
+

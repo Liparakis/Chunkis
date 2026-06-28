@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.portal;
 
 import io.liparakis.chunkis.Chunkis;
-import io.liparakis.chunkis.storage.ChunkisStoragePaths;
+import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.NetherPortalBlock;
@@ -631,3 +631,5 @@ public final class PortalLinkManager {
         }
     }
 }
+
+

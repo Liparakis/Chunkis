@@ -14,9 +14,9 @@ import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
-import io.liparakis.chunkis.storage.AsyncCisSaveManager;
-import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
-import io.liparakis.chunkis.world.GlobalChunkTracker;
+import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
+import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureScheduler;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import net.minecraft.command.argument.UuidArgumentType;
 import net.minecraft.command.permission.Permission;
 import net.minecraft.command.permission.PermissionLevel;
@@ -904,3 +904,4 @@ public final class ChunkDebugCommand {
      */
     record ChatMessage(String text, boolean truncated) {}
 }
+

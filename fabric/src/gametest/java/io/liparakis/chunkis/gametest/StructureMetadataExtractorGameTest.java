@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.gametest;
 
-import io.liparakis.chunkis.storage.CisNbtUtil;
-import io.liparakis.chunkis.storage.StructureMetadataExtractor;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.restoration.nbt.StructureMetadataExtractor;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -83,3 +83,5 @@ public final class StructureMetadataExtractorGameTest {
         context.complete();
     }
 }
+
+

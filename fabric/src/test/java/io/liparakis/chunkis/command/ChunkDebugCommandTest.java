@@ -10,8 +10,8 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
-import io.liparakis.chunkis.storage.AsyncCisSaveManager;
-import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
+import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
+import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureScheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -195,3 +195,5 @@ class ChunkDebugCommandTest {
         assertTrue(detail.contains("inspect=/chunkis debug suspect timeline 2"));
     }
 }
+
+

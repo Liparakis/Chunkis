@@ -12,25 +12,25 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
-import io.liparakis.chunkis.storage.AsyncCisSaveManager;
-import io.liparakis.chunkis.storage.BaseChunkCaptureScheduler;
-import io.liparakis.chunkis.storage.BaseChunkCaptureUtil;
-import io.liparakis.chunkis.storage.CisNbtUtil;
-import io.liparakis.chunkis.storage.CisSnapshotCapture;
-import io.liparakis.chunkis.storage.ChunkDeltaOwnership;
-import io.liparakis.chunkis.storage.ChunkEntityNbtCapture;
-import io.liparakis.chunkis.storage.ChunkOwnershipTraceHelper;
-import io.liparakis.chunkis.storage.DeltaPersistenceGuard;
-import io.liparakis.chunkis.storage.FabricCisStorageHelper;
-import io.liparakis.chunkis.storage.LiveEntitySnapshotCapture;
-import io.liparakis.chunkis.storage.SnapshotSafetyChecker;
-import io.liparakis.chunkis.storage.PendingVanillaSaveDecision;
-import io.liparakis.chunkis.storage.StructureMetadataExtractor;
+import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
+import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureScheduler;
+import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
+import io.liparakis.chunkis.world.entity.capture.ChunkEntityNbtCapture;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
+import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
+import io.liparakis.chunkis.world.entity.capture.LiveEntitySnapshotCapture;
+import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
+import io.liparakis.chunkis.world.tracking.ownership.PendingVanillaSaveDecision;
+import io.liparakis.chunkis.world.restoration.nbt.StructureMetadataExtractor;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.ChunkMutationTrackingScope;
-import io.liparakis.chunkis.world.GlobalChunkTracker;
-import io.liparakis.chunkis.world.PendingChunkMutationSuppression;
-import io.liparakis.chunkis.world.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
+import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import net.minecraft.SharedConstants;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -141,7 +141,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         if (delta.countPendingEntities() == 0) {
             return;
         }
-        io.liparakis.chunkis.world.ChunkRestorer.replayPendingEntitiesIfNeeded(
+        io.liparakis.chunkis.world.restoration.core.ChunkRestorer.replayPendingEntitiesIfNeeded(
                 world,
                 chunk,
                 delta,
@@ -765,7 +765,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 CisNbtUtil.hasFullBlockBaseline(existingMetadata),
                 CisNbtUtil.extractPersistedBaseChunkNbt(existingMetadata),
                 chunk instanceof WorldChunk worldChunk
-                        ? io.liparakis.chunkis.storage.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
+                        ? io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
                         : CisNbtUtil.hasPersistedPortalChunk(existingMetadata)
         );
 
@@ -1309,3 +1309,5 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         return delta == null || (!delta.isDirty() && delta.isEmpty());
     }
 }
+
+

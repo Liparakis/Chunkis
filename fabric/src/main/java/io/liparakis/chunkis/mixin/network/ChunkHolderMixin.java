@@ -11,7 +11,7 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.network.ChunkisNetworking;
-import io.liparakis.chunkis.world.ChunkRestorer;
+import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import net.minecraft.block.BlockState;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
@@ -163,3 +163,4 @@ public abstract class ChunkHolderMixin {
         return packet instanceof ChunkDataS2CPacket;
     }
 }
+

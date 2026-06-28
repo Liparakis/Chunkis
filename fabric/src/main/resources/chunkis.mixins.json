@@ -4,20 +4,20 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "accessor.ChunkBlockEntityNbtAccessor",
-    "world.CommonChunkMixin",
+    "world.chunk.CommonChunkMixin",
     "storage.ChunkSerializerMixin",
-    "world.LeavesBlockMixin",
-    "world.NetherPortalBlockMixin",
+    "world.block.LeavesBlockMixin",
+    "world.block.NetherPortalBlockMixin",
     "storage.StoragePreventionMixin",
     "storage.ThreadedAnvilChunkStorageMixin",
-    "world.WorldChunkMixin",
+    "world.chunk.WorldChunkMixin",
     "network.ChunkHolderMixin",
     "world.SpawnHelperMixin",
-    "world.ServerWorldMixin",
-    "world.BlockEntityMixin",
-    "world.EntityMixin",
+    "world.server.ServerWorldMixin",
+    "world.block.BlockEntityMixin",
+    "world.entity.EntityMixin",
     "world.ChunkRegionMixin",
-    "world.PortalForcerMixin"
+    "world.dimension.PortalForcerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
