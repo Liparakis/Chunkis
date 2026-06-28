@@ -415,14 +415,14 @@ public final class StorageReportCommand {
             incrementCount(bitsPerBlock, sectionPayload.bitsPerBlock());
 
             final int sparseEntries = sparseEntryCount(section);
-            final long denseBytes = bitsToBytes(sectionPayload.encodedBits());
-            final long sparseBytes = bitsToBytes(1L + CisConstants.BLOCK_COUNT_BITS
+            final long denseBytes = ReportNumbers.bitsToBytes(sectionPayload.encodedBits());
+            final long sparseBytes = ReportNumbers.bitsToBytes(1L + CisConstants.BLOCK_COUNT_BITS
                     + ((long) sparseEntries * (SPARSE_ENTRY_POSITION_BITS + payload.globalBits())));
 
             final DefaultSparseReport defaultSparse = defaultSparseReport(section);
             final long defaultSparseBytes = defaultSparse == null
                     ? 0L
-                    : bitsToBytes(1L + CisConstants.BLOCK_COUNT_BITS + payload.globalBits()
+                    : ReportNumbers.bitsToBytes(1L + CisConstants.BLOCK_COUNT_BITS + payload.globalBits()
                                   + CisConstants.BLOCK_COUNT_BITS
                                   + ((long) defaultSparse.exceptionCount()
                                      * (SPARSE_ENTRY_POSITION_BITS + payload.globalBits())));
@@ -721,51 +721,6 @@ public final class StorageReportCommand {
     }
 
     /**
-     * Rounds an encoded bit count up to whole bytes.
-     */
-    private static long bitsToBytes(final long bits) {
-        return (bits + 7L) / 8L;
-    }
-
-    /**
-     * Returns a zero-safe integer average.
-     */
-    private static long safeAverage(final long total, final int count) {
-        if (count <= 0) {
-            return 0L;
-        }
-        return total / count;
-    }
-
-    /**
-     * Formats a histogram as {@code valuexcount} pairs for command output.
-     */
-    private static String formatDistribution(final Map<Integer, Integer> distribution) {
-        if (distribution.isEmpty()) {
-            return "n/a";
-        }
-
-        final StringJoiner joiner = new StringJoiner(", ");
-        distribution.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(entry -> joiner.add(entry.getKey() + "x" + entry.getValue()));
-        return joiner.toString();
-    }
-
-    /**
-     * Formats a signed byte delta with binary units.
-     */
-    private static String formatSignedBytes(final long bytes) {
-        if (bytes > 0L) {
-            return "+" + formatBytes(bytes);
-        }
-        if (bytes < 0L) {
-            return "-" + formatBytes(Math.abs(bytes));
-        }
-        return "0 B";
-    }
-
-    /**
      * Collapses per-section booleans into one chunk-level encoding label.
      */
     private static ChunkEncodingKind chunkEncodingKind(
@@ -841,26 +796,6 @@ public final class StorageReportCommand {
     }
 
     /**
-     * Returns a zero-safe byte average.
-     */
-    private static long averageBytes(final long totalBytes, final int count) {
-        if (count <= 0) {
-            return 0L;
-        }
-        return totalBytes / count;
-    }
-
-    /**
-     * Returns average encoded bytes per section from a summed bit count.
-     */
-    private static long averageSectionBytes(final long totalBits, final int count) {
-        if (count <= 0) {
-            return 0L;
-        }
-        return bitsToBytes(totalBits) / count;
-    }
-
-    /**
      * Calculates the minimum number of bits required to encode values in the
      * range {@code [0, maxValue)}.
      */
@@ -869,36 +804,6 @@ public final class StorageReportCommand {
             return 0;
         }
         return 32 - Integer.numberOfLeadingZeros(maxValue - 1);
-    }
-
-    /**
-     * Formats raw bytes using binary units for command output.
-     */
-    private static String formatBytes(final long bytes) {
-        if (bytes >= ONE_MIB) {
-            return String.format(Locale.ROOT, "%.2f MiB", bytes / (double) ONE_MIB);
-        }
-        if (bytes >= ONE_KIB) {
-            return String.format(Locale.ROOT, "%.2f KiB", bytes / (double) ONE_KIB);
-        }
-        return bytes + " B";
-    }
-
-    /**
-     * Formats a percentage with one decimal place.
-     */
-    private static String formatPercent(final double value) {
-        return String.format(Locale.ROOT, "%.1f%%", value);
-    }
-
-    /**
-     * Converts raw slack bytes into a physical-size percentage.
-     */
-    private static double slackPercent(final long physicalBytes, final long slackBytes) {
-        if (physicalBytes <= 0L) {
-            return 0.0;
-        }
-        return (100.0 * slackBytes) / physicalBytes;
     }
 
     private static int checkedByteCount(final int count, final int bytesPerEntry, final String field)
@@ -1505,6 +1410,112 @@ public final class StorageReportCommand {
     }
 
     /**
+     * Formatting and small arithmetic helpers used by report rendering.
+     *
+     * <p>Keeping these together separates operator-facing presentation math from
+     * region scanning and payload decoding.</p>
+     */
+    private static final class ReportNumbers {
+        private ReportNumbers() {
+        }
+
+        /**
+         * Rounds an encoded bit count up to whole bytes.
+         */
+        private static long bitsToBytes(final long bits) {
+            return (bits + 7L) / 8L;
+        }
+
+        /**
+         * Returns a zero-safe integer average.
+         */
+        private static long safeAverage(final long total, final int count) {
+            if (count <= 0) {
+                return 0L;
+            }
+            return total / count;
+        }
+
+        /**
+         * Returns a zero-safe byte average.
+         */
+        private static long averageBytes(final long totalBytes, final int count) {
+            if (count <= 0) {
+                return 0L;
+            }
+            return totalBytes / count;
+        }
+
+        /**
+         * Returns average encoded bytes per section from a summed bit count.
+         */
+        private static long averageSectionBytes(final long totalBits, final int count) {
+            if (count <= 0) {
+                return 0L;
+            }
+            return bitsToBytes(totalBits) / count;
+        }
+
+        /**
+         * Formats a histogram as {@code valuexcount} pairs for command output.
+         */
+        private static String formatDistribution(final Map<Integer, Integer> distribution) {
+            if (distribution.isEmpty()) {
+                return "n/a";
+            }
+
+            final StringJoiner joiner = new StringJoiner(", ");
+            distribution.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> joiner.add(entry.getKey() + "x" + entry.getValue()));
+            return joiner.toString();
+        }
+
+        /**
+         * Formats raw bytes using binary units for command output.
+         */
+        private static String formatBytes(final long bytes) {
+            if (bytes >= ONE_MIB) {
+                return String.format(Locale.ROOT, "%.2f MiB", bytes / (double) ONE_MIB);
+            }
+            if (bytes >= ONE_KIB) {
+                return String.format(Locale.ROOT, "%.2f KiB", bytes / (double) ONE_KIB);
+            }
+            return bytes + " B";
+        }
+
+        /**
+         * Formats a signed byte delta with binary units.
+         */
+        private static String formatSignedBytes(final long bytes) {
+            if (bytes > 0L) {
+                return "+" + formatBytes(bytes);
+            }
+            if (bytes < 0L) {
+                return "-" + formatBytes(Math.abs(bytes));
+            }
+            return "0 B";
+        }
+
+        /**
+         * Formats a percentage with one decimal place.
+         */
+        private static String formatPercent(final double value) {
+            return String.format(Locale.ROOT, "%.1f%%", value);
+        }
+
+        /**
+         * Converts raw slack bytes into a physical-size percentage.
+         */
+        private static double slackPercent(final long physicalBytes, final long slackBytes) {
+            if (physicalBytes <= 0L) {
+                return 0.0;
+            }
+            return (100.0 * slackBytes) / physicalBytes;
+        }
+    }
+
+    /**
      * Reads and validates raw CIS region-file payload ranges.
      *
      * <p>This isolates low-level region-file IO from the higher-level storage
@@ -1745,32 +1756,32 @@ public final class StorageReportCommand {
 
             sendLine(source, "[Chunkis] Storage report for " + world.getRegistryKey().getValue());
             sendLine(
-                    source, "  Chunkis bytes: " + formatBytes(report.chunkisBytes())
-                            + " | live: " + formatBytes(report.liveBytes())
-                            + " | slack: " + formatBytes(report.slackBytes())
+                    source, "  Chunkis bytes: " + ReportNumbers.formatBytes(report.chunkisBytes())
+                            + " | live: " + ReportNumbers.formatBytes(report.liveBytes())
+                            + " | slack: " + ReportNumbers.formatBytes(report.slackBytes())
             );
             sendLine(
                     source, "  Free blocks: " + report.freeBlocks()
-                            + " | reusable: " + formatBytes(report.reusableBytes())
-                            + " | largest free: " + formatBytes(report.largestFreeBlock())
+                            + " | reusable: " + ReportNumbers.formatBytes(report.reusableBytes())
+                            + " | largest free: " + ReportNumbers.formatBytes(report.largestFreeBlock())
                             + " | reuse hits/misses: " + report.reuseHits() + "/" + report.reuseMisses()
             );
             sendLine(
                     source, "  Stored chunks: " + report.storedChunks()
                             + " | with base NBT: " + report.baseChunks()
-                            + " (" + formatPercent(baseShare) + ")"
+                            + " (" + ReportNumbers.formatPercent(baseShare) + ")"
                             + " | sparse-only: " + baseFreeChunks
             );
             sendLine(
-                    source, "  Avg live / chunk: " + formatBytes(averageBytes(
+                    source, "  Avg live / chunk: " + ReportNumbers.formatBytes(ReportNumbers.averageBytes(
                             report.liveBytes(),
                             report.storedChunks()
                     ))
                             + " | block entities: " + report.blockEntities()
             );
             sendLine(
-                    source, "  Vanilla region bytes: " + formatBytes(report.vanillaBytes())
-                            + " | Chunkis live / vanilla: " + formatPercent(liveVsVanilla)
+                    source, "  Vanilla region bytes: " + ReportNumbers.formatBytes(report.vanillaBytes())
+                            + " | Chunkis live / vanilla: " + ReportNumbers.formatPercent(liveVsVanilla)
             );
             sendLine(
                     source, "  Sections: empty " + report.emptySections()
@@ -1781,20 +1792,20 @@ public final class StorageReportCommand {
             );
             sendLine(
                     source, "  Avg bytes / section: empty 0 B"
-                            + " | uniform " + formatBytes(averageSectionBytes(
+                            + " | uniform " + ReportNumbers.formatBytes(ReportNumbers.averageSectionBytes(
                             report.uniformSectionBits(),
                             report.uniformSections()
                     ))
                             + " | default-sparse "
-                            + formatBytes(averageSectionBytes(
+                            + ReportNumbers.formatBytes(ReportNumbers.averageSectionBytes(
                             report.defaultSparseSectionBits(),
                             report.defaultSparseSections()
                     ))
-                            + " | sparse " + formatBytes(averageSectionBytes(
+                            + " | sparse " + ReportNumbers.formatBytes(ReportNumbers.averageSectionBytes(
                             report.sparseSectionBits(),
                             report.sparseSections()
                     ))
-                            + " | dense " + formatBytes(averageSectionBytes(
+                            + " | dense " + ReportNumbers.formatBytes(ReportNumbers.averageSectionBytes(
                             report.denseSectionBits(),
                             report.denseSections()
                     ))
@@ -1826,25 +1837,25 @@ public final class StorageReportCommand {
             }
 
             sendLine(
-                    source, "  Dense palette sizes: " + formatDistribution(report.densePaletteSizes())
-                            + " | bits/block: " + formatDistribution(report.denseBitsPerBlock())
+                    source, "  Dense palette sizes: " + ReportNumbers.formatDistribution(report.densePaletteSizes())
+                            + " | bits/block: " + ReportNumbers.formatDistribution(report.denseBitsPerBlock())
             );
             sendLine(
                     source, "  Dense vs sparse: beat " + report.denseBeatsSparseCount() + "/" + report.denseSections()
-                            + " | avg margin " + formatBytes(safeAverage(
+                            + " | avg margin " + ReportNumbers.formatBytes(ReportNumbers.safeAverage(
                             report.denseVsSparseMarginTotal(),
                             report.denseSections()
                     ))
-                            + " | worst " + formatSignedBytes(report.denseVsSparseWorstMargin())
+                            + " | worst " + ReportNumbers.formatSignedBytes(report.denseVsSparseWorstMargin())
             );
             sendLine(
                     source, "  Dense vs default-sparse: beat " + report.denseBeatsDefaultSparseCount()
                             + "/" + report.denseSections()
-                            + " | avg margin " + formatBytes(safeAverage(
+                            + " | avg margin " + ReportNumbers.formatBytes(ReportNumbers.safeAverage(
                             report.denseVsDefaultSparseMarginTotal(),
                             report.denseSections()
                     ))
-                            + " | worst " + formatSignedBytes(report.denseVsDefaultSparseWorstMargin())
+                            + " | worst " + ReportNumbers.formatSignedBytes(report.denseVsDefaultSparseWorstMargin())
             );
         }
 
@@ -1864,9 +1875,11 @@ public final class StorageReportCommand {
                 final RegionReport region = report.regions().get(i);
                 sendLine(
                         source, "    " + region.name()
-                                + " | live " + formatBytes(region.liveBytes())
-                                + " | slack " + formatBytes(region.slackBytes())
-                                + " (" + formatPercent(slackPercent(region.fileBytes(), region.slackBytes())) + ")"
+                                + " | live " + ReportNumbers.formatBytes(region.liveBytes())
+                                + " | slack " + ReportNumbers.formatBytes(region.slackBytes())
+                                + " (" + ReportNumbers.formatPercent(
+                                ReportNumbers.slackPercent(region.fileBytes(), region.slackBytes())
+                        ) + ")"
                                 + " | free-list " + region.freeBlockCount()
                                 + " | stored " + region.storedChunks()
                                 + " | base " + region.baseChunks()
@@ -1885,7 +1898,7 @@ public final class StorageReportCommand {
                 final ChunkReport chunk = report.chunks().get(i);
                 sendLine(
                         source, "    " + chunk.pos()
-                                + " | live " + formatBytes(chunk.liveBytes())
+                                + " | live " + ReportNumbers.formatBytes(chunk.liveBytes())
                                 + " | sections e/u/ds/s/d "
                                 + "0/" + chunk.uniformSections() + "/" + chunk.defaultSparseSections() + "/"
                                 + chunk.sparseSections() + "/" + chunk.denseSections()
@@ -1906,11 +1919,11 @@ public final class StorageReportCommand {
                 final DenseSectionReport dense = report.denseSectionsList().get(i);
                 sendLine(
                         source, "    " + dense.pos() + " @y=" + dense.sectionY()
-                                + " | bytes " + formatBytes(dense.encodedBytes())
+                                + " | bytes " + ReportNumbers.formatBytes(dense.encodedBytes())
                                 + " | palette " + dense.localPaletteSize()
                                 + " | bits/block " + dense.bitsPerBlock()
-                                + " | vs sparse " + formatSignedBytes(dense.sparseMarginBytes())
-                                + " | vs ds " + formatSignedBytes(dense.defaultSparseMarginBytes())
+                                + " | vs sparse " + ReportNumbers.formatSignedBytes(dense.sparseMarginBytes())
+                                + " | vs ds " + ReportNumbers.formatSignedBytes(dense.defaultSparseMarginBytes())
                                 + " | top " + dense.commonStates()
                 );
             }
