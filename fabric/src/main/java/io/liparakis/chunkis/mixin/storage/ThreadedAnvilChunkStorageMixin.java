@@ -932,21 +932,18 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
         final String operationId = ChunkTraceStore.nextOperationId("save");
-        ChunkDelta<BlockState, NbtCompound> deltaToSave = delta;
-        if (deltaToSave == null || !deltaToSave.isDirty()) {
+        if (delta == null || !delta.isDirty()) {
             return;
         }
-        deltaToSave = chunkis$recoverSparseDeltaOnSaveGuard(
+
+        final ChunkDelta<BlockState, NbtCompound> deltaToSave = chunkis$prepareDeltaForPersistence(
                 pos,
-                deltaToSave,
+                delta,
                 "load-path-sync",
                 "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta",
                 operationId
         );
-        if (chunkis$rejectSparse(
-                pos, deltaToSave, "load-path-sync", "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta"
-                , operationId
-        )) {
+        if (deltaToSave == null) {
             return;
         }
 
@@ -1041,7 +1038,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
-                "save queue requested: " + DeltaPersistenceGuard.describeLifecycleState(delta),
+                "save queue requested: " + DeltaPersistenceGuard.describeLifecycleState(deltaToQueue),
                 world.getRegistryKey().getValue().toString(),
                 new DebugChunkKey(pos.x, pos.z),
                 null,
@@ -1049,21 +1046,18 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 deltaToQueue.isDirty(),
                 null
         );
-        deltaToQueue = chunkis$recoverSparseDeltaOnSaveGuard(
+        deltaToQueue = chunkis$prepareDeltaForPersistence(
                 pos,
                 deltaToQueue,
                 "save-hook-async",
                 "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                 operationId
         );
-        if (chunkis$rejectSparse(
-                pos, deltaToQueue, "save-hook-async", "ThreadedAnvilChunkStorageMixin" +
-                        "#chunkis$queueDirtyDelta", operationId
-        )) {
+        if (deltaToQueue == null) {
             PayloadWatchTracer.traceDeltaStage(
                     world.getRegistryKey().getValue().toString(),
                     pos,
-                    deltaToQueue,
+                    delta,
                     operationId,
                     ChunkTraceEventType.WATCH_SKIPPED,
                     "save-rejected-sparse",
@@ -1075,6 +1069,41 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         }
 
         AsyncCisSaveManager.submit(world, storage, pos, deltaToQueue, operationId);
+    }
+
+    /**
+     * Runs the shared persistence guard pipeline used by both synchronous saves
+     * and async save-queue submissions.
+     *
+     * <p>The pipeline traces base metadata, attempts base-snapshot recovery for
+     * sparse payloads, and rejects the delta if the sparse persistence guard still
+     * fails afterward.</p>
+     *
+     * @param pos         chunk position being persisted
+     * @param delta       candidate delta
+     * @param path        persistence path label
+     * @param caller      caller label for tracing
+     * @param operationId trace correlation ID
+     * @return prepared delta, or {@code null} if persistence should stop
+     */
+    @Unique
+    private ChunkDelta<BlockState, NbtCompound> chunkis$prepareDeltaForPersistence(
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String path,
+            final String caller,
+            final String operationId
+    ) {
+        final ChunkDelta<BlockState, NbtCompound> recoveredDelta = chunkis$recoverSparseDeltaOnSaveGuard(
+                pos,
+                delta,
+                path,
+                caller,
+                operationId
+        );
+        return chunkis$rejectSparse(pos, recoveredDelta, path, caller, operationId)
+                ? null
+                : recoveredDelta;
     }
 
     @Unique
