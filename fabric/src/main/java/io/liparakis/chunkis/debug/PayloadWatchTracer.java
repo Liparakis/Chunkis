@@ -125,7 +125,7 @@ public final class PayloadWatchTracer {
                         chunkPos,
                         null,
                         target,
-                        summarizeBlock(target, state),
+                        PayloadWatchSummaries.summarizeBlock(target, state),
                         null
                 );
                 continue;
@@ -140,7 +140,7 @@ public final class PayloadWatchTracer {
                     chunkPos,
                     null,
                     target,
-                    summarizeBlock(target, state),
+                    PayloadWatchSummaries.summarizeBlock(target, state),
                     null
             );
         }
@@ -351,7 +351,7 @@ public final class PayloadWatchTracer {
                         chunkKey,
                         operationId,
                         target,
-                        summarizeBlock(target, state),
+                        PayloadWatchSummaries.summarizeBlock(target, state),
                         byteSize
                 );
             }
@@ -542,7 +542,7 @@ public final class PayloadWatchTracer {
                     chunkPos,
                     resolvedOperationId,
                     target,
-                    summarizeExpectedAndActual(
+                    PayloadWatchSummaries.summarizeExpectedAndActual(
                             target,
                             expectedState,
                             actualState,
@@ -837,7 +837,7 @@ public final class PayloadWatchTracer {
                     chunkPos,
                     operationId,
                     target,
-                    summarizeExpectedAndActual(
+                    PayloadWatchSummaries.summarizeExpectedAndActual(
                             target,
                             expectedState,
                             chunk.getBlockState(new BlockPos(target.blockX(), target.blockY(), target.blockZ())),
@@ -1024,7 +1024,7 @@ public final class PayloadWatchTracer {
                     chunkPos,
                     resolvedOperationId,
                     target,
-                    summarizeExpectedAndActual(
+                    PayloadWatchSummaries.summarizeExpectedAndActual(
                             target,
                             expectedState,
                             chunk.getBlockState(new BlockPos(target.blockX(), target.blockY(), target.blockZ())),
@@ -1081,7 +1081,7 @@ public final class PayloadWatchTracer {
                 chunk.getPos(),
                 resolvedOperationId,
                 target,
-                summarizeExpectedAndActual(
+                PayloadWatchSummaries.summarizeExpectedAndActual(
                         target,
                         state,
                         actualState,
@@ -1628,7 +1628,7 @@ public final class PayloadWatchTracer {
                     chunkPos,
                     resolvedOperationId,
                     target,
-                    summarizeExpectedAndActual(
+                    PayloadWatchSummaries.summarizeExpectedAndActual(
                             target,
                             expectedState,
                             clientChunk ? null : liveState,
@@ -1651,7 +1651,7 @@ public final class PayloadWatchTracer {
                         chunkPos,
                         resolvedOperationId,
                         target,
-                        summarizeExpectedAndActual(
+                        PayloadWatchSummaries.summarizeExpectedAndActual(
                                 target,
                                 expectedState,
                                 clientChunk ? null : liveState,
@@ -1675,7 +1675,7 @@ public final class PayloadWatchTracer {
                         chunkPos,
                         resolvedOperationId,
                         target,
-                        summarizeExpectedAndActual(
+                        PayloadWatchSummaries.summarizeExpectedAndActual(
                                 target,
                                 expectedState,
                                 null,
@@ -1833,46 +1833,6 @@ public final class PayloadWatchTracer {
         );
     }
 
-    private static String summarizeBlock(final PayloadWatchTarget target, final BlockState state) {
-        if (!target.hasBlockCoordinates()) {
-            return target.describe() + " state=" + state;
-        }
-        return "pos=" + target.blockX() + ',' + target.blockY() + ',' + target.blockZ()
-                + " state=" + state
-                + " section=" + (target.blockY() >> 4);
-    }
-
-    private static String summarizeExpectedAndActual(
-            final PayloadWatchTarget target,
-            @Nullable final BlockState expectedState,
-            @Nullable final BlockState actualServerState,
-            @Nullable final BlockState actualClientState,
-            final Object chunkStatus,
-            final String source,
-            final String threadName,
-            @Nullable final WorldChunk chunk
-    ) {
-        if (!target.hasBlockCoordinates()) {
-            return target.describe()
-                    + " expectedState=" + expectedState
-                    + " actualServerState=" + actualServerState
-                    + " actualClientState=" + actualClientState
-                    + " chunkInstanceId=" + chunkInstanceId(chunk)
-                    + " chunkStatus=" + chunkStatus
-                    + " source=" + source
-                    + " thread=" + threadName;
-        }
-        return "pos=" + target.blockX() + ',' + target.blockY() + ',' + target.blockZ()
-                + " expectedState=" + expectedState
-                + " actualServerState=" + actualServerState
-                + " actualClientState=" + actualClientState
-                + " chunkInstanceId=" + chunkInstanceId(chunk)
-                + " chunkStatus=" + chunkStatus
-                + " source=" + source
-                + " thread=" + threadName
-                + " section=" + (target.blockY() >> 4);
-    }
-
     private static void registerDecodedWatchTargets(
             final String worldId,
             final ChunkPos chunkPos,
@@ -1909,7 +1869,7 @@ public final class PayloadWatchTracer {
                     chunkPos,
                     operationId,
                     target,
-                    summarizeExpectedAndActual(
+                    PayloadWatchSummaries.summarizeExpectedAndActual(
                             target,
                             expectedState,
                             null,

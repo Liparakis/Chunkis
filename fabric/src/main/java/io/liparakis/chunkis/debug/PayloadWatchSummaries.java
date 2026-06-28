@@ -29,6 +29,15 @@ final class PayloadWatchSummaries {
         throw new AssertionError("Utility class");
     }
 
+    static String summarizeBlock(final PayloadWatchTarget target, final BlockState state) {
+        if (!target.hasBlockCoordinates()) {
+            return target.describe() + " state=" + state;
+        }
+        return "pos=" + target.blockX() + ',' + target.blockY() + ',' + target.blockZ()
+                + " state=" + state
+                + " section=" + (target.blockY() >> 4);
+    }
+
     static String summarizeExpectedAndActual(
             final PayloadWatchTarget target,
             @Nullable final BlockState expectedState,
