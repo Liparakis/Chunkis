@@ -22,8 +22,6 @@ import net.minecraft.world.poi.PointOfInterestStorage;
 import net.minecraft.world.poi.PointOfInterestType;
 import net.minecraft.world.poi.PointOfInterestTypes;
 
-import java.util.ArrayDeque;
-import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -75,19 +73,16 @@ public final class PortalArrivalFallback {
     /**
      * Steps outward from the portal face to search for a valid egress tile.
      */
-    private static final int EGRESS_SEARCH_RADIUS = 2;
 
     /**
      * BFS radius used when counting connected walkable tiles from a candidate egress position.
      * A fixed radius of 2 gives a 5×5 tile budget, sufficient to distinguish open areas from
      * narrow ledges without excessive world queries.
      */
-    private static final int EGRESS_BFS_RADIUS = 2;
 
     /**
      * Minimum connected walkable tiles required to accept an egress position.
      */
-    private static final int EGRESS_MIN_BFS_COUNT = 6;
 
     /**
      * Default state for obsidian blocks used in portal frames.
@@ -374,14 +369,14 @@ public final class PortalArrivalFallback {
             return null;
         }
 
-        final EgressResult egress = findBestEgressPosition(
+        final PortalArrivalSpots.EgressResult egress = PortalArrivalSpots.findBestEgressPosition(
                 world, lowerX, lowerY, lowerZ, axis, target);
 
         final int supportScore = countSupportBelowPortal(world, lowerX, lowerY, lowerZ, widthDirection);
 
-        final EgressResult effectiveEgress = egress != null
+        final PortalArrivalSpots.EgressResult effectiveEgress = egress != null
                 ? egress
-                : syntheticEgress(lowerX, lowerY, lowerZ, axis, target);
+                : PortalArrivalSpots.syntheticEgress(lowerX, lowerY, lowerZ, axis, target);
 
         return new PortalSite(
                 new BlockPos(lowerX, lowerY, lowerZ),
@@ -456,173 +451,6 @@ public final class PortalArrivalFallback {
     }
 
     /**
-     * Searches both sides of the portal face for the best validated egress position.
-     *
-     * <p>Returns the better of the two sides if at least one meets the minimum walkable tile
-     * threshold ({@value #EGRESS_MIN_BFS_COUNT}). Returns {@code null} if neither side qualifies,
-     * which allows the caller to fall back to a synthetic egress position.
-     *
-     * @param world  destination world
-     * @param lowerX X coordinate of the portal's lower-left interior corner
-     * @param lowerY Y coordinate of the portal's lower-left interior corner
-     * @param lowerZ Z coordinate of the portal's lower-left interior corner
-     * @param axis   portal orientation axis
-     * @param target arrival target used for distance scoring
-     * @return the better egress result, or {@code null} if neither side qualifies
-     */
-    private static EgressResult findBestEgressPosition(
-            final ServerWorld world,
-            final int lowerX,
-            final int lowerY,
-            final int lowerZ,
-            final Direction.Axis axis,
-            final BlockPos target
-    ) {
-        final Direction forward = egressForward(axis);
-        final EgressResult front = findBestEgressSide(
-                world, lowerX, lowerY, lowerZ, axis, forward, target);
-        final EgressResult back = findBestEgressSide(
-                world, lowerX, lowerY, lowerZ, axis, forward.getOpposite(), target);
-
-        final EgressResult better = chooseBetterEgress(front, back);
-        if (better == null || better.bfsCount() < EGRESS_MIN_BFS_COUNT) {
-            return null;
-        }
-
-        return better;
-    }
-
-    /**
-     * Scans tiles on one side of the portal face for a validated standing position with sufficient
-     * connected walkable area.
-     *
-     * @param world  destination world
-     * @param lowerX X coordinate of the portal's lower-left interior corner
-     * @param lowerY Y coordinate of the portal's lower-left interior corner
-     * @param lowerZ Z coordinate of the portal's lower-left interior corner
-     * @param axis   portal orientation axis
-     * @param normal direction perpendicular to the portal face (the side to search)
-     * @param target arrival target used for distance scoring
-     * @return the best egress result found on this side, or {@code null} if none qualifies
-     */
-    private static EgressResult findBestEgressSide(
-            final ServerWorld world,
-            final int lowerX,
-            final int lowerY,
-            final int lowerZ,
-            final Direction.Axis axis,
-            final Direction normal,
-            final BlockPos target
-    ) {
-        final Direction widthDirection = widthDirection(axis);
-
-        Vec3d bestArrival = null;
-        long bestDistanceScore = Long.MAX_VALUE;
-        int bestBfs = 0;
-        int walkableCount = 0;
-
-        for (int step = 1; step <= EGRESS_SEARCH_RADIUS; step++) {
-            for (int width = 0; width < PORTAL_INTERIOR_WIDTH; width++) {
-                final int x = lowerX + widthDirection.getOffsetX() * width + normal.getOffsetX() * step;
-                final int z = lowerZ + widthDirection.getOffsetZ() * width + normal.getOffsetZ() * step;
-                final Vec3d arrival = validateStandingSpot(world, x, lowerY, z);
-                if (arrival == null) {
-                    continue;
-                }
-
-                final int bfs = countConnectedWalkableTiles(world, x, lowerY, z);
-                if (bfs < EGRESS_MIN_BFS_COUNT) {
-                    continue;
-                }
-
-                walkableCount++;
-                final long distanceScore = egressDistanceScore(target, x, lowerY, z);
-
-                if (bfs > bestBfs || (bfs == bestBfs && distanceScore < bestDistanceScore)) {
-                    bestDistanceScore = distanceScore;
-                    bestArrival = arrival;
-                    bestBfs = bfs;
-                }
-            }
-        }
-
-        return bestArrival == null ? null : new EgressResult(bestArrival, walkableCount, bestDistanceScore, bestBfs);
-    }
-
-    /**
-     * Constructs a synthetic egress result for cases where no natural walkable side exists.
-     * Picks the egress side closer to the arrival target and places the arrival position
-     * one block outside the portal face.
-     */
-    private static EgressResult syntheticEgress(
-            final int lowerX,
-            final int lowerY,
-            final int lowerZ,
-            final Direction.Axis axis,
-            final BlockPos target
-    ) {
-        final Direction normal = choosePreferredArrivalSide(axis, target, lowerX, lowerZ);
-        final double centerX = lowerX + 0.5 + (axis == Direction.Axis.Z ? 0.5 : 0.0) + normal.getOffsetX();
-        final double centerZ = lowerZ + 0.5 + (axis == Direction.Axis.X ? 0.5 : 0.0) + normal.getOffsetZ();
-        final Vec3d arrival = new Vec3d(centerX, lowerY, centerZ);
-        final long distanceScore = egressDistanceScore(
-                target,
-                BlockPos.ofFloored(arrival).getX(),
-                lowerY,
-                BlockPos.ofFloored(arrival).getZ()
-        );
-        return new EgressResult(arrival, 0, distanceScore, 0);
-    }
-
-    /**
-     * Returns the portal face side (forward or backward along the egress axis) that is closer to
-     * the arrival target.
-     */
-    private static Direction choosePreferredArrivalSide(
-            final Direction.Axis axis,
-            final BlockPos target,
-            final int lowerX,
-            final int lowerZ
-    ) {
-        final Direction forward = egressForward(axis);
-        final Direction backward = forward.getOpposite();
-
-        final long forwardScore = egressDistanceScore(
-                target,
-                lowerX + forward.getOffsetX(),
-                target.getY(),
-                lowerZ + forward.getOffsetZ()
-        );
-        final long backwardScore = egressDistanceScore(
-                target,
-                lowerX + backward.getOffsetX(),
-                target.getY(),
-                lowerZ + backward.getOffsetZ()
-        );
-
-        return forwardScore <= backwardScore ? forward : backward;
-    }
-
-    /**
-     * Picks the better of two egress results based on connected tile count and distance.
-     * The egress result with more walkable tiles is preferred. Distance score breaks ties.
-     *
-     * @param first  first candidate
-     * @param second second candidate
-     * @return the better egress result
-     */
-    private static EgressResult chooseBetterEgress(final EgressResult first, final EgressResult second) {
-        if (first == null) return second;
-        if (second == null) return first;
-
-        if (first.walkableCount() != second.walkableCount()) {
-            return first.walkableCount() > second.walkableCount() ? first : second;
-        }
-
-        return first.distanceScore() <= second.distanceScore() ? first : second;
-    }
-
-    /**
      * Searches the destination area for any safe two-block-high standing position, without
      * building a portal.
      *
@@ -640,13 +468,13 @@ public final class PortalArrivalFallback {
 
         searchColumns(
                 world, target, SAFE_SPOT_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
-                    result[0] = validateStandingSpot(world, worldX, startY, worldZ);
+                    result[0] = PortalArrivalSpots.findStandingSpot(world, worldX, startY, worldZ);
                     if (result[0] != null) {
                         return true;
                     }
 
                     if (surfaceY != startY) {
-                        result[0] = validateStandingSpot(world, worldX, surfaceY, worldZ);
+                        result[0] = PortalArrivalSpots.findStandingSpot(world, worldX, surfaceY, worldZ);
                         return result[0] != null;
                     }
 
@@ -657,59 +485,7 @@ public final class PortalArrivalFallback {
         return result[0];
     }
 
-    /**
-     * Returns the center of a valid two-block-high standing tile with a solid floor, or
-     * {@code null} if the tile fails any passability, fluid, or lava check.
-     *
-     * <p>Returns the exact center of the validated tile rather than delegating position
-     * choice to vanilla.
-     */
-    private static Vec3d validateStandingSpot(
-            final ServerWorld world,
-            final int x,
-            final int y,
-            final int z
-    ) {
-        final BlockPos.Mutable mutable = new BlockPos.Mutable();
-
-        mutable.set(x, y, z);
-        if (isImpassable(world.getBlockState(mutable), world.getBlockEntity(mutable))
-                || !world.getFluidState(mutable).isEmpty()) {
-            return null;
-        }
-
-        mutable.set(x, y + 1, z);
-        if (isImpassable(world.getBlockState(mutable), world.getBlockEntity(mutable))
-                || !world.getFluidState(mutable).isEmpty()) {
-            return null;
-        }
-
-        mutable.set(x, y - 1, z);
-        if (!world.getBlockState(mutable).isSideSolidFullSquare(world, mutable, Direction.UP)) {
-            return null;
-        }
-
-        final Vec3d arrival = new Vec3d(x + 0.5, y, z + 0.5);
-        return isSafeArrivalPosition(world, arrival) ? arrival : null;
-    }
-
-    /**
-     * Checks if a 3D position is safe for an entity to arrive at.
-     * Returns {@code true} if neither the feet nor head position is inside fluid or lava.
-     *
-     * @param world world to check
-     * @param pos   position to check
-     * @return {@code true} if safe
-     */
-    private static boolean isSafeArrivalPosition(final ServerWorld world, final Vec3d pos) {
-        final BlockPos feet = BlockPos.ofFloored(pos);
-        final BlockPos head = feet.up();
-        return world.getFluidState(feet).isEmpty()
-                && world.getFluidState(head).isEmpty()
-                && !world.getBlockState(feet).isOf(Blocks.LAVA)
-                && !world.getBlockState(head).isOf(Blocks.LAVA);
-    }
-
+    
     /**
      * Strict passability check for egress tiles — the player must physically fit here.
      * Checks if a block state prevents an entity from standing in its space.
@@ -718,14 +494,6 @@ public final class PortalArrivalFallback {
      * @param blockEntity block entity at the position, if any
      * @return {@code true} if impassable
      */
-    private static boolean isImpassable(final BlockState state, final BlockEntity blockEntity) {
-        return blockEntity != null
-                || (!state.isAir()
-                && !state.isReplaceable()
-                && !state.isOf(Blocks.FIRE)
-                && !state.isOf(Blocks.NETHER_PORTAL));
-    }
-
     /**
      * Last-resort arrival at the motion-blocking surface above the target column.
      * Delegates final position refinement to {@link NetherPortal#findOpenPosition}.
@@ -890,16 +658,6 @@ public final class PortalArrivalFallback {
     }
 
     /**
-     * Simple distance-based score for egress positions.
-     */
-    private static long egressDistanceScore(final BlockPos target, final int x, final int y, final int z) {
-        final long dx = x - (long) target.getX();
-        final long dz = z - (long) target.getZ();
-        final long dy = Math.abs(y - target.getY());
-        return dx * dx + dz * dz + dy * 4L;
-    }
-
-    /**
      * Counts how many solid support blocks exist two blocks below the portal interior.
      * This helps avoid portals hovering over gaps without any landing area.
      *
@@ -948,53 +706,6 @@ public final class PortalArrivalFallback {
      * @param startZ Z coordinate of the starting tile
      * @return number of connected walkable tiles including the start tile
      */
-    private static int countConnectedWalkableTiles(
-            final ServerWorld world,
-            final int startX,
-            final int startY,
-            final int startZ
-    ) {
-        final int maxTiles = (2 * EGRESS_BFS_RADIUS + 1) * (2 * EGRESS_BFS_RADIUS + 1);
-        final ArrayDeque<Long> queue = new ArrayDeque<>(maxTiles);
-        final HashSet<Long> visited = new HashSet<>(maxTiles);
-
-        final long startKey = BlockPos.asLong(startX, startY, startZ);
-        queue.add(startKey);
-        visited.add(startKey);
-
-        int count = 0;
-
-        while (!queue.isEmpty()) {
-            final long key = queue.poll();
-            final int x = BlockPos.unpackLongX(key);
-            final int z = BlockPos.unpackLongZ(key);
-            count++;
-
-            for (final Direction dir : Direction.Type.HORIZONTAL) {
-                final int nx = x + dir.getOffsetX();
-                final int nz = z + dir.getOffsetZ();
-
-                if (Math.abs(nx - startX) > EGRESS_BFS_RADIUS
-                        || Math.abs(nz - startZ) > EGRESS_BFS_RADIUS) {
-                    continue;
-                }
-
-                final long neighbourKey = BlockPos.asLong(nx, startY, nz);
-                if (visited.contains(neighbourKey)) {
-                    continue;
-                }
-
-                visited.add(neighbourKey);
-
-                if (validateStandingSpot(world, nx, startY, nz) != null) {
-                    queue.add(neighbourKey);
-                }
-            }
-        }
-
-        return count;
-    }
-
     /**
      * Compares two portal sites and returns the one with the better (lower) score.
      */
@@ -1025,13 +736,6 @@ public final class PortalArrivalFallback {
     }
 
     /**
-     * Returns the direction perpendicular to the portal face.
-     */
-    private static Direction egressForward(final Direction.Axis axis) {
-        return axis == Direction.Axis.X ? Direction.NORTH : Direction.EAST;
-    }
-
-    /**
      * Returns the effective ceiling height for the world, capping it in the Nether.
      */
     private static int worldCeilingY(final ServerWorld world) {
@@ -1051,14 +755,4 @@ public final class PortalArrivalFallback {
     private record PortalSite(BlockPos lowerCorner, Vec3d arrival, long score, Direction.Axis axis) {
     }
 
-    /**
-     * The result of an egress position search on one side of a portal face.
-     *
-     * @param arrival       exact validated standing position
-     * @param walkableCount number of accepted walkable tiles found on this side
-     * @param distanceScore squared horizontal distance to the arrival target; lower is better
-     * @param bfsCount      number of connected walkable tiles reachable from the arrival position
-     */
-    private record EgressResult(Vec3d arrival, int walkableCount, long distanceScore, int bfsCount) {
-    }
 }
