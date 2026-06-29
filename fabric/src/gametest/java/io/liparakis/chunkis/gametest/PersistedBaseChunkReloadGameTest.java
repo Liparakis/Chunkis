@@ -15,6 +15,7 @@ import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import java.util.List;
 import java.util.UUID;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -40,8 +41,27 @@ import net.minecraft.world.chunk.WorldChunk;
 @SuppressWarnings("unused")
 public final class PersistedBaseChunkReloadGameTest {
 
+    /**
+     * Bounding box offset used to teleport mock players and unload target chunks.
+     * Moving 20,000 blocks away guarantees the chunk is completely out of player render distance
+     * and eligible for unload.
+     */
     private static final int FAR_BLOCK_DISTANCE = 20_000;
 
+    /**
+     * Identifier for the Minecraft overworld dimension.
+     */
+    private static final String OVERWORLD_ID = "minecraft:overworld";
+
+    /**
+     * Seeds the specified positions with a distinct marker block pattern (Diamond, Gold, Chest).
+     * This pattern is used to verify that chunk restoration successfully reconstructs block grid state.
+     *
+     * @param world     the server world
+     * @param primary   the position for the diamond block
+     * @param secondary the position for the gold block
+     * @param chestPos  the position for the chest
+     */
     private static void placeMarkerPattern(
             final ServerWorld world,
             final BlockPos primary,
@@ -53,6 +73,15 @@ public final class PersistedBaseChunkReloadGameTest {
         world.setBlockState(chestPos, Blocks.CHEST.getDefaultState());
     }
 
+    /**
+     * Checks if the marker block pattern (Diamond, Gold, Chest) is present at the specified positions.
+     *
+     * @param world     the server world
+     * @param primary   the expected position of the diamond block
+     * @param secondary the expected position of the gold block
+     * @param chestPos  the expected position of the chest
+     * @return true if the blocks match the expected pattern
+     */
     private static boolean isMarkerPatternPresent(
             final ServerWorld world,
             final BlockPos primary,
@@ -67,6 +96,13 @@ public final class PersistedBaseChunkReloadGameTest {
                 .isOf(Blocks.CHEST);
     }
 
+    /**
+     * Teleports a player to a specific destination in the server world.
+     *
+     * @param player      the player entity to teleport
+     * @param world       the target server world
+     * @param destination the destination block position
+     */
     private static void teleportPlayer(
             final ServerPlayerEntity player,
             final ServerWorld world,
@@ -84,21 +120,44 @@ public final class PersistedBaseChunkReloadGameTest {
         );
     }
 
+    /**
+     * Forces a chunk to remain loaded and requests it from the world chunk manager.
+     *
+     * @param world    the server world
+     * @param chunkPos the position of the chunk to force load
+     */
     private static void forceAndLoad(final ServerWorld world, final ChunkPos chunkPos) {
         world.setChunkForced(chunkPos.x, chunkPos.z, true);
         world.getChunk(chunkPos.x, chunkPos.z);
     }
 
+    /**
+     * Computes a ChunkPos offset from an anchor block position.
+     * This helper avoids duplicate creation of ChunkPos objects when calculating target test coordinates.
+     *
+     * @param anchor the starting anchor block position
+     * @param offset the chunk offset to apply to both X and Z coordinates
+     * @return the offset ChunkPos
+     */
+    private static ChunkPos getOffsetChunkPos(final BlockPos anchor, final int offset) {
+        final ChunkPos anchorChunk = new ChunkPos(anchor);
+        return new ChunkPos(anchorChunk.x + offset, anchorChunk.z + offset);
+    }
+
+    /**
+     * Creates an {@link AirDeletionScenario} container at the specified chunk offset from the test anchor.
+     *
+     * @param context     the game test context
+     * @param chunkOffset the chunk offset from the anchor position
+     * @return the initialized scenario
+     */
     private static AirDeletionScenario createAirDeletionScenario(
             final TestContext context,
             final int chunkOffset
     ) {
         final ServerWorld world = context.getWorld();
         final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
-        final ChunkPos targetChunk = new ChunkPos(
-                new ChunkPos(anchor).x + chunkOffset,
-                new ChunkPos(anchor).z + chunkOffset
-        );
+        final ChunkPos targetChunk = getOffsetChunkPos(anchor, chunkOffset);
         final BlockPos targetArrival = targetChunk.getBlockPos(8, 100, 8);
         return new AirDeletionScenario(
                 world,
@@ -109,6 +168,14 @@ public final class PersistedBaseChunkReloadGameTest {
         );
     }
 
+    /**
+     * Initializes an {@link AirDeletionTestSetup} by preparing the scenario, registering block watchpoints,
+     * force-loading the chunk, and seeding the primary position with a diamond block.
+     *
+     * @param context     the game test context
+     * @param chunkOffset the chunk offset from the anchor position
+     * @return the prepared test setup
+     */
     private static AirDeletionTestSetup createAirDeletionTestSetup(
             final TestContext context,
             final int chunkOffset
@@ -124,18 +191,36 @@ public final class PersistedBaseChunkReloadGameTest {
         );
     }
 
+    /**
+     * Registers trace watchpoints for the specified block positions in the overworld.
+     *
+     * @param positions the block positions to watch
+     */
     private static void watchBlocks(final BlockPos... positions) {
         for (final BlockPos pos : positions) {
             ChunkTraceWatchpoints.watchPayload(
-                    PayloadWatchTarget.block("minecraft:overworld", pos.getX(), pos.getY(), pos.getZ())
+                    PayloadWatchTarget.block(OVERWORLD_ID, pos.getX(), pos.getY(), pos.getZ())
             );
         }
     }
 
+    /**
+     * Registers a trace watchpoint for the specified entity UUID in the overworld.
+     *
+     * @param entityUuid the UUID of the entity to watch
+     */
     private static void watchEntity(final UUID entityUuid) {
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.entity("minecraft:overworld", entityUuid.toString()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.entity(OVERWORLD_ID, entityUuid.toString()));
     }
 
+    /**
+     * Spawns a test pig entity with configured gravity, AI, and invulnerability settings.
+     *
+     * @param context     the game test context
+     * @param world       the server world
+     * @param targetChunk the chunk position where the pig should be placed
+     * @return the configured PigEntity, or null if creation fails
+     */
     private static PigEntity createConfiguredPig(
             final TestContext context,
             final ServerWorld world,
@@ -159,6 +244,13 @@ public final class PersistedBaseChunkReloadGameTest {
         return pig;
     }
 
+    /**
+     * Checks if there is a valid chest block entity cached and present at the specified position.
+     *
+     * @param world    the server world
+     * @param chestPos the chest block position
+     * @return true if a chest block entity matches and is present
+     */
     private static boolean hasMatchingChestBlockEntity(
             final ServerWorld world,
             final BlockPos chestPos
@@ -171,6 +263,13 @@ public final class PersistedBaseChunkReloadGameTest {
                 .isOf(Blocks.CHEST);
     }
 
+    /**
+     * Checks if a ChunkDelta has a recorded block instruction at the specified coordinates.
+     *
+     * @param delta the chunk delta containing instructions
+     * @param pos   the target block position
+     * @return true if the delta contains a block change for the local coordinates of the position
+     */
     private static boolean containsBlockInstructionAt(
             final ChunkDelta<BlockState, NbtCompound> delta,
             final BlockPos pos
@@ -186,36 +285,60 @@ public final class PersistedBaseChunkReloadGameTest {
         return found[0];
     }
 
+    /**
+     * Helper to verify if a ChunkTraceEvent is associated with the given ChunkPos.
+     *
+     * @param event    the trace event to check
+     * @param chunkPos the target chunk position
+     * @return true if the event's chunk key matches the target chunk position
+     */
+    private static boolean isEventForChunk(final ChunkTraceEvent event, final ChunkPos chunkPos) {
+        return event.chunkKey() != null
+                && event.chunkKey()
+                .x() == chunkPos.x
+                && event.chunkKey()
+                .z() == chunkPos.z;
+    }
+
+    /**
+     * Checks if the trace store contains a BASE_NBT_APPLIED event for the given chunk.
+     *
+     * @param chunkPos the chunk position
+     * @return true if the event exists in the store
+     */
     private static boolean containsBaseChunkAppliedTrace(final ChunkPos chunkPos) {
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
-                event.chunkKey() != null
-                        && event.chunkKey()
-                        .x()
-                        == chunkPos.x
-                        && event.chunkKey()
-                        .z()
-                        == chunkPos.z
+                isEventForChunk(event, chunkPos)
                         && event.eventType()
                         == ChunkTraceEventType.BASE_NBT_APPLIED
         );
         return !events.isEmpty();
     }
 
+    /**
+     * Checks if the trace store contains a MUTATION_ACCEPTED_REAL_EDIT event for the given chunk.
+     *
+     * @param chunkPos the chunk position
+     * @return true if the event exists in the store
+     */
     private static boolean containsUnexpectedRealEditTrace(final ChunkPos chunkPos) {
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
-                event.chunkKey() != null
-                        && event.chunkKey()
-                        .x()
-                        == chunkPos.x
-                        && event.chunkKey()
-                        .z()
-                        == chunkPos.z
+                isEventForChunk(event, chunkPos)
                         && event.eventType()
                         == ChunkTraceEventType.MUTATION_ACCEPTED_REAL_EDIT
         );
         return !events.isEmpty();
     }
 
+    /**
+     * Checks if an entity with the specified UUID is currently alive and active in the chunk.
+     * Checks both the world's entities list and a localized boundary search box.
+     *
+     * @param world    the server world
+     * @param chunkPos the chunk position
+     * @param uuid     the entity UUID
+     * @return true if the entity is present and active
+     */
     private static boolean hasEntityWithUuid(
             final ServerWorld world,
             final ChunkPos chunkPos,
@@ -242,6 +365,15 @@ public final class PersistedBaseChunkReloadGameTest {
                 .isEmpty();
     }
 
+    /**
+     * Constructs a string description of a pig entity's current state for debugging.
+     *
+     * @param world    the server world
+     * @param chunkPos the chunk position
+     * @param pig      the pig entity
+     * @param uuid     the target UUID
+     * @return the string state description
+     */
     private static String describeEntityState(
             final ServerWorld world,
             final ChunkPos chunkPos,
@@ -258,6 +390,15 @@ public final class PersistedBaseChunkReloadGameTest {
                 + ", queryVisible=" + hasEntityWithUuid(world, chunkPos, uuid);
     }
 
+    /**
+     * Asserts that the stored ChunkDelta in the CIS database contains the entity with the specified UUID.
+     *
+     * @param context    the game test context
+     * @param world      the server world
+     * @param chunkPos   the chunk position
+     * @param entityUuid the entity UUID to verify
+     * @param stage      description of the current test stage for logging
+     */
     private static void assertStoredDeltaContainsEntity(
             final TestContext context,
             final ServerWorld world,
@@ -276,27 +417,69 @@ public final class PersistedBaseChunkReloadGameTest {
         );
     }
 
+    /**
+     * Checks if the given ChunkDelta contains an entity payload matching the specified UUID.
+     * Leverages {@link EntityPayloadNbt#findUuid} to safely read the UUID field.
+     *
+     * @param delta      the chunk delta to inspect
+     * @param entityUuid the entity UUID to match
+     * @return true if the delta contains a matching entity payload
+     */
     private static boolean containsEntityUuid(
             final ChunkDelta<BlockState, NbtCompound> delta,
             final UUID entityUuid
     ) {
         final boolean[] found = {false};
         delta.forEachEntity(entityNbt -> {
-            if (found[0] || entityNbt == null) {
-                return;
+            if (!found[0] && entityNbt != null) {
+                found[0] = EntityPayloadNbt.findUuid(entityNbt)
+                        .map(entityUuid::equals)
+                        .orElse(false);
             }
-            found[0] = entityNbt.getIntArray("UUID")
-                    .map(net.minecraft.util.Uuids::toUuid)
-                    .map(entityUuid::equals)
-                    .orElse(false);
         });
         return found[0];
     }
 
+    /**
+     * Formats a {@link ChunkTraceEvent} into a human-readable string for debugging and assertions.
+     *
+     * @param event the trace event
+     * @return formatted string
+     */
+    private static String formatTraceEvent(final ChunkTraceEvent event) {
+        final StringBuilder sb = new StringBuilder();
+        sb.append(event.eventType()
+                .name());
+        if (event.payloadWatchStage() != null) {
+            sb.append('@')
+                    .append(event.payloadWatchStage());
+        }
+        if (event.reason() != null) {
+            sb.append(" reason=")
+                    .append(event.reason());
+        }
+        if (event.source() != null) {
+            sb.append(" src=")
+                    .append(event.source());
+        }
+        if (event.message() != null) {
+            sb.append(" msg=")
+                    .append(event.message());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Compiles a debug timeline string of all trace events matching the watched entity UUID.
+     *
+     * @param entityUuid the UUID of the watched entity
+     * @return a formatted timeline string
+     */
     private static String describeEntityTimeline(final UUID entityUuid) {
+        final String uuidStr = entityUuid.toString();
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
                 event.payloadWatchTarget() != null
-                        && entityUuid.toString()
+                        && uuidStr
                         .equals(event.payloadWatchTarget()
                                 .entityUuid())
         );
@@ -309,33 +492,20 @@ public final class PersistedBaseChunkReloadGameTest {
             if (!builder.isEmpty()) {
                 builder.append(" | ");
             }
-            builder.append(event.eventType()
-                    .name());
-            if (event.payloadWatchStage() != null) {
-                builder.append('@')
-                        .append(event.payloadWatchStage());
-            }
-            if (event.source() != null) {
-                builder.append(" src=")
-                        .append(event.source());
-            }
-            if (event.message() != null) {
-                builder.append(" msg=")
-                        .append(event.message());
-            }
+            builder.append(formatTraceEvent(event));
         }
         return builder.toString();
     }
 
+    /**
+     * Compiles a debug timeline of save-related trace events for the given chunk.
+     *
+     * @param chunkPos the chunk position
+     * @return a formatted timeline string
+     */
     private static String describeSaveTrace(final ChunkPos chunkPos) {
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
-                event.chunkKey() != null
-                        && event.chunkKey()
-                        .x()
-                        == chunkPos.x
-                        && event.chunkKey()
-                        .z()
-                        == chunkPos.z
+                isEventForChunk(event, chunkPos)
                         && (
                         "ThreadedAnvilChunkStorageMixin#chunkis$captureLiveEntities".equals(event.source())
                                 || "ThreadedAnvilChunkStorageMixin#chunkis$onSave".equals(event.source())
@@ -351,25 +521,20 @@ public final class PersistedBaseChunkReloadGameTest {
             if (!builder.isEmpty()) {
                 builder.append(" | ");
             }
-            builder.append(event.eventType()
-                            .name())
-                    .append(" src=")
-                    .append(event.source())
-                    .append(" msg=")
-                    .append(event.message());
+            builder.append(formatTraceEvent(event));
         }
         return builder.toString();
     }
 
+    /**
+     * Compiles a debug timeline of load-related trace events for the given chunk.
+     *
+     * @param chunkPos the chunk position
+     * @return a formatted timeline string
+     */
     private static String describeLoadTrace(final ChunkPos chunkPos) {
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
-                event.chunkKey() != null
-                        && event.chunkKey()
-                        .x()
-                        == chunkPos.x
-                        && event.chunkKey()
-                        .z()
-                        == chunkPos.z
+                isEventForChunk(event, chunkPos)
                         && (event.eventType()
                         == ChunkTraceEventType.LOAD_SOURCE_RESOLVED
                         || event.eventType()
@@ -390,25 +555,23 @@ public final class PersistedBaseChunkReloadGameTest {
             if (!builder.isEmpty()) {
                 builder.append(" | ");
             }
-            builder.append(event.eventType()
-                            .name())
-                    .append(" reason=")
-                    .append(event.reason())
-                    .append(" src=")
-                    .append(event.source())
-                    .append(" msg=")
-                    .append(event.message());
+            builder.append(formatTraceEvent(event));
         }
         return builder.toString();
     }
 
+    /**
+     * Verifies that reloading a persisted entity chunk successfully restores the saved pig entity.
+     *
+     * @param context the game test context
+     */
     @GameTest(maxTicks = 320)
     public void persistedEntityReloadRestoresPig(final TestContext context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
         final ServerWorld world = context.getWorld();
         final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
-        final ChunkPos targetChunk = new ChunkPos(new ChunkPos(anchor).x + 660, new ChunkPos(anchor).z + 660);
+        final ChunkPos targetChunk = getOffsetChunkPos(anchor, 660);
         final BlockPos targetArrival = targetChunk.getBlockPos(8, 115, 8);
         final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
 
@@ -462,6 +625,11 @@ public final class PersistedBaseChunkReloadGameTest {
         });
     }
 
+    /**
+     * Verifies that deleting a block to air inside a restored chunk survives a subsequent chunk reload cycle.
+     *
+     * @param context the game test context
+     */
     @GameTest(maxTicks = 220)
     public void restoredChunkAirDeletionSurvivesSecondReload(final TestContext context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -515,6 +683,11 @@ public final class PersistedBaseChunkReloadGameTest {
         });
     }
 
+    /**
+     * Verifies that deleting a block to air in a persisted base chunk reload preserves the air deletion.
+     *
+     * @param context the game test context
+     */
     @GameTest(maxTicks = 120)
     public void persistedBaseChunkReloadPreservesAirDeletion(final TestContext context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -571,6 +744,11 @@ public final class PersistedBaseChunkReloadGameTest {
         });
     }
 
+    /**
+     * Verifies that reloading a persisted base chunk does not restore empty state but recovers correctly.
+     *
+     * @param context the game test context
+     */
     @GameTest(maxTicks = 120)
     public void persistedBaseChunkReloadDoesNotRestoreEmpty(final TestContext context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -578,7 +756,7 @@ public final class PersistedBaseChunkReloadGameTest {
         final ServerWorld world = context.getWorld();
         final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
         // Move 10,000 blocks away to ensure it's not kept loaded by the gametest structure
-        final ChunkPos targetChunk = new ChunkPos(new ChunkPos(anchor).x + 600, new ChunkPos(anchor).z + 600);
+        final ChunkPos targetChunk = getOffsetChunkPos(anchor, 600);
         final BlockPos targetArrival = targetChunk.getBlockPos(8, 100, 8);
         final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
         final BlockPos primary = targetChunk.getBlockPos(8, 64, 8);
@@ -637,13 +815,18 @@ public final class PersistedBaseChunkReloadGameTest {
         });
     }
 
+    /**
+     * Verifies that repeated full baseline reload churn does not accept unexpected edits and preserves the pig entity.
+     *
+     * @param context the game test context
+     */
     @GameTest(maxTicks = 300)
     public void fullBaselineReloadChurnDoesNotAcceptUnexpectedRealEditsOrLosePig(final TestContext context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
         final ServerWorld world = context.getWorld();
         final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
-        final ChunkPos targetChunk = new ChunkPos(new ChunkPos(anchor).x + 700, new ChunkPos(anchor).z + 700);
+        final ChunkPos targetChunk = getOffsetChunkPos(anchor, 700);
         final BlockPos targetArrival = targetChunk.getBlockPos(8, 115, 8);
         final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
         final BlockPos primary = targetChunk.getBlockPos(8, 64, 8);
@@ -724,6 +907,15 @@ public final class PersistedBaseChunkReloadGameTest {
         });
     }
 
+    /**
+     * Immutable container representing target chunk layout coordinates and arrival parameters for air deletion tests.
+     *
+     * @param world         the server world
+     * @param targetChunk   the chunk under test
+     * @param targetArrival arrival location inside the target chunk
+     * @param farArrival    location far away from target chunk
+     * @param primary       target block pos to watch and modify
+     */
     private record AirDeletionScenario(
             ServerWorld world,
             ChunkPos targetChunk,
@@ -734,6 +926,12 @@ public final class PersistedBaseChunkReloadGameTest {
 
     }
 
+    /**
+     * Immutable setup container combining an air deletion scenario with a mock player instance.
+     *
+     * @param scenario the air deletion scenario parameters
+     * @param player   the spawned mock server player
+     */
     private record AirDeletionTestSetup(
             AirDeletionScenario scenario,
             ServerPlayerEntity player

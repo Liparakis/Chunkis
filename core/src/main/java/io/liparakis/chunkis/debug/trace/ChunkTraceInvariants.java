@@ -50,7 +50,7 @@ public final class ChunkTraceInvariants {
         if (delta == null || appliedCount != 0) {
             return false;
         }
-        return !delta.getBlockInstructions().isEmpty() || !delta.getBlockEntities().isEmpty();
+        return delta.getBlockChangesCount() > 0 || !delta.getBlockEntities().isEmpty();
     }
 
     /**
@@ -71,7 +71,7 @@ public final class ChunkTraceInvariants {
         if (delta == null || hasPersistedBaseChunk) {
             return false;
         }
-        return delta.getBlockInstructions().isEmpty() && !delta.getBlockEntities().isEmpty();
+        return delta.getBlockChangesCount() == 0 && !delta.getBlockEntities().isEmpty();
     }
 
     /**
@@ -101,7 +101,7 @@ public final class ChunkTraceInvariants {
             return true;
         }
         // Snapshot-backed: only report if the delta had its own instructions.
-        return !delta.getBlockInstructions().isEmpty() || !delta.getBlockEntities().isEmpty();
+        return delta.getBlockChangesCount() > 0 || !delta.getBlockEntities().isEmpty();
     }
 
     /**

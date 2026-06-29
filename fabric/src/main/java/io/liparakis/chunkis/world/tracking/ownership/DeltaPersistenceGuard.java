@@ -78,8 +78,7 @@ public final class DeltaPersistenceGuard {
             return false;
         }
         final Object meta = delta.getChunkMetadata();
-        return delta.getBlockInstructions()
-                .isEmpty()
+        return delta.getBlockChangesCount() == 0
                 && !delta.getBlockEntities()
                 .isEmpty()
                 && !CisNbtUtil.hasPersistedBaseChunkNbt(meta)
@@ -128,8 +127,7 @@ public final class DeltaPersistenceGuard {
         }
 
         final Object meta = delta.getChunkMetadata();
-        return "blocks=" + delta.getBlockInstructions()
-                .size()
+        return "blocks=" + delta.getBlockChangesCount()
                 + ", blockEntities=" + delta.getBlockEntities()
                 .size()
                 + ", entities=" + delta.countNonNullEntities()
@@ -162,8 +160,7 @@ public final class DeltaPersistenceGuard {
                 + ", authoritativeV11Snapshot=" + hasAuthoritativeV11SnapshotPayload(delta)
                 + ", metadataKeys=" + describeMetadataKeys(meta)
                 + ", suppressInitialRepopulation=" + delta.shouldSuppressInitialRepopulation()
-                + ", blockChanges=" + delta.getBlockInstructions()
-                .size()
+                + ", blockChanges=" + delta.getBlockChangesCount()
                 + ", blockEntities=" + delta.getBlockEntities()
                 .size();
     }
@@ -177,8 +174,7 @@ public final class DeltaPersistenceGuard {
     public static boolean hasAuthoritativeV11SnapshotPayload(final ChunkDelta<?, ?> delta) {
         return delta != null
                 && delta.getSourceVersion() >= io.liparakis.chunkis.storage.model.CisConstants.VERSION
-                && !delta.getBlockInstructions()
-                .isEmpty();
+                && delta.getBlockChangesCount() > 0;
     }
 
     /**
@@ -186,8 +182,7 @@ public final class DeltaPersistenceGuard {
      * fully authoritative snapshot baseline.
      */
     private static boolean hasReplayPayload(final ChunkDelta<?, ?> delta) {
-        return !delta.getBlockInstructions()
-                .isEmpty()
+        return delta.getBlockChangesCount() > 0
                 || !delta.getBlockEntities()
                 .isEmpty()
                 || delta.countNonNullEntities() > 0;

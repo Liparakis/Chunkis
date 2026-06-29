@@ -40,6 +40,14 @@ import net.minecraft.world.chunk.WorldChunk;
 @SuppressWarnings("unused")
 public final class LegacyEntityStorageHandoffGameTest {
 
+    /**
+     * Creates a serialized legacy entity payload (a cow) at the specified block position.
+     *
+     * @param world the server world where the entity is temporarily created to serialize its data
+     * @param pos   the block position for the entity's starting position
+     * @return a {@link SerializedEntity} container holding the entity's UUID and its serialized NBT payload
+     * @throws NullPointerException if the cow entity cannot be created
+     */
     private static SerializedEntity createLegacyEntityPayload(final ServerWorld world, final BlockPos pos) {
         final Entity entity = Objects.requireNonNull(
                 EntityType.COW.create(world, SpawnReason.COMMAND),
@@ -59,6 +67,12 @@ public final class LegacyEntityStorageHandoffGameTest {
         }
     }
 
+    /**
+     * Discards all non-player entities currently present in the specified chunk.
+     *
+     * @param world    the server world
+     * @param chunkPos the position of the chunk to clear
+     */
     private static void clearNonPlayerEntities(final ServerWorld world, final ChunkPos chunkPos) {
         for (final Entity entity : getChunkEntities(world, chunkPos)) {
             if (!(entity instanceof PlayerEntity)) {
@@ -67,6 +81,14 @@ public final class LegacyEntityStorageHandoffGameTest {
         }
     }
 
+    /**
+     * Counts the number of active entities in the specified chunk that match the given UUID.
+     *
+     * @param world    the server world
+     * @param chunkPos the chunk position to search
+     * @param uuid     the target entity UUID to match
+     * @return the number of matching entities found in the chunk
+     */
     private static int countEntitiesWithUuid(final ServerWorld world, final ChunkPos chunkPos, final UUID uuid) {
         int count = 0;
         for (final Entity entity : getChunkEntities(world, chunkPos)) {
@@ -77,6 +99,13 @@ public final class LegacyEntityStorageHandoffGameTest {
         return count;
     }
 
+    /**
+     * Retrieves a list of all entities within the boundaries of the specified chunk.
+     *
+     * @param world    the server world
+     * @param chunkPos the position of the chunk
+     * @return a list of entities in the chunk
+     */
     private static List<Entity> getChunkEntities(final ServerWorld world, final ChunkPos chunkPos) {
         return world.getOtherEntities(
                 null,
@@ -89,6 +118,12 @@ public final class LegacyEntityStorageHandoffGameTest {
                         chunkPos.getEndZ() + 1));
     }
 
+    /**
+     * Verifies that legacy entity payloads are successfully replayed, saved to vanilla storage,
+     * and removed from the CIS storage on the first chunk load/replay cycle.
+     *
+     * @param context the game test context
+     */
     @GameTest(maxTicks = 200)
     public void rewritesLegacyEntityPayloadsOutOfCisAfterFirstReplay(final TestContext context) {
         final ServerWorld world = context.getWorld();
@@ -165,6 +200,12 @@ public final class LegacyEntityStorageHandoffGameTest {
         context.complete();
     }
 
+    /**
+     * A holder for a serialized entity's runtime UUID and its raw NBT data.
+     *
+     * @param uuid the unique ID of the entity
+     * @param nbt  the serialized NBT compound of the entity
+     */
     private record SerializedEntity(UUID uuid, NbtCompound nbt) {
 
     }

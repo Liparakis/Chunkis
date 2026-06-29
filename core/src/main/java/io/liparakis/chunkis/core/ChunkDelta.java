@@ -982,6 +982,15 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
+     * Returns the number of stored block changes without materializing instructions.
+     *
+     * @return block change count
+     */
+    public int getBlockChangesCount() {
+        return instructions.instructionCount;
+    }
+
+    /**
      * Returns the block palette.
      *
      * @return block palette

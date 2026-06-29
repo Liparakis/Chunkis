@@ -32,6 +32,32 @@ import java.util.Objects;
 @SuppressWarnings("unused")
 public final class StructureMetadataExtractorGameTest {
 
+    /**
+     * Resolves a structure from the registry to use for testing.
+     * Tries to find a vanilla village or village_plains, falling back to the first available structure.
+     *
+     * @param registry the structure registry
+     * @return the resolved structure, or null if the registry is empty
+     */
+    private static Structure getTestStructure(final Registry<Structure> registry) {
+        Structure structure = registry.get(Identifier.ofVanilla("village"));
+        if (structure == null) {
+            structure = registry.get(Identifier.ofVanilla("village_plains"));
+        }
+        if (structure == null) {
+            structure = registry.stream()
+                    .findFirst()
+                    .orElse(null);
+        }
+        return structure;
+    }
+
+    /**
+     * Game test that verifies the output of {@link StructureMetadataExtractor#extract} matches
+     * vanilla's {@link SerializedChunk#structureData} for the same live chunk.
+     *
+     * @param context the game test context
+     */
     @GameTest(maxTicks = 100)
     public void directStructureExtractionMatchesVanillaSerializedChunk(final TestContext context) {
         final ServerWorld world = context.getWorld();
@@ -39,14 +65,9 @@ public final class StructureMetadataExtractorGameTest {
         final WorldChunk chunk = world.getWorldChunk(anchor);
         final ChunkPos chunkPos = chunk.getPos();
 
-        final Registry<Structure> structureRegistry = world.getRegistryManager().getOrThrow(RegistryKeys.STRUCTURE);
-        Structure structure = structureRegistry.get(Identifier.ofVanilla("village"));
-        if (structure == null) {
-            structure = structureRegistry.get(Identifier.ofVanilla("village_plains"));
-        }
-        if (structure == null) {
-            structure = structureRegistry.stream().findFirst().orElse(null);
-        }
+        final Registry<Structure> structureRegistry = world.getRegistryManager()
+                .getOrThrow(RegistryKeys.STRUCTURE);
+        final Structure structure = getTestStructure(structureRegistry);
         context.assertTrue(structure != null, Text.literal("Expected a structure to exist in the registry."));
 
         final StructureStart start = new StructureStart(
@@ -68,7 +89,8 @@ public final class StructureMetadataExtractorGameTest {
         chunk.setStructureReferences(referenceMap);
 
         final NbtCompound direct = StructureMetadataExtractor.extract(world, chunk);
-        final NbtCompound vanilla = SerializedChunk.fromChunk(world, chunk).structureData();
+        final NbtCompound vanilla = SerializedChunk.fromChunk(world, chunk)
+                .structureData();
 
         context.assertTrue(
                 CisNbtUtil.hasStructureData(direct),

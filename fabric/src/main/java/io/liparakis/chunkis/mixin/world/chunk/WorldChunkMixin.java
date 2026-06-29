@@ -228,8 +228,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         final WorldChunk chunk = chunkis$self();
         final ChunkMutationTrackingScope.Cause suppressionCause = chunkis$getSuppressionCause(chunk);
         final ChunkDelta<BlockState, NbtCompound> existingDelta = chunkis$getBlockDelta();
-        final int blockChangesBefore = existingDelta != null ? existingDelta.getBlockInstructions()
-                                                               .size() : 0;
+        final int blockChangesBefore = existingDelta != null ? existingDelta.getBlockChangesCount() : 0;
         final long mutationGenerationBefore = existingDelta != null ? existingDelta.getMutationGeneration() : 0L;
         final boolean deltaExistedBefore = existingDelta != null;
         final BlockState previous = chunk.getBlockState(pos);
@@ -329,8 +328,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 true,
                 !deltaExistedBefore,
                 blockChangesBefore,
-                delta.getBlockInstructions()
-                        .size(),
+                delta.getBlockChangesCount(),
                 delta.getMutationGeneration(),
                 "mutation recorded into ChunkDelta"
         );

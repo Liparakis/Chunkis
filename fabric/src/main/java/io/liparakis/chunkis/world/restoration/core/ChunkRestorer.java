@@ -323,8 +323,7 @@ public final class ChunkRestorer {
                     ChunkTraceReason.RESTORE_EMPTY_RESULT,
                     RESTORE_SOURCE,
                     "restore replay payload produced zero applied results: blocks="
-                            + protoDelta.getBlockInstructions()
-                            .size()
+                            + protoDelta.getBlockChangesCount()
                             + ", blockEntities="
                             + protoDelta.getBlockEntities()
                             .size(),

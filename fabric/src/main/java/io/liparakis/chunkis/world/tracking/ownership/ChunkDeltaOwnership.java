@@ -80,8 +80,7 @@ public final class ChunkDeltaOwnership {
      */
     public static boolean hasReplayPayload(final ChunkDelta<?, ?> delta) {
         return delta != null
-                && (!delta.getBlockInstructions()
-                .isEmpty()
+                && (delta.getBlockChangesCount() > 0
                 || !delta.getBlockEntities()
                 .isEmpty()
                 || delta.countNonNullEntities() > 0);

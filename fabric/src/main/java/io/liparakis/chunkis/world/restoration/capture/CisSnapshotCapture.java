@@ -144,8 +144,7 @@ public final class CisSnapshotCapture {
         if (target == null || !CisNbtUtil.hasFullBlockBaseline(target.getChunkMetadata())) {
             return 0;
         }
-        return target.getBlockInstructions()
-                .size();
+        return target.getBlockChangesCount();
     }
 
     /**

@@ -120,8 +120,7 @@ public final class BaseChunkCaptureUtil {
             return delta;
         }
 
-        final int beforeBlocks = delta.getBlockInstructions()
-                .size();
+        final int beforeBlocks = delta.getBlockChangesCount();
         final int beforeBlockEntities = delta.getBlockEntities()
                 .size();
         final DebugChunkKey chunkKey = DebugChunkKeys.of(chunk.getPos());
@@ -170,8 +169,7 @@ public final class BaseChunkCaptureUtil {
                 "captured base NBT: metadataKeys=" + metadata.getKeys()
                         + ", suppressInitialRepopulation=" + delta.shouldSuppressInitialRepopulation()
                         + ", blocksBefore=" + beforeBlocks + ", blocksAfter="
-                        + delta.getBlockInstructions()
-                        .size() + ", blockEntitiesBefore=" + beforeBlockEntities
+                        + delta.getBlockChangesCount() + ", blockEntitiesBefore=" + beforeBlockEntities
                         + ", blockEntitiesAfter="
                         + delta.getBlockEntities()
                         .size(),

@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.debug.util;
 
-import net.minecraft.block.BlockState;
+import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkSection;
 
@@ -73,16 +73,7 @@ public final class ChunkSectionDebugUtil {
             if (section == null || section.isEmpty()) {
                 continue;
             }
-            for (int y = 0; y < 16; y++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int x = 0; x < 16; x++) {
-                        final BlockState state = section.getBlockState(x, y, z);
-                        if (state != null && !state.isAir()) {
-                            count++;
-                        }
-                    }
-                }
-            }
+            count += ((ChunkSectionAccessor) section).chunkis$getNonEmptyBlockCount();
         }
         return count;
     }

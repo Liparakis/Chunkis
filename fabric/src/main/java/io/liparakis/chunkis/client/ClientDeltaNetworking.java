@@ -274,8 +274,7 @@ public final class ClientDeltaNetworking {
                 operationId,
                 receivedDelta);
 
-        return receivedDelta.getBlockInstructions()
-                .size();
+        return receivedDelta.getBlockChangesCount();
     }
 
     /**
