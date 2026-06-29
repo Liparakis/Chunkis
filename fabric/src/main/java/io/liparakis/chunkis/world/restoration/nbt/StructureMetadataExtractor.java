@@ -22,10 +22,14 @@ import net.minecraft.world.gen.structure.Structure;
  *
  * @author Liparakis
  * @version 1.1
- *
  */
 public final class StructureMetadataExtractor {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private StructureMetadataExtractor() {
         throw new AssertionError("Utility class");
     }
@@ -47,7 +51,8 @@ public final class StructureMetadataExtractor {
         }
 
         final StructureContext context = StructureContext.from(world);
-        final Registry<Structure> structureRegistry = context.registryManager().getOrThrow(RegistryKeys.STRUCTURE);
+        final Registry<Structure> structureRegistry = context.registryManager()
+                .getOrThrow(RegistryKeys.STRUCTURE);
         final ChunkPos chunkPos = chunk.getPos();
 
         final NbtCompound structures = new NbtCompound();
@@ -85,4 +90,3 @@ public final class StructureMetadataExtractor {
         return CisNbtUtil.hasStructureData(structures) ? structures : null;
     }
 }
-

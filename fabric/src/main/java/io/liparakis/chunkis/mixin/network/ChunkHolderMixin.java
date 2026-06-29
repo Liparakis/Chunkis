@@ -38,8 +38,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * called for each player. The chunk reference is hoisted outside the player loop
  * to avoid repeated virtual dispatch.
  *
- * @author Liparakis
- * @version 1.2
  * @see ChunkHolder
  * @see ChunkisNetworking#sendDelta(ServerPlayerEntity, WorldChunk)
  */

@@ -24,28 +24,36 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * to trigger generation. This would normally cause {@code populateEntities} to
  * spawn fresh passive mobs on top of entities already restored from the delta,
  * resulting in duplicate entities.
+ * </p>
  * <p>
  * This mixin cancels entity population for chunks that have valid delta data,
  * ensuring only the restored entities are present.
+ * </p>
  * <p>
  * <b>Scope:</b> Only affects initial passive mob spawning (cows, sheep, etc.).
  * Natural hostile mob spawning is unaffected.
- *
- * @author Liparakis
- * @version 1.0
+ * </p>
  */
 @Mixin(SpawnHelper.class)
 public class SpawnHelperMixin {
+
+    /**
+     * Default constructor for SpawnHelperMixin.
+     */
+    public SpawnHelperMixin() {
+    }
 
     /**
      * Intercepts entity population to prevent duplicate spawning on restored chunks.
      * <p>
      * Chunks with valid Chunkis deltas are skipped, as they already contain
      * restored entities. Fresh chunks without deltas proceed with normal spawning.
+     * </p>
      * <p>
      * <b>Important:</b> The {@code world} parameter is {@link ServerWorldAccess},
      * not {@code ServerWorld}. During generation, this is often a {@code ChunkRegion},
      * so casting to {@code ServerWorld} would fail.
+     * </p>
      *
      * @param world      the world access context (often ChunkRegion during generation)
      * @param biomeEntry the biome for spawn logic
@@ -87,6 +95,7 @@ public class SpawnHelperMixin {
      * <p>
      * Spawning is cancelled if the chunk has a non-empty Chunkis delta,
      * indicating it's a restored chunk with existing entities.
+     * </p>
      *
      * @param chunk the chunk being populated
      * @param ci    callback info to cancel if needed

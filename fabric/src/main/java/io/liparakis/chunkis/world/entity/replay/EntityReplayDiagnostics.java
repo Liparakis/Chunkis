@@ -27,6 +27,11 @@ import org.jetbrains.annotations.Nullable;
  */
 final class EntityReplayDiagnostics {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private EntityReplayDiagnostics() {
         throw new AssertionError("Utility class");
     }
@@ -52,22 +57,27 @@ final class EntityReplayDiagnostics {
             final boolean materialized,
             final String decision,
             final Box searchBox
-                                   ) {
+    ) {
         final ChunkPos chunkPos = chunk.getPos();
-        final UUID uuid = ChunkEntityQueries.parseUuid(entityUuid).orElse(null);
+        final UUID uuid = ChunkEntityQueries.parseUuid(entityUuid)
+                .orElse(null);
         final Entity liveEntity = uuid == null ? null : world.getEntity(uuid);
-        final Identifier nbtType = EntityPayloadNbt.findTypeId(entityNbt).orElse(null);
-        final BlockPos nbtBlockPos = EntityPayloadNbt.findBlockPos(entityNbt).orElse(null);
-        final boolean chunkLoaded = world.getChunkManager().getWorldChunk(chunkPos.x, chunkPos.z, false) != null;
+        final Identifier nbtType = EntityPayloadNbt.findTypeId(entityNbt)
+                .orElse(null);
+        final BlockPos nbtBlockPos = EntityPayloadNbt.findBlockPos(entityNbt)
+                .orElse(null);
+        final boolean chunkLoaded = world.getChunkManager()
+                .getWorldChunk(chunkPos.x, chunkPos.z, false) != null;
         final boolean entityTicking = nbtBlockPos != null && world.shouldTickEntityAt(nbtBlockPos);
         final ChunkMutationTrackingScope.Cause pendingSuppression =
                 PendingChunkMutationSuppression.currentCause(world.getRegistryKey(), chunkPos);
         final ChunkMutationTrackingScope.Cause chunkSuppression =
                 chunk instanceof ChunkisMutationGuardDuck guardDuck
-                        ? guardDuck.chunkis$getMutationTrackingScope().currentCause()
+                        ? guardDuck.chunkis$getMutationTrackingScope()
+                          .currentCause()
                         : ChunkMutationTrackingScope.Cause.NONE;
         final boolean visibleByQuery = uuid != null && ChunkEntityQueries.isVisibleFromWorldQuery(world, uuid,
-                                                                                                  searchBox);
+                searchBox);
 
         final String message = String.format(
                 "entity replay materialization: uuid=%s nbtType=%s nbtBlockPos=%s " +
@@ -90,8 +100,9 @@ final class EntityReplayDiagnostics {
                 materialized,
                 visibleByQuery,
                 decision,
-                Thread.currentThread().getName()
-                                            );
+                Thread.currentThread()
+                        .getName()
+        );
 
         io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
                 io.liparakis.chunkis.debug.model.ChunkisDebugDomain.ENTITY_REPLAY,
@@ -100,13 +111,15 @@ final class EntityReplayDiagnostics {
                 io.liparakis.chunkis.debug.model.ChunkTraceReason.ENTITY_REPLAY,
                 "EntityReplayDiagnostics#traceReplayDecision",
                 message,
-                world.getRegistryKey().getValue().toString(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 new io.liparakis.chunkis.debug.model.key.DebugChunkKey(chunkPos.x, chunkPos.z),
                 null,
                 null,
                 null,
                 null
-                                                              );
+        );
 
         Chunkis.LOGGER.debug("Chunkis {}", message);
     }

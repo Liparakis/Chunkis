@@ -24,9 +24,6 @@ import net.minecraft.util.math.ChunkPos;
  * <p>Methods are not designed for concurrent mutation of the same
  * {@link NbtCompound}. Callers must ensure compounds are not shared across threads
  * while being modified.</p>
- *
- * @author Liparakis
- * @version 1.2
  */
 public final class CisNbtUtil {
 
@@ -125,6 +122,11 @@ public final class CisNbtUtil {
      */
     private static final int RAW_METADATA_INITIAL_CAPACITY = 256;
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private CisNbtUtil() {
         throw new AssertionError("Utility class");
     }
@@ -141,7 +143,7 @@ public final class CisNbtUtil {
             final int chunkX,
             final int chunkZ,
             final int dataVersion
-                                           ) {
+    ) {
         final NbtCompound nbt = new NbtCompound();
 
         nbt.putInt(DATA_VERSION_KEY, dataVersion);
@@ -168,7 +170,7 @@ public final class CisNbtUtil {
     public static void putDelta(
             final NbtCompound root,
             final ChunkDelta<BlockState, NbtCompound> delta
-                               ) {
+    ) {
         Objects.requireNonNull(root, "root");
 
         if (delta == null || delta.isEmpty()) {
@@ -199,7 +201,7 @@ public final class CisNbtUtil {
             final ChunkPos pos,
             final int dataVersion,
             final ChunkDelta<?, NbtCompound> delta
-                                                      ) {
+    ) {
         Objects.requireNonNull(pos, "pos");
 
         return buildLoadChunkNbt(pos.x, pos.z, dataVersion, delta);
@@ -219,7 +221,7 @@ public final class CisNbtUtil {
             final int chunkZ,
             final int dataVersion,
             final ChunkDelta<?, NbtCompound> delta
-                                                      ) {
+    ) {
         return ChunkLoadNbtBuilder.buildLoadChunkNbt(chunkX, chunkZ, dataVersion, delta);
     }
 
@@ -248,7 +250,7 @@ public final class CisNbtUtil {
     public static NbtCompound createChunkMetadata(
             final NbtCompound structureData,
             final boolean suppressInitialRepopulation
-                                                 ) {
+    ) {
         final NbtCompound ownedStructures =
                 structureData != null && !structureData.isEmpty()
                         ? structureData.copy()
@@ -257,7 +259,7 @@ public final class CisNbtUtil {
         return createChunkMetadataTakingOwnership(
                 ownedStructures,
                 suppressInitialRepopulation
-                                                 );
+        );
     }
 
     /**
@@ -272,12 +274,12 @@ public final class CisNbtUtil {
     public static NbtCompound createChunkMetadataTakingOwnership(
             final NbtCompound structureData,
             final boolean suppressInitialRepopulation
-                                                                ) {
+    ) {
         return createChunkMetadataTakingOwnership(
                 structureData,
                 suppressInitialRepopulation,
                 false
-                                                 );
+        );
     }
 
     /**
@@ -295,13 +297,13 @@ public final class CisNbtUtil {
             final NbtCompound structureData,
             final boolean suppressInitialRepopulation,
             final boolean fullBlockBaseline
-                                                                ) {
+    ) {
         return createChunkMetadataTakingOwnership(
                 structureData,
                 suppressInitialRepopulation,
                 fullBlockBaseline,
                 null
-                                                 );
+        );
     }
 
     /**
@@ -324,14 +326,14 @@ public final class CisNbtUtil {
             final boolean suppressInitialRepopulation,
             final boolean fullBlockBaseline,
             final NbtCompound baseChunkNbt
-                                                                ) {
+    ) {
         return createChunkMetadataTakingOwnership(
                 structureData,
                 suppressInitialRepopulation,
                 fullBlockBaseline,
                 baseChunkNbt,
                 false
-                                                 );
+        );
     }
 
     /**
@@ -352,14 +354,14 @@ public final class CisNbtUtil {
             final boolean fullBlockBaseline,
             final NbtCompound baseChunkNbt,
             final boolean portalChunk
-                                                                ) {
+    ) {
         return ChunkMetadataEnvelope.create(
                 structureData,
                 suppressInitialRepopulation,
                 fullBlockBaseline,
                 baseChunkNbt,
                 portalChunk
-                                           );
+        );
     }
 
     /**
@@ -409,7 +411,7 @@ public final class CisNbtUtil {
      */
     public static NbtCompound extractPersistedStructureMetadata(
             final NbtCompound chunkMetadata
-                                                               ) {
+    ) {
         return StructureMetadataNbt.extractPersistedStructureMetadata(chunkMetadata);
     }
 
@@ -497,7 +499,7 @@ public final class CisNbtUtil {
     public static boolean shouldSuppressInitialRepopulation(
             final NbtCompound root,
             final ChunkDelta<?, ?> delta
-                                                           ) {
+    ) {
         if (delta == null || delta.isEmpty()) {
             return false;
         }
@@ -578,7 +580,7 @@ public final class CisNbtUtil {
     public static void ensureEntityIdPresent(
             final NbtCompound nbt,
             final Entity entity
-                                            ) {
+    ) {
         Objects.requireNonNull(nbt, "nbt");
         Objects.requireNonNull(entity, "entity");
 
@@ -594,7 +596,8 @@ public final class CisNbtUtil {
      * @return registry ID string
      */
     private static String resolveEntityId(final Entity entity) {
-        return Registries.ENTITY_TYPE.getId(entity.getType()).toString();
+        return Registries.ENTITY_TYPE.getId(entity.getType())
+                .toString();
     }
 
     /**
@@ -605,7 +608,7 @@ public final class CisNbtUtil {
      */
     private static Boolean readSuppressInitialRepopulationFlag(
             final NbtCompound chunkMetadata
-                                                              ) {
+    ) {
         return ChunkisMetadataFlags.readSuppressInitialRepopulationFlag(chunkMetadata);
     }
 
@@ -642,16 +645,36 @@ public final class CisNbtUtil {
     static NbtCompound getCompoundOrNull(
             final NbtCompound parent,
             final String key
-                                        ) {
+    ) {
         return StructureMetadataNbt.getCompoundOrNull(parent, key);
     }
 
+    /**
+     * Flag statuses tracking base chunk usage choices during load.
+     */
     public enum PersistedBaseChunkUsage {
+        /**
+         * Persisted base chunk NBT used during loads.
+         */
         USED,
+
+        /**
+         * Persisted base chunk was skipped.
+         */
         SKIPPED,
+
+        /**
+         * Persisted base chunk is missing.
+         */
         MISSING
     }
 
+    /**
+     * Wrapper containing root compounds and usage mappings.
+     *
+     * @param root           chunk load NBT compound
+     * @param baseChunkUsage usage code mapping
+     */
     public record LoadChunkNbtResult(
             NbtCompound root,
             PersistedBaseChunkUsage baseChunkUsage
@@ -670,6 +693,8 @@ public final class CisNbtUtil {
             extends ByteArrayOutputStream {
 
         /**
+         * Constructor.
+         *
          * @param size initial capacity
          */
         private LengthPrefixedByteArrayOutputStream(final int size) {
@@ -700,4 +725,3 @@ public final class CisNbtUtil {
         }
     }
 }
-

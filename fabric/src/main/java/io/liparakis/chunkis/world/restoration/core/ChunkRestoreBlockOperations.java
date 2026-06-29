@@ -22,9 +22,21 @@ import org.slf4j.Logger;
  */
 final class ChunkRestoreBlockOperations {
 
+    /**
+     * Logger instance reference.
+     */
     private static final Logger LOGGER = Chunkis.LOGGER;
+
+    /**
+     * Binary mask used to extract coordinate offsets within a chunk section.
+     */
     private static final int SECTION_Y_MASK = 15;
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkRestoreBlockOperations() {
         throw new AssertionError("Utility class");
     }
@@ -50,10 +62,12 @@ final class ChunkRestoreBlockOperations {
             }
         }
 
-        for (final BlockPos pos : Set.copyOf(chunk.getBlockEntities().keySet())) {
+        for (final BlockPos pos : Set.copyOf(chunk.getBlockEntities()
+                .keySet())) {
             removeStaleBlockEntityData(chunk, pos);
         }
-        ((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts().clear();
+        ((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts()
+                .clear();
     }
 
     /**
@@ -70,8 +84,7 @@ final class ChunkRestoreBlockOperations {
      * @param operationId   trace correlation ID
      * @return {@code true} if the block was applied
      */
-    static boolean applyBlockChange(
-            final WorldChunk chunk,
+    static boolean applyBlockChange(final WorldChunk chunk,
             final ChunkPos chunkPosition,
             final int localX,
             final int localY,
@@ -79,33 +92,24 @@ final class ChunkRestoreBlockOperations {
             final BlockState state,
             final BlockPos worldPosition,
             final FailureCounters counters,
-            @Nullable final String operationId
-                                   ) {
+            @Nullable final String operationId) {
         final BlockState previousState = chunk.getBlockState(worldPosition);
-        PayloadWatchTracer.traceRestoreApplyAttempt(
-                chunk,
+        PayloadWatchTracer.traceRestoreApplyAttempt(chunk,
                 worldPosition,
                 previousState,
                 state,
                 operationId,
-                "ChunkRestorer#applyBlockChange"
-                                                   );
+                "ChunkRestorer#applyBlockChange");
         if (localY < chunk.getBottomY() || localY > chunk.getTopYInclusive()) {
             counters.recordOutOfBoundsY();
-            PayloadWatchTracer.traceRestoreApplyFailed(
-                    chunk,
+            PayloadWatchTracer.traceRestoreApplyFailed(chunk,
                     worldPosition,
                     previousState,
                     state,
                     operationId,
                     "ChunkRestorer#applyBlockChange",
-                    "out-of-bounds-y"
-                                                      );
-            LOGGER.warn(
-                    "Skipping out-of-bounds restored block at {} in chunk {}",
-                    worldPosition,
-                    chunkPosition
-                       );
+                    "out-of-bounds-y");
+            LOGGER.warn("Skipping out-of-bounds restored block at {} in chunk {}", worldPosition, chunkPosition);
             return false;
         }
 
@@ -114,21 +118,17 @@ final class ChunkRestoreBlockOperations {
 
             if (sectionIndex < 0 || sectionIndex >= chunk.getSectionArray().length) {
                 counters.recordInvalidSectionIndex();
-                PayloadWatchTracer.traceRestoreApplyFailed(
-                        chunk,
+                PayloadWatchTracer.traceRestoreApplyFailed(chunk,
                         worldPosition,
                         previousState,
                         state,
                         operationId,
                         "ChunkRestorer#applyBlockChange",
-                        "invalid-section-index"
-                                                          );
-                LOGGER.warn(
-                        "Skipping restored block at {} in chunk {} with invalid section index {}",
+                        "invalid-section-index");
+                LOGGER.warn("Skipping restored block at {} in chunk {} with invalid section index {}",
                         worldPosition,
                         chunkPosition,
-                        sectionIndex
-                           );
+                        sectionIndex);
                 return false;
             }
 
@@ -136,41 +136,33 @@ final class ChunkRestoreBlockOperations {
 
             if (section == null) {
                 counters.recordNullSection();
-                PayloadWatchTracer.traceRestoreApplyFailed(
-                        chunk,
+                PayloadWatchTracer.traceRestoreApplyFailed(chunk,
                         worldPosition,
                         previousState,
                         state,
                         operationId,
                         "ChunkRestorer#applyBlockChange",
-                        "null-section"
-                                                          );
-                LOGGER.warn(
-                        "Skipping restored block at {} in chunk {} because section {} is null",
+                        "null-section");
+                LOGGER.warn("Skipping restored block at {} in chunk {} because section {} is null",
                         worldPosition,
                         chunkPosition,
-                        sectionIndex
-                           );
+                        sectionIndex);
                 return false;
             }
 
             section.setBlockState(localX, localY & SECTION_Y_MASK, localZ, state);
-            PayloadWatchTracer.traceRestoreSetBlockReturned(
-                    chunk,
+            PayloadWatchTracer.traceRestoreSetBlockReturned(chunk,
                     worldPosition,
                     previousState,
                     state,
                     operationId,
-                    "ChunkRestorer#applyBlockChange"
-                                                           );
-            PayloadWatchTracer.traceRestoreStateAfterSetBlock(
-                    chunk,
+                    "ChunkRestorer#applyBlockChange");
+            PayloadWatchTracer.traceRestoreStateAfterSetBlock(chunk,
                     worldPosition,
                     previousState,
                     state,
                     operationId,
-                    "ChunkRestorer#applyBlockChange"
-                                                             );
+                    "ChunkRestorer#applyBlockChange");
 
             if (!state.hasBlockEntity()) {
                 removeStaleBlockEntityData(chunk, worldPosition);
@@ -179,47 +171,49 @@ final class ChunkRestoreBlockOperations {
             return true;
         } catch (final Exception e) {
             counters.recordException();
-            PayloadWatchTracer.traceRestoreApplyFailed(
-                    chunk,
+            PayloadWatchTracer.traceRestoreApplyFailed(chunk,
                     worldPosition,
                     previousState,
                     state,
                     operationId,
                     "ChunkRestorer#applyBlockChange",
-                    "exception"
-                                                      );
-            LOGGER.error(
-                    "Failed to restore block at {} in chunk {}",
-                    worldPosition,
-                    chunkPosition,
-                    e
-                        );
+                    "exception");
+            LOGGER.error("Failed to restore block at {} in chunk {}", worldPosition, chunkPosition, e);
             return false;
         }
     }
 
-    private static void removeStaleBlockEntityData(
-            final WorldChunk chunk,
-            final BlockPos worldPosition
-                                                  ) {
+    /**
+     * Prunes and deletes stale block entity entries at target coordinates.
+     *
+     * @param chunk         target world chunk
+     * @param worldPosition absolute coordinates pos
+     */
+    private static void removeStaleBlockEntityData(final WorldChunk chunk, final BlockPos worldPosition) {
         removePendingBlockEntityNbt(chunk, worldPosition);
         removeLiveBlockEntity(chunk, worldPosition);
     }
 
-    private static void removePendingBlockEntityNbt(
-            final WorldChunk chunk,
-            final BlockPos worldPosition
-                                                   ) {
-        ((ChunkBlockEntityNbtAccessor) chunk)
-                .chunkis$getBlockEntityNbts()
+    /**
+     * Prunes scheduled pending NBT payloads.
+     *
+     * @param chunk         target world chunk
+     * @param worldPosition absolute coordinates pos
+     */
+    private static void removePendingBlockEntityNbt(final WorldChunk chunk, final BlockPos worldPosition) {
+        ((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts()
                 .remove(worldPosition);
     }
 
-    private static void removeLiveBlockEntity(
-            final WorldChunk chunk,
-            final BlockPos worldPosition
-                                             ) {
-        chunk.getBlockEntities().remove(worldPosition);
+    /**
+     * Discards active live block entity instances.
+     *
+     * @param chunk         target world chunk
+     * @param worldPosition absolute coordinates pos
+     */
+    private static void removeLiveBlockEntity(final WorldChunk chunk, final BlockPos worldPosition) {
+        chunk.getBlockEntities()
+                .remove(worldPosition);
         chunk.removeBlockEntity(worldPosition);
     }
 
@@ -228,50 +222,105 @@ final class ChunkRestoreBlockOperations {
      */
     static class FailureCounters {
 
+        /**
+         * Count of instructions evaluated.
+         */
         private int visitedInstructions;
+
+        /**
+         * Count of blocks successfully applied.
+         */
         private int appliedBlocks;
+
+        /**
+         * Count of null states encountered.
+         */
         private int nullState;
+
+        /**
+         * Count of coordinates outside Y boundaries.
+         */
         private int outOfBoundsY;
+
+        /**
+         * Count of invalid section index resolves.
+         */
         private int invalidSectionIndex;
+
+        /**
+         * Count of missing section instances.
+         */
         private int nullSection;
+
+        /**
+         * Count of exceptions occurred.
+         */
         private int exception;
 
+        /**
+         * Default constructor.
+         */
+        FailureCounters() {
+        }
+
+        /**
+         * Records visited instruction event.
+         */
         void recordVisitedInstruction() {
             visitedInstructions++;
         }
 
+        /**
+         * Records successfully applied block event.
+         */
         void recordAppliedBlock() {
             appliedBlocks++;
         }
 
+        /**
+         * Records null block state event.
+         */
         void recordNullState() {
             nullState++;
         }
 
+        /**
+         * Records out of bounds coordinates event.
+         */
         void recordOutOfBoundsY() {
             outOfBoundsY++;
         }
 
+        /**
+         * Records invalid section index event.
+         */
         void recordInvalidSectionIndex() {
             invalidSectionIndex++;
         }
 
+        /**
+         * Records null section event.
+         */
         void recordNullSection() {
             nullSection++;
         }
 
+        /**
+         * Records serialization exception event.
+         */
         void recordException() {
             exception++;
         }
 
+        /**
+         * Summarizes counts inside description text string.
+         *
+         * @return description summary text
+         */
         String describe() {
-            return "visited=" + visitedInstructions
-                    + ", applied=" + appliedBlocks
-                    + ", nullState=" + nullState
-                    + ", outOfBoundsY=" + outOfBoundsY
-                    + ", invalidSectionIndex=" + invalidSectionIndex
-                    + ", nullSection=" + nullSection
-                    + ", exception=" + exception;
+            return "visited=" + visitedInstructions + ", applied=" + appliedBlocks + ", nullState=" + nullState
+                    + ", outOfBoundsY=" + outOfBoundsY + ", invalidSectionIndex=" + invalidSectionIndex
+                    + ", nullSection=" + nullSection + ", exception=" + exception;
         }
     }
 }

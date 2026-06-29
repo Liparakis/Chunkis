@@ -30,12 +30,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <p>
  * <b>Performance:</b> ~40 ns overhead per leaf tick (2 ThreadLocal operations).
  * </p>
- *
- * @author Liparakis
- * @version 1.0
  */
 @Mixin(LeavesBlock.class)
 public class LeavesBlockMixin {
+
+    /**
+     * Default constructor for LeavesBlockMixin.
+     */
+    public LeavesBlockMixin() {
+    }
 
     /**
      * Enters the leaf tick context before the scheduled tick runs.
@@ -78,6 +81,16 @@ public class LeavesBlockMixin {
         LeafTickContext.exitDirect();
     }
 
+    /**
+     * Enters the leaf tick context before the random tick runs.
+     *
+     * @param state  the current block state of the leaves
+     * @param world  the server world in which the tick is occurring
+     * @param pos    the position of the leaves block
+     * @param random the random generator for this tick
+     * @param ci     the Mixin {@link CallbackInfo}; unused but required by the
+     *               injection contract
+     */
     @Inject(method = "randomTick", at = @At("HEAD"))
     private void chunkis$beforeLeafRandomTick(
             final BlockState state,
@@ -88,6 +101,17 @@ public class LeavesBlockMixin {
         LeafTickContext.enterDirect();
     }
 
+    /**
+     * Exits the leaf tick context after the random tick completes.
+     * Uses TAIL to ensure cleanup happens even if an exception is thrown.
+     *
+     * @param state  the current block state of the leaves
+     * @param world  the server world in which the tick occurred
+     * @param pos    the position of the leaves block
+     * @param random the random generator for this tick
+     * @param ci     the Mixin {@link CallbackInfo}; unused but required by the
+     *               injection contract
+     */
     @Inject(method = "randomTick", at = @At("TAIL"))
     private void chunkis$afterLeafRandomTick(
             final BlockState state,
@@ -98,5 +122,3 @@ public class LeavesBlockMixin {
         LeafTickContext.exitDirect();
     }
 }
-
-

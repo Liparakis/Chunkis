@@ -41,6 +41,11 @@ public final class LiveEntitySnapshotCapture {
      */
     private static final Comparator<Entity> ENTITY_UUID_COMPARATOR = Comparator.comparing(Entity::getUuid);
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private LiveEntitySnapshotCapture() {
         throw new AssertionError("Utility class");
     }
@@ -67,17 +72,24 @@ public final class LiveEntitySnapshotCapture {
      * @return updated delta containing the captured entity snapshot
      */
     public static ChunkDelta<BlockState, NbtCompound> capture(final ServerWorld world, final WorldChunk chunk,
-                                                              final ChunkDelta<BlockState, NbtCompound> existingDelta
+            final ChunkDelta<BlockState, NbtCompound> existingDelta
             , final String operationId, final String source) {
         final ChunkPos chunkPos = chunk.getPos();
         final List<Entity> liveEntities = collectSavableLiveEntities(world, chunk);
 
         if (shouldSkipEntityCapture(chunk, existingDelta, liveEntities)) {
-            PayloadWatchTracer.traceDeltaStage(world.getRegistryKey().getValue().toString(), chunkPos, existingDelta,
-                                               operationId, ChunkTraceEventType.WATCH_SKIPPED, "save-entity-capture-unsafe", source,
-                                               "preserved "
-                                                       + "existing entity payload because live entity state was transient or suspiciously empty"
-                    , null);
+            PayloadWatchTracer.traceDeltaStage(world.getRegistryKey()
+                            .getValue()
+                            .toString(),
+                    chunkPos,
+                    existingDelta,
+                    operationId,
+                    ChunkTraceEventType.WATCH_SKIPPED,
+                    "save-entity-capture-unsafe",
+                    source,
+                    "preserved existing entity payload because live entity state was transient or suspiciously empty"
+                    ,
+                    null);
             return existingDelta;
         }
 
@@ -106,19 +118,30 @@ public final class LiveEntitySnapshotCapture {
         delta.clearPendingEntities();
         copyUnresolvedPendingEntities(existingDelta, liveEntityUuids, delta);
 
-        ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.SAVE_TX_START,
-                              ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, source,
-                              "entity capture scanned live=" + liveEntities.size() + ", serialized="
-                                      + capturedNbts.size() + ", " + "retainedPending="
-                                      + delta.countPendingEntities(), world.getRegistryKey().getValue().toString(), new DebugChunkKey(chunkPos.x, chunkPos.z), null, null, delta.isDirty(), null);
+        ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.SAVE_TX_START,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                source,
+                "entity capture scanned live=" + liveEntities.size() + ", serialized="
+                        + capturedNbts.size() + ", retainedPending="
+                        + delta.countPendingEntities(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
+                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                delta.isDirty(),
+                null);
         PayloadWatchTracer.traceCapturedEntities(world, chunkPos, capturedNbts);
 
         if (existingDelta != null && delta.countPendingEntities() != 0) {
-            PayloadWatchTracer.traceDeltaStage(world.getRegistryKey().getValue().toString(), chunkPos, delta, null,
-                                               ChunkTraceEventType.WATCH_CAPTURED, "entity-capture-merged-pending", source,
-                                               "live entity " +
-                                                       "capture"
-                                                       + " preserved unresolved pending entity payloads", null);
+            PayloadWatchTracer.traceDeltaStage(world.getRegistryKey()
+                            .getValue()
+                            .toString(), chunkPos, delta, null,
+                    ChunkTraceEventType.WATCH_CAPTURED, "entity-capture-merged-pending", source,
+                    "live entity capture preserved unresolved pending entity payloads", null);
         }
         return delta;
     }
@@ -139,7 +162,8 @@ public final class LiveEntitySnapshotCapture {
         int count = 0;
         for (final Entity entity : world.getOtherEntities(null, searchBox)) {
             if (entity != null && !(entity instanceof PlayerEntity) && entity.isAlive()
-                    && entity.getChunkPos().equals(chunkPos)) {
+                    && entity.getChunkPos()
+                    .equals(chunkPos)) {
                 count++;
             }
         }
@@ -164,7 +188,8 @@ public final class LiveEntitySnapshotCapture {
         final List<Entity> liveEntities = new ArrayList<>();
         for (final Entity entity : world.getOtherEntities(null, searchBox)) {
             if (entity == null || entity instanceof PlayerEntity || !entity.isAlive()
-                    || !entity.getChunkPos().equals(chunkPos)) {
+                    || !entity.getChunkPos()
+                    .equals(chunkPos)) {
                 continue;
             }
             liveEntities.add(entity);
@@ -192,8 +217,8 @@ public final class LiveEntitySnapshotCapture {
      * @return {@code true} when capture should be skipped
      */
     private static boolean shouldSkipEntityCapture(final WorldChunk chunk,
-                                                   final ChunkDelta<BlockState, NbtCompound> existingDelta,
-                                                   final List<Entity> liveEntities) {
+            final ChunkDelta<BlockState, NbtCompound> existingDelta,
+            final List<Entity> liveEntities) {
         if (SnapshotSafetyChecker.isSnapshotUnsafe(chunk)) {
             return true;
         }
@@ -213,7 +238,7 @@ public final class LiveEntitySnapshotCapture {
      * @param targetDelta     delta to write unresolved entries into
      */
     private static void copyUnresolvedPendingEntities(final ChunkDelta<BlockState, NbtCompound> existingDelta,
-                                                      final Set<String> liveEntityUuids, final ChunkDelta<BlockState,
+            final Set<String> liveEntityUuids, final ChunkDelta<BlockState,
                     NbtCompound> targetDelta) {
         if (existingDelta == null || existingDelta.countPendingEntities() == 0) {
             return;

@@ -42,19 +42,24 @@ import net.minecraft.world.chunk.WorldChunk;
  *
  * <p><b>Threading:</b> all methods must run on the server thread. Entity spawning,
  * block entity mutation, and chunk section writes are not thread-safe.</p>
- *
- * @author Liparakis
- * @version 2.2
  */
 public final class ChunkRestorer {
 
+    /**
+     * Log source tag identifier mapping for restoration operations.
+     */
     private static final String RESTORE_SOURCE = "ChunkRestorer#restore";
 
     /**
-     * NBT key for block entity and entity registry IDs.
+     * NBT key mapping identifying entities/block entities.
      */
     private static final String ID_KEY = "id";
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkRestorer() {
         throw new AssertionError("Utility class");
     }
@@ -81,23 +86,32 @@ public final class ChunkRestorer {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> protoDelta,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta
-                              ) {
+    ) {
         restore(
                 world,
                 chunk,
                 protoDelta,
                 runtimeDelta,
                 null
-               );
+        );
     }
 
+    /**
+     * Restores a chunk from persisted delta data using trace operations identifiers.
+     *
+     * @param world        server world context
+     * @param chunk        chunk to restore into
+     * @param protoDelta   source delta loaded from disk/proto state
+     * @param runtimeDelta runtime delta to populate with validated changes
+     * @param operationId  optional execution/operation trace ID label, may be null
+     */
     public static void restore(
             final ServerWorld world,
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> protoDelta,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             final String operationId
-                              ) {
+    ) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(chunk, "chunk");
         Objects.requireNonNull(protoDelta, "protoDelta");
@@ -109,7 +123,7 @@ public final class ChunkRestorer {
             runtimeDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
             runtimeDelta.setSuppressInitialRepopulation(
                     protoDelta.shouldSuppressInitialRepopulation()
-                                                       );
+            );
         }
 
         final ChunkRestorationVisitor visitor = new ChunkRestorationVisitor(
@@ -128,7 +142,7 @@ public final class ChunkRestorer {
                 ChunkTraceInvariants.hasInvalidBlockEntityOnlyPayloadWithoutBase(
                         protoDelta,
                         hasPersistedBaseChunk
-                                                                                );
+                );
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -141,13 +155,15 @@ public final class ChunkRestorer {
                         + (usePersistedBaseChunkForBlocks
                         ? "used"
                         : hasPersistedBaseChunk ? "metadata-only" : "missing"),
-                world.getRegistryKey().getValue().toString(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 protoDelta.isDirty(),
                 null
-                             );
+        );
         PayloadWatchTracer.traceRestoreStarted(world, chunkPos, chunk, protoDelta, operationId);
         if (usePersistedBaseChunkForBlocks) {
             ChunkTraceStore.trace(
@@ -157,13 +173,15 @@ public final class ChunkRestorer {
                     ChunkTraceReason.NONE,
                     RESTORE_SOURCE,
                     "restoring chunk from persisted base snapshot plus sparse delta",
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     protoDelta.isDirty(),
                     null
-                                 );
+            );
         }
         if (invalidBlockEntityOnlyPayloadWithoutBase) {
             ChunkTraceStore.trace(
@@ -173,13 +191,15 @@ public final class ChunkRestorer {
                     ChunkTraceReason.INVALID_PAYLOAD,
                     RESTORE_SOURCE,
                     "blockEntities without blockChanges require persisted base chunk NBT",
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     protoDelta.isDirty(),
                     null
-                                 );
+            );
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     ChunkTraceEventType.RESTORE_FAILED,
@@ -187,13 +207,15 @@ public final class ChunkRestorer {
                     ChunkTraceReason.INVALID_PAYLOAD,
                     RESTORE_SOURCE,
                     "skipped restore because sparse block-entity payload had no base snapshot",
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     protoDelta.isDirty(),
                     null
-                                 );
+            );
             return;
         }
 
@@ -218,13 +240,15 @@ public final class ChunkRestorer {
                     ChunkTraceReason.RESTORE_EXCEPTION,
                     RESTORE_SOURCE,
                     "restore failed with exception",
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     null,
                     null
-                                 );
+            );
             throw e;
         }
 
@@ -234,7 +258,7 @@ public final class ChunkRestorer {
                 protoDelta,
                 appliedCount,
                 usePersistedBaseChunkForBlocks
-                                                                                              );
+        );
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.SPARSE_DELTA_APPLIED,
@@ -243,13 +267,15 @@ public final class ChunkRestorer {
                 RESTORE_SOURCE,
                 "sparse delta replay: blocks=" + visitor.appliedBlocksCount()
                         + ", blockEntities=" + visitor.restoredBlockEntitiesCount(),
-                world.getRegistryKey().getValue().toString(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 runtimeDelta != null && runtimeDelta.isDirty(),
                 null
-                             );
+        );
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.PROTO_CHUNK_SECTIONS_AFTER_DELTA,
@@ -257,13 +283,15 @@ public final class ChunkRestorer {
                 restoreEmptyResult ? ChunkTraceReason.RESTORE_EMPTY_RESULT : ChunkTraceReason.NONE,
                 RESTORE_SOURCE,
                 "server chunk after sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
-                world.getRegistryKey().getValue().toString(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 runtimeDelta != null && runtimeDelta.isDirty(),
                 null
-                             );
+        );
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.RESTORE_COMPLETED,
@@ -272,19 +300,22 @@ public final class ChunkRestorer {
                 RESTORE_SOURCE,
                 "restore completed: blocks=" + visitor.appliedBlocksCount()
                         + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
-                        + ", blockReplay=" + visitor.blockApplyFailureCounters().describe(),
-                world.getRegistryKey().getValue().toString(),
+                        + ", blockReplay=" + visitor.blockApplyFailureCounters()
+                        .describe(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 runtimeDelta != null && runtimeDelta.isDirty(),
                 null
-                             );
+        );
 
         if (ChunkTraceInvariants.shouldAssertNonEmptyRestore(
                 protoDelta,
                 appliedCount
-                                                            )) {
+        )) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.ASSERTIONS,
                     ChunkTraceEventType.ASSERTION_FAILED,
@@ -292,16 +323,20 @@ public final class ChunkRestorer {
                     ChunkTraceReason.RESTORE_EMPTY_RESULT,
                     RESTORE_SOURCE,
                     "restore replay payload produced zero applied results: blocks="
-                            + protoDelta.getBlockInstructions().size()
+                            + protoDelta.getBlockInstructions()
+                            .size()
                             + ", blockEntities="
-                            + protoDelta.getBlockEntities().size(),
-                    world.getRegistryKey().getValue().toString(),
+                            + protoDelta.getBlockEntities()
+                            .size(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     runtimeDelta != null && runtimeDelta.isDirty(),
                     null
-                                 );
+            );
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.ASSERTIONS,
                     ChunkTraceEventType.ASSERTION_FAILED,
@@ -309,26 +344,48 @@ public final class ChunkRestorer {
                     ChunkTraceReason.RESTORE_EMPTY_RESULT,
                     RESTORE_SOURCE,
                     "restore zero-result diagnostics: payload=" + describeReplayPayload(protoDelta)
-                            + ", blockReplay=" + visitor.blockApplyFailureCounters().describe(),
-                    world.getRegistryKey().getValue().toString(),
+                            + ", blockReplay=" + visitor.blockApplyFailureCounters()
+                            .describe(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     runtimeDelta != null && runtimeDelta.isDirty(),
                     null
-                                 );
+            );
         }
     }
 
+    /**
+     * Replays pending entities from runtime delta parameters.
+     *
+     * @param world        target server world
+     * @param chunk        target world chunk
+     * @param runtimeDelta target runtime delta being populated
+     * @param operationId  optional execution/operation trace ID label, may be null
+     */
     public static void replayPendingEntitiesIfNeeded(
             final ServerWorld world,
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             @org.jetbrains.annotations.Nullable final String operationId
-                                                    ) {
+    ) {
         EntityReplayCoordinator.replayPendingEntitiesIfNeeded(world, chunk, runtimeDelta, operationId);
     }
 
+    /**
+     * Replays a single pending entity from parameters.
+     *
+     * @param world             target server world
+     * @param chunk             target world chunk
+     * @param runtimeDelta      target runtime delta being populated
+     * @param operationId       optional execution/operation trace ID label, may be null
+     * @param entityUuid        UUID string of target entity
+     * @param fallbackEntityNbt fallback entity NBT data, may be null
+     * @return ReplayResult outcome status
+     */
     public static ReplayResult replayPendingEntityIfNeeded(
             final ServerWorld world,
             final WorldChunk chunk,
@@ -336,7 +393,7 @@ public final class ChunkRestorer {
             @org.jetbrains.annotations.Nullable final String operationId,
             final String entityUuid,
             @org.jetbrains.annotations.Nullable final NbtCompound fallbackEntityNbt
-                                                          ) {
+    ) {
         return EntityReplayCoordinator.replayPendingEntityIfNeeded(
                 world,
                 chunk,
@@ -344,7 +401,7 @@ public final class ChunkRestorer {
                 operationId,
                 entityUuid,
                 fallbackEntityNbt
-                                                                  );
+        );
     }
 
     /**
@@ -362,6 +419,8 @@ public final class ChunkRestorer {
      * @param localZ        local chunk Z coordinate
      * @param state         state to write
      * @param worldPosition absolute world position, used for stale block entity cleanup/logging
+     * @param counters      failure tracking counters
+     * @param operationId   optional execution/operation trace ID label, may be null
      * @return {@code true} if the block was applied
      */
     static boolean applyBlockChange(
@@ -374,7 +433,7 @@ public final class ChunkRestorer {
             final BlockPos worldPosition,
             final BlockApplyFailureCounters counters,
             @org.jetbrains.annotations.Nullable final String operationId
-                                   ) {
+    ) {
         return ChunkRestoreBlockOperations.applyBlockChange(
                 chunk,
                 chunkPosition,
@@ -385,9 +444,15 @@ public final class ChunkRestorer {
                 worldPosition,
                 counters,
                 operationId
-                                                           );
+        );
     }
 
+    /**
+     * Creates human-readable diagnostic descriptions mapping replayed delta data.
+     *
+     * @param delta source block delta
+     * @return description summary text string
+     */
     static String describeReplayPayload(final ChunkDelta<?, NbtCompound> delta) {
         if (delta == null) {
             return "sections=[], blockChanges=[], blockEntities=[]";
@@ -402,16 +467,18 @@ public final class ChunkRestorer {
             blockChanges.add("(" + x + "," + y + "," + z + ")=" + state);
         });
 
-        delta.getBlockEntities().forEach((packedPos, nbt) -> {
-            final int x = io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos);
-            final int y = io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos);
-            final int z = io.liparakis.chunkis.core.BlockInstruction.unpackZ(packedPos);
-            sections.add(y >> 4);
-            final String id = nbt == null
-                    ? "null"
-                    : nbt.getString(ID_KEY).orElse("<missing-id>");
-            blockEntities.add("(" + x + "," + y + "," + z + ")=" + id);
-        });
+        delta.getBlockEntities()
+                .forEach((packedPos, nbt) -> {
+                    final int x = io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos);
+                    final int y = io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos);
+                    final int z = io.liparakis.chunkis.core.BlockInstruction.unpackZ(packedPos);
+                    sections.add(y >> 4);
+                    final String id = nbt == null
+                            ? "null"
+                            : nbt.getString(ID_KEY)
+                              .orElse("<missing-id>");
+                    blockEntities.add("(" + x + "," + y + "," + z + ")=" + id);
+                });
 
         blockEntities.sort(String::compareTo);
 
@@ -420,6 +487,12 @@ public final class ChunkRestorer {
                 + ", blockEntities=" + blockEntities;
     }
 
+    /**
+     * Helper mapping sets of integers to formatted arrays text.
+     *
+     * @param values set of target integers
+     * @return formatted array string
+     */
     private static String joinIntegers(final Set<Integer> values) {
         final StringBuilder builder = new StringBuilder("[");
         boolean first = true;
@@ -430,26 +503,70 @@ public final class ChunkRestorer {
             builder.append(value);
             first = false;
         }
-        return builder.append(']').toString();
+        return builder.append(']')
+                .toString();
     }
 
+    /**
+     * Replay outcomes representing individual entity spawn results.
+     */
     public enum ReplayStatus {
+        /**
+         * Replayed entity spawned and verified.
+         */
         SPAWNED,
+
+        /**
+         * Replayed entity was already present in the target chunk.
+         */
         ALREADY_PRESENT,
+
+        /**
+         * Chunk is not loaded.
+         */
         CHUNK_NOT_READY,
+
+        /**
+         * Persistent payload was missing or could not be found.
+         */
         PAYLOAD_MISSING,
+
+        /**
+         * Entity was spawned but failed visibility checks (retried).
+         */
         SPAWN_REJECTED_TRANSIENT,
+
+        /**
+         * Duplicate UUID UUID conflicts.
+         */
         DUPLICATE_UUID_CONFLICT,
+
+        /**
+         * Unrecoverable failure.
+         */
         PERMANENT_FAILURE
     }
 
+    /**
+     * Result wrapper representing replay outcomes.
+     *
+     * @param status status code
+     * @param reason description text reason
+     */
     public record ReplayResult(ReplayStatus status, String reason) {
 
     }
 
+    /**
+     * Specialized subclass mapping failure metrics loops.
+     */
     static final class BlockApplyFailureCounters extends ChunkRestoreBlockOperations.FailureCounters {
 
+        /**
+         * Default constructor.
+         */
+        BlockApplyFailureCounters() {
+            super();
+        }
     }
 }
-
-

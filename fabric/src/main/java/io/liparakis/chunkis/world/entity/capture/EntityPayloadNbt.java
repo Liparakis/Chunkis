@@ -19,10 +19,26 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class EntityPayloadNbt {
 
+    /**
+     * Key for entity type ID in NBT.
+     */
     private static final String ENTITY_ID_KEY = "id";
+
+    /**
+     * Key for entity UUID in NBT.
+     */
     private static final String ENTITY_UUID_KEY = "UUID";
+
+    /**
+     * Key for entity position double list in NBT.
+     */
     private static final String ENTITY_POS_KEY = "Pos";
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private EntityPayloadNbt() {
         throw new AssertionError("Utility class");
     }
@@ -39,7 +55,8 @@ public final class EntityPayloadNbt {
         if (nbt == null) {
             return Optional.empty();
         }
-        return nbt.getIntArray(ENTITY_UUID_KEY).flatMap(EntityPayloadNbt::safeUuidFromIntArray);
+        return nbt.getIntArray(ENTITY_UUID_KEY)
+                .flatMap(EntityPayloadNbt::safeUuidFromIntArray);
     }
 
     /**
@@ -63,7 +80,8 @@ public final class EntityPayloadNbt {
     public static boolean hasUuid(@Nullable final NbtCompound nbt, final String entityUuid) {
         return entityUuid != null
                 && !entityUuid.isBlank()
-                && findUuidString(nbt).map(entityUuid::equals).orElse(false);
+                && findUuidString(nbt).map(entityUuid::equals)
+                .orElse(false);
     }
 
     /**
@@ -76,7 +94,8 @@ public final class EntityPayloadNbt {
         if (nbt == null) {
             return Optional.empty();
         }
-        return nbt.getString(ENTITY_ID_KEY).map(Identifier::tryParse);
+        return nbt.getString(ENTITY_ID_KEY)
+                .map(Identifier::tryParse);
     }
 
     /**
@@ -108,12 +127,15 @@ public final class EntityPayloadNbt {
             return Optional.empty();
         }
         return nbt.getList(ENTITY_POS_KEY)
-                  .filter(pos -> pos.size() >= 3)
-                  .map(pos -> new BlockPos(
-                          (int) Math.floor(pos.getDouble(0).orElse(0.0D)),
-                          (int) Math.floor(pos.getDouble(1).orElse(0.0D)),
-                          (int) Math.floor(pos.getDouble(2).orElse(0.0D))
-                  ));
+                .filter(pos -> pos.size() >= 3)
+                .map(pos -> new BlockPos(
+                        (int) Math.floor(pos.getDouble(0)
+                                .orElse(0.0D)),
+                        (int) Math.floor(pos.getDouble(1)
+                                .orElse(0.0D)),
+                        (int) Math.floor(pos.getDouble(2)
+                                .orElse(0.0D))
+                ));
     }
 
     /**
@@ -127,7 +149,9 @@ public final class EntityPayloadNbt {
         if (nbt == null) {
             return "<missing>";
         }
-        return nbt.getList(ENTITY_POS_KEY).map(Object::toString).orElse("<missing>");
+        return nbt.getList(ENTITY_POS_KEY)
+                .map(Object::toString)
+                .orElse("<missing>");
     }
 
     /**

@@ -57,16 +57,39 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(WorldChunk.class)
 public class WorldChunkMixin implements ChunkisMutationGuardDuck {
 
+    /**
+     * Trace source identification tag label.
+     */
     @Unique
     private static final String SOURCE = "WorldChunkMixin";
+
+    /**
+     * Trace source identification tag label for restore.
+     */
     @Unique
     private static final String RESTORE_SOURCE = "WorldChunkMixin#chunkis$restoreChunkFromDelta";
+
+    /**
+     * Trace source identification tag label for block state updates.
+     */
     @Unique
     private static final String SET_BLOCK_STATE_SOURCE = "WorldChunkMixin#setBlockState";
+
+    /**
+     * Trace source identification tag label for block entity updates.
+     */
     @Unique
     private static final String SET_BLOCK_ENTITY_SOURCE = "WorldChunkMixin#setBlockEntity";
+
+    /**
+     * Trace source identification tag label for block entity removal.
+     */
     @Unique
     private static final String REMOVE_BLOCK_ENTITY_SOURCE = "WorldChunkMixin#removeBlockEntity";
+
+    /**
+     * Trace source identification tag label for entity addition.
+     */
     @Unique
     private static final String ADD_ENTITY_SOURCE = "WorldChunkMixin#addEntity";
 
@@ -84,6 +107,9 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
     private static final Predicate<BlockState> NETHER_PORTAL_BLOCK_PREDICATE =
             state -> state.isOf(Blocks.NETHER_PORTAL);
 
+    /**
+     * Active mutation tracking scope instance.
+     */
     @Unique
     private final ChunkMutationTrackingScope chunkis$mutationTrackingScope = new ChunkMutationTrackingScope();
 
@@ -100,8 +126,18 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
     private int chunkis$portalBlockCount;
 
     /**
+     * Default constructor for WorldChunkMixin.
+     */
+    public WorldChunkMixin() {
+    }
+
+    /**
      * Returns whether a block transition should be ignored because it came from
      * vanilla's natural leaf-decay tick path rather than an intentional saved edit.
+     *
+     * @param previous preceding block state
+     * @param next     succeeding block state
+     * @return true if tick represents natural leaf decay
      */
     @Unique
     private static boolean chunkis$isNaturalLeafDecay(final BlockState previous, final BlockState next) {
@@ -110,8 +146,10 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
     }
 
     /**
-     * Extracts the CIS delta previously attached to a proto chunk during
-     * deserialization.
+     * Extracts the CIS delta previously attached to a proto chunk during deserialization.
+     *
+     * @param proto proto chunk to query
+     * @return resolved block delta, or null
      */
     @Unique
     @SuppressWarnings("unchecked")
@@ -120,6 +158,12 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta() : null;
     }
 
+    /**
+     * Extracts the restore operation ID mapping session details.
+     *
+     * @param deltaDuck duck mapping instance
+     * @return resolved operation ID string
+     */
     @Unique
     private static String chunkis$takeRestoreOperationId(final ChunkisDeltaDuck deltaDuck) {
         final String operationId = deltaDuck.chunkis$getRestoreOperationId();
@@ -130,14 +174,29 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         return ChunkTraceStore.nextOperationId("restore");
     }
 
+    /**
+     * Checks if the restored delta state should be marked as saved.
+     *
+     * @param deltaDuck duck mapping instance
+     * @param delta     delta mapping instance
+     * @return true if delta should be marked saved
+     */
     @Unique
     private static boolean chunkis$shouldMarkRestoredDeltaSaved(
             final ChunkisDeltaDuck deltaDuck,
             final ChunkDelta<?, ?> delta
-                                                               ) {
+    ) {
         return deltaDuck.chunkis$wasRestoreLoadedFromStorage() || !delta.isDirty();
     }
 
+    /**
+     * Traces session log details mapping failed restore execution paths.
+     *
+     * @param worldId     target world registry ID string
+     * @param chunkKey    key mapping coordinates
+     * @param operationId active load/save operation ID
+     * @param failedStage failed stage description string
+     */
     @Unique
     private static void chunkis$tracePostRestoreFailure(
             final String worldId, final DebugChunkKey chunkKey,
@@ -146,7 +205,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.RESTORE_FAILED,
                 ChunkTraceSeverity.ERROR, ChunkTraceReason.RESTORE_EXCEPTION, RESTORE_SOURCE, "post-restore follow-up" +
                         " failed during " + failedStage, worldId, chunkKey, null, operationId, null, null
-                             );
+        );
     }
 
     /**
@@ -156,6 +215,11 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
      * can still be inspected and no-op writes can be ignored. Restore-time writes,
      * client writes, and non-server-thread writes are filtered out by
      * {@link #chunkis$shouldNotTrackChunkMutation(WorldChunk)}.</p>
+     *
+     * @param pos   target block coordinates position
+     * @param state target block state to set
+     * @param flags update flags
+     * @param cir   callback info returnable wrapper
      */
     @Inject(method = "setBlockState", at = @At("HEAD"))
     private void chunkis$onSetBlockState(
@@ -164,7 +228,8 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         final WorldChunk chunk = chunkis$self();
         final ChunkMutationTrackingScope.Cause suppressionCause = chunkis$getSuppressionCause(chunk);
         final ChunkDelta<BlockState, NbtCompound> existingDelta = chunkis$getBlockDelta();
-        final int blockChangesBefore = existingDelta != null ? existingDelta.getBlockInstructions().size() : 0;
+        final int blockChangesBefore = existingDelta != null ? existingDelta.getBlockInstructions()
+                                                               .size() : 0;
         final long mutationGenerationBefore = existingDelta != null ? existingDelta.getMutationGeneration() : 0L;
         final boolean deltaExistedBefore = existingDelta != null;
         final BlockState previous = chunk.getBlockState(pos);
@@ -184,7 +249,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     blockChangesBefore,
                     mutationGenerationBefore,
                     "mutation suppressed before tracking"
-                                                        );
+            );
             chunkis$traceSuppressedMutation(chunk, suppressionCause, SET_BLOCK_STATE_SOURCE, pos);
             return;
         }
@@ -204,7 +269,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     blockChangesBefore,
                     mutationGenerationBefore,
                     "mutation skipped before tracking"
-                                                        );
+            );
             return;
         }
         if (previous == state || chunkis$isNaturalLeafDecay(previous, state)) {
@@ -223,7 +288,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     blockChangesBefore,
                     mutationGenerationBefore,
                     "mutation skipped because state was unchanged or natural leaf decay"
-                                                        );
+            );
             return;
         }
 
@@ -231,7 +296,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 chunkis$getOrCreateOwnedBlockDelta(
                         chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
                         SET_BLOCK_STATE_SOURCE
-                                                  );
+                );
         final boolean becameDirty = !delta.isDirty();
         if (chunk.getWorld() instanceof ServerWorld serverWorld) {
             BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
@@ -240,13 +305,13 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         delta.addBlockChange(
                 pos.getX() & CisConstants.COORD_MASK, pos.getY(), pos.getZ() & CisConstants.COORD_MASK,
                 state
-                            );
+        );
 
         if (!state.hasBlockEntity()) {
             delta.removeBlockEntityData(
                     pos.getX() & CisConstants.COORD_MASK, pos.getY(),
                     pos.getZ() & CisConstants.COORD_MASK
-                                       );
+            );
         }
 
         if (becameDirty) {
@@ -264,10 +329,11 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 true,
                 !deltaExistedBefore,
                 blockChangesBefore,
-                delta.getBlockInstructions().size(),
+                delta.getBlockInstructions()
+                        .size(),
                 delta.getMutationGeneration(),
                 "mutation recorded into ChunkDelta"
-                                                    );
+        );
         GlobalChunkTracker.markDirty(chunk, SET_BLOCK_STATE_SOURCE);
     }
 
@@ -276,6 +342,11 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
      *
      * <p>Chunkis currently uses this to refresh the portal chunk index whenever a
      * Nether portal block may have been added or removed.</p>
+     *
+     * @param pos   target block coordinates position
+     * @param state target block state
+     * @param flags update flags
+     * @param cir   callback info returnable wrapper
      */
     @Inject(method = "setBlockState", at = @At("RETURN"))
     private void chunkis$afterSetBlockState(
@@ -301,6 +372,9 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
      *
      * <p>The hook runs on {@code RETURN} so the block entity is fully initialized
      * and can serialize itself through the normal registry-aware path.</p>
+     *
+     * @param blockEntity block entity instance
+     * @param ci          callback info helper
      */
     @Inject(method = "setBlockEntity", at = @At("RETURN"))
     private void chunkis$onSetBlockEntity(final BlockEntity blockEntity, final CallbackInfo ci) {
@@ -315,7 +389,8 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         }
 
         final BlockPos pos = blockEntity.getPos();
-        if (!chunk.getBlockState(pos).hasBlockEntity()) {
+        if (!chunk.getBlockState(pos)
+                .hasBlockEntity()) {
             return;
         }
         if (!(chunk.getWorld() instanceof ServerWorld serverWorld)) {
@@ -326,14 +401,14 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 chunkis$getOrCreateOwnedBlockDelta(
                         chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
                         SET_BLOCK_ENTITY_SOURCE
-                                                  );
+                );
         try {
             BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
             delta.prepareForMutation(SET_BLOCK_ENTITY_SOURCE);
             ChunkBlockEntityCapture.captureBlockEntity(
                     blockEntity, serverWorld.getRegistryManager(),
                     delta
-                                                      );
+            );
             GlobalChunkTracker.markDirty(chunk, SET_BLOCK_ENTITY_SOURCE);
         } catch (final Exception e) {
             Chunkis.LOGGER.error("Chunkis: Failed to capture block entity at {}", pos, e);
@@ -342,6 +417,9 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
 
     /**
      * Removes persisted block-entity data when vanilla removes a live block entity.
+     *
+     * @param pos block coordinates position to remove
+     * @param ci  callback info helper
      */
     @Inject(method = "removeBlockEntity", at = @At("HEAD"))
     private void chunkis$onRemoveBlockEntity(final BlockPos pos, final CallbackInfo ci) {
@@ -359,15 +437,21 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 chunkis$getOrCreateOwnedBlockDelta(
                         chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
                         REMOVE_BLOCK_ENTITY_SOURCE
-                                                  );
+                );
         delta.prepareForMutation(REMOVE_BLOCK_ENTITY_SOURCE);
         delta.removeBlockEntityData(
                 pos.getX() & CisConstants.COORD_MASK, pos.getY(),
                 pos.getZ() & CisConstants.COORD_MASK
-                                   );
+        );
         GlobalChunkTracker.markDirty(chunk, REMOVE_BLOCK_ENTITY_SOURCE);
     }
 
+    /**
+     * Captures entity loading operations mapping updates.
+     *
+     * @param entity target loaded entity
+     * @param ci     callback info helper
+     */
     @Inject(method = "addEntity", at = @At("RETURN"))
     private void chunkis$onAddEntity(final Entity entity, final CallbackInfo ci) {
         final WorldChunk chunk = chunkis$self();
@@ -376,7 +460,8 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 || chunkis$shouldNotTrackChunkMutation(chunk)
                 || entity instanceof PlayerEntity
                 || !entity.isAlive()
-                || !entity.getChunkPos().equals(chunk.getPos())) {
+                || !entity.getChunkPos()
+                .equals(chunk.getPos())) {
             return;
         }
 
@@ -393,9 +478,9 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         delta.prepareForMutation(ADD_ENTITY_SOURCE);
         delta.removeEntitiesMatching(nbt -> nbt != null
                 && nbt.getIntArray("UUID")
-                      .map(Uuids::toUuid)
-                      .map(entity.getUuid()::equals)
-                      .orElse(false));
+                .map(Uuids::toUuid)
+                .map(entity.getUuid()::equals)
+                .orElse(false));
         delta.putEntity(entity.getId(), entityNbt);
         GlobalChunkTracker.markDirty(chunk, ADD_ENTITY_SOURCE);
     }
@@ -403,6 +488,11 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
     /**
      * Replays any proto-attached CIS snapshot once vanilla promotes a proto chunk
      * into a live world chunk.
+     *
+     * @param world        server world context
+     * @param protoChunk   deserialized proto chunk
+     * @param entityLoader entity loader instance
+     * @param ci           callback info helper
      */
     @Inject(method = "<init>(Lnet/minecraft/server/world/ServerWorld;Lnet/minecraft/world/chunk/ProtoChunk;" + "Lnet" +
             "/minecraft/world/chunk/WorldChunk$EntityLoader;)V", at = @At("RETURN"))
@@ -415,18 +505,20 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 : null;
         if (protoDelta != null && protoOperationId != null) {
             PayloadWatchTracer.traceProtoDeltaPresentBeforeConversion(
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     protoChunk,
                     protoDelta,
                     protoOperationId,
                     SOURCE + "#chunkis$onConstructFromProto"
-                                                                     );
+            );
             PayloadWatchTracer.traceWorldChunkConstructorConsumed(
                     chunkis$self(),
                     protoDelta,
                     protoOperationId,
                     SOURCE + "#chunkis$onConstructFromProto"
-                                                                 );
+            );
         }
         if (protoDelta == null || protoDelta.isEmpty()) {
             if (protoOperationId != null) {
@@ -434,13 +526,13 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                         chunkis$self(),
                         protoOperationId,
                         SOURCE + "#chunkis$onConstructFromProto"
-                                                              );
+                );
             }
             PendingChunkMutationSuppression.end(
                     world.getRegistryKey(),
                     chunkis$self().getPos(),
                     SOURCE + "#chunkis$onConstructFromProto#empty"
-                                               );
+            );
             return;
         }
         ChunkOwnershipTraceHelper.traceDecision(
@@ -451,26 +543,28 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 RESTORE_SOURCE,
                 protoDelta,
                 ChunkMutationTrackingScope.Cause.RESTORE
-                                               );
+        );
         chunkis$mutationTrackingScope.push(ChunkMutationTrackingScope.Cause.RESTORE);
         try {
             chunkis$restoreChunkFromDelta(world, chunkis$self(), protoChunk, protoDelta);
         } finally {
             if (protoOperationId != null) {
                 PayloadWatchTracer.traceProtoDeltaPresentAfterConversion(
-                        world.getRegistryKey().getValue().toString(),
+                        world.getRegistryKey()
+                                .getValue()
+                                .toString(),
                         protoChunk,
                         protoDelta,
                         protoOperationId,
                         SOURCE + "#chunkis$onConstructFromProto"
-                                                                        );
+                );
             }
             chunkis$mutationTrackingScope.pop(ChunkMutationTrackingScope.Cause.RESTORE);
             PendingChunkMutationSuppression.end(
                     world.getRegistryKey(),
                     chunkis$self().getPos(),
                     SOURCE + "#chunkis$onConstructFromProto#finally"
-                                               );
+            );
         }
     }
 
@@ -480,6 +574,9 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
      * <p>Chunkis only tracks server-thread writes to fully realized server chunks.
      * Restore-time writes are also ignored to avoid marking a freshly loaded chunk
      * dirty just because its snapshot was applied.</p>
+     *
+     * @param chunk target world chunk to evaluate
+     * @return true if mutation tracking should be bypassed
      */
     @Unique
     private boolean chunkis$shouldNotTrackChunkMutation(final WorldChunk chunk) {
@@ -493,24 +590,35 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     ChunkisDebugDomain.ASSERTIONS, ChunkTraceEventType.ASSERTION_FAILED,
                     ChunkTraceSeverity.ERROR, ChunkTraceReason.OFF_THREAD_MUTATION_REJECTED, SOURCE +
                             "#chunkis$shouldNotTrackChunkMutation", "rejected mutation outside server thread",
-                    world.getRegistryKey().getValue().toString(), DebugChunkKeys.of(chunk.getPos()),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(), DebugChunkKeys.of(chunk.getPos()),
                     null, null, null, null
-                                 );
+            );
             Chunkis.LOGGER.warn(
                     "Chunkis: Block change rejected outside server thread for chunk {} on thread {}",
-                    chunk.getPos(), Thread.currentThread().getName()
-                               );
+                    chunk.getPos(),
+                    Thread.currentThread()
+                            .getName()
+            );
             return true;
         }
 
         return false;
     }
 
+    /**
+     * Evaluates active mutation suppression causes.
+     *
+     * @param chunk target world chunk
+     * @return current tracking suppression cause code
+     */
     @Unique
     private ChunkMutationTrackingScope.Cause chunkis$getSuppressionCause(final WorldChunk chunk) {
         if (chunk instanceof ChunkisMutationGuardDuck guardDuck) {
             final ChunkMutationTrackingScope.Cause liveCause =
-                    guardDuck.chunkis$getMutationTrackingScope().currentCause();
+                    guardDuck.chunkis$getMutationTrackingScope()
+                            .currentCause();
             if (liveCause != ChunkMutationTrackingScope.Cause.NONE) {
                 return liveCause;
             }
@@ -518,6 +626,14 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         return PendingChunkMutationSuppression.currentCause(chunk);
     }
 
+    /**
+     * Dispatches session traces mapping suppressed chunk mutations.
+     *
+     * @param chunk  target world chunk
+     * @param cause  active tracking suppression cause code
+     * @param source class/method trace source trigger label
+     * @param pos    target block coordinates position, may be null
+     */
     @Unique
     private void chunkis$traceSuppressedMutation(
             final WorldChunk chunk,
@@ -528,10 +644,11 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         final boolean shouldTrace = scope.currentCause() == cause
                 ? scope.shouldTraceSuppression(cause)
                 : PendingChunkMutationSuppression.shouldTrace(
-                        chunk.getWorld().getRegistryKey(),
+                        chunk.getWorld()
+                        .getRegistryKey(),
                         chunk.getPos(),
                         cause
-                                                             );
+                );
         if (!shouldTrace) {
             return;
         }
@@ -545,17 +662,29 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                         : ChunkTraceReason.NONE,
                 source,
                 "suppressed chunk mutation ownership during "
-                        + cause.name().toLowerCase().replace('_', '-')
+                        + cause.name()
+                        .toLowerCase()
+                        .replace('_', '-')
                         + (pos != null ? " at " + pos.toShortString() : ""),
-                chunk.getWorld().getRegistryKey().getValue().toString(),
+                chunk.getWorld()
+                        .getRegistryKey()
+                        .getValue()
+                        .toString(),
                 DebugChunkKeys.of(chunk.getPos()),
                 null,
                 null,
                 false,
                 null
-                             );
+        );
     }
 
+    /**
+     * Dispatches session traces when real edits are accepted onto chunks.
+     *
+     * @param chunk            target world chunk
+     * @param pos              target block coordinates position
+     * @param suppressionCause active tracking suppression cause code
+     */
     @Unique
     private void chunkis$traceAcceptedRealEdit(
             final WorldChunk chunk,
@@ -569,13 +698,16 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     ChunkTraceReason.PASSIVE_CHUNK_DIRTIED,
                     SET_BLOCK_STATE_SOURCE,
                     "passive context produced first dirty mutation at " + pos.toShortString(),
-                    chunk.getWorld().getRegistryKey().getValue().toString(),
+                    chunk.getWorld()
+                            .getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunk.getPos()),
                     null,
                     null,
                     true,
                     null
-                                 );
+            );
         }
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -584,17 +716,23 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 ChunkTraceReason.NONE,
                 SET_BLOCK_STATE_SOURCE,
                 "accepted real chunk edit at " + pos.toShortString(),
-                chunk.getWorld().getRegistryKey().getValue().toString(),
+                chunk.getWorld()
+                        .getRegistryKey()
+                        .getValue()
+                        .toString(),
                 DebugChunkKeys.of(chunk.getPos()),
                 null,
                 null,
                 true,
                 null
-                             );
+        );
     }
 
     /**
      * Returns whether the caller is currently on the owning server thread.
+     *
+     * @param world context world reference
+     * @return true if executing on server tick thread
      */
     @Unique
     private boolean chunkis$isOnServerThread(final World world) {
@@ -615,6 +753,11 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
 
     /**
      * Restores a promoted world chunk from the proto-carried CIS snapshot.
+     *
+     * @param world      server world context
+     * @param chunk      target world chunk being populated
+     * @param proto      source proto chunk instance
+     * @param protoDelta source proto delta containing snapshot NBT
      */
     @Unique
     private void chunkis$restoreChunkFromDelta(
@@ -625,7 +768,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 chunkis$getOrCreateOwnedBlockDelta(
                         chunk, ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
                         RESTORE_SOURCE
-                                                  );
+                );
         final String operationId = chunkis$takeRestoreOperationId((ChunkisDeltaDuck) proto);
         PayloadWatchTracer.traceWorldChunkDeltaAttached(chunk, selfDelta, operationId, RESTORE_SOURCE);
         boolean coreRestoreCompleted = false;
@@ -636,7 +779,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         final boolean usePersistedBaseChunkForBlocks =
                 io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(
                         protoDelta.getChunkMetadata()
-                                                                                                                 );
+                );
 
         if (usePersistedBaseChunkForBlocks) {
             ChunkTraceStore.trace(
@@ -646,13 +789,15 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     ChunkTraceReason.NONE,
                     RESTORE_SOURCE,
                     "world chunk before sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunk.getPos()),
                     null,
                     operationId,
                     protoDelta.isDirty(),
                     null
-                                 );
+            );
         }
 
         try {
@@ -663,7 +808,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     protoDelta,
                     operationId,
                     RESTORE_SOURCE
-                                                  );
+            );
             PayloadWatchTracer.traceLiveChunkState(
                     chunk,
                     ChunkTraceEventType.WATCH_PRESENT_AFTER_RESTORE,
@@ -671,7 +816,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     RESTORE_SOURCE,
                     operationId,
                     protoDelta
-                                                  );
+            );
             PayloadWatchTracer.traceLiveChunkState(
                     chunk,
                     ChunkTraceEventType.WATCH_LIVE_CHUNK_STATE_AFTER_RESTORE,
@@ -679,7 +824,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     RESTORE_SOURCE,
                     operationId,
                     protoDelta
-                                                  );
+            );
             failedStage = "portal-poi-resync";
             chunkis$resyncPortalPointOfInterestStorage(world, chunk);
             failedStage = "portal-index-update";
@@ -687,9 +832,11 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         } catch (final Exception e) {
             if (coreRestoreCompleted) {
                 chunkis$tracePostRestoreFailure(
-                        world.getRegistryKey().getValue().toString(),
+                        world.getRegistryKey()
+                                .getValue()
+                                .toString(),
                         DebugChunkKeys.of(chunk.getPos()), operationId, failedStage
-                                               );
+                );
             }
             Chunkis.LOGGER.error("Chunkis: Failed to restore chunk {}", proto.getPos(), e);
         }
@@ -705,13 +852,15 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     finalSections > 0 ? ChunkTraceReason.NONE : ChunkTraceReason.BASE_SNAPSHOT_NOT_APPLIED,
                     RESTORE_SOURCE,
                     "world chunk after sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     DebugChunkKeys.of(chunk.getPos()),
                     null,
                     operationId,
                     protoDelta.isDirty(),
                     null
-                                 );
+            );
             if (finalSections == 0) {
                 ChunkTraceStore.trace(
                         ChunkisDebugDomain.ASSERTIONS,
@@ -720,13 +869,15 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                         ChunkTraceReason.BASE_SNAPSHOT_NOT_APPLIED,
                         RESTORE_SOURCE,
                         "persisted base NBT existed but final server chunk had zero non-empty sections",
-                        world.getRegistryKey().getValue().toString(),
+                        world.getRegistryKey()
+                                .getValue()
+                                .toString(),
                         DebugChunkKeys.of(chunk.getPos()),
                         null,
                         operationId,
                         protoDelta.isDirty(),
                         null
-                                     );
+                );
             }
         }
 
@@ -735,6 +886,15 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         }
     }
 
+    /**
+     * Traces active metadata descriptors linked to live chunk deltas.
+     *
+     * @param world       server world context
+     * @param chunk       target world chunk reference
+     * @param protoDelta  proto delta containing source values
+     * @param liveDelta   live delta mapping targets
+     * @param operationId active load/save operation ID
+     */
     @Unique
     private void chunkis$traceLiveDeltaMetadata(
             final ServerWorld world,
@@ -742,7 +902,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
             final ChunkDelta<BlockState, NbtCompound> protoDelta,
             final ChunkDelta<BlockState, NbtCompound> liveDelta,
             final String operationId
-                                               ) {
+    ) {
         final boolean protoHasBase =
                 io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil.hasPersistedBaseChunkNbt(protoDelta.getChunkMetadata());
         final boolean liveHasBase =
@@ -762,18 +922,22 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 lostAnchor ? ChunkTraceReason.RESTORE_EXCEPTION : ChunkTraceReason.NONE,
                 RESTORE_SOURCE,
                 "live delta metadata after attach: proto="
-                        + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(protoDelta)
+                        + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(
+                        protoDelta)
                         + ", live="
-                        + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(liveDelta)
+                        + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(
+                        liveDelta)
                         + ", protoHasBase=" + protoHasBase
                         + ", liveHasBase=" + liveHasBase,
-                world.getRegistryKey().getValue().toString(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 DebugChunkKeys.of(chunk.getPos()),
                 null,
                 operationId,
                 liveDelta.isDirty(),
                 null
-                             );
+        );
     }
 
     /**
@@ -782,12 +946,17 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
      * <p>Portal blocks are exact chunk content, but POI storage is auxiliary
      * metadata. Re-adding the POIs here keeps portal search behavior aligned with
      * the restored block grid.</p>
+     *
+     * @param world server world context
+     * @param chunk target world chunk reference
      */
     @Unique
     private void chunkis$resyncPortalPointOfInterestStorage(final ServerWorld world, final WorldChunk chunk) {
         final PointOfInterestStorage poiStorage = world.getPointOfInterestStorage();
         final RegistryEntry<PointOfInterestType> portalType =
-                world.getRegistryManager().getOrThrow(RegistryKeys.POINT_OF_INTEREST_TYPE).getOrThrow(PointOfInterestTypes.NETHER_PORTAL);
+                world.getRegistryManager()
+                        .getOrThrow(RegistryKeys.POINT_OF_INTEREST_TYPE)
+                        .getOrThrow(PointOfInterestTypes.NETHER_PORTAL);
 
         final int blockCount = chunkis$addPortalPois(chunk, poiStorage, portalType);
         if (blockCount == 0) {
@@ -795,20 +964,30 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         }
 
         final long poiCount = poiStorage.getInChunk(
-                PORTAL_POI_PREDICATE, chunk.getPos(),
-                PointOfInterestStorage.OccupationStatus.ANY
-                                                   ).count();
+                        PORTAL_POI_PREDICATE, chunk.getPos(),
+                        PointOfInterestStorage.OccupationStatus.ANY
+                )
+                .count();
 
         if (poiCount == 0) {
             Chunkis.LOGGER.warn(
                     "Chunkis [PORTAL]: Restored chunk {} in {} has {} portal block(s) but no portal POIs " +
-                            "after resync", chunk.getPos(), world.getRegistryKey().getValue(), blockCount
-                               );
+                            "after resync",
+                    chunk.getPos(),
+                    world.getRegistryKey()
+                            .getValue(),
+                    blockCount
+            );
         }
     }
 
     /**
      * Adds portal POIs for every restored Nether portal block in the chunk.
+     *
+     * @param chunk      target world chunk reference
+     * @param poiStorage point of interest storage reference
+     * @param portalType point of interest type entry
+     * @return count of portal blocks matched
      */
     @Unique
     private int chunkis$addPortalPois(
@@ -820,12 +999,15 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     chunkis$portalBlockCount++;
                     poiStorage.add(pos, portalType);
                 }
-                                           );
+        );
         final int count = chunkis$portalBlockCount;
         chunkis$portalBlockCount = 0;
         return count;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public ChunkMutationTrackingScope chunkis$getMutationTrackingScope() {
         return chunkis$mutationTrackingScope;
@@ -833,6 +1015,8 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
 
     /**
      * Returns the live mutable Chunkis delta attached to this chunk.
+     *
+     * @return active block delta
      */
     @Unique
     @SuppressWarnings("unchecked")
@@ -840,49 +1024,58 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         return (ChunkDelta<BlockState, NbtCompound>) ((ChunkisDeltaDuck) this).chunkis$getDelta();
     }
 
+    /**
+     * Resolves the active tracked delta or creates a new one claiming ownership.
+     *
+     * @param chunk           target world chunk
+     * @param ownershipReason ownership claim reason code
+     * @param source          class/method trace source trigger label
+     * @return active block delta mapping updates
+     */
     @Unique
     private ChunkDelta<BlockState, NbtCompound> chunkis$getOrCreateOwnedBlockDelta(
             final WorldChunk chunk,
             final ChunkTraceReason ownershipReason,
             final String source
-                                                                                  ) {
+    ) {
         ChunkDelta<BlockState, NbtCompound> delta = chunkis$getBlockDelta();
         if (delta == null) {
             delta = new ChunkDelta<>(BlockState::isAir);
             ((ChunkisDeltaDuck) chunk).chunkis$setDelta(delta);
             ChunkOwnershipTraceHelper.traceDecision(
-                    chunk.getWorld().getRegistryKey(),
+                    chunk.getWorld()
+                            .getRegistryKey(),
                     chunk.getPos(),
                     "CLAIMED",
                     ownershipReason,
                     source + "#createDelta",
                     delta,
                     chunkis$getSuppressionCause(chunk)
-                                                   );
+            );
         }
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             delta.claimOwnership(ownershipReason.name(), source);
             ChunkOwnershipTraceHelper.traceDecision(
-                    chunk.getWorld().getRegistryKey(),
+                    chunk.getWorld()
+                            .getRegistryKey(),
                     chunk.getPos(),
                     "CLAIMED",
                     ownershipReason,
                     source,
                     delta,
                     chunkis$getSuppressionCause(chunk)
-                                                   );
+            );
         }
         return delta;
     }
 
     /**
      * Convenience cast for accessing the target {@link WorldChunk} instance.
+     *
+     * @return self casted to WorldChunk
      */
     @Unique
     private WorldChunk chunkis$self() {
         return (WorldChunk) (Object) this;
     }
-
 }
-
-

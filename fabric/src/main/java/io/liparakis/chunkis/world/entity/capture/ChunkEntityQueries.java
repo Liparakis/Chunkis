@@ -21,6 +21,11 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ChunkEntityQueries {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkEntityQueries() {
         throw new AssertionError("Utility class");
     }
@@ -40,13 +45,14 @@ public final class ChunkEntityQueries {
     public static NbtCompound findPendingEntityNbt(
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             final String entityUuid
-                                                  ) {
+    ) {
         final NbtCompound[] found = {null};
         runtimeDelta.forEachPendingEntity(nbt -> {
             if (found[0] != null || nbt == null) {
                 return;
             }
-            final String candidateUuid = EntityPayloadNbt.findUuidString(nbt).orElse(null);
+            final String candidateUuid = EntityPayloadNbt.findUuidString(nbt)
+                    .orElse(null);
             if (entityUuid.equals(candidateUuid)) {
                 found[0] = nbt;
             }
@@ -86,7 +92,7 @@ public final class ChunkEntityQueries {
             final Entity entity,
             @Nullable final EntityType<?> expectedType,
             final ChunkPos expectedChunk
-                                              ) {
+    ) {
         return entity != null
                 && entity.isAlive()
                 && !entity.isRemoved()
@@ -112,7 +118,7 @@ public final class ChunkEntityQueries {
             final ServerWorld world,
             final UUID uuid,
             final Box searchBox
-                                                 ) {
+    ) {
         for (final Entity entity : world.getOtherEntities(null, searchBox)) {
             if (uuid.equals(entity.getUuid()) && entity.isAlive() && !entity.isRemoved()) {
                 return true;

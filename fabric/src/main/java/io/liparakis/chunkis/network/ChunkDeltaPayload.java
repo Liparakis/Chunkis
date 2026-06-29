@@ -34,14 +34,19 @@ import net.minecraft.util.Identifier;
  * {@value #COMPRESSION_THRESHOLD} bytes. The compressed form is used only when
  * it is at least 10% smaller than the
  * original — below that, the decompression overhead is not worthwhile.
+ * </p>
  *
  * <h2>Thread safety</h2>
  * <p>
  * {@link Deflater} and {@link Inflater} instances are pooled per-thread to avoid
  * construction cost and synchronization overhead on the Netty I/O threads.
+ * </p>
  *
- * @author Liparakis
- * @version 1.2
+ * @param data             raw or compressed serialised block delta byte data
+ * @param chunkX           chunk X position
+ * @param chunkZ           chunk Z position
+ * @param compressed       true if byte data is compressed
+ * @param uncompressedSize size of raw byte data when uncompressed
  */
 public record ChunkDeltaPayload(
         byte[] data,
@@ -55,44 +60,49 @@ public record ChunkDeltaPayload(
      */
     public static final CustomPayload.Id<ChunkDeltaPayload> ID =
             new CustomPayload.Id<>(Identifier.of(Chunkis.MOD_ID, "chunk_delta"));
+
     /**
      * Hard cap on incoming payload data length to guard against malformed packets.
      */
     private static final int MAX_PAYLOAD_SIZE = 1024 * 1024; // 1 MB
+
     /**
      * Minimum raw payload size in bytes before compression is attempted.
-     * Deflating small payloads can make them larger, so compression is skipped below this.
      */
     private static final int COMPRESSION_THRESHOLD = 4096; // 4 KB
+
     /**
-     * Compression is kept only when the deflated size is strictly below this
-     * fraction of the original. Expressed as a ratio: {@code compressed < raw * threshold}.
+     * Compression ratio threshold factor.
      */
     private static final double COMPRESSION_RATIO_THRESHOLD = 0.9;
+
     /**
      * Wire flag indicating the payload data is zlib-compressed.
      */
     private static final byte FLAG_COMPRESSED = (byte) 0x01;
+
     /**
      * Wire flag indicating the payload data is uncompressed.
      */
     private static final byte FLAG_UNCOMPRESSED = (byte) 0x00;
+
     /**
      * Scratch buffer size for deflate/inflate loops.
      */
     private static final int COMPRESSION_BUFFER_SIZE = 8192;
+
     /**
-     * Per-thread {@link Deflater} pool. Configured at {@link Deflater#BEST_SPEED}
-     * to minimise send latency at the cost of some compression ratio.
+     * Per-thread {@link Deflater} pool.
      */
     private static final ThreadLocal<Deflater> DEFLATER_POOL =
             ThreadLocal.withInitial(() -> new Deflater(Deflater.BEST_SPEED));
+
     /**
-     * Per-thread {@link Inflater} pool. Each instance is reset before reuse
-     * to ensure clean state between decompressions.
+     * Per-thread {@link Inflater} pool.
      */
     private static final ThreadLocal<Inflater> INFLATER_POOL =
             ThreadLocal.withInitial(Inflater::new);
+
     /**
      * Codec wiring the static {@link #read} and instance {@link #write} methods.
      */
@@ -111,6 +121,7 @@ public record ChunkDeltaPayload(
      *     of the raw size.</li>
      * </ul>
      * Otherwise a defensive copy of the raw bytes is stored uncompressed.
+     * </p>
      *
      * @param rawData raw serialised delta bytes (must not be null)
      * @param chunkX  chunk X coordinate
@@ -134,8 +145,7 @@ public record ChunkDeltaPayload(
     /**
      * Deserializes a {@link ChunkDeltaPayload} from the given packet buffer.
      *
-     * <p>
-     * Wire order: {@code chunkX | chunkZ | flags | dataLength | data | [origLength if compressed]}.
+     * <p>Wire order: {@code chunkX | chunkZ | flags | dataLength | data | [origLength if compressed]}.</p>
      *
      * @param buf the buffer to read from
      * @return the deserialized payload
@@ -195,10 +205,9 @@ public record ChunkDeltaPayload(
     /**
      * Decompresses {@code compressed} using the thread-local {@link Inflater}.
      *
-     * <p>
-     * Uses streaming inflate so that a mismatch between {@code originalSize}
+     * <p>Uses streaming inflate so that a mismatch between {@code originalSize}
      * and the true inflated length is detected and reported rather than causing
-     * a buffer overflow or silent data truncation.
+     * a buffer overflow or silent data truncation.</p>
      *
      * @param compressed   the compressed bytes to inflate
      * @param originalSize the expected decompressed byte count
@@ -289,8 +298,7 @@ public record ChunkDeltaPayload(
     /**
      * Serializes this payload into the given packet buffer.
      *
-     * <p>
-     * Wire order: {@code chunkX | chunkZ | flags | dataLength | data | [origLength if compressed]}.
+     * <p>Wire order: {@code chunkX | chunkZ | flags | dataLength | data | [origLength if compressed]}.</p>
      *
      * @param buf the buffer to write to
      */
@@ -307,6 +315,9 @@ public record ChunkDeltaPayload(
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Id<? extends CustomPayload> getId() {
         return ID;

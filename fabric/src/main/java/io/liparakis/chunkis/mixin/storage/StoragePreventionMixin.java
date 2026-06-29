@@ -27,11 +27,31 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(RegionBasedStorage.class)
 public class StoragePreventionMixin {
 
+    /**
+     * Logger instance for writing storage prevention logs.
+     */
     @Unique
     private static final Logger LOGGER = Chunkis.LOGGER;
+
+    /**
+     * Trace source identification tag label.
+     */
     @Unique
     private static final String SOURCE = "StoragePreventionMixin";
 
+    /**
+     * Default constructor for StoragePreventionMixin.
+     */
+    public StoragePreventionMixin() {
+    }
+
+    /**
+     * Injects at head of RegionBasedStorage#write to cancel vanilla saves and document the bypassed decision.
+     *
+     * @param pos target chunk position
+     * @param nbt target chunk NBT payload
+     * @param ci  callback info helper
+     */
     @Inject(method = "write(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/NbtCompound;)V", at = @At("HEAD"),
             cancellable = true)
     private void chunkis$blockWrite(final ChunkPos pos, final NbtCompound nbt, final CallbackInfo ci) {
@@ -42,24 +62,27 @@ public class StoragePreventionMixin {
             ChunkOwnershipTraceHelper.traceDecision(
                     null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
                     null, null
-                                                   );
+            );
         } else {
             ChunkOwnershipTraceHelper.traceDecision(
                     null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
                     snapshot.delta(), null
-                                                   );
+            );
         }
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.VANILLA_SAVE_CANCELLED,
                 ChunkTraceSeverity.INFO, reason, SOURCE + "#chunkis$blockWrite", "blocked vanilla MCA write", null,
                 new DebugChunkKey(pos.x, pos.z), null, null, null, null
-                             );
+        );
         ci.cancel();
     }
 
     /**
      * Records passive vanilla chunk read attempts without claiming ownership.
+     *
+     * @param pos target chunk position
+     * @param cir callback info returnable wrapper
      */
     @Inject(method = "getTagAt(Lnet/minecraft/util/math/ChunkPos;)Lnet/minecraft/nbt/NbtCompound;", at = @At("HEAD"),
             cancellable = true)
@@ -67,12 +90,16 @@ public class StoragePreventionMixin {
         ChunkOwnershipTraceHelper.traceDecision(
                 null, pos, "BYPASSED", ChunkTraceReason.PASSIVE_VANILLA_LOAD,
                 SOURCE + "#chunkis$blockGetTagAt", null, null
-                                               );
+        );
         cir.setReturnValue(null);
     }
 
     /**
      * Records passive vanilla chunk scans without claiming ownership.
+     *
+     * @param chunkPos target chunk position
+     * @param scanner  NBT scanner instance
+     * @param ci       callback info helper
      */
     @Inject(method = "scanChunk(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/scanner/NbtScanner;)V", at =
     @At("HEAD"), cancellable = true)
@@ -80,12 +107,14 @@ public class StoragePreventionMixin {
         ChunkOwnershipTraceHelper.traceDecision(
                 null, chunkPos, "BYPASSED", ChunkTraceReason.PASSIVE_VANILLA_LOAD,
                 SOURCE + "#chunkis$blockScanChunk", null, null
-                                               );
+        );
         ci.cancel();
     }
 
     /**
      * Leaves vanilla region sync intact while documenting the boundary.
+     *
+     * @param ci callback info helper
      */
     @Inject(method = "sync()V", at = @At("HEAD"))
     private void chunkis$blockSync(final CallbackInfo ci) {

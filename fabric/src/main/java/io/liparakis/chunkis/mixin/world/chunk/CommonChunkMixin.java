@@ -21,23 +21,36 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * Mixin for the base {@link Chunk} class to provide {@link ChunkDelta}
  * capability to all chunk types.
  *
- * <p>
- * Implements {@link ChunkisDeltaDuck} to attach a per-chunk delta, and
+ * <p>Implements {@link ChunkisDeltaDuck} to attach a per-chunk delta, and
  * overrides {@code needsSaving()} so that a chunk is always considered dirty
- * when its delta has unsaved changes — even if vanilla would report it clean.
- *
- * @author Liparakis
- * @version 1.1
+ * when its delta has unsaved changes — even if vanilla would report it clean.</p>
  */
 @Mixin(Chunk.class)
 public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
 
+    /**
+     * The attached Chunkis delta state.
+     */
     @Unique
     private volatile ChunkDelta<?, ?> chunkis$delta;
+
+    /**
+     * The active restore session operation ID.
+     */
     @Unique
     private volatile String chunkis$restoreOperationId;
+
+    /**
+     * True if the active restore session loaded state from storage.
+     */
     @Unique
     private volatile boolean chunkis$restoreLoadedFromStorage;
+
+    /**
+     * Default constructor for CommonChunkMixin.
+     */
+    public CommonChunkMixin() {
+    }
 
     /**
      * {@inheritDoc}
@@ -56,25 +69,35 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     public void chunkis$setDelta(final ChunkDelta<?, ?> delta) {
         this.chunkis$delta = Objects.requireNonNull(delta, "ChunkDelta cannot be null");
         notifyTrackerIfWorldChunk();
-        chunkis$traceWorldChunkDeltaAttachment();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String chunkis$getRestoreOperationId() {
         return chunkis$restoreOperationId;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void chunkis$setRestoreOperationId(final String operationId) {
         this.chunkis$restoreOperationId = operationId;
-        chunkis$traceWorldChunkDeltaAttachment();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean chunkis$wasRestoreLoadedFromStorage() {
         return chunkis$restoreLoadedFromStorage;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void chunkis$setRestoreLoadedFromStorage(final boolean restoreLoadedFromStorage) {
         this.chunkis$restoreLoadedFromStorage = restoreLoadedFromStorage;
@@ -104,7 +127,8 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     @Inject(method = "markNeedsSaving", at = @At("HEAD"))
     private void chunkis$onMarkNeedsSaving(final CallbackInfo ci) {
         if ((Object) this instanceof ChunkisMutationGuardDuck guardDuck
-                && guardDuck.chunkis$getMutationTrackingScope().currentCause()
+                && guardDuck.chunkis$getMutationTrackingScope()
+                .currentCause()
                 != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
@@ -143,10 +167,9 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * Notifies {@link GlobalChunkTracker} if this chunk instance is a
      * {@link WorldChunk}.
      *
-     * <p>
-     * The {@code instanceof} pattern match is used rather than a cast
+     * <p>The {@code instanceof} pattern match is used rather than a cast
      * on {@code this} directly, because at the {@link Chunk} mixin level
-     * {@code this} may be any {@link Chunk} subtype.
+     * {@code this} may be any {@link Chunk} subtype.</p>
      */
     @Unique
     private void notifyTrackerIfWorldChunk() {
@@ -155,5 +178,3 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
         }
     }
 }
-
-

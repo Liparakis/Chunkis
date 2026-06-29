@@ -4,9 +4,7 @@ import io.liparakis.chunkis.command.ChunkDebugCommand;
 import io.liparakis.chunkis.command.DurabilityTestCommand;
 import io.liparakis.chunkis.command.StorageReportCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
-import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.migration.CisWorldMigrator;
 import io.liparakis.chunkis.migration.McaMigrator;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
@@ -62,16 +60,20 @@ public final class ChunkisMod implements ModInitializer {
      * Registers Chunkis network payloads.
      */
     private static void registerPayloads() {
-        PayloadTypeRegistry.playS2C().register(ChunkDeltaPayload.ID, ChunkDeltaPayload.CODEC);
+        PayloadTypeRegistry.playS2C()
+                .register(ChunkDeltaPayload.ID, ChunkDeltaPayload.CODEC);
     }
 
     /**
      * Registers Chunkis server commands.
      */
     private static void registerCommands() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> DurabilityTestCommand.register(dispatcher));
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> ChunkDebugCommand.register(dispatcher));
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> StorageReportCommand.register(dispatcher));
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> DurabilityTestCommand.register(
+                dispatcher));
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> ChunkDebugCommand.register(
+                dispatcher));
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> StorageReportCommand.register(
+                dispatcher));
     }
 
     /**
@@ -82,15 +84,10 @@ public final class ChunkisMod implements ModInitializer {
      */
     private static void registerEvents() {
         ServerWorldEvents.LOAD.register((server, world) -> migrateWorld(world));
-
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk));
-
         ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
-
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
-
         ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
-
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> clearRuntimeState());
     }
 
@@ -159,7 +156,8 @@ public final class ChunkisMod implements ModInitializer {
         }
 
         Chunkis.LOGGER.warn("Chunkis [STOPPING]: Force-saving {} dirty delta(s) for {}", pending.size(),
-                            world.getRegistryKey().getValue());
+                world.getRegistryKey()
+                        .getValue());
 
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
                 FabricCisStorageHelper.getStorage(world);
@@ -219,7 +217,6 @@ public final class ChunkisMod implements ModInitializer {
         registerPayloads();
         registerCommands();
         registerEvents();
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8));
     }
 }
 

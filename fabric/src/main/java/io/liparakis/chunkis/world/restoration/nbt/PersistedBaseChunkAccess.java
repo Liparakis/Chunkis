@@ -10,10 +10,21 @@ import net.minecraft.nbt.NbtCompound;
  */
 final class PersistedBaseChunkAccess {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private PersistedBaseChunkAccess() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Extracts a copied NBT compound from persisted base chunk metadata.
+     *
+     * @param chunkMetadata chunk metadata envelope object
+     * @return copied NBT compound or null
+     */
     static NbtCompound extractCopiedBaseChunkNbt(final Object chunkMetadata) {
         if (!(chunkMetadata instanceof NbtCompound metadata) || metadata.isEmpty()) {
             return null;
@@ -24,6 +35,12 @@ final class PersistedBaseChunkAccess {
         return baseChunkNbt != null && !baseChunkNbt.isEmpty() ? baseChunkNbt.copy() : null;
     }
 
+    /**
+     * Evaluates if chunk metadata contains persisted base chunk NBT details.
+     *
+     * @param chunkMetadata chunk metadata envelope object
+     * @return true if base chunk compound exists
+     */
     static boolean hasPersistedBaseChunkNbt(final Object chunkMetadata) {
         if (!(chunkMetadata instanceof NbtCompound metadata) || metadata.isEmpty()) {
             return false;
@@ -34,6 +51,12 @@ final class PersistedBaseChunkAccess {
         return baseChunkNbt != null && !baseChunkNbt.isEmpty();
     }
 
+    /**
+     * Evaluates if base chunk NBT should supply the block deserialization baseline.
+     *
+     * @param chunkMetadata chunk metadata envelope object
+     * @return true if base chunk compound is preferred for blocks baseline
+     */
     static boolean shouldUsePersistedBaseChunkForBlockBaseline(final Object chunkMetadata) {
         return hasPersistedBaseChunkNbt(chunkMetadata) && !CisNbtUtil.hasFullBlockBaseline(chunkMetadata);
     }

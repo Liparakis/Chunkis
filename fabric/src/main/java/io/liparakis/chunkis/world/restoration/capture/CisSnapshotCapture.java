@@ -21,20 +21,34 @@ public final class CisSnapshotCapture {
      * Width/height/depth of one vanilla chunk section in blocks.
      */
     private static final int SECTION_SIZE = 16;
+
     /**
      * Bit shift used to convert a section index into its world-space Y offset.
      */
     private static final int SECTION_SHIFT = 4;
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private CisSnapshotCapture() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Captures blocks and block entities from a live chunk into target delta.
+     *
+     * @param chunk       source live world chunk
+     * @param target      destination block delta
+     * @param operationId active load/save operation ID
+     * @return updated block delta
+     */
     public static ChunkDelta<BlockState, NbtCompound> capture(
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> target,
             final String operationId
-                                                             ) {
+    ) {
         final int previousNonAirBlocks = countPersistedNonAirBlocks(target);
         final int liveNonAirBlocks = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
         if (isSuspiciousBaselineShrink(previousNonAirBlocks, liveNonAirBlocks)) {
@@ -46,14 +60,16 @@ public final class CisSnapshotCapture {
                             + " previousNonAir={} liveNonAir={} suppressionCause={} restoreOperationId={} " +
                             "chunkStatus={} saveOperationId={}",
                     chunk.getPos(),
-                    chunk.getWorld().getRegistryKey().getValue(),
+                    chunk.getWorld()
+                            .getRegistryKey()
+                            .getValue(),
                     previousNonAirBlocks,
                     liveNonAirBlocks,
                     PendingChunkMutationSuppression.currentCause(chunk),
                     restoreOperationId,
                     chunk.getStatus(),
                     operationId
-                               );
+            );
             return target;
         }
         PayloadWatchTracer.traceCapturedBlocks(chunk);
@@ -82,9 +98,10 @@ public final class CisSnapshotCapture {
 
         ChunkBlockEntityCapture.captureBlockEntities(
                 chunk,
-                chunk.getWorld().getRegistryManager(),
+                chunk.getWorld()
+                        .getRegistryManager(),
                 target
-                                                    );
+        );
 
         final NbtCompound existingMetadata = target.getChunkMetadata();
         target.setChunkMetadata(
@@ -94,35 +111,52 @@ public final class CisSnapshotCapture {
                         true,
                         CisNbtUtil.extractPersistedBaseChunkNbt(existingMetadata),
                         BaseChunkCaptureUtil.hasPortalBlocks(chunk)
-                                                             ),
+                ),
                 false
-                               );
+        );
         target.setSuppressInitialRepopulation(true);
         return target;
     }
 
+    /**
+     * Evaluates if non-air block count has shrunk suspiciously.
+     *
+     * @param previousNonAirBlocks previous count
+     * @param liveNonAirBlocks     current count
+     * @return true if suspicious
+     */
     static boolean isSuspiciousBaselineShrink(
             final int previousNonAirBlocks,
             final int liveNonAirBlocks
-                                             ) {
+    ) {
         return previousNonAirBlocks > 0
                 && liveNonAirBlocks >= 0
                 && liveNonAirBlocks * 10 < previousNonAirBlocks * 6;
     }
 
+    /**
+     * Counts persisted non-air blocks in target delta.
+     *
+     * @param target block delta instance
+     * @return non-air block count
+     */
     private static int countPersistedNonAirBlocks(final ChunkDelta<BlockState, NbtCompound> target) {
         if (target == null || !CisNbtUtil.hasFullBlockBaseline(target.getChunkMetadata())) {
             return 0;
         }
-        return target.getBlockInstructions().size();
+        return target.getBlockInstructions()
+                .size();
     }
 
     /**
      * Converts a section-local Y coordinate into an absolute chunk-local world Y.
+     *
+     * @param chunkBottomY bottom Y coordinates of the chunk
+     * @param sectionIndex chunk section index
+     * @param localY       local Y offset
+     * @return absolute world Y coordinate
      */
     static int toWorldY(final int chunkBottomY, final int sectionIndex, final int localY) {
         return chunkBottomY + (sectionIndex << SECTION_SHIFT) + localY;
     }
 }
-
-

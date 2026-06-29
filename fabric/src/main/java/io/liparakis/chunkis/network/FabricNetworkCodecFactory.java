@@ -18,28 +18,38 @@ import net.minecraft.state.property.Property;
 /**
  * Factory for creating Fabric-specific network encoders and decoders.
  *
- * <p>
- * All shared adapter instances ({@link FabricBlockRegistryAdapter},
+ * <p>All shared adapter instances ({@link FabricBlockRegistryAdapter},
  * {@link FabricBlockStateAdapter}, {@link FabricNbtAdapter}) are immutable and
- * thread-safe, so they are constructed once and reused across all codec instances.
+ * thread-safe, so they are constructed once and reused across all codec instances.</p>
  *
- * <p>
- * <b>Creation strategy:</b> Encoder and decoder singletons are lazily initialized
+ * <p><b>Creation strategy:</b> Encoder and decoder singletons are lazily initialized
  * on first use via double-checked locking. This provides zero-allocation performance
- * on the hot path while deferring construction until the codec is actually needed.
+ * on the hot path while deferring construction until the codec is actually needed.</p>
  *
- * <p>
- * <b>Thread safety:</b> All public methods are thread-safe.
- *
- * @author Liparakis
- * @version 1.1
+ * <p><b>Thread safety:</b> All public methods are thread-safe.</p>
  */
 public final class FabricNetworkCodecFactory {
 
+    /**
+     * Shared static registry adapter mapping block types.
+     */
     private static final BlockRegistryAdapter<Block> REGISTRY_ADAPTER = new FabricBlockRegistryAdapter();
+
+    /**
+     * Shared static adapter mapping state properties.
+     */
     private static final BlockStateAdapter<Block, BlockState, Property<?>> STATE_ADAPTER = new FabricBlockStateAdapter();
+
+    /**
+     * Shared static adapter mapping NBT compounds.
+     */
     private static final NbtAdapter<NbtCompound> NBT_ADAPTER = new FabricNbtAdapter();
-    private static final PropertyPacker<Block, BlockState, Property<?>> PROPERTY_PACKER = new PropertyPacker<>(STATE_ADAPTER);
+
+    /**
+     * Shared static property packer mapping properties.
+     */
+    private static final PropertyPacker<Block, BlockState, Property<?>> PROPERTY_PACKER = new PropertyPacker<>(
+            STATE_ADAPTER);
 
     /**
      * Cached air state used as the "no block" sentinel in codec operations.
@@ -58,6 +68,11 @@ public final class FabricNetworkCodecFactory {
      */
     private static volatile CisNetworkEncoder<Block, BlockState, Property<?>, NbtCompound> encoderSingleton;
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private FabricNetworkCodecFactory() {
         throw new AssertionError("Utility class");
     }
@@ -65,9 +80,8 @@ public final class FabricNetworkCodecFactory {
     /**
      * Returns the shared decoder singleton, creating it on first call.
      *
-     * <p>
-     * Uses double-checked locking: the fast path (volatile read) is allocation-free.
-     * The slow path (synchronized block) is taken only on the very first call.
+     * <p>Uses double-checked locking: the fast path (volatile read) is allocation-free.
+     * The slow path (synchronized block) is taken only on the very first call.</p>
      *
      * @return the shared {@link CisNetworkDecoder} instance
      */
@@ -82,9 +96,8 @@ public final class FabricNetworkCodecFactory {
     /**
      * Returns the shared encoder singleton, creating it on first call.
      *
-     * <p>
-     * Uses double-checked locking: the fast path (volatile read) is allocation-free.
-     * The slow path (synchronized block) is taken only on the very first call.
+     * <p>Uses double-checked locking: the fast path (volatile read) is allocation-free.
+     * The slow path (synchronized block) is taken only on the very first call.</p>
      *
      * @return the shared {@link CisNetworkEncoder} instance
      */

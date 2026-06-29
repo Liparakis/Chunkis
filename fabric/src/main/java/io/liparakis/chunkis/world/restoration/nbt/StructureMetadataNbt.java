@@ -12,6 +12,11 @@ import net.minecraft.nbt.NbtCompound;
  */
 final class StructureMetadataNbt {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private StructureMetadataNbt() {
         throw new AssertionError("Utility class");
     }
@@ -55,9 +60,9 @@ final class StructureMetadataNbt {
      */
     static boolean hasStructureData(final NbtCompound structures) {
         return structures != null && !structures.isEmpty() && (getCompoundOrNull(structures,
-                                                                                 CisNbtUtil.STRUCTURE_STARTS_KEY)
+                CisNbtUtil.STRUCTURE_STARTS_KEY)
                 != null || getCompoundOrNull(structures,
-                                             CisNbtUtil.STRUCTURE_REFERENCES_KEY) != null);
+                CisNbtUtil.STRUCTURE_REFERENCES_KEY) != null);
     }
 
     /**
@@ -72,6 +77,7 @@ final class StructureMetadataNbt {
             return null;
         }
 
-        return parent.getCompound(key).orElse(null);
+        return parent.getCompound(key)
+                .orElse(null);
     }
 }

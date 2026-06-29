@@ -32,15 +32,10 @@ import net.minecraft.world.World;
 /**
  * Persistent bidirectional portal pairing table.
  *
- * <p>
- * The portal chunk index only tells Chunkis which chunks contain portal
+ * <p>The portal chunk index only tells Chunkis which chunks contain portal
  * blocks. It does not preserve portal identity. This table persists explicit
  * "portal A links to portal B" relationships so return travel can prefer the
- * original partner instead of relying on a fresh nearest-portal search.
- *
- * @author Liparakis
- * @version 1.2
- *
+ * original partner instead of relying on a fresh nearest-portal search.</p>
  */
 public final class PortalLinkManager {
 
@@ -48,30 +43,37 @@ public final class PortalLinkManager {
      * Key for the list of portal pairing entries in NBT.
      */
     private static final String ENTRIES_KEY = "entries";
+
     /**
      * Key for the source portal anchor in an NBT entry.
      */
     private static final String SOURCE_KEY = "source";
+
     /**
      * Key for the destination portal anchor in an NBT entry.
      */
     private static final String DESTINATION_KEY = "destination";
+
     /**
      * Key for the dimension identifier in a portal anchor NBT.
      */
     private static final String NBT_DIMENSION = "dimension";
+
     /**
      * Key for the X coordinate in a portal anchor NBT.
      */
     private static final String NBT_X = "x";
+
     /**
      * Key for the Y coordinate in a portal anchor NBT.
      */
     private static final String NBT_Y = "y";
+
     /**
      * Key for the Z coordinate in a portal anchor NBT.
      */
     private static final String NBT_Z = "z";
+
     /**
      * Key for the orientation axis in a portal anchor NBT.
      */
@@ -81,6 +83,7 @@ public final class PortalLinkManager {
      * Minimum portal width in blocks (used for anchor validation).
      */
     private static final int MIN_PORTAL_WIDTH = 2;
+
     /**
      * Minimum portal height in blocks (used for anchor validation).
      */
@@ -91,6 +94,11 @@ public final class PortalLinkManager {
      */
     private static final Map<Path, PortalLinkTable> TABLES = new ConcurrentHashMap<>();
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private PortalLinkManager() {
         throw new AssertionError("Utility class");
     }
@@ -99,9 +107,8 @@ public final class PortalLinkManager {
      * Records a bidirectional link between a source portal and a destination portal
      * whose anchor (lower-corner and axis) is already known.
      *
-     * <p>
-     * Use this overload when the destination portal was just created and its
-     * geometry is provided directly rather than resolved from world state.
+     * <p>Use this overload when the destination portal was just created and its
+     * geometry is provided directly rather than resolved from world state.</p>
      *
      * @param sourceWorld            world containing the source portal
      * @param sourcePortalPos        any block position within the source portal
@@ -133,9 +140,8 @@ public final class PortalLinkManager {
      * Records a bidirectional link between two existing portals, resolving both
      * anchors from world state.
      *
-     * <p>
-     * If either position does not contain a valid nether portal block, the
-     * registration is silently skipped.
+     * <p>If either position does not contain a valid nether portal block, the
+     * registration is silently skipped.</p>
      *
      * @param sourceWorld          world containing the source portal
      * @param sourcePortalPos      any block position within the source portal
@@ -161,10 +167,9 @@ public final class PortalLinkManager {
      * Returns a teleport target for the linked destination portal, if a valid link
      * exists from the source portal.
      *
-     * <p>
-     * If the recorded destination portal is no longer present in the world, the
+     * <p>If the recorded destination portal is no longer present in the world, the
      * stale link is removed and an empty Optional is returned, allowing the caller
-     * to fall through to vanilla logic.
+     * to fall through to vanilla logic.</p>
      *
      * @param destinationWorld the expected destination world
      * @param entity           the entity being teleported
@@ -224,11 +229,9 @@ public final class PortalLinkManager {
     /**
      * Flushes and discards the portal link table for the given server instance.
      *
-     * <p>
-     * Should be called on server shutdown or world unload.
+     * <p>Should be called on server shutdown or world unload.</p>
      *
-     * @param server the server whose table should be closed; ignored if
-     *               {@code null}
+     * @param server the server whose table should be closed; ignored if {@code null}
      */
     public static void close(final MinecraftServer server) {
         if (server == null) {
@@ -245,11 +248,11 @@ public final class PortalLinkManager {
     /**
      * Flushes and discards all portal link tables.
      *
-     * <p>
-     * Intended for use in test teardown or full server shutdown.
+     * <p>Intended for use in test teardown or full server shutdown.</p>
      */
     public static void clear() {
-        TABLES.values().forEach(PortalLinkTable::close);
+        TABLES.values()
+                .forEach(PortalLinkTable::close);
         TABLES.clear();
     }
 
@@ -277,14 +280,11 @@ public final class PortalLinkManager {
     }
 
     /**
-     * Resolves a {@link PortalAnchor} from any block position within a nether
-     * portal.
+     * Resolves a {@link PortalAnchor} from any block position within a nether portal.
      *
-     * <p>
-     * Walks down to the lowest portal row, then sideways to the leftmost column,
+     * <p>Walks down to the lowest portal row, then sideways to the leftmost column,
      * to arrive at the canonical lower-left corner of the portal frame. Returns
-     * empty
-     * if {@code portalPos} does not contain a nether portal block.
+     * empty if {@code portalPos} does not contain a nether portal block.</p>
      *
      * @param world     the world to query
      * @param portalPos any block position within the portal
@@ -329,7 +329,8 @@ public final class PortalLinkManager {
             return Optional.empty();
         }
 
-        final Direction.Axis axis = portalState.getOrEmpty(NetherPortalBlock.AXIS).orElse(Direction.Axis.X);
+        final Direction.Axis axis = portalState.getOrEmpty(NetherPortalBlock.AXIS)
+                .orElse(Direction.Axis.X);
         final Direction widthDirection = widthDirection(axis);
         final Direction edgeDirection = legacyEdge ? widthDirection : widthDirection.getOpposite();
         final BlockPos.Mutable cursor = portalPos.mutableCopy();
@@ -370,19 +371,17 @@ public final class PortalLinkManager {
             final Direction.Axis axis) {
         final BlockState state = world.getBlockState(pos);
         return !state.isOf(Blocks.NETHER_PORTAL)
-                || state.getOrEmpty(NetherPortalBlock.AXIS).orElse(axis) != axis;
+                || state.getOrEmpty(NetherPortalBlock.AXIS)
+                .orElse(axis) != axis;
     }
 
     /**
      * Returns {@code true} if the portal described by {@code anchor} still exists
-     * in
-     * the world.
+     * in the world.
      *
-     * <p>
-     * Forces the containing chunk to load before checking, then verifies a
-     * {@value MIN_PORTAL_WIDTH}×{@value MIN_PORTAL_HEIGHT} block region starting
-     * from
-     * the lower-left corner of the portal frame.
+     * <p>Forces the containing chunk to load before checking, then verifies a
+     * {@value #MIN_PORTAL_WIDTH}×{@value #MIN_PORTAL_HEIGHT} block region starting
+     * from the lower-left corner of the portal frame.</p>
      *
      * @param world  the world to check
      * @param anchor the anchor describing the portal's expected position and axis
@@ -392,13 +391,18 @@ public final class PortalLinkManager {
             final ServerWorld world,
             final PortalAnchor anchor) {
         // Force chunk load so block queries don't return empty air for unloaded chunks.
-        world.getChunk(anchor.lowerCorner().getX() >> 4, anchor.lowerCorner().getZ() >> 4);
+        world.getChunk(anchor.lowerCorner()
+                        .getX() >> 4,
+                anchor.lowerCorner()
+                        .getZ() >> 4);
 
         final Direction widthDirection = widthDirection(anchor.axis());
 
         for (int width = 0; width < MIN_PORTAL_WIDTH; width++) {
             for (int height = 0; height < MIN_PORTAL_HEIGHT; height++) {
-                final BlockPos pos = anchor.lowerCorner().offset(widthDirection, width).up(height);
+                final BlockPos pos = anchor.lowerCorner()
+                        .offset(widthDirection, width)
+                        .up(height);
                 if (isDifferentPortalBlock(world, pos, anchor.axis())) {
                     return false;
                 }
@@ -419,7 +423,10 @@ public final class PortalLinkManager {
     private static Optional<PortalAnchor> normalizePortalAnchor(
             final ServerWorld world,
             final PortalAnchor anchor) {
-        world.getChunk(anchor.lowerCorner().getX() >> 4, anchor.lowerCorner().getZ() >> 4);
+        world.getChunk(anchor.lowerCorner()
+                        .getX() >> 4,
+                anchor.lowerCorner()
+                        .getZ() >> 4);
 
         final PortalAnchor normalized = resolvePortalAnchor(world, anchor.lowerCorner()).orElse(null);
         if (normalized == null || !isValidPortalAnchor(world, normalized)) {
@@ -462,10 +469,12 @@ public final class PortalLinkManager {
          * Filesystem path where this table is stored.
          */
         private final Path path;
+
         /**
          * In-memory bidirectional pairing map.
          */
         private final ConcurrentHashMap<PortalAnchor, PortalAnchor> links;
+
         /**
          * Whether the table has been modified since it was last saved.
          */
@@ -497,16 +506,19 @@ public final class PortalLinkManager {
 
             try (final DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
                 final NbtCompound root = NbtIo.readCompound(input);
-                final NbtList entries = root.getList(ENTRIES_KEY).orElseGet(NbtList::new);
+                final NbtList entries = root.getList(ENTRIES_KEY)
+                        .orElseGet(NbtList::new);
 
                 for (final net.minecraft.nbt.NbtElement element : entries) {
                     if (!(element instanceof NbtCompound entry)) {
                         continue;
                     }
 
-                    final Optional<PortalAnchor> source = readAnchor(entry.getCompound(SOURCE_KEY).orElse(null));
+                    final Optional<PortalAnchor> source = readAnchor(entry.getCompound(SOURCE_KEY)
+                            .orElse(null));
                     final Optional<PortalAnchor> destination = readAnchor(
-                            entry.getCompound(DESTINATION_KEY).orElse(null));
+                            entry.getCompound(DESTINATION_KEY)
+                                    .orElse(null));
 
                     if (source.isPresent() && destination.isPresent()) {
                         loaded.put(source.get(), destination.get());
@@ -527,20 +539,30 @@ public final class PortalLinkManager {
          */
         private static NbtCompound writeAnchor(final PortalAnchor anchor) {
             final NbtCompound nbt = new NbtCompound();
-            nbt.putString(NBT_DIMENSION, anchor.worldKey().getValue().toString());
-            nbt.putInt(NBT_X, anchor.lowerCorner().getX());
-            nbt.putInt(NBT_Y, anchor.lowerCorner().getY());
-            nbt.putInt(NBT_Z, anchor.lowerCorner().getZ());
-            nbt.putString(NBT_AXIS, anchor.axis().asString());
+            nbt.putString(NBT_DIMENSION,
+                    anchor.worldKey()
+                            .getValue()
+                            .toString());
+            nbt.putInt(NBT_X,
+                    anchor.lowerCorner()
+                            .getX());
+            nbt.putInt(NBT_Y,
+                    anchor.lowerCorner()
+                            .getY());
+            nbt.putInt(NBT_Z,
+                    anchor.lowerCorner()
+                            .getZ());
+            nbt.putString(NBT_AXIS,
+                    anchor.axis()
+                            .asString());
             return nbt;
         }
 
         /**
          * Deserializes a {@link PortalAnchor} from NBT.
          *
-         * <p>
-         * Returns empty if {@code nbt} is {@code null}, if the dimension identifier
-         * cannot be parsed, or if the axis value is not {@code "x"} or {@code "z"}.
+         * <p>Returns empty if {@code nbt} is {@code null}, if the dimension identifier
+         * cannot be parsed, or if the axis value is not {@code "x"} or {@code "z"}.</p>
          *
          * @param nbt the compound to read from, or {@code null}
          * @return the deserialized anchor, or empty
@@ -594,9 +616,11 @@ public final class PortalLinkManager {
         /**
          * Inserts a bidirectional link (forward + reverse) and flushes to disk once.
          *
-         * <p>
-         * Batching both directions into a single save call avoids the double disk
-         * write that would result from two separate {@code put} calls.
+         * <p>Batching both directions into a single save call avoids the double disk
+         * write that would result from two separate {@code put} calls.</p>
+         *
+         * @param a first portal anchor
+         * @param b second portal anchor
          */
         void putPair(final PortalAnchor a, final PortalAnchor b) {
             final boolean changedForward = !b.equals(links.put(a, b));
@@ -610,6 +634,9 @@ public final class PortalLinkManager {
 
         /**
          * Removes a bidirectional link (forward + reverse) and flushes to disk once.
+         *
+         * @param a first portal anchor
+         * @param b second portal anchor
          */
         void removePair(final PortalAnchor a, final PortalAnchor b) {
             final boolean removedForward = links.remove(a) != null;
@@ -660,5 +687,3 @@ public final class PortalLinkManager {
         }
     }
 }
-
-

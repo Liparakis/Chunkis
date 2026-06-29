@@ -42,20 +42,29 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * <p><strong>Chunk lifecycle safety:</strong> No chunk references, world references,
  * or registry lookups are retained beyond the scope of the inject method. All
  * operations are synchronous and execute on the server tick thread.</p>
- *
- * @author Liparakis
- * @version 1.3
- *
  */
 @Mixin(BlockEntity.class)
 public abstract class BlockEntityMixin {
 
-
+    /**
+     * Shadowed reference to the enclosing world context.
+     */
     @Shadow
     protected World world;
 
+    /**
+     * Shadowed method resolving the block entity's block coordinates position.
+     *
+     * @return block coordinates position
+     */
     @Shadow
     public abstract BlockPos getPos();
+
+    /**
+     * Default constructor for BlockEntityMixin.
+     */
+    public BlockEntityMixin() {
+    }
 
     /**
      * Injected at the head of {@link BlockEntity#markDirty()} to trigger Chunkis
@@ -78,7 +87,8 @@ public abstract class BlockEntityMixin {
             return;
         }
         if (chunk instanceof ChunkisMutationGuardDuck guardDuck
-                && guardDuck.chunkis$getMutationTrackingScope().currentCause()
+                && guardDuck.chunkis$getMutationTrackingScope()
+                .currentCause()
                 != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
@@ -120,16 +130,17 @@ public abstract class BlockEntityMixin {
             delta.claimOwnership(
                     ChunkTraceReason.PLAYER_OR_COMMAND_EDIT.name(),
                     "BlockEntityMixin#handleChunkDelta"
-                                );
+            );
             ChunkOwnershipTraceHelper.traceDecision(
-                    chunk.getWorld().getRegistryKey(),
+                    chunk.getWorld()
+                            .getRegistryKey(),
                     chunk.getPos(),
                     "CLAIMED",
                     ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
                     "BlockEntityMixin#handleChunkDelta",
                     delta,
                     PendingChunkMutationSuppression.currentCause(chunk)
-                                                   );
+            );
         }
 
         BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
@@ -165,14 +176,12 @@ public abstract class BlockEntityMixin {
                     (BlockEntity) (Object) this,
                     serverWorld.getRegistryManager(),
                     delta
-                                                      );
+            );
         } catch (final Exception e) {
             Chunkis.LOGGER.error(
                     "Chunkis: Failed to proactively capture block entity NBT at {}",
                     getPos(), e
-                                );
+            );
         }
     }
 }
-
-

@@ -22,17 +22,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * base terrain regeneration, those one-shot spawns can replay even though the
  * saved entity payload will be restored separately. This mixin blocks only the
  * generation-time entity spawn path for chunks explicitly marked to suppress
- * initial repopulation.
+ * initial repopulation.</p>
  *
  * <p><b>Threading:</b> Invoked on the server main thread during chunk generation.
- * All field accesses in this mixin must remain main-thread-only.
- *
- * @author Liparakis
- * @version 1.2
- *
+ * All field accesses in this mixin must remain main-thread-only.</p>
  */
 @Mixin(ChunkRegion.class)
 public class ChunkRegionMixin {
+
+    /**
+     * Default constructor for ChunkRegionMixin.
+     */
+    public ChunkRegionMixin() {
+    }
 
     /**
      * Cancels worldgen entity spawns for restored chunks so villages, mineshafts,
@@ -42,7 +44,7 @@ public class ChunkRegionMixin {
      * <p>The fast path exits immediately when {@code entity} is {@code null},
      * when the owning chunk does not implement {@link ChunkisDeltaDuck}, or when
      * no delta is attached — covering the common non-restored case with minimal
-     * overhead.
+     * overhead.</p>
      *
      * @param entity the entity vanilla is attempting to spawn during generation
      * @param cir    callback used to cancel the spawn and set the return value

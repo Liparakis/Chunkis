@@ -1,6 +1,5 @@
 package io.liparakis.chunkis.world.entity.capture;
 
-
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.UUID;
@@ -22,6 +21,11 @@ import net.minecraft.util.Uuids;
  */
 public final class ChunkEntityNbtCapture {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkEntityNbtCapture() {
         throw new AssertionError("Utility class");
     }
@@ -54,7 +58,7 @@ public final class ChunkEntityNbtCapture {
             return nbt;
         } catch (final Exception e) {
             Chunkis.LOGGER.debug("Chunkis: Skipped entity capture for {} in chunk {}", entity.getType(),
-                                 entity.getChunkPos(), e);
+                    entity.getChunkPos(), e);
             return null;
         }
     }
@@ -88,6 +92,8 @@ public final class ChunkEntityNbtCapture {
         }
         // Uuids.toUuid throws IllegalArgumentException for non-4-element arrays;
         // orElse(null) collapses both the missing-key and the malformed-array cases.
-        return entityNbt.getIntArray("UUID").map(Uuids::toUuid).orElse(null);
+        return entityNbt.getIntArray("UUID")
+                .map(Uuids::toUuid)
+                .orElse(null);
     }
 }

@@ -36,12 +36,12 @@ import org.slf4j.Logger;
  *
  * <p><b>Threading:</b> must run on the server thread. Block entity serialization
  * and chunk state access are not generally thread-safe.</p>
- *
- * @author Liparakis
- * @version 2.2
  */
 public final class ChunkBlockEntityCapture {
 
+    /**
+     * Logger instance reference.
+     */
     private static final Logger LOGGER = Chunkis.LOGGER;
 
     /**
@@ -50,6 +50,11 @@ public final class ChunkBlockEntityCapture {
      */
     private static final String BLOCK_ENTITY_ID_KEY = "id";
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkBlockEntityCapture() {
         throw new AssertionError("Utility class");
     }
@@ -70,7 +75,7 @@ public final class ChunkBlockEntityCapture {
             final BlockEntity blockEntity,
             final RegistryWrapper.WrapperLookup registryManager,
             final ChunkDelta<?, NbtCompound> delta
-                                         ) {
+    ) {
         Objects.requireNonNull(blockEntity, "blockEntity");
         Objects.requireNonNull(registryManager, "registryManager");
         Objects.requireNonNull(delta, "delta");
@@ -110,7 +115,7 @@ public final class ChunkBlockEntityCapture {
             final WorldChunk chunk,
             final RegistryWrapper.WrapperLookup registryManager,
             final ChunkDelta<?, NbtCompound> delta
-                                           ) {
+    ) {
         Objects.requireNonNull(chunk, "chunk");
         Objects.requireNonNull(registryManager, "registryManager");
         Objects.requireNonNull(delta, "delta");
@@ -118,7 +123,8 @@ public final class ChunkBlockEntityCapture {
         final ServerWorld serverWorld = asServerWorld(chunk.getWorld());
         final ChunkPos chunkPos = chunk.getPos();
 
-        for (final BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+        for (final BlockEntity blockEntity : chunk.getBlockEntities()
+                .values()) {
             captureBlockEntityFromChunkSweep(serverWorld, chunkPos, chunk, blockEntity, registryManager, delta);
         }
     }
@@ -147,7 +153,7 @@ public final class ChunkBlockEntityCapture {
             @Nullable final BlockEntity blockEntity,
             final RegistryWrapper.WrapperLookup registryManager,
             final ChunkDelta<?, NbtCompound> delta
-                                                        ) {
+    ) {
         if (blockEntity == null || blockEntity.isRemoved()) {
             return;
         }
@@ -185,7 +191,7 @@ public final class ChunkBlockEntityCapture {
     private static NbtCompound trySerializeBlockEntity(
             final BlockEntity blockEntity,
             final RegistryWrapper.WrapperLookup registryManager
-                                                      ) {
+    ) {
         try {
             final NbtCompound nbt = blockEntity.createNbtWithIdentifyingData(registryManager);
             if (nbt == null || nbt.isEmpty()) {
@@ -198,7 +204,7 @@ public final class ChunkBlockEntityCapture {
                     blockEntity.getPos(),
                     blockEntity.getType(),
                     e
-                       );
+            );
             return null;
         }
     }
@@ -217,14 +223,14 @@ public final class ChunkBlockEntityCapture {
     private static NbtCompound injectBlockEntityId(
             final BlockEntity blockEntity,
             final NbtCompound nbt
-                                                  ) {
+    ) {
         final var typeId = BlockEntityType.getId(blockEntity.getType());
         if (typeId == null) {
             LOGGER.warn(
                     "Chunkis: Block entity at {} has unregistered type: {}",
                     blockEntity.getPos(),
                     blockEntity.getType()
-                       );
+            );
             return null;
         }
         nbt.putString(BLOCK_ENTITY_ID_KEY, typeId.toString());
@@ -247,13 +253,13 @@ public final class ChunkBlockEntityCapture {
             final BlockPos worldPos,
             final NbtCompound nbt,
             final ChunkDelta<?, NbtCompound> delta
-                                    ) {
+    ) {
         delta.addBlockEntityData(
                 worldPos.getX() & CisConstants.COORD_MASK,
                 worldPos.getY(),
                 worldPos.getZ() & CisConstants.COORD_MASK,
                 nbt
-                                );
+        );
     }
 
     /**
@@ -273,16 +279,18 @@ public final class ChunkBlockEntityCapture {
             final BlockEntity blockEntity,
             final NbtCompound nbt,
             final ChunkDelta<?, NbtCompound> delta
-                                                ) {
+    ) {
         storeInDelta(worldPos, nbt, delta);
         if (serverWorld != null && chunkPos != null) {
             PayloadWatchTracer.traceCapturedBlockEntity(
-                    serverWorld.getRegistryKey().getValue().toString(),
+                    serverWorld.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     chunkPos,
                     worldPos,
                     blockEntity,
                     nbt
-                                                       );
+            );
         }
     }
 
@@ -296,12 +304,12 @@ public final class ChunkBlockEntityCapture {
     private static void removeFromDelta(
             final BlockPos worldPos,
             final ChunkDelta<?, NbtCompound> delta
-                                       ) {
+    ) {
         delta.removeBlockEntityData(
                 worldPos.getX() & CisConstants.COORD_MASK,
                 worldPos.getY(),
                 worldPos.getZ() & CisConstants.COORD_MASK
-                                   );
+        );
     }
 
     /**
@@ -321,7 +329,7 @@ public final class ChunkBlockEntityCapture {
             @Nullable final ChunkPos chunkPos,
             final BlockPos pos,
             final String reason
-                                    ) {
+    ) {
         if (serverWorld != null && chunkPos != null) {
             PayloadWatchTracer.traceSkippedBlockEntityCapture(serverWorld, chunkPos, pos, reason);
         }

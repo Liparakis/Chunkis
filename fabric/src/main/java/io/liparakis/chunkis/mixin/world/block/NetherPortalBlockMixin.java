@@ -24,27 +24,30 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p>Vanilla creates a new destination portal when no matching portal POI is found.
  * That is risky for Chunkis because restored portal blocks and POI state may be
  * temporarily out of sync during load/restore flows. This mixin prevents player
- * teleportation from creating surprise portals when vanilla cannot find one.
+ * teleportation from creating surprise portals when vanilla cannot find one.</p>
  *
  * <p>Existing portals are left untouched. If vanilla finds a valid destination
  * portal, the vanilla path continues normally and Chunkis records the link for
- * future direct reuse.
+ * future direct reuse.</p>
  *
  * <p>This applies only to player travel between the Overworld and Nether. Other
- * entities and non-standard dimensions keep vanilla behavior.
- *
- * @author Liparakis
- * @version 1.2
+ * entities and non-standard dimensions keep vanilla behavior.</p>
  */
 @Mixin(NetherPortalBlock.class)
 public abstract class NetherPortalBlockMixin {
+
+    /**
+     * Default constructor for NetherPortalBlockMixin.
+     */
+    public NetherPortalBlockMixin() {
+    }
 
     /**
      * Queries vanilla's portal forcer for an existing destination portal.
      *
      * <p>Returns the portal position if one is found, or empty if vanilla would
      * have fallen back to creating a new portal. The caller is responsible for
-     * recording the link and deciding whether vanilla should continue.
+     * recording the link and deciding whether vanilla should continue.</p>
      *
      * @param destinationWorld     target world to search in
      * @param scaledDestinationPos vanilla-scaled destination position
@@ -58,7 +61,7 @@ public abstract class NetherPortalBlockMixin {
             final BlockPos scaledDestinationPos,
             final boolean destinationIsNether,
             final WorldBorder worldBorder
-                                                                           ) {
+    ) {
         return destinationWorld
                 .getPortalForcer()
                 .getPortalPos(scaledDestinationPos, destinationIsNether, worldBorder);
@@ -76,7 +79,7 @@ public abstract class NetherPortalBlockMixin {
     private static boolean chunkis$isNetherOverworldPair(
             final World sourceWorld,
             final ServerWorld destinationWorld
-                                                        ) {
+    ) {
         final RegistryKey<World> sourceKey = sourceWorld.getRegistryKey();
         final RegistryKey<World> destinationKey = destinationWorld.getRegistryKey();
 
@@ -89,12 +92,12 @@ public abstract class NetherPortalBlockMixin {
      *
      * <p>The flow is intentionally conservative:
      * <ol>
-     *   <li>Ignore non-player entities.
-     *   <li>Ignore non Overworld–Nether transfers.
-     *   <li>Use an already-registered Chunkis portal link if one exists.
+     *   <li>Ignore non-player entities.</li>
+     *   <li>Ignore non Overworld–Nether transfers.</li>
+     *   <li>Use an already-registered Chunkis portal link if one exists.</li>
      *   <li>Let vanilla continue if it can find an existing destination portal
-     *       (recording the link for future direct reuse).
-     *   <li>Otherwise return a Chunkis fallback teleport target.
+     *       (recording the link for future direct reuse).</li>
+     *   <li>Otherwise return a Chunkis fallback teleport target.</li>
      * </ol>
      *
      * @param destinationWorld     target world
@@ -118,7 +121,7 @@ public abstract class NetherPortalBlockMixin {
             final boolean destinationIsNether,
             final WorldBorder worldBorder,
             final CallbackInfoReturnable<TeleportTarget> cir
-                                                    ) {
+    ) {
         if (!(entity instanceof ServerPlayerEntity)) {
             return;
         }
@@ -137,7 +140,7 @@ public abstract class NetherPortalBlockMixin {
                         entity,
                         sourceWorld,
                         sourcePortalPos
-                                                 );
+                );
 
         if (linkedTarget.isPresent()) {
             cir.setReturnValue(linkedTarget.get());
@@ -146,12 +149,12 @@ public abstract class NetherPortalBlockMixin {
 
         final Optional<BlockPos> existingDestination = chunkis$findExistingDestinationPortal(
                 destinationWorld, scaledDestinationPos, destinationIsNether, worldBorder
-                                                                                            );
+        );
 
         if (existingDestination.isPresent()) {
             PortalLinkManager.registerBidirectionalIfPresent(
                     sourceWorld, sourcePortalPos, destinationWorld, existingDestination.get()
-                                                            );
+            );
             // Existing portal found — let vanilla handle teleportation normally.
             return;
         }
@@ -163,7 +166,7 @@ public abstract class NetherPortalBlockMixin {
                         sourceWorld,
                         sourcePortalPos,
                         scaledDestinationPos
-                                            )
-                          );
+                )
+        );
     }
 }

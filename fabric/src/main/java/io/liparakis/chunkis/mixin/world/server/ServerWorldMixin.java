@@ -27,25 +27,49 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+/**
+ * Mixin intercepting ServerWorld actions, scheduling entity replays and captures.
+ */
 @Mixin(ServerWorld.class)
 public abstract class ServerWorldMixin {
 
+    /**
+     * Trace source identification tag label.
+     */
     @Unique
     private static final String SOURCE = "ServerWorldMixin#chunkis$afterSpawnEntity";
 
+    /**
+     * Default constructor for ServerWorldMixin.
+     */
+    public ServerWorldMixin() {
+    }
+
+    /**
+     * Injected at the tail of tick to drain the scheduled entity replay queue.
+     *
+     * @param shouldKeepTicking boolean supplier mapping tick status
+     * @param ci                callback info helper
+     */
     @Inject(method = "tick", at = @At("TAIL"))
     private void chunkis$drainScheduledEntityReplayQueue(
             final java.util.function.BooleanSupplier shouldKeepTicking,
             final CallbackInfo ci
-                                                        ) {
+    ) {
         ScheduledEntityReplayQueue.tick((ServerWorld) (Object) this);
     }
 
+    /**
+     * Injected at the return of spawnEntity to register spawned entities into the chunk delta.
+     *
+     * @param entity target entity spawned
+     * @param cir    callback info returnable wrapper
+     */
     @Inject(method = "spawnEntity", at = @At("RETURN"))
     private void chunkis$afterSpawnEntity(
             final Entity entity,
             final CallbackInfoReturnable<Boolean> cir
-                                         ) {
+    ) {
         if (!cir.getReturnValueZ()
                 || entity == null
                 || entity instanceof PlayerEntity
@@ -59,9 +83,11 @@ public abstract class ServerWorldMixin {
                 != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
-        final WorldChunk chunk = world.getChunkManager().getWorldChunk(chunkPos.x, chunkPos.z, false);
+        final WorldChunk chunk = world.getChunkManager()
+                .getWorldChunk(chunkPos.x, chunkPos.z, false);
         if (chunk instanceof ChunkisMutationGuardDuck guardDuck
-                && guardDuck.chunkis$getMutationTrackingScope().currentCause()
+                && guardDuck.chunkis$getMutationTrackingScope()
+                .currentCause()
                 != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
@@ -74,7 +100,7 @@ public abstract class ServerWorldMixin {
                     SOURCE,
                     null,
                     null
-                                                   );
+            );
             return;
         }
 
@@ -89,7 +115,7 @@ public abstract class ServerWorldMixin {
             delta.claimOwnership(
                     ChunkTraceReason.PLAYER_OR_COMMAND_EDIT.name(),
                     SOURCE
-                                );
+            );
             ChunkOwnershipTraceHelper.traceDecision(
                     world.getRegistryKey(),
                     chunkPos,
@@ -98,7 +124,7 @@ public abstract class ServerWorldMixin {
                     SOURCE,
                     delta,
                     null
-                                                   );
+            );
         }
         BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(world, chunk, delta);
 
@@ -109,13 +135,10 @@ public abstract class ServerWorldMixin {
 
         delta.removeEntitiesMatching(nbt -> nbt != null
                 && nbt.getIntArray("UUID")
-                      .map(Uuids::toUuid)
-                      .map(entity.getUuid()::equals)
-                      .orElse(false));
+                .map(Uuids::toUuid)
+                .map(entity.getUuid()::equals)
+                .orElse(false));
         delta.putEntity(entity.getId(), entityNbt);
         GlobalChunkTracker.markDirty(chunk, SOURCE);
     }
-
 }
-
-

@@ -11,16 +11,30 @@ import net.minecraft.nbt.NbtList;
  */
 final class ChunkLoadNbtBuilder {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkLoadNbtBuilder() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Synthesizes the final chunk load NBT compound based on delta metrics.
+     *
+     * @param chunkX      chunk X coordinate
+     * @param chunkZ      chunk Z coordinate
+     * @param dataVersion data version integer mapping
+     * @param delta       source block delta
+     * @return LoadChunkNbtResult wrapper
+     */
     static CisNbtUtil.LoadChunkNbtResult buildLoadChunkNbt(
             final int chunkX,
             final int chunkZ,
             final int dataVersion,
             final ChunkDelta<?, NbtCompound> delta
-                                                          ) {
+    ) {
         final Object metadata = delta != null ? delta.getChunkMetadata() : null;
         final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
         final boolean usePersistedBaseChunkForBlocks =
@@ -51,10 +65,16 @@ final class ChunkLoadNbtBuilder {
         return new CisNbtUtil.LoadChunkNbtResult(root, baseChunkUsage);
     }
 
+    /**
+     * Replaces the entities list key inside target root NBT with elements fetched from delta.
+     *
+     * @param root  target NBT compound
+     * @param delta source block delta
+     */
     static void replaceChunkEntitiesFromDelta(
             final NbtCompound root,
             final ChunkDelta<BlockState, NbtCompound> delta
-                                             ) {
+    ) {
         Objects.requireNonNull(root, "root");
         if (delta == null) {
             return;
@@ -69,10 +89,16 @@ final class ChunkLoadNbtBuilder {
         root.put("entities", entities);
     }
 
+    /**
+     * Attaches structural metadata from delta to target root NBT.
+     *
+     * @param root  target NBT compound
+     * @param delta source block delta
+     */
     static void putChunkMetadata(
             final NbtCompound root,
             final ChunkDelta<BlockState, NbtCompound> delta
-                                ) {
+    ) {
         Objects.requireNonNull(root, "root");
         if (delta == null) {
             return;
@@ -85,10 +111,16 @@ final class ChunkLoadNbtBuilder {
         }
     }
 
+    /**
+     * Casts delta parameters safely.
+     *
+     * @param delta target delta to cast
+     * @return casted delta mapping
+     */
     @SuppressWarnings("unchecked")
     private static ChunkDelta<BlockState, NbtCompound> castDelta(
             final ChunkDelta<?, NbtCompound> delta
-                                                                ) {
+    ) {
         return (ChunkDelta<BlockState, NbtCompound>) delta;
     }
 }
