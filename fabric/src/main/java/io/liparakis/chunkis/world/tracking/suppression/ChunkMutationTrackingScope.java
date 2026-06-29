@@ -21,24 +21,12 @@ import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 public final class ChunkMutationTrackingScope {
 
     /**
-     * Reason a mutation is being suppressed, or {@link #NONE} when suppression
-     * is not active.
-     */
-    public enum Cause {
-        NONE,
-        PASSIVE_LOAD,
-        BASE_APPLY,
-        RESTORE
-    }
-
-    /**
      * Re-entrant depth for passive-load suppression scopes.
      *
      * <p>Incremented by {@link #push(Cause)} and decremented by {@link #pop(Cause)}.
      * A value greater than zero means passive-load suppression is currently active.</p>
      */
     private int passiveLoadDepth;
-
     /**
      * Re-entrant depth for base-apply suppression scopes.
      *
@@ -46,7 +34,6 @@ public final class ChunkMutationTrackingScope {
      * A value greater than zero means Chunkis base-apply suppression is active.</p>
      */
     private int baseApplyDepth;
-
     /**
      * Re-entrant depth for restore suppression scopes.
      *
@@ -54,7 +41,6 @@ public final class ChunkMutationTrackingScope {
      * A value greater than zero means restore suppression is currently active.</p>
      */
     private int restoreDepth;
-
     /**
      * Whether the passive-load suppression trace has already been emitted for the
      * current passive-load scope entry.
@@ -63,7 +49,6 @@ public final class ChunkMutationTrackingScope {
      * can emit a fresh trace event.</p>
      */
     private boolean passiveLoadTraced;
-
     /**
      * Whether the base-apply suppression trace has already been emitted for the
      * current base-apply scope entry.
@@ -72,7 +57,6 @@ public final class ChunkMutationTrackingScope {
      * can emit a fresh trace event.</p>
      */
     private boolean baseApplyTraced;
-
     /**
      * Whether the restore suppression trace has already been emitted for the
      * current restore scope entry.
@@ -100,6 +84,22 @@ public final class ChunkMutationTrackingScope {
     }
 
     /**
+     * Returns the {@link ChunkTraceEventType} corresponding to the given cause.
+     *
+     * @param cause the suppression cause; must not be {@link Cause#NONE}
+     * @return the matching trace event type
+     * @throws IllegalArgumentException if {@code cause} is {@link Cause#NONE}
+     */
+    public static ChunkTraceEventType suppressionEventType(final Cause cause) {
+        return switch (cause) {
+            case RESTORE -> ChunkTraceEventType.MUTATION_SUPPRESSED_RESTORE;
+            case BASE_APPLY -> ChunkTraceEventType.MUTATION_SUPPRESSED_BASE_APPLY;
+            case PASSIVE_LOAD -> ChunkTraceEventType.MUTATION_SUPPRESSED_PASSIVE_LOAD;
+            case NONE -> throw new IllegalArgumentException("NONE has no suppression event type");
+        };
+    }
+
+    /**
      * Enters a suppression scope for the given cause, incrementing its depth.
      *
      * <p>{@link Cause#NONE} is a no-op.</p>
@@ -109,9 +109,10 @@ public final class ChunkMutationTrackingScope {
     public void push(final Cause cause) {
         switch (cause) {
             case PASSIVE_LOAD -> passiveLoadDepth++;
-            case BASE_APPLY   -> baseApplyDepth++;
-            case RESTORE      -> restoreDepth++;
-            case NONE         -> { }
+            case BASE_APPLY -> baseApplyDepth++;
+            case RESTORE -> restoreDepth++;
+            case NONE -> {
+            }
         }
     }
 
@@ -147,7 +148,8 @@ public final class ChunkMutationTrackingScope {
                     restoreTraced = false;
                 }
             }
-            case NONE -> { }
+            case NONE -> {
+            }
         }
     }
 
@@ -168,9 +170,15 @@ public final class ChunkMutationTrackingScope {
      * @return the active cause, or {@link Cause#NONE}
      */
     public Cause currentCause() {
-        if (restoreDepth > 0)      return Cause.RESTORE;
-        if (baseApplyDepth > 0)    return Cause.BASE_APPLY;
-        if (passiveLoadDepth > 0)  return Cause.PASSIVE_LOAD;
+        if (restoreDepth > 0) {
+            return Cause.RESTORE;
+        }
+        if (baseApplyDepth > 0) {
+            return Cause.BASE_APPLY;
+        }
+        if (passiveLoadDepth > 0) {
+            return Cause.PASSIVE_LOAD;
+        }
         return Cause.NONE;
     }
 
@@ -189,33 +197,11 @@ public final class ChunkMutationTrackingScope {
     public boolean shouldTraceSuppression(final Cause cause) {
         return switch (cause) {
             case PASSIVE_LOAD -> markTracedOnce(TracedFlag.PASSIVE_LOAD);
-            case BASE_APPLY   -> markTracedOnce(TracedFlag.BASE_APPLY);
-            case RESTORE      -> markTracedOnce(TracedFlag.RESTORE);
-            case NONE         -> throw new IllegalArgumentException("NONE has no suppression trace");
+            case BASE_APPLY -> markTracedOnce(TracedFlag.BASE_APPLY);
+            case RESTORE -> markTracedOnce(TracedFlag.RESTORE);
+            case NONE -> throw new IllegalArgumentException("NONE has no suppression trace");
         };
     }
-
-    /**
-     * Returns the {@link ChunkTraceEventType} corresponding to the given cause.
-     *
-     * @param cause the suppression cause; must not be {@link Cause#NONE}
-     * @return the matching trace event type
-     * @throws IllegalArgumentException if {@code cause} is {@link Cause#NONE}
-     */
-    public static ChunkTraceEventType suppressionEventType(final Cause cause) {
-        return switch (cause) {
-            case RESTORE      -> ChunkTraceEventType.MUTATION_SUPPRESSED_RESTORE;
-            case BASE_APPLY   -> ChunkTraceEventType.MUTATION_SUPPRESSED_BASE_APPLY;
-            case PASSIVE_LOAD -> ChunkTraceEventType.MUTATION_SUPPRESSED_PASSIVE_LOAD;
-            case NONE         -> throw new IllegalArgumentException("NONE has no suppression event type");
-        };
-    }
-
-    /**
-     * Internal flag selector used by {@link #markTracedOnce} to avoid
-     * a boolean parameter whose meaning is implicit at the call site.
-     */
-    private enum TracedFlag { PASSIVE_LOAD, BASE_APPLY, RESTORE }
 
     /**
      * Sets the traced flag for {@code flag} and returns {@code true} the first
@@ -230,21 +216,44 @@ public final class ChunkMutationTrackingScope {
     private boolean markTracedOnce(final TracedFlag flag) {
         return switch (flag) {
             case PASSIVE_LOAD -> {
-                if (passiveLoadTraced) yield false;
+                if (passiveLoadTraced) {
+                    yield false;
+                }
                 passiveLoadTraced = true;
                 yield true;
             }
             case BASE_APPLY -> {
-                if (baseApplyTraced) yield false;
+                if (baseApplyTraced) {
+                    yield false;
+                }
                 baseApplyTraced = true;
                 yield true;
             }
             case RESTORE -> {
-                if (restoreTraced) yield false;
+                if (restoreTraced) {
+                    yield false;
+                }
                 restoreTraced = true;
                 yield true;
             }
         };
     }
+
+    /**
+     * Reason a mutation is being suppressed, or {@link #NONE} when suppression
+     * is not active.
+     */
+    public enum Cause {
+        NONE,
+        PASSIVE_LOAD,
+        BASE_APPLY,
+        RESTORE
+    }
+
+    /**
+     * Internal flag selector used by {@link #markTracedOnce} to avoid
+     * a boolean parameter whose meaning is implicit at the call site.
+     */
+    private enum TracedFlag {PASSIVE_LOAD, BASE_APPLY, RESTORE}
 }
 

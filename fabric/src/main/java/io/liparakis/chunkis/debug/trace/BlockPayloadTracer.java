@@ -14,6 +14,7 @@ import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
 public final class BlockPayloadTracer {
+
     private BlockPayloadTracer() {
         throw new AssertionError("Utility class");
     }
@@ -33,7 +34,7 @@ public final class BlockPayloadTracer {
             final int blockChangesAfter,
             final long mutationGeneration,
             @Nullable final String message
-    ) {
+                                                ) {
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final PayloadWatchTarget target = PayloadWatchTracer.watchedBlockTarget(worldId, pos);
         if (target == null) {
@@ -65,7 +66,7 @@ public final class BlockPayloadTracer {
                         + " blockChangesAfter=" + blockChangesAfter
                         + " mutationGeneration=" + mutationGeneration,
                 null
-        );
+                                     );
     }
 
     public static void traceCapturedBlocks(final WorldChunk chunk) {
@@ -79,7 +80,7 @@ public final class BlockPayloadTracer {
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
-        )) {
+                                                                                            )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
@@ -98,7 +99,7 @@ public final class BlockPayloadTracer {
                         target,
                         PayloadWatchSummaries.summarizeBlock(target, state),
                         null
-                );
+                                             );
                 continue;
             }
 
@@ -113,7 +114,7 @@ public final class BlockPayloadTracer {
                     target,
                     PayloadWatchSummaries.summarizeBlock(target, state),
                     null
-            );
+                                         );
         }
     }
 }

@@ -12,6 +12,7 @@ import net.minecraft.util.math.ChunkPos;
 import org.jetbrains.annotations.Nullable;
 
 public final class BlockEntityPayloadTracer {
+
     private BlockEntityPayloadTracer() {
         throw new AssertionError("Utility class");
     }
@@ -22,7 +23,7 @@ public final class BlockEntityPayloadTracer {
             final BlockPos pos,
             @Nullable final BlockEntity blockEntity,
             @Nullable final NbtCompound nbt
-    ) {
+                                               ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -31,7 +32,7 @@ public final class BlockEntityPayloadTracer {
                 pos.getX(),
                 pos.getY(),
                 pos.getZ()
-        );
+                                                                                  );
         if (target == null) {
             return;
         }
@@ -49,7 +50,7 @@ public final class BlockEntityPayloadTracer {
                     target,
                     summary,
                     null
-            );
+                                         );
             return;
         }
 
@@ -64,7 +65,7 @@ public final class BlockEntityPayloadTracer {
                 target,
                 summary,
                 null
-        );
+                                     );
     }
 
     public static void traceSkippedBlockEntityCapture(
@@ -72,7 +73,7 @@ public final class BlockEntityPayloadTracer {
             final ChunkPos chunkPos,
             final BlockPos pos,
             final String message
-    ) {
+                                                     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -81,7 +82,7 @@ public final class BlockEntityPayloadTracer {
                 pos.getX(),
                 pos.getY(),
                 pos.getZ()
-        );
+                                                                                  );
         if (target == null) {
             return;
         }
@@ -97,7 +98,7 @@ public final class BlockEntityPayloadTracer {
                 target,
                 "pos=" + pos.getX() + ',' + pos.getY() + ',' + pos.getZ(),
                 null
-        );
+                                     );
     }
 
     public static void traceRestoredBlockEntity(
@@ -107,7 +108,7 @@ public final class BlockEntityPayloadTracer {
             final BlockEntity blockEntity,
             final NbtCompound nbt,
             final String operationId
-    ) {
+                                               ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -116,7 +117,7 @@ public final class BlockEntityPayloadTracer {
                 pos.getX(),
                 pos.getY(),
                 pos.getZ()
-        );
+                                                                                  );
         if (target == null) {
             return;
         }
@@ -131,7 +132,7 @@ public final class BlockEntityPayloadTracer {
                 target,
                 PayloadWatchSummaries.summarizeBlockEntity(target, blockEntity, nbt),
                 null
-        );
+                                     );
     }
 
     public static void traceRestoreBlockEntitySkipped(
@@ -140,7 +141,7 @@ public final class BlockEntityPayloadTracer {
             final BlockPos pos,
             final String operationId,
             final String message
-    ) {
+                                                     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -149,7 +150,7 @@ public final class BlockEntityPayloadTracer {
                 pos.getX(),
                 pos.getY(),
                 pos.getZ()
-        );
+                                                                                  );
         if (target == null) {
             return;
         }
@@ -164,6 +165,6 @@ public final class BlockEntityPayloadTracer {
                 target,
                 target.describe(),
                 null
-        );
+                                     );
     }
 }

@@ -11,9 +11,8 @@ package io.liparakis.chunkis.spi;
  *
  * @param <S> block-state type
  * @param <P> property type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public interface PropertyValueAdapter<S, P> {
 

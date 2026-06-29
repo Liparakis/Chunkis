@@ -2,10 +2,11 @@ package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.ownership.PendingVanillaSaveDecision;
 import net.minecraft.nbt.NbtCompound;
@@ -19,8 +20,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 
 /**
  * Hard-stops vanilla MCA writes.
@@ -43,19 +42,19 @@ public class StoragePreventionMixin {
             ChunkOwnershipTraceHelper.traceDecision(
                     null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
                     null, null
-            );
+                                                   );
         } else {
             ChunkOwnershipTraceHelper.traceDecision(
                     null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
                     snapshot.delta(), null
-            );
+                                                   );
         }
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.VANILLA_SAVE_CANCELLED,
                 ChunkTraceSeverity.INFO, reason, SOURCE + "#chunkis$blockWrite", "blocked vanilla MCA write", null,
                 new DebugChunkKey(pos.x, pos.z), null, null, null, null
-        );
+                             );
         ci.cancel();
     }
 
@@ -68,7 +67,7 @@ public class StoragePreventionMixin {
         ChunkOwnershipTraceHelper.traceDecision(
                 null, pos, "BYPASSED", ChunkTraceReason.PASSIVE_VANILLA_LOAD,
                 SOURCE + "#chunkis$blockGetTagAt", null, null
-        );
+                                               );
         cir.setReturnValue(null);
     }
 
@@ -81,7 +80,7 @@ public class StoragePreventionMixin {
         ChunkOwnershipTraceHelper.traceDecision(
                 null, chunkPos, "BYPASSED", ChunkTraceReason.PASSIVE_VANILLA_LOAD,
                 SOURCE + "#chunkis$blockScanChunk", null, null
-        );
+                                               );
         ci.cancel();
     }
 

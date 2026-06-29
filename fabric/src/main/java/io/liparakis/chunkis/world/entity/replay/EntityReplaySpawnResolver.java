@@ -37,15 +37,16 @@ final class EntityReplaySpawnResolver {
                                 final Entity entity, final NbtCompound nbt, @Nullable final String operationId) {
         final Entity existing = world.getEntity(entity.getUuid());
 
-        if (ChunkEntityQueries.isMatchingLiveEntity(existing, entity.getType(), chunkPosition) && ChunkEntityQueries.isVisibleFromWorldQuery(world, entity.getUuid(), searchBox)) {
+        if (ChunkEntityQueries.isMatchingLiveEntity(existing, entity.getType(), chunkPosition)
+                && ChunkEntityQueries.isVisibleFromWorldQuery(world, entity.getUuid(), searchBox)) {
             PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getUuidAsString(), operationId,
-                    "restore skipped: entity already present in world");
+                                                         "restore skipped: entity already present in world");
             return SpawnOutcome.ALREADY_PRESENT;
         }
 
         if (existing != null) {
             PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getUuidAsString(), operationId,
-                    "restore skipped: duplicate UUID conflict type/chunk mismatch");
+                                                         "restore skipped: duplicate UUID conflict type/chunk mismatch");
             return SpawnOutcome.DUPLICATE_UUID_CONFLICT;
         }
 
@@ -55,12 +56,12 @@ final class EntityReplaySpawnResolver {
                 return SpawnOutcome.SPAWNED;
             }
             PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getUuidAsString(), operationId,
-                    "restore skipped: spawnEntity returned true but world query did not find entity");
+                                                         "restore skipped: spawnEntity returned true but world query did not find entity");
             return SpawnOutcome.SPAWN_ACCEPTED_NOT_VISIBLE;
         }
 
         PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getUuidAsString(), operationId,
-                "restore skipped: ServerWorld.spawnEntity returned false");
+                                                     "restore skipped: ServerWorld.spawnEntity returned false");
         return SpawnOutcome.SPAWN_REJECTED;
     }
 

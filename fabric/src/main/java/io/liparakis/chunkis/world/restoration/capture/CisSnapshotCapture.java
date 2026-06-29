@@ -5,8 +5,8 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
-import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.world.chunk.ChunkSection;
@@ -34,7 +34,7 @@ public final class CisSnapshotCapture {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> target,
             final String operationId
-    ) {
+                                                             ) {
         final int previousNonAirBlocks = countPersistedNonAirBlocks(target);
         final int liveNonAirBlocks = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
         if (isSuspiciousBaselineShrink(previousNonAirBlocks, liveNonAirBlocks)) {
@@ -53,7 +53,7 @@ public final class CisSnapshotCapture {
                     restoreOperationId,
                     chunk.getStatus(),
                     operationId
-            );
+                               );
             return target;
         }
         PayloadWatchTracer.traceCapturedBlocks(chunk);
@@ -84,7 +84,7 @@ public final class CisSnapshotCapture {
                 chunk,
                 chunk.getWorld().getRegistryManager(),
                 target
-        );
+                                                    );
 
         final NbtCompound existingMetadata = target.getChunkMetadata();
         target.setChunkMetadata(
@@ -94,9 +94,9 @@ public final class CisSnapshotCapture {
                         true,
                         CisNbtUtil.extractPersistedBaseChunkNbt(existingMetadata),
                         BaseChunkCaptureUtil.hasPortalBlocks(chunk)
-                ),
+                                                             ),
                 false
-        );
+                               );
         target.setSuppressInitialRepopulation(true);
         return target;
     }
@@ -104,7 +104,7 @@ public final class CisSnapshotCapture {
     static boolean isSuspiciousBaselineShrink(
             final int previousNonAirBlocks,
             final int liveNonAirBlocks
-    ) {
+                                             ) {
         return previousNonAirBlocks > 0
                 && liveNonAirBlocks >= 0
                 && liveNonAirBlocks * 10 < previousNonAirBlocks * 6;

@@ -32,21 +32,26 @@ import java.util.Map;
  * - ~2 references per unique entry (map + list)
  *
  * @param <T> type stored in the palette
- *
+ * @author Liparakis
+ * @version 1
  * @see ChunkDelta
  * @see BlockInstruction
- *
- * @version 1
- * @author Liparakis
  */
 public class Palette<T> {
-    /** Initial capacity optimized for typical chunk block diversity */
+
+    /**
+     * Initial capacity optimized for typical chunk block diversity
+     */
     private static final int INITIAL_CAPACITY = 32;
 
-    /** Sequential list mapping IDs to entries (ID → Entry) */
+    /**
+     * Sequential list mapping IDs to entries (ID → Entry)
+     */
     private final List<T> idToEntry = new ArrayList<>(INITIAL_CAPACITY);
 
-    /** Reverse lookup mapping entries to their assigned IDs (Entry → ID) */
+    /**
+     * Reverse lookup mapping entries to their assigned IDs (Entry → ID)
+     */
     private final Map<T, Integer> entryToId = new HashMap<>(INITIAL_CAPACITY);
 
     /**

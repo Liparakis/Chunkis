@@ -3,8 +3,9 @@ package io.liparakis.chunkis.mixin.world.entity;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
-import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import java.util.UUID;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -19,8 +20,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.UUID;
-
 @Mixin(Entity.class)
 public abstract class EntityMixin {
 
@@ -30,11 +29,17 @@ public abstract class EntityMixin {
     @Shadow
     private World world;
 
+    @Unique
+    private static boolean chunkis$shouldPreserveEntityPayload(final Entity.RemovalReason reason) {
+        return reason == Entity.RemovalReason.UNLOADED_TO_CHUNK
+                || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER;
+    }
+
     @Inject(method = "remove", at = @At("HEAD"))
     private void chunkis$traceWatchedRemoval(
             final Entity.RemovalReason reason,
             final CallbackInfo ci
-    ) {
+                                            ) {
         final Entity self = (Entity) (Object) this;
         if (!(this.world instanceof ServerWorld serverWorld)) {
             return;
@@ -45,7 +50,7 @@ public abstract class EntityMixin {
                 reason,
                 null,
                 "EntityMixin#chunkis$traceWatchedRemoval"
-        );
+                                                 );
         if (!chunkis$shouldPreserveEntityPayload(reason)) {
             chunkis$removeEntityPayload(serverWorld, self);
         }
@@ -55,7 +60,7 @@ public abstract class EntityMixin {
     private void chunkis$traceStartedTrackingBy(
             final ServerPlayerEntity player,
             final CallbackInfo ci
-    ) {
+                                               ) {
         final Entity self = (Entity) (Object) this;
         if (!(this.world instanceof ServerWorld serverWorld)) {
             return;
@@ -67,14 +72,14 @@ public abstract class EntityMixin {
                 "entity-tracking-start",
                 "EntityMixin#chunkis$traceStartedTrackingBy",
                 "watched entity started tracking for player"
-        );
+                                                   );
     }
 
     @Inject(method = "onStoppedTrackingBy", at = @At("HEAD"))
     private void chunkis$traceStoppedTrackingBy(
             final ServerPlayerEntity player,
             final CallbackInfo ci
-    ) {
+                                               ) {
         final Entity self = (Entity) (Object) this;
         if (!(this.world instanceof ServerWorld serverWorld)) {
             return;
@@ -86,7 +91,7 @@ public abstract class EntityMixin {
                 "entity-tracking-stop",
                 "EntityMixin#chunkis$traceStoppedTrackingBy",
                 "watched entity stopped tracking for player"
-        );
+                                                   );
     }
 
     @Unique
@@ -104,17 +109,11 @@ public abstract class EntityMixin {
         delta.removeEntity(entity.getId());
         delta.removeEntitiesMatching(nbt -> nbt != null
                 && nbt.getIntArray("UUID")
-                .map(net.minecraft.util.Uuids::toUuid)
-                .map(targetUuid::equals)
-                .orElse(false));
+                      .map(net.minecraft.util.Uuids::toUuid)
+                      .map(targetUuid::equals)
+                      .orElse(false));
         GlobalChunkTracker.markDirty(chunk, REMOVE_SOURCE);
         ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
-    }
-
-    @Unique
-    private static boolean chunkis$shouldPreserveEntityPayload(final Entity.RemovalReason reason) {
-        return reason == Entity.RemovalReason.UNLOADED_TO_CHUNK
-                || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER;
     }
 }
 

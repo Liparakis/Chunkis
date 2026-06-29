@@ -1,22 +1,20 @@
 package io.liparakis.chunkis.storage.io;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
-import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
-import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.mapping.PropertyPacker;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -24,8 +22,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CisStorageTraceTest {
 
@@ -74,7 +73,7 @@ class CisStorageTraceTest {
                 ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
                 ChunkTraceEventType.REGION_READ_TX_START,
                 ChunkTraceEventType.REGION_READ_TX_END
-        );
+                                       );
         assertThat(events)
                 .filteredOn(event -> saveOperationId.equals(event.operationId()))
                 .extracting(ChunkTraceEvent::eventType)
@@ -84,7 +83,7 @@ class CisStorageTraceTest {
                         ChunkTraceEventType.REGION_WRITE_TX_START,
                         ChunkTraceEventType.REGION_WRITE_TX_END,
                         ChunkTraceEventType.SAVE_FLUSH_COMPLETED
-                );
+                         );
         assertThat(events)
                 .filteredOn(event -> loadOperationId.equals(event.operationId()))
                 .extracting(ChunkTraceEvent::eventType)
@@ -93,7 +92,7 @@ class CisStorageTraceTest {
                         ChunkTraceEventType.REGION_READ_TX_START,
                         ChunkTraceEventType.REGION_READ_TX_END,
                         ChunkTraceEventType.LOAD_TX_END
-                );
+                         );
     }
 
     @Test
@@ -178,7 +177,7 @@ class CisStorageTraceTest {
                 .contains(
                         ChunkTraceEventType.REGION_READ_TX_START,
                         ChunkTraceEventType.REGION_READ_TX_END
-                );
+                         );
         assertThat(ChunkTraceStore.latest(20))
                 .filteredOn(event -> "save-op-paranoid".equals(event.operationId()))
                 .filteredOn(event -> event.eventType() == ChunkTraceEventType.ASSERTION_FAILED)
@@ -186,6 +185,7 @@ class CisStorageTraceTest {
     }
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
+
         private static final List<String> KNOWN_BLOCKS = List.of("air", "stone");
 
         @Override
@@ -210,6 +210,7 @@ class CisStorageTraceTest {
     }
 
     private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
+
         @Override
         public String getDefaultState(final String block) {
             return block;
@@ -247,6 +248,7 @@ class CisStorageTraceTest {
     }
 
     private static final class TestNbtAdapter implements NbtAdapter<String> {
+
         @Override
         public void write(final String tag, final DataOutput output) throws IOException {
             output.writeUTF(tag);

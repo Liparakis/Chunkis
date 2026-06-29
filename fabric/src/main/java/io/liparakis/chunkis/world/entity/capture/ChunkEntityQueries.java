@@ -1,6 +1,8 @@
 package io.liparakis.chunkis.world.entity.capture;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
@@ -9,9 +11,6 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Shared entity lookup and verification helpers scoped to one chunk column.
@@ -41,7 +40,7 @@ public final class ChunkEntityQueries {
     public static NbtCompound findPendingEntityNbt(
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             final String entityUuid
-    ) {
+                                                  ) {
         final NbtCompound[] found = {null};
         runtimeDelta.forEachPendingEntity(nbt -> {
             if (found[0] != null || nbt == null) {
@@ -87,7 +86,7 @@ public final class ChunkEntityQueries {
             final Entity entity,
             @Nullable final EntityType<?> expectedType,
             final ChunkPos expectedChunk
-    ) {
+                                              ) {
         return entity != null
                 && entity.isAlive()
                 && !entity.isRemoved()
@@ -113,7 +112,7 @@ public final class ChunkEntityQueries {
             final ServerWorld world,
             final UUID uuid,
             final Box searchBox
-    ) {
+                                                 ) {
         for (final Entity entity : world.getOtherEntities(null, searchBox)) {
             if (uuid.equals(entity.getUuid()) && entity.isAlive() && !entity.isRemoved()) {
                 return true;
@@ -131,13 +130,13 @@ public final class ChunkEntityQueries {
      * The upper bound is {@code getTopYInclusive() + 1} to include blocks at the
      * top of the build height in the search.</p>
      *
-     * @param world           world providing vertical bounds
-     * @param chunkPosition   target chunk
+     * @param world         world providing vertical bounds
+     * @param chunkPosition target chunk
      * @return search box covering the full chunk column
      */
     public static Box chunkColumnBox(final ServerWorld world, final ChunkPos chunkPosition) {
         return new Box(
-                chunkPosition.getStartX(), world.getBottomY(),            chunkPosition.getStartZ(),
+                chunkPosition.getStartX(), world.getBottomY(), chunkPosition.getStartZ(),
                 chunkPosition.getEndX() + 1, world.getTopYInclusive() + 1, chunkPosition.getEndZ() + 1
         );
     }

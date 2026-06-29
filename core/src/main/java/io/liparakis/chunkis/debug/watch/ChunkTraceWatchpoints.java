@@ -187,14 +187,14 @@ public final class ChunkTraceWatchpoints {
      * <p>This method uses a direct loop instead of streams to avoid lambda and stream pipeline
      * allocation on a method that may be called repeatedly while tracing payload activity.</p>
      *
-     * @param worldId world identifier to match.
+     * @param worldId  world identifier to match.
      * @param chunkKey chunk key to match.
      * @return immutable list of matching payload watches in registration order.
      */
     public static List<PayloadWatchTarget> watchedPayloadsForChunk(
             final String worldId,
             final DebugChunkKey chunkKey
-    ) {
+                                                                  ) {
         synchronized (MONITOR) {
             final List<PayloadWatchTarget> matches = new ArrayList<>();
             for (final PayloadWatchTarget target : PAYLOAD_TARGETS) {
@@ -210,9 +210,9 @@ public final class ChunkTraceWatchpoints {
      * Finds the first watched block payload target at the supplied world-space block position.
      *
      * @param worldId world identifier to match.
-     * @param blockX world-space block x coordinate.
-     * @param blockY world-space block y coordinate.
-     * @param blockZ world-space block z coordinate.
+     * @param blockX  world-space block x coordinate.
+     * @param blockY  world-space block y coordinate.
+     * @param blockZ  world-space block z coordinate.
      * @return matching target, or {@code null} when no block watch matches.
      */
     public static PayloadWatchTarget watchedBlock(
@@ -220,7 +220,7 @@ public final class ChunkTraceWatchpoints {
             final int blockX,
             final int blockY,
             final int blockZ
-    ) {
+                                                 ) {
         return findBlockPayload(worldId, PayloadWatchType.BLOCK, blockX, blockY, blockZ);
     }
 
@@ -228,9 +228,9 @@ public final class ChunkTraceWatchpoints {
      * Finds the first watched block-entity payload target at the supplied world-space block position.
      *
      * @param worldId world identifier to match.
-     * @param blockX world-space block x coordinate.
-     * @param blockY world-space block y coordinate.
-     * @param blockZ world-space block z coordinate.
+     * @param blockX  world-space block x coordinate.
+     * @param blockY  world-space block y coordinate.
+     * @param blockZ  world-space block z coordinate.
      * @return matching target, or {@code null} when no block-entity watch matches.
      */
     public static PayloadWatchTarget watchedBlockEntity(
@@ -238,21 +238,21 @@ public final class ChunkTraceWatchpoints {
             final int blockX,
             final int blockY,
             final int blockZ
-    ) {
+                                                       ) {
         return findBlockPayload(worldId, PayloadWatchType.BLOCK_ENTITY, blockX, blockY, blockZ);
     }
 
     /**
      * Finds the first watched entity payload target for the supplied entity UUID.
      *
-     * @param worldId world identifier to match.
+     * @param worldId    world identifier to match.
      * @param entityUuid entity UUID string to match.
      * @return matching target, or {@code null} when no entity watch matches.
      */
     public static PayloadWatchTarget watchedEntity(
             final String worldId,
             final String entityUuid
-    ) {
+                                                  ) {
         synchronized (MONITOR) {
             for (final PayloadWatchTarget target : PAYLOAD_TARGETS) {
                 if (target.matchesEntity(worldId, entityUuid)) {
@@ -287,10 +287,10 @@ public final class ChunkTraceWatchpoints {
      * registration-order semantics and nullable return behavior.</p>
      *
      * @param worldId world identifier to match.
-     * @param type expected block-based payload type.
-     * @param blockX world-space block x coordinate.
-     * @param blockY world-space block y coordinate.
-     * @param blockZ world-space block z coordinate.
+     * @param type    expected block-based payload type.
+     * @param blockX  world-space block x coordinate.
+     * @param blockY  world-space block y coordinate.
+     * @param blockZ  world-space block z coordinate.
      * @return first matching target, or {@code null} when no target matches.
      */
     private static PayloadWatchTarget findBlockPayload(
@@ -299,7 +299,7 @@ public final class ChunkTraceWatchpoints {
             final int blockX,
             final int blockY,
             final int blockZ
-    ) {
+                                                      ) {
         synchronized (MONITOR) {
             for (final PayloadWatchTarget target : PAYLOAD_TARGETS) {
                 if (target.matchesBlock(worldId, type, blockX, blockY, blockZ)) {

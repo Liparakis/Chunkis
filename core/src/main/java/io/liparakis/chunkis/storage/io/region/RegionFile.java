@@ -5,11 +5,10 @@ import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
-
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -38,6 +37,18 @@ import java.util.List;
 public final class RegionFile implements AutoCloseable {
 
     /**
+     * Fixed number of chunk slots tracked by one region header.
+     */
+    static final int CHUNKS_PER_REGION = 1024;
+    /**
+     * Total header size: 1024 chunk entries — 8 bytes per entry.
+     */
+    static final int HEADER_SIZE = 8192;
+    /**
+     * Footer magic marking the trailing allocation metadata block.
+     */
+    static final int FOOTER_MAGIC = 0x43495346;
+    /**
      * Trace source label used for read-side region events.
      */
     private static final String READ_SOURCE = "RegionFile#read";
@@ -50,25 +61,9 @@ public final class RegionFile implements AutoCloseable {
      */
     private static final int REGION_MASK = 31;
     /**
-     * Fixed number of chunk slots tracked by one region header.
-     */
-    static final int CHUNKS_PER_REGION = 1024;
-
-    /**
-     * Total header size: 1024 chunk entries — 8 bytes per entry.
-     */
-    static final int HEADER_SIZE = 8192;
-
-    /**
      * Size of one header entry: 4-byte offset + 4-byte length.
      */
     private static final int HEADER_ENTRY_SIZE = 8;
-
-    /**
-     * Footer magic marking the trailing allocation metadata block.
-     */
-    static final int FOOTER_MAGIC = 0x43495346;
-
     /**
      * Metadata payload magic written before the footer trailer.
      */
@@ -83,37 +78,30 @@ public final class RegionFile implements AutoCloseable {
      * Sentinel indicating that no footer has been located or written yet.
      */
     private static final int NO_FOOTER = -1;
-
-    /**
-     * Absolute path to the backing region file on disk.
-     */
-    private final Path path;
-
-    /**
-     * Open channel for all reads, writes, compaction swaps, and header updates.
-     */
-    private FileChannel channel;
-
     /**
      * Chunk payload offsets indexed by local region slot. Package-private for tests/compaction.
      */
     final int[] offsets = new int[CHUNKS_PER_REGION];
-
     /**
      * Chunk payload lengths indexed by local region slot. Package-private for tests/compaction.
      */
     final int[] lengths = new int[CHUNKS_PER_REGION];
-
+    /**
+     * Absolute path to the backing region file on disk.
+     */
+    private final Path path;
     /**
      * In-memory free blocks available for best-fit reuse. Always sorted and non-overlapping.
      */
     private final RegionAllocationMetadata allocationMetadata = new RegionAllocationMetadata();
-
     /**
      * Reusable direct buffer for single-entry header writes.
      */
     private final ByteBuffer headerBuffer = ByteBuffer.allocateDirect(HEADER_ENTRY_SIZE);
-
+    /**
+     * Open channel for all reads, writes, compaction swaps, and header updates.
+     */
+    private FileChannel channel;
     /**
      * Whether in-memory state has writes not yet forced to disk.
      */
@@ -142,6 +130,78 @@ public final class RegionFile implements AutoCloseable {
         } else {
             loadHeader();
         }
+    }
+
+    /**
+     * Writes the allocation metadata payload plus trailing footer marker to
+     * {@code target} at {@code metadataStart}.
+     */
+    static void writeMetadata(final FileChannel target, final long metadataStart,
+                              final List<RegionFreeBlock> freeBlocks, final long reuseHits, final long reuseMisses)
+            throws IOException {
+        final int payloadLength = (Integer.BYTES * 3) + (Long.BYTES * 2) + (freeBlocks.size() * HEADER_ENTRY_SIZE);
+        final ByteBuffer buffer = ByteBuffer.allocate(payloadLength + (Integer.BYTES * 2));
+        buffer.putInt(METADATA_MAGIC);
+        buffer.putInt(METADATA_VERSION);
+        buffer.putInt(freeBlocks.size());
+        buffer.putLong(reuseHits);
+        buffer.putLong(reuseMisses);
+        for (final RegionFreeBlock block : freeBlocks) {
+            buffer.putInt(block.offset());
+            buffer.putInt(block.length());
+        }
+        buffer.putInt(payloadLength);
+        buffer.putInt(FOOTER_MAGIC);
+        buffer.flip();
+        writeFully(target, buffer, metadataStart);
+    }
+
+    /**
+     * Returns the local slot index for a chunk position within this region
+     * (0â€“1023, row-major in Z).
+     */
+    private static int getChunkIndex(final CisChunkPos pos) {
+        return (pos.x() & REGION_MASK) + (pos.z() & REGION_MASK) * 32;
+    }
+
+    private static DebugChunkKey chunkKey(final CisChunkPos pos) {
+        return new DebugChunkKey(pos.x(), pos.z());
+    }
+
+    /**
+     * Reads exactly {@code target.remaining()} bytes or throws on unexpected EOF.
+     */
+    static void readFully(final FileChannel source, final ByteBuffer target, final long position) throws IOException {
+        long currentPosition = position;
+        while (target.hasRemaining()) {
+            final int bytesRead = source.read(target, currentPosition);
+            if (bytesRead < 0) {
+                throw new IOException("Unexpected EOF while reading region file");
+            }
+            currentPosition += bytesRead;
+        }
+    }
+
+    /**
+     * Writes all bytes in {@code source}, retrying until none remain.
+     */
+    static void writeFully(final FileChannel target, final ByteBuffer source, final long position) throws IOException {
+        long currentPosition = position;
+        while (source.hasRemaining()) {
+            final int bytesWritten = target.write(source, currentPosition);
+            if (bytesWritten <= 0) {
+                throw new IOException("Failed to make progress while writing region file");
+            }
+            currentPosition += bytesWritten;
+        }
+    }
+
+    /**
+     * Reads one chunk payload into a caller-provided scratch buffer.
+     */
+    static void readChunkBytes(final FileChannel source, final int offset, final int length, final byte[] target)
+            throws IOException {
+        readFully(source, ByteBuffer.wrap(target, 0, length), offset);
     }
 
     /**
@@ -182,14 +242,14 @@ public final class RegionFile implements AutoCloseable {
     public synchronized byte[] read(CisChunkPos pos, String operationId) throws IOException {
         final DebugChunkKey chunkKey = chunkKey(pos);
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_START,
-                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read started", null
+                              ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read started", null
                 , chunkKey, regionKey(), operationId, null, null);
 
         final int index = getChunkIndex(pos);
 
         if (offsets[index] == 0) {
             ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_END,
-                    ChunkTraceSeverity.INFO, ChunkTraceReason.MISSING_ENTRY, READ_SOURCE, "region file entry missing"
+                                  ChunkTraceSeverity.INFO, ChunkTraceReason.MISSING_ENTRY, READ_SOURCE, "region file entry missing"
                     , null, chunkKey, regionKey(), operationId, null, null);
             return null;
         }
@@ -202,8 +262,8 @@ public final class RegionFile implements AutoCloseable {
         final ByteBuffer buffer = ByteBuffer.allocate(lengths[index]);
         readFully(channel, buffer, offsets[index]);
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_END,
-                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read completed",
-                null, chunkKey, regionKey(), operationId, null, lengths[index]);
+                              ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read completed",
+                              null, chunkKey, regionKey(), operationId, null, lengths[index]);
         return buffer.array();
     }
 
@@ -237,8 +297,8 @@ public final class RegionFile implements AutoCloseable {
     public synchronized void write(CisChunkPos pos, byte[] data, String operationId) throws IOException {
         final DebugChunkKey chunkKey = chunkKey(pos);
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_START,
-                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write started", null,
-                chunkKey, regionKey(), operationId, null, data == null ? 0 : data.length);
+                              ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write started", null,
+                              chunkKey, regionKey(), operationId, null, data == null ? 0 : data.length);
 
         final int index = getChunkIndex(pos);
         final int oldOffset = offsets[index];
@@ -256,8 +316,8 @@ public final class RegionFile implements AutoCloseable {
             writeMetadata();
             dirty = true;
             ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
-                    ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region clear completed",
-                    null, chunkKey, regionKey(), operationId, null, 0);
+                                  ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region clear completed",
+                                  null, chunkKey, regionKey(), operationId, null, 0);
             return;
         }
 
@@ -271,8 +331,8 @@ public final class RegionFile implements AutoCloseable {
             writeMetadata();
             dirty = true;
             ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
-                    ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed",
-                    null, chunkKey, regionKey(), operationId, null, dataLength);
+                                  ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed",
+                                  null, chunkKey, regionKey(), operationId, null, dataLength);
             return;
         }
 
@@ -286,7 +346,7 @@ public final class RegionFile implements AutoCloseable {
         writeMetadata();
         dirty = true;
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
-                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed", null
+                              ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed", null
                 , chunkKey, regionKey(), operationId, null, dataLength);
     }
 
@@ -369,7 +429,7 @@ public final class RegionFile implements AutoCloseable {
      */
     private Path writeCompactedTempFile(final long liveBytes) throws IOException {
         return RegionCompactionIO.writeCompactedTempFile(path, channel, offsets, lengths, liveBytes,
-                allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
+                                                         allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
     }
 
     /**
@@ -439,7 +499,7 @@ public final class RegionFile implements AutoCloseable {
     private boolean readFooterMetadata(final int footerStart) throws IOException {
         final ByteBuffer payload = RegionFooterIO.readFooterPayload(channel, footerStart);
         return allocationMetadata.loadFromFooter(payload, metadataOffset, offsets, lengths, HEADER_ENTRY_SIZE,
-                METADATA_MAGIC, METADATA_VERSION);
+                                                 METADATA_MAGIC, METADATA_VERSION);
     }
 
     /**
@@ -474,30 +534,7 @@ public final class RegionFile implements AutoCloseable {
     private void writeMetadata() throws IOException {
         metadataOffset = (int) channel.size();
         writeMetadata(channel, metadataOffset, allocationMetadata.freeBlocks(), allocationMetadata.reuseHits(),
-                allocationMetadata.reuseMisses());
-    }
-
-    /**
-     * Writes the allocation metadata payload plus trailing footer marker to
-     * {@code target} at {@code metadataStart}.
-     */
-    static void writeMetadata(final FileChannel target, final long metadataStart,
-                              final List<RegionFreeBlock> freeBlocks, final long reuseHits, final long reuseMisses) throws IOException {
-        final int payloadLength = (Integer.BYTES * 3) + (Long.BYTES * 2) + (freeBlocks.size() * HEADER_ENTRY_SIZE);
-        final ByteBuffer buffer = ByteBuffer.allocate(payloadLength + (Integer.BYTES * 2));
-        buffer.putInt(METADATA_MAGIC);
-        buffer.putInt(METADATA_VERSION);
-        buffer.putInt(freeBlocks.size());
-        buffer.putLong(reuseHits);
-        buffer.putLong(reuseMisses);
-        for (final RegionFreeBlock block : freeBlocks) {
-            buffer.putInt(block.offset());
-            buffer.putInt(block.length());
-        }
-        buffer.putInt(payloadLength);
-        buffer.putInt(FOOTER_MAGIC);
-        buffer.flip();
-        writeFully(target, buffer, metadataStart);
+                      allocationMetadata.reuseMisses());
     }
 
     /**
@@ -517,8 +554,8 @@ public final class RegionFile implements AutoCloseable {
         final long physicalBytes = safeChannelSize();
         final int metadataBytes = Math.max(0, (int) physicalBytes - dataEndWithoutMetadata());
         return new RegionSpaceStats(path, physicalBytes, sumLiveBytes(), allocationMetadata.reusableBytes(),
-                metadataBytes, allocationMetadata.freeBlockCount(), allocationMetadata.largestFreeBlock(),
-                allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
+                                    metadataBytes, allocationMetadata.freeBlockCount(), allocationMetadata.largestFreeBlock(),
+                                    allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
     }
 
     /**
@@ -537,14 +574,6 @@ public final class RegionFile implements AutoCloseable {
         headerBuffer.flip();
 
         writeFully(channel, headerBuffer, (long) index * HEADER_ENTRY_SIZE);
-    }
-
-    /**
-     * Returns the local slot index for a chunk position within this region
-     * (0â€“1023, row-major in Z).
-     */
-    private static int getChunkIndex(final CisChunkPos pos) {
-        return (pos.x() & REGION_MASK) + (pos.z() & REGION_MASK) * 32;
     }
 
     /**
@@ -586,49 +615,10 @@ public final class RegionFile implements AutoCloseable {
         return FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
     }
 
-    private static DebugChunkKey chunkKey(final CisChunkPos pos) {
-        return new DebugChunkKey(pos.x(), pos.z());
-    }
-
     private DebugRegionKey regionKey() {
         final String fileName = path.getFileName().toString();
         final String[] parts = fileName.substring(2, fileName.length() - 4).split("\\.");
         return new DebugRegionKey(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-    }
-
-    /**
-     * Reads exactly {@code target.remaining()} bytes or throws on unexpected EOF.
-     */
-    static void readFully(final FileChannel source, final ByteBuffer target, final long position) throws IOException {
-        long currentPosition = position;
-        while (target.hasRemaining()) {
-            final int bytesRead = source.read(target, currentPosition);
-            if (bytesRead < 0) {
-                throw new IOException("Unexpected EOF while reading region file");
-            }
-            currentPosition += bytesRead;
-        }
-    }
-
-    /**
-     * Writes all bytes in {@code source}, retrying until none remain.
-     */
-    static void writeFully(final FileChannel target, final ByteBuffer source, final long position) throws IOException {
-        long currentPosition = position;
-        while (source.hasRemaining()) {
-            final int bytesWritten = target.write(source, currentPosition);
-            if (bytesWritten <= 0) {
-                throw new IOException("Failed to make progress while writing region file");
-            }
-            currentPosition += bytesWritten;
-        }
-    }
-
-    /**
-     * Reads one chunk payload into a caller-provided scratch buffer.
-     */
-    static void readChunkBytes(final FileChannel source, final int offset, final int length, final byte[] target) throws IOException {
-        readFully(source, ByteBuffer.wrap(target, 0, length), offset);
     }
 
     /**
@@ -641,16 +631,22 @@ public final class RegionFile implements AutoCloseable {
     /**
      * Immutable compaction result for one region file.
      */
-    public record RegionCompactReport(Path path, long physicalBytesBefore, long physicalBytesAfter, long liveBytes) {}
+    public record RegionCompactReport(Path path, long physicalBytesBefore, long physicalBytesAfter, long liveBytes) {
+
+    }
 
     /**
      * Immutable space-usage snapshot for one region file.
      */
     public record RegionSpaceStats(Path path, long physicalBytes, long liveBytes, long reusableBytes, int metadataBytes,
-                                   int freeBlockCount, int largestFreeBlock, long reuseHits, long reuseMisses) {}
+                                   int freeBlockCount, int largestFreeBlock, long reuseHits, long reuseMisses) {
+
+    }
 
     /**
      * Allocation decision returned by best-fit lookup.
      */
-    record Allocation(int offset, boolean reused) {}
+    record Allocation(int offset, boolean reused) {
+
+    }
 }

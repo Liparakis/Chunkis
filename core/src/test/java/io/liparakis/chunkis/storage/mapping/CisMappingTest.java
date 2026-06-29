@@ -1,13 +1,13 @@
 package io.liparakis.chunkis.storage.mapping;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.storage.bits.BitReader;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
@@ -16,11 +16,11 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CisMappingTest {
+
     private static final Gson GSON = new Gson();
     private static final Type MAPPING_TYPE = new TypeToken<Map<String, Integer>>() {
     }.getType();
@@ -88,12 +88,21 @@ class CisMappingTest {
     private CisMapping<String, String, String> newMapping(Path mappingFile) throws IOException {
         BlockStateAdapter<String, String, String> stateAdapter = new TestBlockStateAdapter();
         return new CisMapping<>(mappingFile, new TestBlockRegistryAdapter(), stateAdapter,
-                new PropertyPacker<>(stateAdapter));
+                                new PropertyPacker<>(stateAdapter));
     }
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
+
         private static final String AIR = "minecraft:air";
         private static final Map<String, String> KNOWN_BLOCKS = canonicalBlocks();
+
+        private static Map<String, String> canonicalBlocks() {
+            Map<String, String> blocks = new LinkedHashMap<>();
+            blocks.put(AIR, AIR);
+            blocks.put("known:stone", "known:stone");
+            blocks.put("known:dirt", "known:dirt");
+            return blocks;
+        }
 
         @Override
         public String getId(String block) {
@@ -114,17 +123,10 @@ class CisMappingTest {
         public Collection<String> getRegisteredBlocks() {
             return KNOWN_BLOCKS.values();
         }
-
-        private static Map<String, String> canonicalBlocks() {
-            Map<String, String> blocks = new LinkedHashMap<>();
-            blocks.put(AIR, AIR);
-            blocks.put("known:stone", "known:stone");
-            blocks.put("known:dirt", "known:dirt");
-            return blocks;
-        }
     }
 
     private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
+
         @Override
         public String getDefaultState(String block) {
             return block;

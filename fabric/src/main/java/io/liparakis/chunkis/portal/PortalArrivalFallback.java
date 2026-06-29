@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.portal;
 
+import java.util.Set;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -21,8 +22,6 @@ import net.minecraft.world.dimension.NetherPortal;
 import net.minecraft.world.poi.PointOfInterestStorage;
 import net.minecraft.world.poi.PointOfInterestType;
 import net.minecraft.world.poi.PointOfInterestTypes;
-
-import java.util.Set;
 
 /**
  * Controlled fallback for Nether portal travel when vanilla cannot link to an existing destination
@@ -97,7 +96,7 @@ public final class PortalArrivalFallback {
             final ServerWorld sourceWorld,
             final BlockPos sourcePortalPos,
             final BlockPos scaledDestinationPos
-    ) {
+                                       ) {
         final Direction.Axis axis = resolvePortalAxis(
                 sourceWorld.getBlockState(sourcePortalPos));
 
@@ -111,7 +110,7 @@ public final class PortalArrivalFallback {
                     destinationWorld,
                     portalSite.lowerCorner(),
                     portalSite.axis()
-            );
+                                                   );
             return createTeleportTarget(destinationWorld, entity, portalSite.arrival(), true);
         }
 
@@ -126,7 +125,7 @@ public final class PortalArrivalFallback {
                 entity,
                 emergencyArrival(destinationWorld, entity, scaledDestinationPos),
                 false
-        );
+                                   );
     }
 
     /**
@@ -144,7 +143,7 @@ public final class PortalArrivalFallback {
             final Entity entity,
             final BlockPos lowerCorner,
             final Direction.Axis axis
-    ) {
+                                                           ) {
         final Vec3d arrival = findLinkedPortalArrival(world, entity, lowerCorner, axis);
         return new TeleportTarget(
                 world,
@@ -170,16 +169,6 @@ public final class PortalArrivalFallback {
     }
 
     /**
-     * Visits every column in an outward square-ring search, computing {@code startY} (clamped
-     * target height) and {@code surfaceY} (motion-blocking surface) for each. The visitor receives
-     * both Y values and returns {@code true} to stop the search early.
-     */
-    @FunctionalInterface
-    private interface ColumnVisitor {
-        boolean visit(int worldX, int worldZ, int startY, int surfaceY);
-    }
-
-    /**
      * Iterates through columns in an expanding square ring pattern around a target position.
      *
      * @param world        destination world
@@ -196,7 +185,7 @@ public final class PortalArrivalFallback {
             final int minY,
             final int maxY,
             final ColumnVisitor visitor
-    ) {
+                                     ) {
         for (int radius = 0; radius <= searchRadius; radius++) {
             for (int dx = -radius; dx <= radius; dx++) {
                 for (int dz = -radius; dz <= radius; dz++) {
@@ -212,7 +201,7 @@ public final class PortalArrivalFallback {
                     final int surfaceY = MathHelper.clamp(
                             world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, worldX, worldZ),
                             minY, maxY
-                    );
+                                                         );
                     final int startY = MathHelper.clamp(target.getY(), minY, surfaceY);
 
                     if (visitor.visit(worldX, worldZ, startY, surfaceY)) {
@@ -239,23 +228,23 @@ public final class PortalArrivalFallback {
             final ServerWorld world,
             final BlockPos target,
             final Direction.Axis axis
-    ) {
+                                            ) {
         final int minY = world.getBottomY() + 1;
         final int maxY = worldCeilingY(world) - PORTAL_INTERIOR_HEIGHT - 1;
-        final PortalSite[] best = { null };
+        final PortalSite[] best = {null};
 
         searchColumns(
                 world, target, PORTAL_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
                     best[0] = chooseBetter(
                             best[0],
                             validatePortalSiteBothAxes(world, target, worldX, startY, worldZ, axis)
-                    );
+                                          );
 
                     if (surfaceY != startY) {
                         best[0] = chooseBetter(
                                 best[0],
                                 validatePortalSiteBothAxes(world, target, worldX, surfaceY, worldZ, axis)
-                        );
+                                              );
                     }
 
                     best[0] = searchVerticalPortalSites(
@@ -263,7 +252,7 @@ public final class PortalArrivalFallback {
 
                     return false;
                 }
-        );
+                     );
 
         return best[0];
     }
@@ -282,14 +271,14 @@ public final class PortalArrivalFallback {
             final int maxY,
             final Direction.Axis axis,
             PortalSite bestSite
-    ) {
+                                                       ) {
         for (int deltaY = 1; deltaY <= PORTAL_VERTICAL_RANGE; deltaY++) {
             final int upwardY = startY + deltaY;
             if (upwardY <= maxY) {
                 bestSite = chooseBetter(
                         bestSite,
                         validatePortalSiteBothAxes(world, target, x, upwardY, z, axis)
-                );
+                                       );
             }
 
             final int downwardY = startY - deltaY;
@@ -297,7 +286,7 @@ public final class PortalArrivalFallback {
                 bestSite = chooseBetter(
                         bestSite,
                         validatePortalSiteBothAxes(world, target, x, downwardY, z, axis)
-                );
+                                       );
             }
         }
 
@@ -315,7 +304,7 @@ public final class PortalArrivalFallback {
             final int lowerY,
             final int lowerZ,
             final Direction.Axis preferredAxis
-    ) {
+                                                        ) {
         final Direction.Axis otherAxis = preferredAxis == Direction.Axis.X
                 ? Direction.Axis.Z
                 : Direction.Axis.X;
@@ -323,7 +312,7 @@ public final class PortalArrivalFallback {
         return chooseBetter(
                 validatePortalSite(world, target, lowerX, lowerY, lowerZ, preferredAxis),
                 validatePortalSite(world, target, lowerX, lowerY, lowerZ, otherAxis)
-        );
+                           );
     }
 
     /**
@@ -348,7 +337,7 @@ public final class PortalArrivalFallback {
             final int lowerY,
             final int lowerZ,
             final Direction.Axis axis
-    ) {
+                                                ) {
         final Direction widthDirection = widthDirection(axis);
 
         if (!isPortalFootprintSafe(world, lowerX, lowerY, lowerZ, widthDirection)) {
@@ -375,7 +364,7 @@ public final class PortalArrivalFallback {
                         supportScore,
                         effectiveEgress.walkableCount(),
                         effectiveEgress.bfsCount()
-                ),
+                              ),
                 axis
         );
     }
@@ -390,7 +379,7 @@ public final class PortalArrivalFallback {
             final int lowerY,
             final int lowerZ,
             final Direction widthDirection
-    ) {
+                                                ) {
         final BlockPos.Mutable mutable = new BlockPos.Mutable();
 
         for (int width = -1; width <= PORTAL_INTERIOR_WIDTH; width++) {
@@ -399,7 +388,7 @@ public final class PortalArrivalFallback {
                         lowerX + widthDirection.getOffsetX() * width,
                         lowerY + height,
                         lowerZ + widthDirection.getOffsetZ() * width
-                );
+                           );
 
                 if (isUnsafeToReplace(world.getBlockState(mutable), world.getBlockEntity(mutable))) {
                     return false;
@@ -447,10 +436,10 @@ public final class PortalArrivalFallback {
     private static Vec3d findSafeArrival(
             final ServerWorld world,
             final BlockPos target
-    ) {
+                                        ) {
         final int minY = world.getBottomY() + 1;
         final int maxY = worldCeilingY(world) - 2;
-        final Vec3d[] result = { null };
+        final Vec3d[] result = {null};
 
         searchColumns(
                 world, target, SAFE_SPOT_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
@@ -466,7 +455,7 @@ public final class PortalArrivalFallback {
 
                     return false;
                 }
-        );
+                     );
 
         return result[0];
     }
@@ -479,12 +468,12 @@ public final class PortalArrivalFallback {
             final ServerWorld world,
             final Entity entity,
             final BlockPos target
-    ) {
+                                         ) {
         final int topY = MathHelper.clamp(
                 world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, target.getX(), target.getZ()),
                 world.getBottomY() + 1,
                 worldCeilingY(world) - 2
-        );
+                                         );
 
         final Vec3d anchor = new Vec3d(target.getX() + 0.5, topY, target.getZ() + 0.5);
         return NetherPortal.findOpenPosition(anchor, world, entity, entity.getDimensions(entity.getPose()));
@@ -504,7 +493,7 @@ public final class PortalArrivalFallback {
             final Entity entity,
             final Vec3d position,
             final boolean builtPortal
-    ) {
+                                                      ) {
         final TeleportTarget.PostDimensionTransition cooldown =
                 teleported -> teleported.setPortalCooldown(FALLBACK_PORTAL_COOLDOWN_TICKS);
 
@@ -533,7 +522,7 @@ public final class PortalArrivalFallback {
             final Entity entity,
             final BlockPos lowerCorner,
             final Direction.Axis axis
-    ) {
+                                                ) {
         final Direction widthDirection = widthDirection(axis);
         final Vec3d center = new Vec3d(
                 lowerCorner.getX() + 0.5 + widthDirection.getOffsetX() * 0.5,
@@ -553,7 +542,7 @@ public final class PortalArrivalFallback {
             final ServerWorld world,
             final BlockPos lowerCorner,
             final Direction.Axis axis
-    ) {
+                                   ) {
         final Direction widthDirection = widthDirection(axis);
         final BlockState portalState = Blocks.NETHER_PORTAL
                 .getDefaultState()
@@ -569,7 +558,7 @@ public final class PortalArrivalFallback {
                         lowerCorner.offset(widthDirection, width).up(height),
                         OBSIDIAN_STATE,
                         Block.NOTIFY_ALL
-                );
+                                   );
             }
         }
 
@@ -579,7 +568,7 @@ public final class PortalArrivalFallback {
                         lowerCorner.offset(widthDirection, width).up(height),
                         portalState,
                         Block.NOTIFY_ALL
-                );
+                                   );
             }
         }
 
@@ -597,7 +586,7 @@ public final class PortalArrivalFallback {
             final ServerWorld world,
             final BlockPos lowerCorner,
             final Direction widthDirection
-    ) {
+                                     ) {
         final PointOfInterestStorage poiStorage = world.getPointOfInterestStorage();
         final RegistryEntry<PointOfInterestType> portalPoiType = world
                 .getRegistryManager()
@@ -623,7 +612,7 @@ public final class PortalArrivalFallback {
             final int supportScore,
             final int egressScore,
             final int bfsCount
-    ) {
+                                      ) {
         final long dx = lowerX - (long) target.getX();
         final long dz = lowerZ - (long) target.getZ();
         final long horizontalDistanceSq = dx * dx + dz * dz;
@@ -651,7 +640,7 @@ public final class PortalArrivalFallback {
             final int lowerY,
             final int lowerZ,
             final Direction widthDirection
-    ) {
+                                              ) {
         int support = 0;
         final BlockPos.Mutable mutable = new BlockPos.Mutable();
 
@@ -660,7 +649,7 @@ public final class PortalArrivalFallback {
                     lowerX + widthDirection.getOffsetX() * width,
                     lowerY - 2,
                     lowerZ + widthDirection.getOffsetZ() * width
-            );
+                       );
 
             if (world.getBlockState(mutable).isSideSolidFullSquare(world, mutable, Direction.UP)) {
                 support++;
@@ -674,7 +663,9 @@ public final class PortalArrivalFallback {
      * Compares two portal sites and returns the one with the better (lower) score.
      */
     private static PortalSite chooseBetter(final PortalSite current, final PortalSite candidate) {
-        if (candidate == null) return current;
+        if (candidate == null) {
+            return current;
+        }
         return current == null || candidate.score() < current.score() ? candidate : current;
     }
 
@@ -709,6 +700,17 @@ public final class PortalArrivalFallback {
     }
 
     /**
+     * Visits every column in an outward square-ring search, computing {@code startY} (clamped
+     * target height) and {@code surfaceY} (motion-blocking surface) for each. The visitor receives
+     * both Y values and returns {@code true} to stop the search early.
+     */
+    @FunctionalInterface
+    private interface ColumnVisitor {
+
+        boolean visit(int worldX, int worldZ, int startY, int surfaceY);
+    }
+
+    /**
      * A validated candidate site for portal placement.
      *
      * @param lowerCorner bottom-left interior corner of the proposed portal
@@ -717,6 +719,7 @@ public final class PortalArrivalFallback {
      * @param axis        portal orientation axis for this site
      */
     private record PortalSite(BlockPos lowerCorner, Vec3d arrival, long score, Direction.Axis axis) {
+
     }
 
 }

@@ -21,9 +21,8 @@ import java.io.IOException;
  * @param <S> BlockState type
  * @param <P> Property type
  * @param <N> NBT type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class CisNetworkEncoder<B, S, P, N> extends AbstractCisEncoder<S, N> {
 
@@ -33,11 +32,17 @@ public final class CisNetworkEncoder<B, S, P, N> extends AbstractCisEncoder<S, N
     @SuppressWarnings("rawtypes")
     private static final ThreadLocal<EncoderContext> CONTEXT = ThreadLocal.withInitial(EncoderContext::new);
 
-    /** Registry adapter used to turn block identities into stable network ids. */
+    /**
+     * Registry adapter used to turn block identities into stable network ids.
+     */
     private final BlockRegistryAdapter<B> registryAdapter;
-    /** Typed state adapter retained locally so palette writes do not need wildcard casts. */
+    /**
+     * Typed state adapter retained locally so palette writes do not need wildcard casts.
+     */
     private final BlockStateAdapter<B, S, P> typedStateAdapter;
-    /** Property serializer used for the network global palette payload. */
+    /**
+     * Property serializer used for the network global palette payload.
+     */
     private final PropertyPacker<B, S, P> propertyPacker;
 
     /**

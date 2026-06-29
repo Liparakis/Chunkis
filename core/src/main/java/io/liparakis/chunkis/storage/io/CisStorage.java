@@ -3,15 +3,15 @@ package io.liparakis.chunkis.storage.io;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
-import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.codec.CisDecoder;
@@ -19,7 +19,6 @@ import io.liparakis.chunkis.storage.codec.CisEncoder;
 import io.liparakis.chunkis.storage.io.region.RegionFile;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.model.CisConstants;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -133,6 +132,37 @@ public final class CisStorage<B, S, P, N> {
     }
 
     /**
+     * Creates a fresh empty delta. Centralised so all missing/corrupt load exits
+     * are consistent and easy to audit.
+     */
+    private static <S, N> ChunkDelta<S, N> newEmptyDelta() {
+        return new ChunkDelta<>();
+    }
+
+    private static ChunkTraceReason classifyLoadFailure(final Exception error) {
+        final String message = error.getMessage();
+        if (message == null) {
+            return ChunkTraceReason.DECODE_FAILED;
+        }
+        if (message.contains("Failed to decompress") || message.contains("Decompressed CIS data too small")) {
+            return ChunkTraceReason.DECOMPRESSION_FAILED;
+        }
+        if (message.contains("Unknown Block ID")) {
+            return ChunkTraceReason.MAPPING_LOOKUP_FAILED;
+        }
+        return ChunkTraceReason.DECODE_FAILED;
+    }
+
+    private static DebugChunkKey toChunkKey(final CisChunkPos pos) {
+        return new DebugChunkKey(pos.x(), pos.z());
+    }
+
+    private static DebugRegionKey toRegionKey(final CisChunkPos pos) {
+        final var regionKey = RegionFileCache.regionKey(pos);
+        return new DebugRegionKey(regionKey.x(), regionKey.z());
+    }
+
+    /**
      * Saves a chunk delta to CIS storage.
      *
      * <p>If the delta is empty the chunk entry is cleared from its region file
@@ -166,7 +196,7 @@ public final class CisStorage<B, S, P, N> {
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.SAVE_TX_START,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, SAVE_SOURCE, "save requested", null, toChunkKey(pos),
                 toRegionKey(pos), operationId, delta.isDirty(), null
-        );
+                             );
 
         try {
             final PreparedSave preparedSave = prepareSave(pos, delta);
@@ -183,7 +213,7 @@ public final class CisStorage<B, S, P, N> {
                     ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.SAVE_FLUSH_FAILED,
                     ChunkTraceSeverity.ERROR, ChunkTraceReason.IO_EXCEPTION, SAVE_SOURCE, "save failed", null,
                     toChunkKey(pos), toRegionKey(pos), operationId, delta.isDirty(), null
-            );
+                                 );
             Chunkis.LOGGER.error("Chunkis: Failed to save CIS chunk {}", pos, e);
             return false;
         }
@@ -229,7 +259,8 @@ public final class CisStorage<B, S, P, N> {
      * @throws IOException if compression or region-file I/O fails
      */
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    public boolean writePrepared(final CisChunkPos pos, final PreparedSave preparedSave, final String operationId) throws IOException {
+    public boolean writePrepared(final CisChunkPos pos, final PreparedSave preparedSave, final String operationId)
+            throws IOException {
         Objects.requireNonNull(pos, "pos");
         Objects.requireNonNull(preparedSave, "preparedSave");
 
@@ -241,7 +272,7 @@ public final class CisStorage<B, S, P, N> {
                 ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.SAVE_FLUSH_STARTED,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "flush started", null,
                 toChunkKey(pos), toRegionKey(pos), operationId, null, preparedSave.rawData().length
-        );
+                             );
 
         final byte[] compressedData = compressionContext.get().compress(preparedSave.rawData());
         final RegionFile regionFile = getRegionFile(pos, true);
@@ -256,7 +287,7 @@ public final class CisStorage<B, S, P, N> {
                 ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "flush completed", null,
                 toChunkKey(pos), toRegionKey(pos), operationId, null, compressedData.length
-        );
+                             );
         return true;
     }
 
@@ -277,7 +308,7 @@ public final class CisStorage<B, S, P, N> {
                                 "paranoid read-back missing written entry" :
                                 "paranoid read-back bytes mismatched " + "written payload", null, toChunkKey(pos),
                         toRegionKey(pos), operationId, null, expectedBytes.length
-                );
+                                     );
             }
         } catch (final IOException e) {
             ChunkTraceStore.trace(
@@ -285,7 +316,7 @@ public final class CisStorage<B, S, P, N> {
                     ChunkTraceSeverity.ERROR, ChunkTraceReason.IO_EXCEPTION, WRITE_SOURCE, "paranoid read-back " +
                             "failed: " + e.getMessage(), null, toChunkKey(pos), toRegionKey(pos), operationId, null,
                     expectedBytes.length
-            );
+                                 );
         }
     }
 
@@ -319,15 +350,16 @@ public final class CisStorage<B, S, P, N> {
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_START,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, LOAD_SOURCE, "load requested", null, toChunkKey(pos),
                 toRegionKey(pos), operationId, null, null
-        );
+                             );
 
         try {
             final ChunkDelta<S, N> delta = loadUnchecked(pos, operationId);
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_END,
                     ChunkTraceSeverity.INFO, delta.isEmpty() ? ChunkTraceReason.NEITHER :
-                            ChunkTraceReason.CHUNKIS_STORAGE, LOAD_SOURCE, delta.isEmpty() ? "load returned empty delta" : "load returned stored delta", null, toChunkKey(pos), toRegionKey(pos), operationId, delta.isDirty(), null
-            );
+                            ChunkTraceReason.CHUNKIS_STORAGE, LOAD_SOURCE, delta.isEmpty() ? "load returned empty delta"
+                            : "load returned stored delta", null, toChunkKey(pos), toRegionKey(pos), operationId, delta.isDirty(), null
+                                 );
             return delta;
         } catch (final Exception e) {
             final ChunkTraceReason reason = classifyLoadFailure(e);
@@ -336,11 +368,11 @@ public final class CisStorage<B, S, P, N> {
                     ChunkTraceSeverity.ERROR, reason, LOAD_SOURCE,
                     "load failed and entry will be cleared: " + e.getMessage(), null, toChunkKey(pos),
                     toRegionKey(pos), operationId, null, null
-            );
+                                 );
             Chunkis.LOGGER.error(
                     "Chunkis: Failed to decode CIS chunk at {}. Clearing corrupted data. Error: {}", pos
                     , e.getMessage()
-            );
+                                );
             clearChunk(pos);
             return newEmptyDelta();
         }
@@ -443,7 +475,7 @@ public final class CisStorage<B, S, P, N> {
 
         if (decompressed.length < MIN_DECOMPRESSED_SIZE) {
             throw new IOException("Decompressed CIS data too small for chunk " + pos + ": " + decompressed.length +
-                    " bytes (compressed size: " + compressedData.length + ")");
+                                          " bytes (compressed size: " + compressedData.length + ")");
         }
 
         return decoder.get().decode(decompressed);
@@ -459,7 +491,7 @@ public final class CisStorage<B, S, P, N> {
      * @param pos    chunk position
      * @param create whether to create the region file when it does not exist
      * @return region file, or {@code null} when {@code create == false} and no
-     * file exists on disk
+     *         file exists on disk
      * @throws IOException if the region file cannot be opened
      */
     private RegionFile getRegionFile(final CisChunkPos pos, final boolean create) throws IOException {
@@ -472,37 +504,6 @@ public final class CisStorage<B, S, P, N> {
      */
     List<RegionFile> drainRegionCache() {
         return regionFiles.drain();
-    }
-
-    /**
-     * Creates a fresh empty delta. Centralised so all missing/corrupt load exits
-     * are consistent and easy to audit.
-     */
-    private static <S, N> ChunkDelta<S, N> newEmptyDelta() {
-        return new ChunkDelta<>();
-    }
-
-    private static ChunkTraceReason classifyLoadFailure(final Exception error) {
-        final String message = error.getMessage();
-        if (message == null) {
-            return ChunkTraceReason.DECODE_FAILED;
-        }
-        if (message.contains("Failed to decompress") || message.contains("Decompressed CIS data too small")) {
-            return ChunkTraceReason.DECOMPRESSION_FAILED;
-        }
-        if (message.contains("Unknown Block ID")) {
-            return ChunkTraceReason.MAPPING_LOOKUP_FAILED;
-        }
-        return ChunkTraceReason.DECODE_FAILED;
-    }
-
-    private static DebugChunkKey toChunkKey(final CisChunkPos pos) {
-        return new DebugChunkKey(pos.x(), pos.z());
-    }
-
-    private static DebugRegionKey toRegionKey(final CisChunkPos pos) {
-        final var regionKey = RegionFileCache.regionKey(pos);
-        return new DebugRegionKey(regionKey.x(), regionKey.z());
     }
 
     /**

@@ -5,9 +5,21 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.migrator.CisMigrationReport;
 import io.liparakis.chunkis.migrator.CisStorageMigrator;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.model.CisConstants;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeSet;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -18,13 +30,6 @@ import net.minecraft.test.TestContext;
 import net.minecraft.text.Text;
 import net.minecraft.util.WorldSavePath;
 import org.slf4j.helpers.NOPLogger;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.*;
 
 /**
  * End-to-end GameTest coverage for migrating real V8 CIS fixtures through the
@@ -43,7 +48,9 @@ public final class CisFixtureMigrationGameTest {
 
     private static final String FIXTURE_ROOT = "V8";
 
-    /** Region file paths relative to {@link #FIXTURE_ROOT}. */
+    /**
+     * Region file paths relative to {@link #FIXTURE_ROOT}.
+     */
     private static final String[] FIXTURE_REGION_FILES = {
             "regions/r.-1.0.cis",
             "regions/r.-1.1.cis",
@@ -51,84 +58,20 @@ public final class CisFixtureMigrationGameTest {
             "regions/r.0.1.cis"
     };
 
-    /** Total chunk slots covered by {@link #FIXTURE_REGION_FILES} (4 — 1024). */
+    /**
+     * Total chunk slots covered by {@link #FIXTURE_REGION_FILES} (4 — 1024).
+     */
     private static final int EXPECTED_SCANNED_CHUNKS = FIXTURE_REGION_FILES.length * 1024;
 
-    /** Bytes per chunk header entry (offset int + length int). */
+    /**
+     * Bytes per chunk header entry (offset int + length int).
+     */
     private static final int HEADER_ENTRY_BYTES = 8;
 
-    /** Number of chunk slots per region file (32 Ã— 32). */
-    private static final int REGION_SLOTS = 1024;
-
     /**
-     * Verifies that the real V8 fixture set migrates losslessly to the current
-     * CIS version when processed through the Fabric runtime adapters.
-     *
-     * @param context GameTest execution context
-     * @throws IOException if fixture setup fails
+     * Number of chunk slots per region file (32 Ã— 32).
      */
-    @SuppressWarnings("unused")
-    @GameTest(maxTicks = 400)
-    public void migratesV8FixturesWithoutChangingLogicalChunkContents(final TestContext context) throws IOException {
-        io.liparakis.chunkis.debug.config.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.config.ChunkisDebugLevel.LIFECYCLE);
-        final ServerWorld world = context.getWorld();
-        final Path storageRoot = Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT).resolve("chunkis_migration_test");
-        final Path regionsDir = storageRoot.resolve("regions");
-
-        deleteRecursively(storageRoot);
-        copyFixtures(storageRoot, regionsDir);
-
-        final List<CisChunkPos> populatedChunks = collectPopulatedChunks(regionsDir);
-        context.assertTrue(!populatedChunks.isEmpty(), Text.literal("Expected at least one populated V8 fixture chunk."));
-
-        final Path mappingFile = storageRoot.resolve("global_ids.json");
-        final io.liparakis.chunkis.storage.mapping.PropertyPacker<Block, BlockState, Property<?>> packer =
-                new io.liparakis.chunkis.storage.mapping.PropertyPacker<>(new io.liparakis.chunkis.adapter.FabricBlockStateAdapter());
-        final io.liparakis.chunkis.storage.mapping.CisMapping<Block, BlockState, Property<?>> mapping =
-                new io.liparakis.chunkis.storage.mapping.CisMapping<>(
-                        mappingFile,
-                        new io.liparakis.chunkis.adapter.FabricBlockRegistryAdapter(),
-                        new io.liparakis.chunkis.adapter.FabricBlockStateAdapter(),
-                        packer
-                );
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
-                new CisStorage<>(
-                        regionsDir,
-                        mapping,
-                        new io.liparakis.chunkis.adapter.FabricBlockStateAdapter(),
-                        new io.liparakis.chunkis.adapter.FabricNbtAdapter(),
-                        net.minecraft.block.Blocks.AIR.getDefaultState()
-                );
-
-        try {
-            final Map<CisChunkPos, ChunkSnapshot> before =
-                    snapshotChunks(storage, populatedChunks, 8);
-
-            final CisMigrationReport report =
-                    new CisStorageMigrator<>(storage, NOPLogger.NOP_LOGGER).migrateStorage(regionsDir);
-
-            context.assertTrue(
-                    report.failedChunks() == 0,
-                    Text.literal("Expected no failed chunk migrations, got " + report.failedChunks()));
-            context.assertTrue(
-                    report.migratedChunks() == populatedChunks.size(),
-                    Text.literal("Expected " + populatedChunks.size() + " migrated chunks, got " + report.migratedChunks()));
-            context.assertTrue(
-                    report.scannedChunks() == EXPECTED_SCANNED_CHUNKS,
-                    Text.literal("Expected to scan " + EXPECTED_SCANNED_CHUNKS + " chunk slots, got " + report.scannedChunks()));
-
-            final Map<CisChunkPos, ChunkSnapshot> after =
-                    snapshotChunks(storage, populatedChunks, CisConstants.VERSION);
-            context.assertTrue(
-                    before.equals(after),
-                    Text.literal("Migrated chunk contents did not match the original fixture snapshot."));
-            context.complete();
-        } finally {
-            io.liparakis.chunkis.debug.config.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.config.ChunkisDebugLevel.OFF);
-            storage.close();
-            deleteRecursively(storageRoot);
-        }
-    }
+    private static final int REGION_SLOTS = 1024;
 
     /**
      * Copies the read-only V8 fixture set into the active GameTest world save.
@@ -157,7 +100,7 @@ public final class CisFixtureMigrationGameTest {
         Files.createDirectories(destination.getParent());
 
         try (InputStream input = CisFixtureMigrationGameTest.class.getClassLoader()
-                .getResourceAsStream(resourcePath)) {
+                                                                  .getResourceAsStream(resourcePath)) {
             if (input == null) {
                 throw new IOException("Missing fixture resource: " + resourcePath);
             }
@@ -229,9 +172,9 @@ public final class CisFixtureMigrationGameTest {
      * Loads and snapshots all requested chunks, asserting the expected source
      * version and suppression flag for each one.
      *
-     * @param storage             active storage
-     * @param positions           chunk positions to capture
-     * @param expectedVersion     expected decoded source version
+     * @param storage         active storage
+     * @param positions       chunk positions to capture
+     * @param expectedVersion expected decoded source version
      * @return deterministic snapshot map keyed by chunk position
      */
     private static Map<CisChunkPos, ChunkSnapshot> snapshotChunks(
@@ -295,6 +238,78 @@ public final class CisFixtureMigrationGameTest {
     }
 
     /**
+     * Verifies that the real V8 fixture set migrates losslessly to the current
+     * CIS version when processed through the Fabric runtime adapters.
+     *
+     * @param context GameTest execution context
+     * @throws IOException if fixture setup fails
+     */
+    @SuppressWarnings("unused")
+    @GameTest(maxTicks = 400)
+    public void migratesV8FixturesWithoutChangingLogicalChunkContents(final TestContext context) throws IOException {
+        io.liparakis.chunkis.debug.config.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.config.ChunkisDebugLevel.LIFECYCLE);
+        final ServerWorld world = context.getWorld();
+        final Path storageRoot = Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT).resolve("chunkis_migration_test");
+        final Path regionsDir = storageRoot.resolve("regions");
+
+        deleteRecursively(storageRoot);
+        copyFixtures(storageRoot, regionsDir);
+
+        final List<CisChunkPos> populatedChunks = collectPopulatedChunks(regionsDir);
+        context.assertTrue(!populatedChunks.isEmpty(), Text.literal("Expected at least one populated V8 fixture chunk."));
+
+        final Path mappingFile = storageRoot.resolve("global_ids.json");
+        final io.liparakis.chunkis.storage.mapping.PropertyPacker<Block, BlockState, Property<?>> packer =
+                new io.liparakis.chunkis.storage.mapping.PropertyPacker<>(new io.liparakis.chunkis.adapter.FabricBlockStateAdapter());
+        final io.liparakis.chunkis.storage.mapping.CisMapping<Block, BlockState, Property<?>> mapping =
+                new io.liparakis.chunkis.storage.mapping.CisMapping<>(
+                        mappingFile,
+                        new io.liparakis.chunkis.adapter.FabricBlockRegistryAdapter(),
+                        new io.liparakis.chunkis.adapter.FabricBlockStateAdapter(),
+                        packer
+                );
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+                new CisStorage<>(
+                        regionsDir,
+                        mapping,
+                        new io.liparakis.chunkis.adapter.FabricBlockStateAdapter(),
+                        new io.liparakis.chunkis.adapter.FabricNbtAdapter(),
+                        net.minecraft.block.Blocks.AIR.getDefaultState()
+                );
+
+        try {
+            final Map<CisChunkPos, ChunkSnapshot> before =
+                    snapshotChunks(storage, populatedChunks, 8);
+
+            final CisMigrationReport report =
+                    new CisStorageMigrator<>(storage, NOPLogger.NOP_LOGGER).migrateStorage(regionsDir);
+
+            context.assertTrue(
+                    report.failedChunks() == 0,
+                    Text.literal("Expected no failed chunk migrations, got " + report.failedChunks()));
+            context.assertTrue(
+                    report.migratedChunks() == populatedChunks.size(),
+                    Text.literal(
+                            "Expected " + populatedChunks.size() + " migrated chunks, got " + report.migratedChunks()));
+            context.assertTrue(
+                    report.scannedChunks() == EXPECTED_SCANNED_CHUNKS,
+                    Text.literal("Expected to scan " + EXPECTED_SCANNED_CHUNKS + " chunk slots, got "
+                                         + report.scannedChunks()));
+
+            final Map<CisChunkPos, ChunkSnapshot> after =
+                    snapshotChunks(storage, populatedChunks, CisConstants.VERSION);
+            context.assertTrue(
+                    before.equals(after),
+                    Text.literal("Migrated chunk contents did not match the original fixture snapshot."));
+            context.complete();
+        } finally {
+            io.liparakis.chunkis.debug.config.ChunkisDebugConfig.setLevel(io.liparakis.chunkis.debug.config.ChunkisDebugLevel.OFF);
+            storage.close();
+            deleteRecursively(storageRoot);
+        }
+    }
+
+    /**
      * Stable logical representation of one decoded chunk delta, used for
      * before/after equality checks.
      *
@@ -334,9 +349,9 @@ public final class CisFixtureMigrationGameTest {
             blockEntities.sort(String::compareTo);
 
             final List<String> entities = delta.getEntitiesList().stream()
-                    .map(String::valueOf)
-                    .sorted()
-                    .toList();
+                                               .map(String::valueOf)
+                                               .sorted()
+                                               .toList();
 
             return new ChunkSnapshot(
                     List.copyOf(blocks),

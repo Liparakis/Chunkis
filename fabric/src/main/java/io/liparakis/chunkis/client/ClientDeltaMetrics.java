@@ -1,13 +1,12 @@
 package io.liparakis.chunkis.client;
 
 import io.liparakis.chunkis.Chunkis;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import org.jetbrains.annotations.NotNull;
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Supplier;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Thread-safe performance metrics and rate-limited error logging for the
@@ -29,7 +28,9 @@ import java.util.function.Supplier;
 @Environment(EnvType.CLIENT)
 public final class ClientDeltaMetrics {
 
-    /** Enable/disable metrics collection. Zero overhead when disabled. */
+    /**
+     * Enable/disable metrics collection. Zero overhead when disabled.
+     */
     public static final boolean ENABLED = Boolean.getBoolean("chunkis.client.metrics");
 
     /**
@@ -105,16 +106,17 @@ public final class ClientDeltaMetrics {
      */
     public static void logErrorThrottled(final Supplier<String> messageSupplier, final Throwable cause) {
         final int errors = errorCount.incrementAndGet();
-        if (!shouldLogError(errors))
+        if (!shouldLogError(errors)) {
             return;
+        }
 
         final String message = messageSupplier.get();
         if (cause != null) {
             Chunkis.LOGGER.error("{} — error #{} (logging every {}th)",
-                    message, errors, ERROR_LOG_INTERVAL, cause);
+                                 message, errors, ERROR_LOG_INTERVAL, cause);
         } else {
             Chunkis.LOGGER.error("{} — error #{} (logging every {}th)",
-                    message, errors, ERROR_LOG_INTERVAL);
+                                 message, errors, ERROR_LOG_INTERVAL);
         }
     }
 
@@ -125,8 +127,9 @@ public final class ClientDeltaMetrics {
      */
     public static void logSummary() {
         final long packets = packetsReceived.sum();
-        if (packets == 0)
+        if (packets == 0) {
             return;
+        }
 
         final double avgBytes = averagePerPacket(totalBytesReceived.sum(), packets);
         final double avgMicros = averagePerPacket(totalDecodeNanos.sum(), packets) / 1_000.0;
@@ -218,7 +221,7 @@ public final class ClientDeltaMetrics {
         @Override
         public @NotNull String toString() {
             return String.format("Packets: %d, Avg: %.1f bytes, %.1f blocks, %.2fμs, Errors: %d",
-                    packets, avgBytes(), avgBlocks(), avgDecodeMicros(), errors);
+                                 packets, avgBytes(), avgBlocks(), avgDecodeMicros(), errors);
         }
     }
 }

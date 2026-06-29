@@ -72,11 +72,11 @@ public final class DeltaPersistenceGuard {
     /**
      * Logs attribution for a rejected sparse no-base save.
      *
-     * @param world   world that owns the save, may be {@code null}
-     * @param pos     chunk position being saved, may be {@code null}
-     * @param delta   rejected delta
-     * @param path    save path label
-     * @param caller  caller label
+     * @param world  world that owns the save, may be {@code null}
+     * @param pos    chunk position being saved, may be {@code null}
+     * @param delta  rejected delta
+     * @param path   save path label
+     * @param caller caller label
      */
     public static void logRejectedSparseDeltaWithoutBase(
             final ServerWorld world,
@@ -95,7 +95,7 @@ public final class DeltaPersistenceGuard {
                 caller,
                 describeDeltaShape(delta),
                 delta.shouldSuppressInitialRepopulation()
-        );
+                            );
     }
 
     public static String describeDeltaShape(final ChunkDelta<?, ?> delta) {
@@ -154,7 +154,9 @@ public final class DeltaPersistenceGuard {
         final java.util.Set<Integer> sections = new java.util.HashSet<>();
         delta.forEachBlock((x, y, z, state) -> sections.add(y >> 4));
         delta.getBlockEntities().forEach((packedPos, nbt) ->
-                sections.add(io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos) >> 4));
+                                                 sections.add(
+                                                         io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos)
+                                                                 >> 4));
         return sections.size();
     }
 

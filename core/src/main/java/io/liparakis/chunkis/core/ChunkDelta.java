@@ -3,15 +3,13 @@ package io.liparakis.chunkis.core;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMaps;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -42,12 +40,10 @@ import java.util.function.UnaryOperator;
  *
  * @param <S> block state type
  * @param <N> NBT/data payload type
- *
- * @see BlockInstruction
- * @see Palette
- *
  * @author Liparakis
  * @version 1.1
+ * @see BlockInstruction
+ * @see Palette
  */
 public final class ChunkDelta<S, N> {
 
@@ -79,17 +75,22 @@ public final class ChunkDelta<S, N> {
      * Palette mapping block states to compact integer ids.
      */
     private final Palette<S> blockPalette;
-
+    /**
+     * Ownership and dirty state metadata tracking.
+     */
+    private final DeltaOwnershipState ownershipState;
+    /**
+     * Predicate used to identify states that should clear block entity payloads.
+     */
+    private final Predicate<S> isEmptyState;
     /**
      * Lazily allocated block entity payloads keyed by packed position.
      */
     private Long2ObjectOpenHashMap<N> blockEntities;
-
     /**
      * Lazily allocated active entities keyed by runtime entity id.
      */
     private Int2ObjectOpenHashMap<N> activeEntities;
-
     /**
      * Entity payloads loaded from disk/network that have not been spawned yet.
      *
@@ -97,7 +98,6 @@ public final class ChunkDelta<S, N> {
      * {@link ArrayList} for block-only deltas.</p>
      */
     private List<N> pendingEntities;
-
     /**
      * Chunk-level metadata used to preserve deterministic reload state.
      *
@@ -105,38 +105,24 @@ public final class ChunkDelta<S, N> {
      * serialized vanilla-compatible base chunk payload.</p>
      */
     private N chunkMetadata;
-
     /**
      * Cached encoded metadata payload, including the length prefix written by the
      * NBT adapter.
      */
     private byte[] encodedChunkMetadata;
-
     /**
      * Hash of {@link #encodedChunkMetadata}, used as a cheap first-pass equality
      * check before byte comparison.
      */
     private int encodedChunkMetadataHash;
-
-    /**
-     * Ownership and dirty state metadata tracking.
-     */
-    private final DeltaOwnershipState ownershipState;
-
     /**
      * CIS format version this delta was decoded from or last saved as.
      */
     private int sourceVersion;
-
     /**
      * Whether restored loads should suppress one-time vanilla repopulation work.
      */
     private boolean suppressInitialRepopulation;
-
-    /**
-     * Predicate used to identify states that should clear block entity payloads.
-     */
-    private final Predicate<S> isEmptyState;
 
     /**
      * Creates an empty delta with an explicit empty-state predicate.
@@ -174,6 +160,66 @@ public final class ChunkDelta<S, N> {
     @SuppressWarnings("unchecked")
     public ChunkDelta() {
         this((Predicate<S>) NEVER_EMPTY_STATE);
+    }
+
+    /**
+     * Private constructor used by snapshot creation to initialize final fields.
+     */
+    private ChunkDelta(
+            final Palette<S> blockPalette,
+            final Predicate<S> isEmptyState
+                      ) {
+        this.blockPalette = blockPalette;
+        this.isEmptyState = isEmptyState;
+        this.instructions = new BlockInstructionStorage();
+        this.ownershipState = new DeltaOwnershipState();
+        this.pendingEntities = Collections.emptyList();
+        this.sourceVersion = CisConstants.VERSION;
+    }
+
+    /**
+     * Packs a palette id and position key into one block instruction.
+     *
+     * @param paletteId palette id
+     * @param posKey    packed local position
+     * @return packed instruction
+     */
+    private static long packInstruction(final int paletteId, final long posKey) {
+        return ((long) paletteId << Integer.SIZE) | (posKey & POSITION_MASK);
+    }
+
+    /**
+     * Extracts the packed local position from an instruction.
+     *
+     * @param instruction packed instruction
+     * @return packed local position
+     */
+    private static long instructionPosKey(final long instruction) {
+        return instruction & POSITION_MASK;
+    }
+
+    /**
+     * Extracts the palette id from an instruction.
+     *
+     * @param instruction packed instruction
+     * @return palette id
+     */
+    private static int instructionPaletteId(final long instruction) {
+        return (int) (instruction >>> Integer.SIZE);
+    }
+
+    /**
+     * Copies an entity list into the internal representation.
+     *
+     * @param entities source entity list, may be {@code null}
+     * @return empty singleton or mutable copy
+     */
+    private static <N> List<N> normalizeEntityList(final List<N> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return new ArrayList<>(entities);
     }
 
     /**
@@ -243,21 +289,6 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
-     * Private constructor used by snapshot creation to initialize final fields.
-     */
-    private ChunkDelta(
-            final Palette<S> blockPalette,
-            final Predicate<S> isEmptyState
-    ) {
-        this.blockPalette = blockPalette;
-        this.isEmptyState = isEmptyState;
-        this.instructions = new BlockInstructionStorage();
-        this.ownershipState = new DeltaOwnershipState();
-        this.pendingEntities = Collections.emptyList();
-        this.sourceVersion = CisConstants.VERSION;
-    }
-
-    /**
      * Records one semantic mutation.
      */
     private void markDirtyInternal() {
@@ -265,7 +296,8 @@ public final class ChunkDelta<S, N> {
         ownershipState.mutationGeneration++;
         if (!wasDirty) {
             if (ownershipState.firstMutationSource == null) {
-                ownershipState.firstMutationSource = ownershipState.pendingMutationSource != null ? ownershipState.pendingMutationSource : SOURCE;
+                ownershipState.firstMutationSource =
+                        ownershipState.pendingMutationSource != null ? ownershipState.pendingMutationSource : SOURCE;
             }
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.DIRTY_TRACKING,
@@ -280,7 +312,7 @@ public final class ChunkDelta<S, N> {
                     null,
                     true,
                     null
-            );
+                                 );
         }
         ownershipState.pendingMutationSource = null;
     }
@@ -298,7 +330,7 @@ public final class ChunkDelta<S, N> {
             final int y,
             final int z,
             final S newState
-    ) {
+                              ) {
         addBlockChange(x, y, z, newState, true);
     }
 
@@ -317,7 +349,7 @@ public final class ChunkDelta<S, N> {
             final int z,
             final S newState,
             final boolean markDirty
-    ) {
+                              ) {
         if (newState == null) {
             return;
         }
@@ -348,7 +380,7 @@ public final class ChunkDelta<S, N> {
             final long posKey,
             final int index,
             final boolean markDirty
-    ) {
+                                          ) {
         final long newInstruction = packInstruction(paletteId, posKey);
 
         if (instructions.packedInstructions[index] == newInstruction) {
@@ -373,7 +405,7 @@ public final class ChunkDelta<S, N> {
             final int paletteId,
             final long posKey,
             final boolean markDirty
-    ) {
+                                  ) {
         instructions.add(packInstruction(paletteId, posKey), posKey);
 
         if (markDirty) {
@@ -391,37 +423,6 @@ public final class ChunkDelta<S, N> {
         if (blockEntities != null && isEmptyState.test(state)) {
             blockEntities.remove(posKey);
         }
-    }
-
-    /**
-     * Packs a palette id and position key into one block instruction.
-     *
-     * @param paletteId palette id
-     * @param posKey    packed local position
-     * @return packed instruction
-     */
-    private static long packInstruction(final int paletteId, final long posKey) {
-        return ((long) paletteId << Integer.SIZE) | (posKey & POSITION_MASK);
-    }
-
-    /**
-     * Extracts the packed local position from an instruction.
-     *
-     * @param instruction packed instruction
-     * @return packed local position
-     */
-    private static long instructionPosKey(final long instruction) {
-        return instruction & POSITION_MASK;
-    }
-
-    /**
-     * Extracts the palette id from an instruction.
-     *
-     * @param instruction packed instruction
-     * @return palette id
-     */
-    private static int instructionPaletteId(final long instruction) {
-        return (int) (instruction >>> Integer.SIZE);
     }
 
     /**
@@ -448,7 +449,7 @@ public final class ChunkDelta<S, N> {
             final int y,
             final int z,
             final boolean markDirty
-    ) {
+                                     ) {
         if (blockEntities == null) {
             return;
         }
@@ -510,7 +511,7 @@ public final class ChunkDelta<S, N> {
             final int y,
             final int z,
             final int paletteId
-    ) {
+                                  ) {
         final long posKey = BlockInstruction.packPos(x, y, z);
         instructions.add(packInstruction(paletteId, posKey), posKey);
     }
@@ -528,7 +529,7 @@ public final class ChunkDelta<S, N> {
             final int y,
             final int z,
             final N nbt
-    ) {
+                                  ) {
         addBlockEntityData(x, y, z, nbt, true);
     }
 
@@ -547,7 +548,7 @@ public final class ChunkDelta<S, N> {
             final int z,
             final N nbt,
             final boolean markDirty
-    ) {
+                                  ) {
         if (nbt == null) {
             return;
         }
@@ -856,20 +857,6 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
-     * Copies an entity list into the internal representation.
-     *
-     * @param entities source entity list, may be {@code null}
-     * @return empty singleton or mutable copy
-     */
-    private static <N> List<N> normalizeEntityList(final List<N> entities) {
-        if (entities == null || entities.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        return new ArrayList<>(entities);
-    }
-
-    /**
      * Returns chunk-level metadata.
      *
      * @return metadata payload, or {@code null}
@@ -921,7 +908,7 @@ public final class ChunkDelta<S, N> {
     public boolean updateChunkMetadataWithEncodedPayload(
             final N metadata,
             final byte[] encodedPayload
-    ) {
+                                                        ) {
         if (metadata == null || encodedPayload == null) {
             if (chunkMetadata == null && encodedChunkMetadata == null) {
                 return false;
@@ -1017,25 +1004,6 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
-     * Visitor for all delta contents.
-     */
-    public interface DeltaVisitor<S, N> {
-        void visitBlock(int x, int y, int z, S state);
-
-        void visitBlockEntity(int x, int y, int z, N nbt);
-
-        void visitEntity(N nbt);
-    }
-
-    /**
-     * Visitor for block-only scans.
-     */
-    @FunctionalInterface
-    public interface BlockVisitor<S> {
-        void visitBlock(int x, int y, int z, S state);
-    }
-
-    /**
      * Visits blocks, block entities, and entities.
      *
      * @param visitor visitor to receive delta contents
@@ -1054,7 +1022,7 @@ public final class ChunkDelta<S, N> {
                         BlockInstruction.unpackY(posKey),
                         BlockInstruction.unpackZ(posKey),
                         entry.getValue()
-                );
+                                        );
             }
         }
 
@@ -1096,7 +1064,7 @@ public final class ChunkDelta<S, N> {
                     BlockInstruction.unpackY(posKey),
                     BlockInstruction.unpackZ(posKey),
                     state
-            );
+                              );
         }
     }
 
@@ -1151,7 +1119,7 @@ public final class ChunkDelta<S, N> {
                     null,
                     false,
                     null
-            );
+                                 );
         }
     }
 
@@ -1183,7 +1151,7 @@ public final class ChunkDelta<S, N> {
                     null,
                     false,
                     null
-            );
+                                 );
         }
         return true;
     }
@@ -1263,5 +1231,26 @@ public final class ChunkDelta<S, N> {
 
     public void prepareForMutation(final String source) {
         ownershipState.pendingMutationSource = source;
+    }
+
+    /**
+     * Visitor for all delta contents.
+     */
+    public interface DeltaVisitor<S, N> {
+
+        void visitBlock(int x, int y, int z, S state);
+
+        void visitBlockEntity(int x, int y, int z, N nbt);
+
+        void visitEntity(N nbt);
+    }
+
+    /**
+     * Visitor for block-only scans.
+     */
+    @FunctionalInterface
+    public interface BlockVisitor<S> {
+
+        void visitBlock(int x, int y, int z, S state);
     }
 }

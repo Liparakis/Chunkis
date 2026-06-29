@@ -9,17 +9,26 @@ package io.liparakis.chunkis.storage.bits;
  * using zero-copy slicing.
  * </p>
  *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class BitReader {
-    /** The raw data buffer being read from */
+
+    /**
+     * The raw data buffer being read from
+     */
     private byte[] data;
-    /** Index of the byte currently being consumed from {@link #data}. */
+    /**
+     * Index of the byte currently being consumed from {@link #data}.
+     */
     private int byteIndex;
-    /** Bit cursor within the current byte, counted from the most significant bit. */
+    /**
+     * Bit cursor within the current byte, counted from the most significant bit.
+     */
     private int bitIndex;
-    /** Exclusive upper bound of the readable slice inside {@link #data}. */
+    /**
+     * Exclusive upper bound of the readable slice inside {@link #data}.
+     */
     private int endIndex;
 
     public BitReader(byte[] data) {

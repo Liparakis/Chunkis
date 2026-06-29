@@ -5,20 +5,21 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.network.ChunkisNetworking;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
+import java.util.List;
 import net.minecraft.block.BlockState;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.network.packet.Packet;
 import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
-import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.server.world.ChunkHolder;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,8 +27,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import java.util.List;
 
 /**
  * Intercepts chunk packet transmission to piggyback Chunkis delta packets
@@ -46,6 +45,17 @@ import java.util.List;
  */
 @Mixin(ChunkHolder.class)
 public abstract class ChunkHolderMixin {
+
+    /**
+     * Returns true if the given packet is a {@link ChunkDataS2CPacket}.
+     *
+     * @param packet the packet to test
+     * @return true if this is a full chunk data packet
+     */
+    @Unique
+    private static boolean isChunkDataPacket(final Packet<?> packet) {
+        return packet instanceof ChunkDataS2CPacket;
+    }
 
     /**
      * Shadow of {@link ChunkHolder#getWorldChunk()}.
@@ -76,10 +86,14 @@ public abstract class ChunkHolderMixin {
             final Packet<?> packet,
             final CallbackInfo ci) {
 
-        if (!isChunkDataPacket(packet)) return;
+        if (!isChunkDataPacket(packet)) {
+            return;
+        }
 
         final WorldChunk chunk = this.getWorldChunk();
-        if (chunk == null) return;
+        if (chunk == null) {
+            return;
+        }
         if (chunk instanceof ChunkisDeltaDuck deltaDuck
                 && chunk.getWorld() instanceof ServerWorld serverWorld
                 && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
@@ -90,7 +104,7 @@ public abstract class ChunkHolderMixin {
                     chunk,
                     delta,
                     deltaDuck.chunkis$getRestoreOperationId()
-            );
+                                                       );
         }
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CLIENT_SYNC,
@@ -106,7 +120,7 @@ public abstract class ChunkHolderMixin {
                 null,
                 null,
                 null
-        );
+                             );
         PayloadWatchTracer.traceLiveChunkState(
                 chunk,
                 ChunkTraceEventType.WATCH_PRESENT_AFTER_CHUNK_FULL,
@@ -114,7 +128,7 @@ public abstract class ChunkHolderMixin {
                 "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
                 null,
                 null
-        );
+                                              );
         if (chunk.getWorld() instanceof ServerWorld serverWorld
                 && chunk instanceof ChunkisDeltaDuck deltaDuck
                 && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
@@ -126,7 +140,7 @@ public abstract class ChunkHolderMixin {
                     delta,
                     deltaDuck.chunkis$getRestoreOperationId(),
                     "ChunkHolderMixin#chunkis$onSendPacketToPlayers"
-            );
+                                                                );
         }
         PayloadWatchTracer.traceLiveChunkState(
                 chunk,
@@ -135,7 +149,7 @@ public abstract class ChunkHolderMixin {
                 "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
                 null,
                 null
-        );
+                                              );
 
         for (final ServerPlayerEntity player : players) {
             ChunkisNetworking.sendDelta(player, chunk);
@@ -147,18 +161,7 @@ public abstract class ChunkHolderMixin {
                 "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
                 null,
                 null
-        );
-    }
-
-    /**
-     * Returns true if the given packet is a {@link ChunkDataS2CPacket}.
-     *
-     * @param packet the packet to test
-     * @return true if this is a full chunk data packet
-     */
-    @Unique
-    private static boolean isChunkDataPacket(final Packet<?> packet) {
-        return packet instanceof ChunkDataS2CPacket;
+                                              );
     }
 }
 

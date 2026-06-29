@@ -59,7 +59,7 @@ public final class CisRegionCompactor {
             final List<RegionFile> cachedFiles,
             final List<RegionCompaction> regions,
             final Set<Path> processedPaths
-    ) {
+                                            ) {
         for (final RegionFile regionFile : cachedFiles) {
             final RegionCompaction result = compactAndCloseRegion(regionFile);
             regions.add(result);
@@ -76,7 +76,7 @@ public final class CisRegionCompactor {
             final Path storageDir,
             final List<RegionCompaction> regions,
             final Set<Path> processedPaths
-    ) {
+                                                 ) {
         if (!Files.isDirectory(storageDir)) {
             return 0;
         }
@@ -176,7 +176,7 @@ public final class CisRegionCompactor {
     private static CompactionReport summarizeCompaction(
             final List<RegionCompaction> regions,
             final int extraFailures
-    ) {
+                                                       ) {
         long before = 0L;
         long after = 0L;
         long live = 0L;
@@ -242,6 +242,7 @@ public final class CisRegionCompactor {
             long liveBytes,
             List<RegionCompaction> regions
     ) {
+
     }
 
     /**
@@ -254,5 +255,6 @@ public final class CisRegionCompactor {
             long liveBytes,
             boolean compacted
     ) {
+
     }
 }

@@ -8,15 +8,14 @@ import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.WorldChunk;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.World;
+import net.minecraft.world.chunk.WorldChunk;
 
 /**
  * Tracks the live dirty chunk deltas that Chunkis currently owns.
@@ -34,7 +33,7 @@ public final class GlobalChunkTracker {
                     key,
                     ChunkTraceReason.TRACKER_UNLOAD_CACHE_EVICT,
                     "evicted delta from unload cache due to capacity"
-            ));
+                                                                                  ));
 
     private GlobalChunkTracker() {
         throw new AssertionError("Utility class");
@@ -64,7 +63,7 @@ public final class GlobalChunkTracker {
                 source,
                 delta,
                 null
-        );
+                                               );
         putDeltaIfNeeded(keyOf(chunk.getWorld().getRegistryKey(), chunk.getPos()), delta, source, chunk);
     }
 
@@ -73,7 +72,7 @@ public final class GlobalChunkTracker {
             final World world,
             final ChunkPos pos,
             final ChunkDelta<?, ?> delta
-    ) {
+                               ) {
         addDelta(world, pos, delta, MUTATION_SOURCE);
     }
 
@@ -82,7 +81,7 @@ public final class GlobalChunkTracker {
             final ChunkPos pos,
             final ChunkDelta<?, ?> delta,
             final String source
-    ) {
+                               ) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(pos, "pos");
         if (delta == null) {
@@ -101,7 +100,7 @@ public final class GlobalChunkTracker {
             final int chunkZ,
             final ChunkDelta<?, ?> delta,
             final String source
-    ) {
+                        ) {
         if (delta == null) {
             return;
         }
@@ -127,7 +126,7 @@ public final class GlobalChunkTracker {
                     "kept authoritative tracked delta over weaker replacement",
                     source,
                     null
-            );
+                                                );
             putInUnloadCache(key, existing, true, null);
             return;
         }
@@ -140,7 +139,7 @@ public final class GlobalChunkTracker {
                 "registered dirty delta",
                 source,
                 null
-        );
+                                            );
         putInUnloadCache(key, delta, false, null);
     }
 
@@ -153,7 +152,7 @@ public final class GlobalChunkTracker {
             final ChunkPos position,
             final ChunkDelta<?, ?> liveDelta,
             final long generation
-    ) {
+                                           ) {
         markSavedIfUnchanged(world.getRegistryKey(), position.x, position.z, liveDelta, generation);
     }
 
@@ -163,7 +162,7 @@ public final class GlobalChunkTracker {
             final ChunkPos position,
             final ChunkDelta<?, ?> expected,
             final long generation
-    ) {
+                                             ) {
         if (world == null || position == null || expected == null) {
             return false;
         }
@@ -176,7 +175,7 @@ public final class GlobalChunkTracker {
             final int chunkZ,
             final ChunkDelta<?, ?> expected,
             final long generation
-    ) {
+                                      ) {
         if (dimension == null || expected == null) {
             return false;
         }
@@ -190,7 +189,7 @@ public final class GlobalChunkTracker {
             final ChunkPos pos,
             final ChunkDelta<?, ?> delta,
             final String source
-    ) {
+                                                   ) {
         if (ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             return false;
         }
@@ -202,7 +201,7 @@ public final class GlobalChunkTracker {
                 source,
                 delta,
                 null
-        );
+                                               );
         return true;
     }
 
@@ -211,7 +210,7 @@ public final class GlobalChunkTracker {
             final DebugChunkKey chunkKey,
             final ChunkDelta<?, ?> delta,
             final String source
-    ) {
+                                                   ) {
         if (ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             return false;
         }
@@ -223,7 +222,7 @@ public final class GlobalChunkTracker {
                 source,
                 delta,
                 null
-        );
+                                               );
         return true;
     }
 
@@ -231,7 +230,7 @@ public final class GlobalChunkTracker {
             final RegistryKey<World> dimension,
             final int chunkX,
             final int chunkZ
-    ) {
+                         ) {
         final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
         final DebugChunkKey debugKey = key.debugChunkKey();
         if (dirtyDeltas.remove(key) != null) {
@@ -242,7 +241,7 @@ public final class GlobalChunkTracker {
                     "removed dirty delta after save",
                     SOURCE,
                     null
-            );
+                                                );
         }
         invalidateUnloadCache(key, "invalidated unload cache after save");
     }
@@ -253,7 +252,7 @@ public final class GlobalChunkTracker {
             final int chunkZ,
             final ChunkDelta<?, ?> liveDelta,
             final long generation
-    ) {
+                                    ) {
         if (liveDelta == null) {
             return;
         }
@@ -268,7 +267,7 @@ public final class GlobalChunkTracker {
                                 "ignored async save completion for replaced delta",
                                 SOURCE,
                                 null
-                        );
+                                                            );
                         return active;
                     }
                     if (liveDelta.markSavedIfGeneration(generation)) {
@@ -279,7 +278,7 @@ public final class GlobalChunkTracker {
                                 "removed dirty delta after unchanged async save",
                                 SOURCE,
                                 null
-                        );
+                                                            );
                         invalidateUnloadCache(key, "invalidated unload cache after unchanged async save");
                         return null;
                     }
@@ -290,10 +289,10 @@ public final class GlobalChunkTracker {
                             "ignored async save completion for advanced generation " + generation,
                             SOURCE,
                             null
-                    );
+                                                        );
                     return active;
                 }
-        );
+                                    );
     }
 
     public static void noteChunkUnloaded(final WorldChunk chunk) {
@@ -303,7 +302,7 @@ public final class GlobalChunkTracker {
                 chunk.getPos().x,
                 chunk.getPos().z,
                 dirtyDeltas.containsKey(keyOf(chunk.getWorld().getRegistryKey(), chunk.getPos()))
-        );
+                         );
     }
 
     public static void clear() {
@@ -328,7 +327,7 @@ public final class GlobalChunkTracker {
             final RegistryKey<World> dimension,
             final int chunkX,
             final int chunkZ
-    ) {
+                                    ) {
         final DebugChunkKey debugKey = DebugChunkKeys.of(chunkX, chunkZ);
         final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
         final ChunkDelta<?, ?> active = dirtyDeltas.get(key);
@@ -345,7 +344,7 @@ public final class GlobalChunkTracker {
                     "ignored clean unload-cache delta and fell back to storage",
                     SOURCE,
                     null
-            );
+                                                );
             return null;
         }
         GlobalChunkTrackerTrace.traceTracker(
@@ -359,7 +358,7 @@ public final class GlobalChunkTracker {
                         : "no delta in unload cache",
                 SOURCE,
                 null
-        );
+                                            );
         return cached;
     }
 
@@ -387,7 +386,7 @@ public final class GlobalChunkTracker {
             final ChunkDelta<?, ?> delta,
             final String source,
             final WorldChunk chunk
-    ) {
+                                        ) {
         if (!dirtyDeltas.containsKey(key)) {
             GlobalChunkTrackerTrace.traceFirstDirtyMutation(key, delta, source);
         }
@@ -404,7 +403,7 @@ public final class GlobalChunkTracker {
                     key,
                     ChunkTraceReason.AUTHORITATIVE_DELTA_KEPT,
                     "kept authoritative tracked delta over weaker replacement"
-            );
+                                                );
             putInUnloadCache(key, existing, true, null);
             return;
         }
@@ -415,28 +414,28 @@ public final class GlobalChunkTracker {
                 delta,
                 "CLAIMED",
                 source + "#dirtyMapPut"
-        );
+                                                              );
         GlobalChunkTrackerTrace.traceTrackedDeltaStage(
                 key,
                 delta,
                 "dirty-tracker",
                 source,
                 "delta entered dirty tracker"
-        );
+                                                      );
         if (chunk != null) {
             GlobalChunkTrackerTrace.traceTrackedLiveChunk(
                     chunk,
                     delta,
                     "dirty-tracker-live",
                     source
-            );
+                                                         );
         }
         GlobalChunkTrackerTrace.traceTracker(
                 key,
                 ChunkTraceReason.TRACKER_DIRTY_MAP_PUT,
                 "registered dirty delta",
                 source
-        );
+                                            );
         putInUnloadCache(key, delta, true, chunk);
     }
 
@@ -447,7 +446,7 @@ public final class GlobalChunkTracker {
     static boolean shouldKeepExistingAuthoritativeDelta(
             final ChunkDelta<?, ?> existing,
             final ChunkDelta<?, ?> incoming
-    ) {
+                                                       ) {
         return existing != null && isAuthoritative(existing) && !isAuthoritative(incoming);
     }
 
@@ -456,7 +455,7 @@ public final class GlobalChunkTracker {
             final int chunkX,
             final int chunkZ,
             final boolean hadActiveDirtyDelta
-    ) {
+                                 ) {
         final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
         if (!hadActiveDirtyDelta) {
             return;
@@ -471,7 +470,7 @@ public final class GlobalChunkTracker {
                 "world chunk unloaded while dirty delta remained tracked without unload-cache mirror",
                 SOURCE,
                 true
-        );
+                                            );
     }
 
     private static void putInUnloadCache(
@@ -479,35 +478,35 @@ public final class GlobalChunkTracker {
             final ChunkDelta<?, ?> delta,
             final boolean tracePut,
             final WorldChunk chunk
-    ) {
+                                        ) {
         unloadCache.put(key, delta);
         GlobalChunkTrackerTrace.traceOwnershipBoundaryDecision(
                 key,
                 delta,
                 ChunkDeltaOwnership.hasChunkisOwnedState(delta) ? "CLAIMED" : "BYPASSED",
                 SOURCE + "#putInUnloadCache"
-        );
+                                                              );
         GlobalChunkTrackerTrace.traceTrackedDeltaStage(
                 key,
                 delta,
                 "unload-cache",
                 SOURCE + "#putInUnloadCache",
                 "delta stored in unload cache"
-        );
+                                                      );
         if (chunk != null) {
             GlobalChunkTrackerTrace.traceTrackedLiveChunk(
                     chunk,
                     delta,
                     "unload-cache-live",
                     SOURCE + "#putInUnloadCache"
-            );
+                                                         );
         }
         if (tracePut) {
             GlobalChunkTrackerTrace.traceTracker(
                     key,
                     ChunkTraceReason.TRACKER_UNLOAD_CACHE_PUT,
                     "stored delta in unload cache"
-            );
+                                                );
         }
     }
 
@@ -518,7 +517,7 @@ public final class GlobalChunkTracker {
     private static void invalidateUnloadCache(
             final DimensionChunkKey key,
             final String message
-    ) {
+                                             ) {
         final boolean removed;
         removed = unloadCache.remove(key);
         if (removed) {
@@ -529,7 +528,7 @@ public final class GlobalChunkTracker {
                     message,
                     SOURCE,
                     null
-            );
+                                                );
         }
     }
 
@@ -540,7 +539,7 @@ public final class GlobalChunkTracker {
     private static DimensionChunkKey keyOf(
             final RegistryKey<World> dimension,
             final ChunkPos pos
-    ) {
+                                          ) {
         return DimensionChunkKey.of(dimension, pos);
     }
 
@@ -548,7 +547,7 @@ public final class GlobalChunkTracker {
             final RegistryKey<World> dimension,
             final int chunkX,
             final int chunkZ
-    ) {
+                                          ) {
         return DimensionChunkKey.of(dimension, chunkX, chunkZ);
     }
 }

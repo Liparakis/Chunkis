@@ -1,14 +1,14 @@
 package io.liparakis.chunkis.world.tracking.suppression;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkMutationTrackingScopeTest {
 
@@ -21,12 +21,12 @@ class ChunkMutationTrackingScopeTest {
                 true,
                 null,
                 false
-        ), false);
+                                                                            ), false);
 
         assertEquals(
                 ChunkMutationTrackingScope.Cause.BASE_APPLY,
                 ChunkMutationTrackingScope.initialCauseForLoad(delta)
-        );
+                    );
     }
 
     @Test
@@ -34,7 +34,7 @@ class ChunkMutationTrackingScopeTest {
         assertEquals(
                 ChunkMutationTrackingScope.Cause.PASSIVE_LOAD,
                 ChunkMutationTrackingScope.initialCauseForLoad(new ChunkDelta<>())
-        );
+                    );
     }
 
     @Test
@@ -65,15 +65,15 @@ class ChunkMutationTrackingScopeTest {
         assertEquals(
                 ChunkTraceEventType.MUTATION_SUPPRESSED_RESTORE,
                 ChunkMutationTrackingScope.suppressionEventType(ChunkMutationTrackingScope.Cause.RESTORE)
-        );
+                    );
         assertEquals(
                 ChunkTraceEventType.MUTATION_SUPPRESSED_BASE_APPLY,
                 ChunkMutationTrackingScope.suppressionEventType(ChunkMutationTrackingScope.Cause.BASE_APPLY)
-        );
+                    );
         assertEquals(
                 ChunkTraceEventType.MUTATION_SUPPRESSED_PASSIVE_LOAD,
                 ChunkMutationTrackingScope.suppressionEventType(ChunkMutationTrackingScope.Cause.PASSIVE_LOAD)
-        );
+                    );
     }
 }
 

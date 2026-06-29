@@ -26,7 +26,7 @@ public final class ChunkTraceInvariants {
             ChunkTraceReason.CHUNKIS_STORAGE,
             ChunkTraceReason.BOTH,
             ChunkTraceReason.NEITHER
-    );
+                                                                           );
 
     private ChunkTraceInvariants() {
         throw new AssertionError("Utility class");
@@ -46,7 +46,7 @@ public final class ChunkTraceInvariants {
     public static boolean shouldAssertNonEmptyRestore(
             final ChunkDelta<?, ?> delta,
             final int appliedCount
-    ) {
+                                                     ) {
         if (delta == null || appliedCount != 0) {
             return false;
         }
@@ -60,14 +60,14 @@ public final class ChunkTraceInvariants {
      * <p>Block-entity-only payloads without a base chunk are unloadable: the
      * block states they reference do not exist in vanilla storage.</p>
      *
-     * @param delta               the delta to inspect; may be {@code null}
+     * @param delta                 the delta to inspect; may be {@code null}
      * @param hasPersistedBaseChunk whether a vanilla base chunk exists on disk
      * @return {@code true} if the payload is in an invalid state
      */
     public static boolean hasInvalidBlockEntityOnlyPayloadWithoutBase(
             final ChunkDelta<?, ?> delta,
             final boolean hasPersistedBaseChunk
-    ) {
+                                                                     ) {
         if (delta == null || hasPersistedBaseChunk) {
             return false;
         }
@@ -83,8 +83,8 @@ public final class ChunkTraceInvariants {
      * all data and zero is expected). For non-snapshot restores any zero-apply
      * result is reportable.</p>
      *
-     * @param delta                the delta being restored; may be {@code null}
-     * @param appliedCount         number of blocks/entities actually written
+     * @param delta                 the delta being restored; may be {@code null}
+     * @param appliedCount          number of blocks/entities actually written
      * @param snapshotBackedRestore whether the restore was backed by a snapshot
      * @return {@code true} if the empty result should be reported
      */
@@ -92,7 +92,7 @@ public final class ChunkTraceInvariants {
             final ChunkDelta<?, ?> delta,
             final int appliedCount,
             final boolean snapshotBackedRestore
-    ) {
+                                                        ) {
         if (delta == null || appliedCount != 0) {
             return false;
         }
@@ -122,20 +122,17 @@ public final class ChunkTraceInvariants {
      */
     public static String describeEventViolation(final ChunkTraceEvent event) {
         return switch (event.eventType()) {
-            case SAVE_REJECTED ->
-                    event.reason() == ChunkTraceReason.NONE
-                            ? "save rejected without a machine-readable reason"
-                            : null;
+            case SAVE_REJECTED -> event.reason() == ChunkTraceReason.NONE
+                    ? "save rejected without a machine-readable reason"
+                    : null;
 
-            case LOAD_SOURCE_RESOLVED ->
-                    !LOAD_SOURCE_REASONS.contains(event.reason())
-                            ? "load source resolved without a valid source reason"
-                            : null;
+            case LOAD_SOURCE_RESOLVED -> !LOAD_SOURCE_REASONS.contains(event.reason())
+                    ? "load source resolved without a valid source reason"
+                    : null;
 
-            case VANILLA_SAVE_CANCELLED ->
-                    event.chunkKey() == null
-                            ? "vanilla save cancellation missing chunk coordinates"
-                            : null;
+            case VANILLA_SAVE_CANCELLED -> event.chunkKey() == null
+                    ? "vanilla save cancellation missing chunk coordinates"
+                    : null;
 
             case SAVE_QUEUED, SAVE_FLUSH_STARTED, SAVE_FLUSH_COMPLETED, SAVE_FLUSH_FAILED -> {
                 if (event.operationId() == null) {
@@ -146,10 +143,9 @@ public final class ChunkTraceInvariants {
                         : null;
             }
 
-            case DELTA_MARKED_CLEAN ->
-                    !Boolean.FALSE.equals(event.dirtyState())
-                            ? "delta marked clean without dirty=false state"
-                            : null;
+            case DELTA_MARKED_CLEAN -> !Boolean.FALSE.equals(event.dirtyState())
+                    ? "delta marked clean without dirty=false state"
+                    : null;
 
             default -> null;
         };

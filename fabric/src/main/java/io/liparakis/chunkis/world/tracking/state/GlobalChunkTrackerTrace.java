@@ -29,7 +29,7 @@ final class GlobalChunkTrackerTrace {
             final DimensionChunkKey key,
             final ChunkTraceReason reason,
             final String message
-    ) {
+                            ) {
         traceTracker(key.dimension(), key.debugChunkKey(), reason, message, SOURCE, null);
     }
 
@@ -40,7 +40,7 @@ final class GlobalChunkTrackerTrace {
             final String message,
             final String source,
             final Boolean dirtyState
-    ) {
+                            ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.DIRTY_TRACKING,
                 ChunkTraceEventType.TRACKER_STATE_UPDATED,
@@ -54,7 +54,7 @@ final class GlobalChunkTrackerTrace {
                 null,
                 dirtyState,
                 null
-        );
+                             );
     }
 
     static void traceTracker(
@@ -62,7 +62,7 @@ final class GlobalChunkTrackerTrace {
             final ChunkTraceReason reason,
             final String message,
             final String source
-    ) {
+                            ) {
         traceTracker(key.dimension(), key.debugChunkKey(), reason, message, source, null);
     }
 
@@ -70,7 +70,7 @@ final class GlobalChunkTrackerTrace {
             final DimensionChunkKey key,
             final ChunkDelta<?, ?> delta,
             final String source
-    ) {
+                                       ) {
         if (delta == null || !delta.isDirty()) {
             return;
         }
@@ -87,14 +87,14 @@ final class GlobalChunkTrackerTrace {
                 null,
                 true,
                 null
-        );
+                             );
     }
 
     static void assertInvalidSparsePayloadWithoutBase(
             final DimensionChunkKey key,
             final ChunkDelta<?, ?> delta,
             final String source
-    ) {
+                                                     ) {
         if (!DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta)) {
             return;
         }
@@ -113,7 +113,7 @@ final class GlobalChunkTrackerTrace {
                 null,
                 delta.isDirty(),
                 null
-        );
+                             );
     }
 
     static void traceOwnershipBoundaryDecision(
@@ -121,7 +121,7 @@ final class GlobalChunkTrackerTrace {
             final ChunkDelta<?, ?> delta,
             final String decision,
             final String source
-    ) {
+                                              ) {
         final ChunkTraceReason reason = ChunkDeltaOwnership.hasChunkisOwnedState(delta)
                 ? ChunkTraceReason.valueOf(delta.getOwnershipReason())
                 : ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
@@ -133,7 +133,7 @@ final class GlobalChunkTrackerTrace {
                 source,
                 delta,
                 null
-        );
+                                               );
     }
 
     static void traceTrackedDeltaStage(
@@ -142,7 +142,7 @@ final class GlobalChunkTrackerTrace {
             final String stage,
             final String source,
             final String message
-    ) {
+                                      ) {
         PayloadWatchTracer.traceDeltaStage(
                 key.dimension().getValue().toString(),
                 key.debugChunkKey(),
@@ -155,7 +155,7 @@ final class GlobalChunkTrackerTrace {
                 source,
                 message,
                 null
-        );
+                                          );
     }
 
     static void traceTrackedLiveChunk(
@@ -163,7 +163,7 @@ final class GlobalChunkTrackerTrace {
             final ChunkDelta<?, ?> delta,
             final String stage,
             final String source
-    ) {
+                                     ) {
         PayloadWatchTracer.traceLiveChunkState(
                 chunk,
                 ChunkTraceEventType.WATCH_CAPTURED,
@@ -171,7 +171,7 @@ final class GlobalChunkTrackerTrace {
                 source,
                 null,
                 castBlockDelta(delta)
-        );
+                                              );
     }
 
     @SuppressWarnings("unchecked")

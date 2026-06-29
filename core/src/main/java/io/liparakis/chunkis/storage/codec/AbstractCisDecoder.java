@@ -64,26 +64,22 @@ public abstract class AbstractCisDecoder<S, N> {
      * Reusable buffer for local palette indices in dense sections.
      */
     protected final int[] localPaletteBuffer;
-
-    /**
-     * The format version of the data being decoded. Set per {@link #decodeInternal} call.
-     */
-    protected int decodedVersion;
-
-    /**
-     * The global palette mapping indices to BlockStates. Set per {@link #decodeInternal} call.
-     */
-    protected List<S> globalPalette;
-
     /**
      * Adapter used to decode block entities, entities, and chunk metadata payloads.
      */
     protected final NbtAdapter<N> nbtAdapter;
-
     /**
      * Fallback state returned when the payload refers to an invalid palette entry.
      */
     protected final S airState;
+    /**
+     * The format version of the data being decoded. Set per {@link #decodeInternal} call.
+     */
+    protected int decodedVersion;
+    /**
+     * The global palette mapping indices to BlockStates. Set per {@link #decodeInternal} call.
+     */
+    protected List<S> globalPalette;
 
     protected AbstractCisDecoder(NbtAdapter<N> nbtAdapter, S airState) {
         this.nbtAdapter = nbtAdapter;
@@ -91,6 +87,62 @@ public abstract class AbstractCisDecoder<S, N> {
         this.propertyReader = new BitReader(new byte[0]);
         this.sectionReader = new BitReader(new byte[0]);
         this.localPaletteBuffer = new int[SECTION_VOLUME];
+    }
+
+    /**
+     * Rejects dense-section palette sizes that are negative or larger than one section.
+     */
+    private static void validateLocalPaletteSize(int localSize) throws IOException {
+        if (localSize < 0 || localSize > SECTION_VOLUME) {
+            throw new IOException("Invalid local palette size: " + localSize);
+        }
+    }
+
+    /**
+     * Returns the minimum bit width needed to encode values in {@code [0, maxValue)}.
+     */
+    protected static int calculateBitsNeeded(int maxValue) {
+        if (maxValue <= 1) {
+            return 0;
+        }
+        return 32 - Integer.numberOfLeadingZeros(maxValue - 1);
+    }
+
+    /**
+     * Rejects global palette sizes that are negative or implausibly large for
+     * one chunk payload.
+     */
+    protected static void validateGlobalPaletteSize(int globalPaletteSize) throws IOException {
+        if (globalPaletteSize < 0 || globalPaletteSize > MAX_REASONABLE_PALETTE_SIZE) {
+            throw new IOException("Invalid palette size: " + globalPaletteSize);
+        }
+    }
+
+    /**
+     * Ensures that the requested byte span is fully present before the decoder
+     * attempts to read it.
+     */
+    protected static void ensureAvailable(byte[] data, int offset, int length, String section) throws IOException {
+        if (offset < 0 || length < 0 || offset > data.length - length) {
+            throw new IOException("Truncated data: cannot read " + section);
+        }
+    }
+
+    /**
+     * Reads a big-endian 32-bit integer from the raw payload.
+     */
+    protected static int readIntBE(byte[] b, int off) {
+        return ((b[off] & 0xFF) << 24)
+                | ((b[off + 1] & 0xFF) << 16)
+                | ((b[off + 2] & 0xFF) << 8)
+                | (b[off + 3] & 0xFF);
+    }
+
+    /**
+     * Reads a big-endian 16-bit integer from the raw payload.
+     */
+    protected static short readShortBE(byte[] b, int off) {
+        return (short) (((b[off] & 0xFF) << 8) | (b[off + 1] & 0xFF));
     }
 
     /**
@@ -132,7 +184,7 @@ public abstract class AbstractCisDecoder<S, N> {
             throw new IOException(String.format(
                     "Invalid CIS magic number: 0x%08X (expected: 0x%08X)",
                     magic, CisConstants.MAGIC
-            ));
+                                               ));
         }
 
         this.decodedVersion = readIntBE(data, 4);
@@ -140,7 +192,7 @@ public abstract class AbstractCisDecoder<S, N> {
             throw new IOException(String.format(
                     "Unsupported CIS version: %d (supported range: 7–%d)",
                     decodedVersion, CisConstants.VERSION
-            ));
+                                               ));
         }
     }
 
@@ -228,7 +280,7 @@ public abstract class AbstractCisDecoder<S, N> {
             final ChunkDelta<S, N> delta,
             final int sectionY,
             final int globalBits
-    ) {
+                                     ) {
         final int globalIdx = (int) reader.read(globalBits);
         final S state = getStateFromPalette(globalIdx);
         if (isAir(state)) {
@@ -250,7 +302,7 @@ public abstract class AbstractCisDecoder<S, N> {
             final ChunkDelta<S, N> delta,
             final int sectionY,
             final int globalBits
-    ) {
+                                           ) {
         final int defaultGlobalIdx = (int) reader.read(globalBits);
         final S defaultState = getStateFromPalette(defaultGlobalIdx);
         final int exceptionCount = (int) reader.read(CisConstants.BLOCK_COUNT_BITS);
@@ -302,15 +354,6 @@ public abstract class AbstractCisDecoder<S, N> {
     }
 
     /**
-     * Rejects dense-section palette sizes that are negative or larger than one section.
-     */
-    private static void validateLocalPaletteSize(int localSize) throws IOException {
-        if (localSize < 0 || localSize > SECTION_VOLUME) {
-            throw new IOException("Invalid local palette size: " + localSize);
-        }
-    }
-
-    /**
      * Reads the dense-section local palette into {@link #localPaletteBuffer}.
      */
     private void readLocalPalette(BitReader reader, int localSize, int globalBits) {
@@ -345,7 +388,7 @@ public abstract class AbstractCisDecoder<S, N> {
                         Chunkis.LOGGER.warn(
                                 "Dense section local palette index {} out of range (size {}); using air",
                                 paletteIndex, localSize
-                        );
+                                           );
                         paletteIndex = 0;
                     }
 
@@ -480,14 +523,6 @@ public abstract class AbstractCisDecoder<S, N> {
     }
 
     /**
-     * Returns the minimum bit width needed to encode values in {@code [0, maxValue)}.
-     */
-    protected static int calculateBitsNeeded(int maxValue) {
-        if (maxValue <= 1) return 0;
-        return 32 - Integer.numberOfLeadingZeros(maxValue - 1);
-    }
-
-    /**
      * Resolves a global palette index, falling back to {@link #airState} when
      * the index is out of range.
      */
@@ -507,26 +542,6 @@ public abstract class AbstractCisDecoder<S, N> {
     }
 
     /**
-     * Rejects global palette sizes that are negative or implausibly large for
-     * one chunk payload.
-     */
-    protected static void validateGlobalPaletteSize(int globalPaletteSize) throws IOException {
-        if (globalPaletteSize < 0 || globalPaletteSize > MAX_REASONABLE_PALETTE_SIZE) {
-            throw new IOException("Invalid palette size: " + globalPaletteSize);
-        }
-    }
-
-    /**
-     * Ensures that the requested byte span is fully present before the decoder
-     * attempts to read it.
-     */
-    protected static void ensureAvailable(byte[] data, int offset, int length, String section) throws IOException {
-        if (offset < 0 || length < 0 || offset > data.length - length) {
-            throw new IOException("Truncated data: cannot read " + section);
-        }
-    }
-
-    /**
      * Allocates storage for the next decoded global palette.
      */
     protected void beginGlobalPalette(int expectedSize) {
@@ -539,22 +554,5 @@ public abstract class AbstractCisDecoder<S, N> {
     protected void addGlobalPaletteState(Palette<S> palette, S state) {
         globalPalette.add(state);
         palette.getOrAdd(state);
-    }
-
-    /**
-     * Reads a big-endian 32-bit integer from the raw payload.
-     */
-    protected static int readIntBE(byte[] b, int off) {
-        return ((b[off] & 0xFF) << 24)
-                | ((b[off + 1] & 0xFF) << 16)
-                | ((b[off + 2] & 0xFF) << 8)
-                | (b[off + 3] & 0xFF);
-    }
-
-    /**
-     * Reads a big-endian 16-bit integer from the raw payload.
-     */
-    protected static short readShortBE(byte[] b, int off) {
-        return (short) (((b[off] & 0xFF) << 8) | (b[off + 1] & 0xFF));
     }
 }

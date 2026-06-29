@@ -1,12 +1,12 @@
 package io.liparakis.chunkis.world.tracking.ownership;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkDeltaOwnershipTest {
 
@@ -45,9 +45,9 @@ class ChunkDeltaOwnershipTest {
                         true,
                         false,
                         baseChunk
-                ),
+                                                             ),
                 false
-        );
+                              );
 
         assertFalse(ChunkDeltaOwnership.hasChunkisOwnedState(delta));
         assertFalse(ChunkDeltaOwnership.shouldMirrorVanillaDirtyState(delta));
@@ -64,9 +64,9 @@ class ChunkDeltaOwnershipTest {
                         true,
                         false,
                         baseChunk
-                ),
+                                                             ),
                 false
-        );
+                              );
 
         assertTrue(ChunkDeltaOwnership.hasRestorableChunkisState(delta));
     }

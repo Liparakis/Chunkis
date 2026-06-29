@@ -18,27 +18,27 @@ final class ChunkisMetadataFlags {
         return readChunkisBooleanFlag(
                 chunkMetadata,
                 CisNbtUtil.SUPPRESS_INITIAL_REPOPULATION_KEY
-        );
+                                     );
     }
 
     static Boolean readFullBlockBaselineFlag(final NbtCompound chunkMetadata) {
         return readChunkisBooleanFlag(
                 chunkMetadata,
                 CisNbtUtil.FULL_BLOCK_BASELINE_KEY
-        );
+                                     );
     }
 
     static Boolean readPortalChunkFlag(final NbtCompound chunkMetadata) {
         return readChunkisBooleanFlag(
                 chunkMetadata,
                 CisNbtUtil.PORTAL_CHUNK_KEY
-        );
+                                     );
     }
 
     private static Boolean readChunkisBooleanFlag(
             final NbtCompound chunkMetadata,
             final String key
-    ) {
+                                                 ) {
         final NbtCompound chunkisMetadata =
                 CisNbtUtil.getCompoundOrNull(chunkMetadata, CisNbtUtil.CHUNKIS_METADATA_KEY);
 

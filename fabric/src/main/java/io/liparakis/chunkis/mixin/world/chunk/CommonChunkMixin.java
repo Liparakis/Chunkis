@@ -7,6 +7,7 @@ import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
+import java.util.Objects;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,8 +16,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import java.util.Objects;
 
 /**
  * Mixin for the base {@link Chunk} class to provide {@link ChunkDelta}
@@ -105,7 +104,8 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     @Inject(method = "markNeedsSaving", at = @At("HEAD"))
     private void chunkis$onMarkNeedsSaving(final CallbackInfo ci) {
         if ((Object) this instanceof ChunkisMutationGuardDuck guardDuck
-                && guardDuck.chunkis$getMutationTrackingScope().currentCause() != ChunkMutationTrackingScope.Cause.NONE) {
+                && guardDuck.chunkis$getMutationTrackingScope().currentCause()
+                != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
         if ((Object) this instanceof WorldChunk worldChunk) {

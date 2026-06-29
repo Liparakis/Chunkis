@@ -2,6 +2,15 @@ package io.liparakis.chunkis.portal;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.NetherPortalBlock;
@@ -20,16 +29,6 @@ import net.minecraft.util.math.Direction;
 import net.minecraft.world.TeleportTarget;
 import net.minecraft.world.World;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * Persistent bidirectional portal pairing table.
  *
@@ -44,29 +43,52 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  */
 public final class PortalLinkManager {
-    /** Key for the list of portal pairing entries in NBT. */
+
+    /**
+     * Key for the list of portal pairing entries in NBT.
+     */
     private static final String ENTRIES_KEY = "entries";
-    /** Key for the source portal anchor in an NBT entry. */
+    /**
+     * Key for the source portal anchor in an NBT entry.
+     */
     private static final String SOURCE_KEY = "source";
-    /** Key for the destination portal anchor in an NBT entry. */
+    /**
+     * Key for the destination portal anchor in an NBT entry.
+     */
     private static final String DESTINATION_KEY = "destination";
-    /** Key for the dimension identifier in a portal anchor NBT. */
+    /**
+     * Key for the dimension identifier in a portal anchor NBT.
+     */
     private static final String NBT_DIMENSION = "dimension";
-    /** Key for the X coordinate in a portal anchor NBT. */
+    /**
+     * Key for the X coordinate in a portal anchor NBT.
+     */
     private static final String NBT_X = "x";
-    /** Key for the Y coordinate in a portal anchor NBT. */
+    /**
+     * Key for the Y coordinate in a portal anchor NBT.
+     */
     private static final String NBT_Y = "y";
-    /** Key for the Z coordinate in a portal anchor NBT. */
+    /**
+     * Key for the Z coordinate in a portal anchor NBT.
+     */
     private static final String NBT_Z = "z";
-    /** Key for the orientation axis in a portal anchor NBT. */
+    /**
+     * Key for the orientation axis in a portal anchor NBT.
+     */
     private static final String NBT_AXIS = "axis";
 
-    /** Minimum portal width in blocks (used for anchor validation). */
+    /**
+     * Minimum portal width in blocks (used for anchor validation).
+     */
     private static final int MIN_PORTAL_WIDTH = 2;
-    /** Minimum portal height in blocks (used for anchor validation). */
+    /**
+     * Minimum portal height in blocks (used for anchor validation).
+     */
     private static final int MIN_PORTAL_HEIGHT = 3;
 
-    /** Active portal link tables indexed by their filesystem path. */
+    /**
+     * Active portal link tables indexed by their filesystem path.
+     */
     private static final Map<Path, PortalLinkTable> TABLES = new ConcurrentHashMap<>();
 
     private PortalLinkManager() {
@@ -428,6 +450,7 @@ public final class PortalLinkManager {
             RegistryKey<World> worldKey,
             BlockPos lowerCorner,
             Direction.Axis axis) {
+
     }
 
     /**
@@ -435,11 +458,17 @@ public final class PortalLinkManager {
      */
     private static final class PortalLinkTable {
 
-        /** Filesystem path where this table is stored. */
+        /**
+         * Filesystem path where this table is stored.
+         */
         private final Path path;
-        /** In-memory bidirectional pairing map. */
+        /**
+         * In-memory bidirectional pairing map.
+         */
         private final ConcurrentHashMap<PortalAnchor, PortalAnchor> links;
-        /** Whether the table has been modified since it was last saved. */
+        /**
+         * Whether the table has been modified since it was last saved.
+         */
         private boolean dirty;
 
         /**
@@ -451,84 +480,6 @@ public final class PortalLinkManager {
             this.path = Objects.requireNonNull(path, "path");
             this.links = load(path);
             this.dirty = false;
-        }
-
-        /**
-         * Returns the destination portal linked from the given source portal.
-         *
-         * @param source the source portal anchor
-         * @return the destination anchor, or {@code null} if no link exists
-         */
-        PortalAnchor get(final PortalAnchor source) {
-            return links.get(source);
-        }
-
-        /**
-         * Inserts a bidirectional link (forward + reverse) and flushes to disk once.
-         *
-         * <p>
-         * Batching both directions into a single save call avoids the double disk
-         * write that would result from two separate {@code put} calls.
-         */
-        void putPair(final PortalAnchor a, final PortalAnchor b) {
-            final boolean changedForward = !b.equals(links.put(a, b));
-            final boolean changedReverse = !a.equals(links.put(b, a));
-
-            if (changedForward || changedReverse) {
-                dirty = true;
-                save();
-            }
-        }
-
-        /**
-         * Removes a bidirectional link (forward + reverse) and flushes to disk once.
-         */
-        void removePair(final PortalAnchor a, final PortalAnchor b) {
-            final boolean removedForward = links.remove(a) != null;
-            final boolean removedReverse = links.remove(b) != null;
-
-            if (removedForward || removedReverse) {
-                dirty = true;
-                save();
-            }
-        }
-
-        /**
-         * Flushes the table to disk if it has been modified.
-         */
-        void close() {
-            if (dirty) {
-                save();
-            }
-        }
-
-        /**
-         * Serializes the entire link table to NBT and writes it to disk.
-         */
-        private void save() {
-            try {
-                Files.createDirectories(path.getParent());
-
-                final NbtCompound root = new NbtCompound();
-                final NbtList entries = new NbtList();
-
-                links.forEach((source, destination) -> {
-                    final NbtCompound entry = new NbtCompound();
-                    entry.put(SOURCE_KEY, writeAnchor(source));
-                    entry.put(DESTINATION_KEY, writeAnchor(destination));
-                    entries.add(entry);
-                });
-
-                root.put(ENTRIES_KEY, entries);
-
-                try (final DataOutputStream output = new DataOutputStream(Files.newOutputStream(path))) {
-                    NbtIo.writeCompound(root, output);
-                }
-
-                dirty = false;
-            } catch (final IOException e) {
-                Chunkis.LOGGER.error("Chunkis: Failed to save portal links {}", path, e);
-            }
         }
 
         /**
@@ -628,6 +579,84 @@ public final class PortalLinkManager {
                             nbt.getInt(NBT_Y, 0),
                             nbt.getInt(NBT_Z, 0)),
                     axis));
+        }
+
+        /**
+         * Returns the destination portal linked from the given source portal.
+         *
+         * @param source the source portal anchor
+         * @return the destination anchor, or {@code null} if no link exists
+         */
+        PortalAnchor get(final PortalAnchor source) {
+            return links.get(source);
+        }
+
+        /**
+         * Inserts a bidirectional link (forward + reverse) and flushes to disk once.
+         *
+         * <p>
+         * Batching both directions into a single save call avoids the double disk
+         * write that would result from two separate {@code put} calls.
+         */
+        void putPair(final PortalAnchor a, final PortalAnchor b) {
+            final boolean changedForward = !b.equals(links.put(a, b));
+            final boolean changedReverse = !a.equals(links.put(b, a));
+
+            if (changedForward || changedReverse) {
+                dirty = true;
+                save();
+            }
+        }
+
+        /**
+         * Removes a bidirectional link (forward + reverse) and flushes to disk once.
+         */
+        void removePair(final PortalAnchor a, final PortalAnchor b) {
+            final boolean removedForward = links.remove(a) != null;
+            final boolean removedReverse = links.remove(b) != null;
+
+            if (removedForward || removedReverse) {
+                dirty = true;
+                save();
+            }
+        }
+
+        /**
+         * Flushes the table to disk if it has been modified.
+         */
+        void close() {
+            if (dirty) {
+                save();
+            }
+        }
+
+        /**
+         * Serializes the entire link table to NBT and writes it to disk.
+         */
+        private void save() {
+            try {
+                Files.createDirectories(path.getParent());
+
+                final NbtCompound root = new NbtCompound();
+                final NbtList entries = new NbtList();
+
+                links.forEach((source, destination) -> {
+                    final NbtCompound entry = new NbtCompound();
+                    entry.put(SOURCE_KEY, writeAnchor(source));
+                    entry.put(DESTINATION_KEY, writeAnchor(destination));
+                    entries.add(entry);
+                });
+
+                root.put(ENTRIES_KEY, entries);
+
+                try (final DataOutputStream output = new DataOutputStream(Files.newOutputStream(path))) {
+                    NbtIo.writeCompound(root, output);
+                }
+
+                dirty = false;
+            } catch (final IOException e) {
+                Chunkis.LOGGER.error("Chunkis: Failed to save portal links {}", path, e);
+            }
         }
     }
 }

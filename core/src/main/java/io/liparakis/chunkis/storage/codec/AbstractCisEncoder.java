@@ -7,12 +7,11 @@ import io.liparakis.chunkis.storage.bits.BitWriter;
 import io.liparakis.chunkis.storage.model.CisChunk;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import io.liparakis.chunkis.storage.model.CisSection;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
-
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -57,6 +56,27 @@ public abstract class AbstractCisEncoder<S, N> {
         this.airState = airState;
     }
 
+    private static void writeHeader(DataOutputStream dos) throws IOException {
+        dos.writeInt(CisConstants.MAGIC);
+        dos.writeInt(CisConstants.VERSION);
+    }
+
+    private static int uniformEncodingBits(final int globalBits) {
+        return 1 + CisConstants.BLOCK_COUNT_BITS + globalBits;
+    }
+
+    private static int defaultSparseEncodingBits(final int exceptionCount, final int globalBits) {
+        return 1 + CisConstants.BLOCK_COUNT_BITS + globalBits + CisConstants.BLOCK_COUNT_BITS
+                + (exceptionCount * (12 + globalBits));
+    }
+
+    /**
+     * Returns the minimum bit width needed to encode values in {@code [0, maxValue)}.
+     */
+    protected static int calculateBitsNeeded(int maxValue) {
+        return AbstractCisDecoder.calculateBitsNeeded(maxValue);
+    }
+
     /**
      * Writes one global palette entry's block identity and properties to {@code dos}.
      * The bit-packed property data should be written to {@code ctx.bitWriter}; it is
@@ -90,11 +110,6 @@ public abstract class AbstractCisEncoder<S, N> {
         writeChunkMetadata(dos, delta);
 
         return ctx.mainBuffer.toByteArray();
-    }
-
-    private static void writeHeader(DataOutputStream dos) throws IOException {
-        dos.writeInt(CisConstants.MAGIC);
-        dos.writeInt(CisConstants.VERSION);
     }
 
     /**
@@ -168,7 +183,7 @@ public abstract class AbstractCisEncoder<S, N> {
                     BlockInstruction.unpackX(p),
                     BlockInstruction.unpackY(p),
                     BlockInstruction.unpackZ(p)
-            );
+                                                          );
             dos.writeInt(packedPos);
             writeNbtPayload(blockEntityData, dos);
         }
@@ -355,7 +370,7 @@ public abstract class AbstractCisEncoder<S, N> {
             final CisSection<S> section,
             final DefaultSparseCandidate<S> candidate,
             final int globalBits
-    ) {
+                                           ) {
         ctx.bitWriter.write(CisConstants.SECTION_ENCODING_SPARSE, 1);
         ctx.bitWriter.write(CisConstants.DEFAULT_SPARSE_SECTION_SENTINEL, CisConstants.BLOCK_COUNT_BITS);
 
@@ -374,7 +389,7 @@ public abstract class AbstractCisEncoder<S, N> {
             final EncoderContext<S> ctx,
             final CisSection<S> section,
             final int globalBits
-    ) {
+                                            ) {
         ctx.bitWriter.write(CisConstants.SECTION_ENCODING_SPARSE, 1);
 
         if (section.mode == CisSection.MODE_SPARSE) {
@@ -490,7 +505,7 @@ public abstract class AbstractCisEncoder<S, N> {
             final EncoderContext<S> ctx,
             final CisSection<S> section,
             final int globalBits
-    ) {
+                                             ) {
         for (int i = 0; i < section.sparseSize; i++) {
             ctx.bitWriter.write(section.sparseKeys[i] & 0xFFFF, 12);
             final S state = (S) section.sparseValues[i];
@@ -524,7 +539,7 @@ public abstract class AbstractCisEncoder<S, N> {
             final Object[] states,
             final S defaultState,
             final int globalBits
-    ) {
+                                             ) {
         for (int i = 0; i < SECTION_VOLUME; i++) {
             final S state = logicalState((S) states[i]);
             if (Objects.equals(state, defaultState)) {
@@ -538,15 +553,6 @@ public abstract class AbstractCisEncoder<S, N> {
 
     private int sparseEncodingBits(final CisSection<S> section, final int globalBits) {
         return 1 + CisConstants.BLOCK_COUNT_BITS + (sparseEntryCount(section) * (12 + globalBits));
-    }
-
-    private static int uniformEncodingBits(final int globalBits) {
-        return 1 + CisConstants.BLOCK_COUNT_BITS + globalBits;
-    }
-
-    private static int defaultSparseEncodingBits(final int exceptionCount, final int globalBits) {
-        return 1 + CisConstants.BLOCK_COUNT_BITS + globalBits + CisConstants.BLOCK_COUNT_BITS
-                + (exceptionCount * (12 + globalBits));
     }
 
     /**
@@ -679,16 +685,21 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
-     * Returns the minimum bit width needed to encode values in {@code [0, maxValue)}.
+     * Section encodings considered by the adaptive cost selector.
      */
-    protected static int calculateBitsNeeded(int maxValue) {
-        return AbstractCisDecoder.calculateBitsNeeded(maxValue);
+    private enum SectionEncoding {
+        UNIFORM,
+        DEFAULT_SPARSE,
+        SPARSE,
+        DENSE
     }
 
     /**
      * Pair of the CisChunk representation and the ordered global palette state list.
      */
-    private record EncodedChunkInput<S>(CisChunk<S> chunk, List<S> usedStates) {}
+    private record EncodedChunkInput<S>(CisChunk<S> chunk, List<S> usedStates) {
+
+    }
 
     /**
      * Reusable scratch state for one encoder instance.
@@ -699,6 +710,7 @@ public abstract class AbstractCisEncoder<S, N> {
      * {@link #reset}.</p>
      */
     public static class EncoderContext<S> {
+
         /**
          * Main byte sink for the full encoded chunk payload.
          */
@@ -713,17 +725,14 @@ public abstract class AbstractCisEncoder<S, N> {
          * Global palette reverse lookup: block state → encoded palette index.
          */
         public final Reference2IntMap<S> globalIdMap = new Reference2IntOpenHashMap<>();
-
-        /**
-         * Dense-section local palette encoded as global palette ids.
-         */
-        private final IntArrayList localPaletteIds = new IntArrayList(64);
-
         /**
          * Dense-section reverse lookup: block state identity → local palette index.
          */
         public final Reference2IntMap<S> fastLocalPaletteIndex = new Reference2IntOpenHashMap<>();
-
+        /**
+         * Dense-section local palette encoded as global palette ids.
+         */
+        private final IntArrayList localPaletteIds = new IntArrayList(64);
         /**
          * Reusable dense scratch array for expanding sparse sections during cost evaluation.
          */
@@ -763,24 +772,17 @@ public abstract class AbstractCisEncoder<S, N> {
      * cross the non-throwing functional interface boundary.
      */
     private static final class EntityEncodingException extends RuntimeException {
+
         EntityEncodingException(final IOException cause) {
             super(cause);
         }
     }
 
     /**
-     * Section encodings considered by the adaptive cost selector.
-     */
-    private enum SectionEncoding {
-        UNIFORM,
-        DEFAULT_SPARSE,
-        SPARSE,
-        DENSE
-    }
-
-    /**
      * The most-common logical state for a section and the number of positions
      * that differ from it, used by the default-sparse encoder.
      */
-    private record DefaultSparseCandidate<S>(S defaultState, int exceptionCount) {}
+    private record DefaultSparseCandidate<S>(S defaultState, int exceptionCount) {
+
+    }
 }

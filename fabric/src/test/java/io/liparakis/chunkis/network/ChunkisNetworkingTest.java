@@ -1,8 +1,8 @@
 package io.liparakis.chunkis.network;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
 
 class ChunkisNetworkingTest {
 
@@ -13,6 +13,6 @@ class ChunkisNetworkingTest {
         assertEquals(
                 "sent delta to player Alex rawBytes=512 wireBytes=128 compressed=true",
                 ChunkisNetworking.describePayloadOutcome("Alex", 512, payload)
-        );
+                    );
     }
 }

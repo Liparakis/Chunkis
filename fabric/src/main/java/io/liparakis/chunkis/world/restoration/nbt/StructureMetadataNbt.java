@@ -47,7 +47,7 @@ final class StructureMetadataNbt {
         return hasStructureData(chunkMetadata) ? chunkMetadata.copy() : null;
     }
 
-        /**
+    /**
      * Returns whether a structures compound contains starts or references.
      *
      * @param structures vanilla structures compound
@@ -55,8 +55,9 @@ final class StructureMetadataNbt {
      */
     static boolean hasStructureData(final NbtCompound structures) {
         return structures != null && !structures.isEmpty() && (getCompoundOrNull(structures,
-                CisNbtUtil.STRUCTURE_STARTS_KEY) != null || getCompoundOrNull(structures,
-                CisNbtUtil.STRUCTURE_REFERENCES_KEY) != null);
+                                                                                 CisNbtUtil.STRUCTURE_STARTS_KEY)
+                != null || getCompoundOrNull(structures,
+                                             CisNbtUtil.STRUCTURE_REFERENCES_KEY) != null);
     }
 
     /**

@@ -116,10 +116,14 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
         clientDelta.addBlockEntityData(x, y, z, nbt, false);
 
         final BlockPos pos = new BlockPos(baseX + x, y, baseZ + z);
-        if (!canHaveBlockEntity(pos)) return;
+        if (!canHaveBlockEntity(pos)) {
+            return;
+        }
 
         final BlockEntity be = deserializeBlockEntity(pos, nbt);
-        if (be == null) return;
+        if (be == null) {
+            return;
+        }
 
         replaceBlockEntity(pos, be);
     }

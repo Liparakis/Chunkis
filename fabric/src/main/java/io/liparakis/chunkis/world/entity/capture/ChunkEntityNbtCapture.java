@@ -1,15 +1,14 @@
 package io.liparakis.chunkis.world.entity.capture;
 
 
+import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import java.util.UUID;
+import net.minecraft.entity.Entity;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.storage.NbtWriteView;
 import net.minecraft.util.ErrorReporter;
-import net.minecraft.nbt.NbtCompound;
-import io.liparakis.chunkis.Chunkis;
-import net.minecraft.entity.Entity;
 import net.minecraft.util.Uuids;
-
-import java.util.UUID;
 
 /**
  * Serializes live {@link Entity} instances to NBT for storage in Chunkis delta payloads.

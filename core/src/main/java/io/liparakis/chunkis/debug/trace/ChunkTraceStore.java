@@ -1,11 +1,15 @@
 package io.liparakis.chunkis.debug.trace;
 
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
-import io.liparakis.chunkis.debug.model.*;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -147,12 +151,12 @@ public final class ChunkTraceStore {
             final String operationId,
             final Boolean dirtyState,
             final Integer byteSize
-    ) {
+                            ) {
         trace(
                 domain, eventType, severity, reason,
                 source, message, worldId, chunkKey, regionKey, operationId,
                 dirtyState, byteSize, null, null, null
-        );
+             );
     }
 
     /**
@@ -195,7 +199,7 @@ public final class ChunkTraceStore {
             final PayloadWatchTarget payloadWatchTarget,
             final String payloadWatchStage,
             final String payloadWatchSummary
-    ) {
+                            ) {
         // Payload-watch events bypass the level gate; all others are filtered.
         if (payloadWatchTarget == null && !ChunkisDebugConfig.allows(domain, severity)) {
             return;
@@ -257,7 +261,7 @@ public final class ChunkTraceStore {
     public static List<ChunkTraceEvent> latestMatching(
             final int count,
             final Predicate<ChunkTraceEvent> predicate
-    ) {
+                                                      ) {
         if (count <= 0) {
             return List.of();
         }
@@ -530,7 +534,7 @@ public final class ChunkTraceStore {
             final DebugChunkKey chunkKey,
             final String operationId,
             final long beforeEventId
-    ) {
+                                    ) {
         synchronized (MONITOR) {
             for (int i = size - 1; i >= 0; i--) {
                 final ChunkTraceEvent event = ringAt(i);

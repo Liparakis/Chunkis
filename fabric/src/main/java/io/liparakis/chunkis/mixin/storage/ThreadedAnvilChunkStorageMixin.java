@@ -27,6 +27,11 @@ import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.SharedConstants;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -49,12 +54,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Intercepts chunk load and save operations in {@link ServerChunkLoadingManager},
@@ -83,6 +82,7 @@ import java.util.concurrent.CompletableFuture;
  */
 @Mixin(ServerChunkLoadingManager.class)
 public abstract class ThreadedAnvilChunkStorageMixin {
+
     @Unique
     private static final String SAVE_SOURCE = "ThreadedAnvilChunkStorageMixin#chunkis$onSave";
     @Unique
@@ -96,13 +96,101 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     ServerWorld world;
 
     @Unique
-    private String chunkis$worldId() {
-        return world.getRegistryKey().getValue().toString();
+    private static DebugChunkKey chunkis$debugChunkKey(final ChunkPos pos) {
+        return new DebugChunkKey(pos.x, pos.z);
+    }
+
+    /**
+     * Returns the delta attached to {@code chunk} via {@link ChunkisDeltaDuck},
+     * or {@code null} if the chunk is {@code null} or does not implement the
+     * interface.  Fallback for chunks absent from the global tracker.
+     *
+     * @param chunk the chunk to inspect; may be {@code null}
+     * @return the attached delta, or {@code null}
+     */
+    @Unique
+    @SuppressWarnings("unchecked")
+    private static ChunkDelta<BlockState, NbtCompound> chunkis$getChunkDelta(final Chunk chunk) {
+        return chunk instanceof ChunkisDeltaDuck duck
+                ? (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta()
+                : null;
+    }
+
+    /**
+     * Resolves the best available chunk instance for saving.
+     *
+     * <p>The live world chunk is preferred; if absent, the saving future is
+     * checked without blocking.</p>
+     *
+     * @param holder the chunk holder
+     * @return the resolved chunk, or {@code null}
+     */
+    @Unique
+    private static Chunk chunkis$resolveChunkForSaving(final ChunkHolder holder) {
+        final Chunk live = holder.getWorldChunk();
+        if (live != null) {
+            return live;
+        }
+        final Object result = holder.getSavingFuture().getNow(null);
+        if (!(result instanceof Optional<?> opt)) {
+            return null;
+        }
+        final Object value = opt.orElse(null);
+        return value instanceof Chunk c ? c : null;
     }
 
     @Unique
-    private static DebugChunkKey chunkis$debugChunkKey(final ChunkPos pos) {
-        return new DebugChunkKey(pos.x, pos.z);
+    private static int chunkis$getGameDataVersion() {
+        return SharedConstants.getGameVersion().dataVersion().id();
+    }
+
+    /**
+     * Writes {@code metadata} into {@code delta}, preferring the pre-encoded path
+     * for performance.  Falls back to a direct set if encoding fails so structure
+     * metadata is never silently lost.
+     *
+     * @param delta    the delta to update
+     * @param metadata the metadata compound to install
+     * @param pos      the chunk position used for the fallback warning log
+     */
+    @Unique
+    private static void chunkis$updateDeltaMetadata(
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final NbtCompound metadata,
+            final ChunkPos pos) {
+        try {
+            delta.updateChunkMetadataWithEncodedPayload(
+                    metadata, CisNbtUtil.serializeRawPayload(metadata));
+        } catch (final Exception e) {
+            Chunkis.LOGGER.warn(
+                    "Chunkis: Failed to pre-encode structure metadata for chunk {}, " +
+                            "falling back to direct metadata update",
+                    pos, e
+                               );
+            delta.setChunkMetadata(metadata);
+        }
+    }
+
+    /**
+     * Returns {@code true} when a tracked in-memory delta is too weak to be
+     * authoritative for load reconstruction and storage should be consulted instead.
+     *
+     * <p>An empty clean delta with no persisted base chunk or full-block baseline
+     * is not useful reconstruction state preferring it over storage would cause
+     * Chunkis to emit synthetic {@code STATUS_EMPTY} NBT and reroll terrain.</p>
+     *
+     * @param delta the tracked delta candidate; may be {@code null}
+     * @return {@code true} when storage should be consulted instead
+     */
+    @Unique
+    private static boolean chunkis$shouldBypassTrackedDelta(
+            final ChunkDelta<BlockState, NbtCompound> delta) {
+        return delta == null || (!delta.isDirty() && delta.isEmpty());
+    }
+
+    @Unique
+    private String chunkis$worldId() {
+        return world.getRegistryKey().getValue().toString();
     }
 
     @Unique
@@ -111,7 +199,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final String stage,
             final String source,
             final String message
-    ) {
+                                                   ) {
         if (entity == null) {
             return;
         }
@@ -122,7 +210,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 stage,
                 source,
                 message
-        );
+                                                   );
     }
 
     @Unique
@@ -147,7 +235,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 chunk,
                 delta,
                 deltaDuck.chunkis$getRestoreOperationId()
-        );
+                                                                                               );
     }
 
     @Unique
@@ -184,7 +272,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "entity-manager-load",
                 "ThreadedAnvilChunkStorageMixin#chunkis$traceWatchedEntityLoad",
                 "watched entity entered ServerChunkLoadingManager.loadEntity"
-        );
+                                          );
     }
 
     @Inject(method = "unloadEntity", at = @At("HEAD"))
@@ -194,7 +282,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "entity-manager-unload",
                 "ThreadedAnvilChunkStorageMixin#chunkis$traceWatchedEntityUnload",
                 "watched entity entered ServerChunkLoadingManager.unloadEntity"
-        );
+                                          );
         chunkis$scheduleEntityReplay(entity);
     }
 
@@ -202,36 +290,36 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     private void chunkis$traceChunkEntitiesTickable(
             final ChunkHolder holder,
             final CallbackInfoReturnable<CompletableFuture<net.minecraft.server.world.OptionalChunk<WorldChunk>>> cir
-    ) {
+                                                   ) {
         cir.getReturnValue().thenAccept(optionalChunk ->
-                optionalChunk.ifPresent(chunk -> {
-                    chunkis$replayPendingEntities(chunk);
-                    PayloadWatchTracer.traceEntityChunkReentry(
-                            world,
-                            chunk,
-                            "chunk-entities-tickable",
-                            "ThreadedAnvilChunkStorageMixin#chunkis$traceChunkEntitiesTickable",
-                            "chunk became entity-tickable"
-                    );
-                }));
+                                                optionalChunk.ifPresent(chunk -> {
+                                                    chunkis$replayPendingEntities(chunk);
+                                                    PayloadWatchTracer.traceEntityChunkReentry(
+                                                            world,
+                                                            chunk,
+                                                            "chunk-entities-tickable",
+                                                            "ThreadedAnvilChunkStorageMixin#chunkis$traceChunkEntitiesTickable",
+                                                            "chunk became entity-tickable"
+                                                                                              );
+                                                }));
     }
 
     @Inject(method = "makeChunkTickable", at = @At("RETURN"))
     private void chunkis$traceChunkTickable(
             final ChunkHolder holder,
             final CallbackInfoReturnable<CompletableFuture<net.minecraft.server.world.OptionalChunk<WorldChunk>>> cir
-    ) {
+                                           ) {
         cir.getReturnValue().thenAccept(optionalChunk ->
-                optionalChunk.ifPresent(chunk -> {
-                    chunkis$replayPendingEntities(chunk);
-                    PayloadWatchTracer.traceEntityChunkReentry(
-                            world,
-                            chunk,
-                            "chunk-tickable",
-                            "ThreadedAnvilChunkStorageMixin#chunkis$traceChunkTickable",
-                            "chunk became tickable"
-                    );
-                }));
+                                                optionalChunk.ifPresent(chunk -> {
+                                                    chunkis$replayPendingEntities(chunk);
+                                                    PayloadWatchTracer.traceEntityChunkReentry(
+                                                            world,
+                                                            chunk,
+                                                            "chunk-tickable",
+                                                            "ThreadedAnvilChunkStorageMixin#chunkis$traceChunkTickable",
+                                                            "chunk became tickable"
+                                                                                              );
+                                                }));
     }
 
     /**
@@ -266,7 +354,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     ChunkTraceReason.NEITHER,
                     "load source resolved: no tracker delta and no storage entry",
                     "bypassed synthetic load because tracker and storage were empty"
-            );
+                                      );
             return;
         }
 
@@ -280,13 +368,13 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     resolvedReason,
                     "load source resolved but delta had no restorable Chunkis state",
                     "bypassed synthetic load because delta had no restorable state"
-            );
+                                      );
             return;
         }
         delta.claimOwnership(
                 ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE.name(),
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt"
-        );
+                            );
         ChunkOwnershipTraceHelper.traceDecision(
                 world.getRegistryKey(),
                 chunkPos,
@@ -295,7 +383,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                 delta,
                 ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
-        );
+                                               );
 
         final CisNbtUtil.LoadChunkNbtResult loadNbt =
                 CisNbtUtil.buildLoadChunkNbt(chunkPos, chunkis$getGameDataVersion(), delta);
@@ -315,13 +403,13 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      * @param storage  CIS storage backing the world
      * @param chunkPos chunk position being loaded
      * @return resolved load delta, or {@code null} when both tracker and storage
-     * have no useful state
+     *         have no useful state
      */
     @Unique
     private ChunkDelta<BlockState, NbtCompound> chunkis$resolveDeltaForLoad(
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final ChunkPos chunkPos
-    ) {
+                                                                           ) {
         final ChunkDelta<BlockState, NbtCompound> trackedDelta = chunkis$getTrackedDelta(chunkPos);
         if (!chunkis$shouldBypassTrackedDelta(trackedDelta)) {
             chunkis$saveDirtyDelta(storage, chunkPos, trackedDelta);
@@ -349,7 +437,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkTraceReason resolvedReason,
             final String resolvedMessage,
             final String transactionEndMessage
-    ) {
+                                           ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.LOAD_SOURCE_RESOLVED,
@@ -363,7 +451,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 null,
                 delta != null && delta.isDirty(),
                 null
-        );
+                             );
         ChunkOwnershipTraceHelper.traceDecision(
                 world.getRegistryKey(),
                 chunkPos,
@@ -372,7 +460,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                 delta,
                 ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
-        );
+                                               );
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.LOAD_TX_END,
@@ -386,7 +474,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 null,
                 delta != null && delta.isDirty(),
                 null
-        );
+                             );
     }
 
     /**
@@ -401,7 +489,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos chunkPos,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final CisNbtUtil.LoadChunkNbtResult loadNbt
-    ) {
+                                              ) {
         final boolean hasPersistedBaseChunk = delta != null
                 && CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
         final boolean authoritativeFullBaseline = delta != null
@@ -433,7 +521,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     null,
                     delta.isDirty(),
                     null
-            );
+                                 );
         }
 
         ChunkTraceStore.trace(
@@ -453,7 +541,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 null,
                 delta != null && delta.isDirty(),
                 null
-        );
+                             );
 
         if (authoritativeFullBaseline
                 && loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.USED) {
@@ -470,7 +558,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     null,
                     delta.isDirty(),
                     null
-            );
+                                 );
         }
 
         if (loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.USED) {
@@ -487,7 +575,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     null,
                     delta != null && delta.isDirty(),
                     null
-            );
+                                 );
         } else if (loadNbt.baseChunkUsage() == CisNbtUtil.PersistedBaseChunkUsage.SKIPPED) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -505,7 +593,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     null,
                     delta != null && delta.isDirty(),
                     null
-            );
+                                 );
         }
 
         ChunkTraceStore.trace(
@@ -522,7 +610,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 null,
                 delta != null && delta.isDirty(),
                 null
-        );
+                             );
     }
 
     /**
@@ -566,7 +654,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 operationId,
                 null,
                 null
-        );
+                             );
         final Chunk chunk = chunkis$resolveChunkForSaving(chunkHolder);
         ChunkDelta<BlockState, NbtCompound> delta = chunkis$resolveDeltaForSave(chunk, pos);
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
@@ -581,7 +669,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 SAVE_SOURCE,
                 delta,
                 null
-        );
+                                               );
         PayloadWatchTracer.traceDeltaStage(
                 world.getRegistryKey().getValue().toString(),
                 pos,
@@ -592,7 +680,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 SAVE_SOURCE,
                 "delta entered save transaction",
                 null
-        );
+                                          );
 
         delta = chunkis$captureSnapshot(chunk, delta, operationId);
         delta = chunkis$captureStructureMetadata(chunk, delta);
@@ -609,7 +697,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     SAVE_SOURCE,
                     "delta was clean after snapshot/entity capture; async save not queued",
                     null
-            );
+                                              );
         }
 
         if (delta != null) {
@@ -642,7 +730,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     private ChunkDelta<BlockState, NbtCompound> chunkis$resolveDeltaForSave(
             final Chunk chunk,
             final ChunkPos pos
-    ) {
+                                                                           ) {
         ChunkDelta<BlockState, NbtCompound> delta = chunkis$getActiveDelta(pos);
         if (delta == null) {
             delta = chunkis$getChunkDelta(chunk);
@@ -661,7 +749,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         delta.claimOwnership(
                 ChunkTraceReason.EXPLICIT_CHUNKIS_MUTATION.name(),
                 SAVE_SOURCE + "#entityCapture"
-        );
+                            );
         return delta;
     }
 
@@ -682,7 +770,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final Chunk chunk,
             final String operationId,
             final CallbackInfoReturnable<Boolean> cir
-    ) {
+                                           ) {
         final int liveSavableEntities = chunk instanceof WorldChunk worldChunk
                 ? LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk)
                 : 0;
@@ -700,7 +788,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     operationId,
                     true,
                     null
-            );
+                                 );
         }
         if (liveSavableEntities > 0) {
             ChunkTraceStore.trace(
@@ -719,7 +807,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     operationId,
                     delta != null && delta.isDirty(),
                     null
-            );
+                                 );
         }
         ChunkOwnershipTraceHelper.traceDecision(
                 world.getRegistryKey(),
@@ -729,7 +817,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 SAVE_SOURCE,
                 delta,
                 null
-        );
+                                               );
         PendingVanillaSaveDecision.put(pos, delta, ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED);
         cir.setReturnValue(Boolean.TRUE);
     }
@@ -759,45 +847,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     @SuppressWarnings("unchecked")
     private ChunkDelta<BlockState, NbtCompound> chunkis$getActiveDelta(final ChunkPos pos) {
         return (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getActiveDelta(world, pos);
-    }
-
-    /**
-     * Returns the delta attached to {@code chunk} via {@link ChunkisDeltaDuck},
-     * or {@code null} if the chunk is {@code null} or does not implement the
-     * interface.  Fallback for chunks absent from the global tracker.
-     *
-     * @param chunk the chunk to inspect; may be {@code null}
-     * @return the attached delta, or {@code null}
-     */
-    @Unique
-    @SuppressWarnings("unchecked")
-    private static ChunkDelta<BlockState, NbtCompound> chunkis$getChunkDelta(final Chunk chunk) {
-        return chunk instanceof ChunkisDeltaDuck duck
-                ? (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta()
-                : null;
-    }
-
-    /**
-     * Resolves the best available chunk instance for saving.
-     *
-     * <p>The live world chunk is preferred; if absent, the saving future is
-     * checked without blocking.</p>
-     *
-     * @param holder the chunk holder
-     * @return the resolved chunk, or {@code null}
-     */
-    @Unique
-    private static Chunk chunkis$resolveChunkForSaving(final ChunkHolder holder) {
-        final Chunk live = holder.getWorldChunk();
-        if (live != null) {
-            return live;
-        }
-        final Object result = holder.getSavingFuture().getNow(null);
-        if (!(result instanceof Optional<?> opt)) {
-            return null;
-        }
-        final Object value = opt.orElse(null);
-        return value instanceof Chunk c ? c : null;
     }
 
     /**
@@ -849,7 +898,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                         ?
                         io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
                         : CisNbtUtil.hasPersistedPortalChunk(existingMetadata)
-        );
+                                                                                  );
 
         chunkis$updateDeltaMetadata(delta, metadata, chunk.getPos());
         return delta;
@@ -878,7 +927,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     SAVE_SOURCE,
                     "skipped full snapshot capture because chunk was not snapshot-safe",
                     null
-            );
+                                              );
             return existingDelta;
         }
 
@@ -912,7 +961,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 existingDelta,
                 operationId,
                 "ThreadedAnvilChunkStorageMixin#chunkis$captureLiveEntities"
-        );
+                                                );
     }
 
     /**
@@ -942,7 +991,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "load-path-sync",
                 "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta",
                 operationId
-        );
+                                                                                                  );
         if (deltaToSave == null) {
             return;
         }
@@ -977,7 +1026,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "save-hook-async",
                 "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                 operationId
-        );
+                                                         );
         if (deltaToQueue == null) {
             PayloadWatchTracer.traceDeltaStage(
                     world.getRegistryKey().getValue().toString(),
@@ -989,7 +1038,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                     "delta was rejected by sparse persistence guard; async save not queued",
                     null
-            );
+                                              );
             return;
         }
 
@@ -1007,14 +1056,14 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      * @param delta       candidate delta
      * @param operationId trace correlation ID
      * @return delta ready for persistence preparation, or {@code null} if queueing
-     * should stop
+     *         should stop
      */
     @Unique
     private ChunkDelta<BlockState, NbtCompound> chunkis$prepareDeltaForQueueing(
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId
-    ) {
+                                                                               ) {
         if (delta == null || !delta.isDirty()) {
             if (delta != null) {
                 PayloadWatchTracer.traceDeltaStage(
@@ -1027,7 +1076,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                         "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                         "delta was clean when queueing was attempted; async save not queued",
                         null
-                );
+                                                  );
             }
             return null;
         }
@@ -1042,7 +1091,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                     "chunk was not Chunkis-owned; async save not queued",
                     null
-            );
+                                              );
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.ASSERTIONS,
                     ChunkTraceEventType.ASSERTION_FAILED,
@@ -1056,7 +1105,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     operationId,
                     true,
                     null
-            );
+                                 );
             ChunkOwnershipTraceHelper.traceDecision(
                     world.getRegistryKey(),
                     pos,
@@ -1065,7 +1114,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                     delta,
                     null
-            );
+                                                   );
             return null;
         }
 
@@ -1077,7 +1126,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
                 delta,
                 null
-        );
+                                               );
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.SAVE_QUEUE_REQUESTED,
@@ -1091,7 +1140,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 operationId,
                 delta.isDirty(),
                 null
-        );
+                             );
         return delta;
     }
 
@@ -1117,13 +1166,13 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final String path,
             final String caller,
             final String operationId
-    ) {
+                                                                                  ) {
         final ChunkDelta<BlockState, NbtCompound> recoveredDelta = chunkis$recoverSparseDeltaOnSaveGuard(
                 pos,
                 delta,
                 caller,
                 operationId
-        );
+                                                                                                        );
         return chunkis$rejectSparse(pos, recoveredDelta, path, caller, operationId)
                 ? null
                 : recoveredDelta;
@@ -1135,7 +1184,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String caller,
             final String operationId
-    ) {
+                                                                                     ) {
         chunkis$traceBaseMetadataBeforeSaveGuard(pos, delta, caller, operationId);
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true)) {
             return delta;
@@ -1163,7 +1212,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 operationId,
                 delta.isDirty(),
                 null
-        );
+                             );
 
         if (liveChunk == null) {
             return delta;
@@ -1184,7 +1233,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 operationId,
                 recoveredDelta.isDirty(),
                 null
-        );
+                             );
         return recoveredDelta;
     }
 
@@ -1194,7 +1243,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String caller,
             final String operationId
-    ) {
+                                                         ) {
         final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -1211,7 +1260,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 operationId,
                 delta.isDirty(),
                 null
-        );
+                             );
     }
 
     /**
@@ -1248,7 +1297,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     operationId,
                     delta.isDirty(),
                     null
-            );
+                                 );
         }
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
             return false;
@@ -1266,14 +1315,14 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 operationId,
                 delta.isDirty(),
                 null
-        );
+                             );
         DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(
                 world,
                 pos,
                 delta,
                 path,
                 caller
-        );
+                                                               );
         return true;
     }
 
@@ -1297,15 +1346,10 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "Chunkis [CLOSE]: Force-saving {} remaining dirty delta(s) for {}",
                 pending.size(),
                 world.getRegistryKey().getValue()
-        );
+                           );
         for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
             chunkis$saveDirtyDelta(storage, entry.getKey(), entry.getValue());
         }
-    }
-
-    @Unique
-    private static int chunkis$getGameDataVersion() {
-        return SharedConstants.getGameVersion().dataVersion().id();
     }
 
     /**
@@ -1326,35 +1370,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     "Chunkis: Direct structure metadata extraction failed for chunk {}, " +
                             "falling back to SerializedChunk",
                     chunk.getPos(), e
-            );
+                               );
             return SerializedChunk.fromChunk(world, chunk).structureData();
-        }
-    }
-
-    /**
-     * Writes {@code metadata} into {@code delta}, preferring the pre-encoded path
-     * for performance.  Falls back to a direct set if encoding fails so structure
-     * metadata is never silently lost.
-     *
-     * @param delta    the delta to update
-     * @param metadata the metadata compound to install
-     * @param pos      the chunk position used for the fallback warning log
-     */
-    @Unique
-    private static void chunkis$updateDeltaMetadata(
-            final ChunkDelta<BlockState, NbtCompound> delta,
-            final NbtCompound metadata,
-            final ChunkPos pos) {
-        try {
-            delta.updateChunkMetadataWithEncodedPayload(
-                    metadata, CisNbtUtil.serializeRawPayload(metadata));
-        } catch (final Exception e) {
-            Chunkis.LOGGER.warn(
-                    "Chunkis: Failed to pre-encode structure metadata for chunk {}, " +
-                            "falling back to direct metadata update",
-                    pos, e
-            );
-            delta.setChunkMetadata(metadata);
         }
     }
 
@@ -1366,22 +1383,5 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     @Unique
     private CisStorage<Block, BlockState, Property<?>, NbtCompound> chunkis$getStorage() {
         return FabricCisStorageHelper.getStorage(world);
-    }
-
-    /**
-     * Returns {@code true} when a tracked in-memory delta is too weak to be
-     * authoritative for load reconstruction and storage should be consulted instead.
-     *
-     * <p>An empty clean delta with no persisted base chunk or full-block baseline
-     * is not useful reconstruction state preferring it over storage would cause
-     * Chunkis to emit synthetic {@code STATUS_EMPTY} NBT and reroll terrain.</p>
-     *
-     * @param delta the tracked delta candidate; may be {@code null}
-     * @return {@code true} when storage should be consulted instead
-     */
-    @Unique
-    private static boolean chunkis$shouldBypassTrackedDelta(
-            final ChunkDelta<BlockState, NbtCompound> delta) {
-        return delta == null || (!delta.isDirty() && delta.isEmpty());
     }
 }

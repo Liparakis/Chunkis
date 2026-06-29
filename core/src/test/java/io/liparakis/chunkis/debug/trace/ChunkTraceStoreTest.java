@@ -1,22 +1,20 @@
 package io.liparakis.chunkis.debug.trace;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
-import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
-import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
-
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class ChunkTraceStoreTest {
 
@@ -77,9 +75,9 @@ class ChunkTraceStoreTest {
 
         final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(10);
         assertThat(latest).extracting(ChunkTraceEvent::message)
-                .containsExactly("fourth", "third", "second");
+                          .containsExactly("fourth", "third", "second");
         assertThat(latest).extracting(ChunkTraceEvent::eventId)
-                .containsExactly(4L, 3L, 2L);
+                          .containsExactly(4L, 3L, 2L);
     }
 
     @Test
@@ -116,7 +114,7 @@ class ChunkTraceStoreTest {
         ));
 
         assertThat(ChunkTraceStore.snapshot()).extracting(ChunkTraceEvent::message)
-                .containsExactly("first", "second");
+                                              .containsExactly("first", "second");
     }
 
     @Test
@@ -141,7 +139,7 @@ class ChunkTraceStoreTest {
                 .containsExactly(
                         ChunkTraceEventType.ASSERTION_FAILED,
                         ChunkTraceEventType.SAVE_REJECTED
-                );
+                                );
         assertThat(ChunkTraceStore.latest(1).getFirst().message())
                 .contains("save rejected without a machine-readable reason");
     }

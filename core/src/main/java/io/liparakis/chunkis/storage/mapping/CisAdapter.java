@@ -14,9 +14,8 @@ import java.io.IOException;
  *
  * @param <S> the type representing a block state (e.g.,
  *            `net.minecraft.block.BlockState`)
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public interface CisAdapter<S> {
 

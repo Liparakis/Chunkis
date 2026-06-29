@@ -6,9 +6,16 @@ import com.mojang.brigadier.context.CommandContext;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.command.argument.Vec3ArgumentType;
 import net.minecraft.command.permission.Permission;
 import net.minecraft.command.permission.PermissionLevel;
@@ -19,14 +26,6 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
-
-import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Registers and handles the {@code /durability_test} and {@code /durability_test_stop} commands.
@@ -66,7 +65,9 @@ public final class DurabilityTestCommand {
      */
     private static final AtomicReference<String> runIdRef = new AtomicReference<>();
 
-    /** Minimum permitted interval between teleport ticks. Enforced via clamping in {@link #runTest}. */
+    /**
+     * Minimum permitted interval between teleport ticks. Enforced via clamping in {@link #runTest}.
+     */
     private static final int MIN_DELAY_MS = 10;
 
     private DurabilityTestCommand() {
@@ -87,21 +88,21 @@ public final class DurabilityTestCommand {
     public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(
                 CommandManager.literal("durability_test")
-                        .requires(source -> source.getPermissions()
-                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                        .then(CommandManager.argument("pos1", Vec3ArgumentType.vec3())
-                                .then(CommandManager.argument("pos2", Vec3ArgumentType.vec3())
-                                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
-                                                // Note: integer(1) accepts values < MIN_DELAY_MS; the floor
-                                                // is enforced by Math.max in runTest instead.
-                                                .then(CommandManager.argument("delayMs", IntegerArgumentType.integer(1))
-                                                        .executes(DurabilityTestCommand::runTest))))));
+                              .requires(source -> source.getPermissions()
+                                                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                              .then(CommandManager.argument("pos1", Vec3ArgumentType.vec3())
+                                                  .then(CommandManager.argument("pos2", Vec3ArgumentType.vec3())
+                                                                      .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
+                                                                                          // Note: integer(1) accepts values < MIN_DELAY_MS; the floor
+                                                                                          // is enforced by Math.max in runTest instead.
+                                                                                          .then(CommandManager.argument("delayMs", IntegerArgumentType.integer(1))
+                                                                                                              .executes(DurabilityTestCommand::runTest))))));
 
         dispatcher.register(
                 CommandManager.literal("durability_test_stop")
-                        .requires(source -> source.getPermissions()
-                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                        .executes(DurabilityTestCommand::stopTest));
+                              .requires(source -> source.getPermissions()
+                                                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                              .executes(DurabilityTestCommand::stopTest));
     }
 
     /**
@@ -153,9 +154,10 @@ public final class DurabilityTestCommand {
 
         traceStarted(count, delayMs, worldId(source), runId);
         source.sendFeedback(
-                () -> Text.literal("[Chunkis] Starting durability test: " + count + " cycles at " + delayMs + "ms delay"),
+                () -> Text.literal(
+                        "[Chunkis] Starting durability test: " + count + " cycles at " + delayMs + "ms delay"),
                 true
-        );
+                           );
 
         executor.scheduleAtFixedRate(
                 () -> {
@@ -178,12 +180,12 @@ public final class DurabilityTestCommand {
                                             worldId(source),
                                             null,
                                             runId
-                                    );
+                                         );
                                 }
                                 source.sendFeedback(
                                         () -> Text.literal("[Chunkis] Durability test complete."),
                                         true
-                                );
+                                                   );
                                 return;
                             }
 
@@ -206,7 +208,7 @@ public final class DurabilityTestCommand {
                                     world.getRegistryKey().getValue().toString(),
                                     toChunkKey(target),
                                     runId
-                            );
+                                 );
                             player.teleport(
                                     world,
                                     target.x,
@@ -216,14 +218,14 @@ public final class DurabilityTestCommand {
                                     player.getYaw(),
                                     player.getPitch(),
                                     false
-                            );
+                                           );
                         } catch (final Exception exception) {
                             if (shutdownAndClear(executor, runId)) {
                                 traceFailed(exception.getMessage(), worldId(source), runId);
                             }
                             source.sendError(
                                     Text.literal("[Chunkis] Durability test failed: " + exception.getMessage())
-                            );
+                                            );
                         } finally {
                             // Reset the guard so the next executor tick can dispatch again.
                             teleportQueued.set(false);
@@ -233,7 +235,7 @@ public final class DurabilityTestCommand {
                 0,
                 delayMs,
                 TimeUnit.MILLISECONDS
-        );
+                                    );
 
         return 1;
     }
@@ -292,7 +294,7 @@ public final class DurabilityTestCommand {
                 null,
                 null,
                 runId
-        );
+             );
         return true;
     }
 
@@ -365,7 +367,7 @@ public final class DurabilityTestCommand {
                 worldId,
                 null,
                 operationId
-        );
+             );
     }
 
     /**
@@ -385,7 +387,7 @@ public final class DurabilityTestCommand {
                 worldId,
                 null,
                 operationId
-        );
+             );
     }
 
     /**
@@ -408,7 +410,7 @@ public final class DurabilityTestCommand {
             final String worldId,
             final DebugChunkKey chunkKey,
             final String operationId
-    ) {
+                             ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 eventType,
@@ -422,6 +424,6 @@ public final class DurabilityTestCommand {
                 operationId,
                 null,
                 null
-        );
+                             );
     }
 }

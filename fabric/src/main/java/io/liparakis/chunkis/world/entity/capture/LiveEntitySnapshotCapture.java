@@ -9,6 +9,11 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -17,8 +22,6 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
-
-import java.util.*;
 
 /**
  * Captures a snapshot of live, savable entities in a chunk and writes them into
@@ -71,8 +74,9 @@ public final class LiveEntitySnapshotCapture {
 
         if (shouldSkipEntityCapture(chunk, existingDelta, liveEntities)) {
             PayloadWatchTracer.traceDeltaStage(world.getRegistryKey().getValue().toString(), chunkPos, existingDelta,
-                    operationId, ChunkTraceEventType.WATCH_SKIPPED, "save-entity-capture-unsafe", source, "preserved "
-                            + "existing entity payload because live entity state was transient or suspiciously empty"
+                                               operationId, ChunkTraceEventType.WATCH_SKIPPED, "save-entity-capture-unsafe", source,
+                                               "preserved "
+                                                       + "existing entity payload because live entity state was transient or suspiciously empty"
                     , null);
             return existingDelta;
         }
@@ -103,14 +107,18 @@ public final class LiveEntitySnapshotCapture {
         copyUnresolvedPendingEntities(existingDelta, liveEntityUuids, delta);
 
         ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.SAVE_TX_START,
-                ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, source,
-                "entity capture scanned live=" + liveEntities.size() + ", serialized=" + capturedNbts.size() + ", " + "retainedPending=" + delta.countPendingEntities(), world.getRegistryKey().getValue().toString(), new DebugChunkKey(chunkPos.x, chunkPos.z), null, null, delta.isDirty(), null);
+                              ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, source,
+                              "entity capture scanned live=" + liveEntities.size() + ", serialized="
+                                      + capturedNbts.size() + ", " + "retainedPending="
+                                      + delta.countPendingEntities(), world.getRegistryKey().getValue().toString(), new DebugChunkKey(chunkPos.x, chunkPos.z), null, null, delta.isDirty(), null);
         PayloadWatchTracer.traceCapturedEntities(world, chunkPos, capturedNbts);
 
         if (existingDelta != null && delta.countPendingEntities() != 0) {
             PayloadWatchTracer.traceDeltaStage(world.getRegistryKey().getValue().toString(), chunkPos, delta, null,
-                    ChunkTraceEventType.WATCH_CAPTURED, "entity-capture-merged-pending", source, "live entity " +
-                            "capture" + " preserved unresolved pending entity payloads", null);
+                                               ChunkTraceEventType.WATCH_CAPTURED, "entity-capture-merged-pending", source,
+                                               "live entity " +
+                                                       "capture"
+                                                       + " preserved unresolved pending entity payloads", null);
         }
         return delta;
     }
@@ -130,7 +138,8 @@ public final class LiveEntitySnapshotCapture {
         final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPos);
         int count = 0;
         for (final Entity entity : world.getOtherEntities(null, searchBox)) {
-            if (entity != null && !(entity instanceof PlayerEntity) && entity.isAlive() && entity.getChunkPos().equals(chunkPos)) {
+            if (entity != null && !(entity instanceof PlayerEntity) && entity.isAlive()
+                    && entity.getChunkPos().equals(chunkPos)) {
                 count++;
             }
         }
@@ -154,7 +163,8 @@ public final class LiveEntitySnapshotCapture {
         final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPos);
         final List<Entity> liveEntities = new ArrayList<>();
         for (final Entity entity : world.getOtherEntities(null, searchBox)) {
-            if (entity == null || entity instanceof PlayerEntity || !entity.isAlive() || !entity.getChunkPos().equals(chunkPos)) {
+            if (entity == null || entity instanceof PlayerEntity || !entity.isAlive()
+                    || !entity.getChunkPos().equals(chunkPos)) {
                 continue;
             }
             liveEntities.add(entity);

@@ -2,10 +2,9 @@ package io.liparakis.chunkis.world.tracking.ownership;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
-import net.minecraft.util.math.ChunkPos;
-
 import java.util.HashMap;
 import java.util.Map;
+import net.minecraft.util.math.ChunkPos;
 
 /**
  * Carries save-path ownership snapshots into lower vanilla storage hooks on the same thread.
@@ -23,7 +22,7 @@ public final class PendingVanillaSaveDecision {
             final ChunkPos pos,
             final ChunkDelta<?, ?> delta,
             final ChunkTraceReason reason
-    ) {
+                          ) {
         PENDING.get().put(pos.toLong(), new Snapshot(delta, reason));
     }
 
@@ -35,5 +34,6 @@ public final class PendingVanillaSaveDecision {
             ChunkDelta<?, ?> delta,
             ChunkTraceReason reason
     ) {
+
     }
 }

@@ -7,11 +7,11 @@ import org.jetbrains.annotations.NotNull;
  *
  * @param x the region's X coordinate
  * @param z the region's Z coordinate
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public record RegionKey(int x, int z) {
+
     @Override
     public @NotNull String toString() {
         return "r." + x + "." + z;

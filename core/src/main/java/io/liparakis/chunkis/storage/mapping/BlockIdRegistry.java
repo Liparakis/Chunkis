@@ -5,13 +5,12 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
-
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Arrays;
 
 /**
  * Maintains the append-only block ID table used by {@link CisMapping}.
@@ -21,19 +20,32 @@ import java.util.Arrays;
  * {@code global_ids.json}; they are intentionally preserved in snapshots so
  * their numeric IDs are never reused for new blocks.
  *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 final class BlockIdRegistry<B> {
-    /** Sentinel returned by fastutil maps when a block has not been assigned an id. */
+
+    /**
+     * Sentinel returned by fastutil maps when a block has not been assigned an id.
+     */
     private static final int MISSING_BLOCK_ID = -1;
-    /** Highest representable persisted block id in the current on-disk format. */
+    /**
+     * Highest representable persisted block id in the current on-disk format.
+     */
     private static final int MAX_BLOCK_ID = 0xFFFF;
 
-    /** Identity-based mapping from currently loaded block instances to persisted numeric ids. */
+    /**
+     * Identity-based mapping from currently loaded block instances to persisted numeric ids.
+     */
     private final Reference2IntMap<B> blockToId = new Reference2IntOpenHashMap<>();
-    /** Reverse lookup from persisted numeric ids to currently loaded block instances. */
+    /**
+     * Reverse lookup from persisted numeric ids to currently loaded block instances.
+     */
     private final Int2ObjectMap<B> idToBlock = new Int2ObjectOpenHashMap<>();
+    /**
+     * Tombstones for unresolved block identifiers whose numeric ids must remain occupied.
+     */
+    private final Map<String, Integer> unresolvedIds = new HashMap<>();
     /**
      * Lock-free decode lookup table published after each resolved-id mutation.
      * Reads dominate writes, so decode paths read from this volatile array instead
@@ -46,13 +58,33 @@ final class BlockIdRegistry<B> {
      * path.
      */
     private volatile Map<B, Integer> idsByBlock = new IdentityHashMap<>();
-    /** Tombstones for unresolved block identifiers whose numeric ids must remain occupied. */
-    private final Map<String, Integer> unresolvedIds = new HashMap<>();
-
-    /** Next append-only id that will be assigned to a newly discovered block. */
+    /**
+     * Next append-only id that will be assigned to a newly discovered block.
+     */
     private int nextId = 0;
+
     BlockIdRegistry() {
         blockToId.defaultReturnValue(MISSING_BLOCK_ID);
+    }
+
+    /**
+     * Returns a stable insertion-ordered view sorted by numeric id for deterministic JSON output.
+     */
+    private static Map<String, Integer> sortByNumericId(Map<String, Integer> snapshot) {
+        Map<String, Integer> sorted = new LinkedHashMap<>();
+        snapshot.entrySet().stream()
+                .sorted(Comparator.comparingInt(Map.Entry::getValue))
+                .forEach(entry -> sorted.put(entry.getKey(), entry.getValue()));
+        return sorted;
+    }
+
+    /**
+     * Validates that an on-disk id fits within the current persisted block-id range.
+     */
+    private static void validateId(int id) {
+        if (id < 0 || id > MAX_BLOCK_ID) {
+            throw new IllegalArgumentException("Chunkis block ID out of range: " + id);
+        }
     }
 
     int getId(B block) {
@@ -66,8 +98,7 @@ final class BlockIdRegistry<B> {
             return null;
         }
 
-        @SuppressWarnings("unchecked")
-        final B block = (B) snapshot[id];
+        @SuppressWarnings("unchecked") final B block = (B) snapshot[id];
         return block;
     }
 
@@ -115,17 +146,6 @@ final class BlockIdRegistry<B> {
     }
 
     /**
-     * Returns a stable insertion-ordered view sorted by numeric id for deterministic JSON output.
-     */
-    private static Map<String, Integer> sortByNumericId(Map<String, Integer> snapshot) {
-        Map<String, Integer> sorted = new LinkedHashMap<>();
-        snapshot.entrySet().stream()
-                .sorted(Comparator.comparingInt(Map.Entry::getValue))
-                .forEach(entry -> sorted.put(entry.getKey(), entry.getValue()));
-        return sorted;
-    }
-
-    /**
      * Advances {@link #nextId} past an existing assigned id, preserving append-only allocation.
      */
     private void advanceNextId(int assignedId) {
@@ -153,14 +173,5 @@ final class BlockIdRegistry<B> {
         updatedIds.putAll(currentIds);
         updatedIds.put(block, id);
         idsByBlock = updatedIds;
-    }
-
-    /**
-     * Validates that an on-disk id fits within the current persisted block-id range.
-     */
-    private static void validateId(int id) {
-        if (id < 0 || id > MAX_BLOCK_ID) {
-            throw new IllegalArgumentException("Chunkis block ID out of range: " + id);
-        }
     }
 }

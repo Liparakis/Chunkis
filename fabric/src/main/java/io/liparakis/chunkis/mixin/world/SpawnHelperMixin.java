@@ -47,11 +47,11 @@ public class SpawnHelperMixin {
      * not {@code ServerWorld}. During generation, this is often a {@code ChunkRegion},
      * so casting to {@code ServerWorld} would fail.
      *
-     * @param world    the world access context (often ChunkRegion during generation)
-     * @param biomeEntry    the biome for spawn logic
-     * @param chunkPos the chunk position being populated
-     * @param random   the random generator for spawning
-     * @param ci       callback info to cancel population
+     * @param world      the world access context (often ChunkRegion during generation)
+     * @param biomeEntry the biome for spawn logic
+     * @param chunkPos   the chunk position being populated
+     * @param random     the random generator for spawning
+     * @param ci         callback info to cancel population
      */
     @Inject(method = "populateEntities", at = @At("HEAD"), cancellable = true)
     private static void chunkis$onPopulateEntities(

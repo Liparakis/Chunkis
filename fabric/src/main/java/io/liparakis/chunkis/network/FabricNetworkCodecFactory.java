@@ -6,9 +6,9 @@ import io.liparakis.chunkis.adapter.FabricNbtAdapter;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
-import io.liparakis.chunkis.storage.mapping.PropertyPacker;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkDecoder;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkEncoder;
+import io.liparakis.chunkis.storage.mapping.PropertyPacker;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -73,7 +73,9 @@ public final class FabricNetworkCodecFactory {
      */
     public static CisNetworkDecoder<Block, BlockState, Property<?>, NbtCompound> createDecoder() {
         final CisNetworkDecoder<Block, BlockState, Property<?>, NbtCompound> fast = decoderSingleton;
-        if (fast != null) return fast;
+        if (fast != null) {
+            return fast;
+        }
         return initDecoderSingleton();
     }
 
@@ -88,7 +90,9 @@ public final class FabricNetworkCodecFactory {
      */
     public static CisNetworkEncoder<Block, BlockState, Property<?>, NbtCompound> createEncoder() {
         final CisNetworkEncoder<Block, BlockState, Property<?>, NbtCompound> fast = encoderSingleton;
-        if (fast != null) return fast;
+        if (fast != null) {
+            return fast;
+        }
         return initEncoderSingleton();
     }
 

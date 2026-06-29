@@ -78,8 +78,8 @@ public final class CisRegionInspector {
      */
     private static RegionSpaceUsage toRegionSpaceUsage(final Path path, final RegionFile.RegionSpaceStats stats) {
         return new RegionSpaceUsage(path.getFileName().toString(), stats.physicalBytes(), stats.liveBytes(),
-                stats.reusableBytes(), stats.metadataBytes(), stats.freeBlockCount(), stats.largestFreeBlock(),
-                stats.reuseHits(), stats.reuseMisses());
+                                    stats.reusableBytes(), stats.metadataBytes(), stats.freeBlockCount(), stats.largestFreeBlock(),
+                                    stats.reuseHits(), stats.reuseMisses());
     }
 
     /**
@@ -88,6 +88,7 @@ public final class CisRegionInspector {
     public record RegionSpaceUsage(String name, long physicalBytes, long liveBytes, long reusableBytes,
                                    int metadataBytes, int freeBlockCount, int largestFreeBlock, long reuseHits,
                                    long reuseMisses) {
+
         /**
          * Returns non-live bytes excluding the fixed header and persisted metadata footer.
          */

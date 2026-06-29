@@ -12,7 +12,9 @@ import java.io.IOException;
  * @version 1
  */
 final class CompressionContext {
-    CompressionContext() {}
+
+    CompressionContext() {
+    }
 
     /**
      * Compresses data using Zstd.

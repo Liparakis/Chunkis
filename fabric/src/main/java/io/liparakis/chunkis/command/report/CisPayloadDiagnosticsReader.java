@@ -1,10 +1,13 @@
 package io.liparakis.chunkis.command.report;
 
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkEncodingKind;
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkPayloadDiagnostics;
+import io.liparakis.chunkis.command.report.StorageReportModels.RegionCoordinates;
+import io.liparakis.chunkis.command.report.StorageReportModels.SectionEncodingKind;
+import io.liparakis.chunkis.command.report.StorageReportModels.SectionPayloadDiagnostics;
 import io.liparakis.chunkis.storage.bits.BitReader;
 import io.liparakis.chunkis.storage.io.CisCompression;
 import io.liparakis.chunkis.storage.model.CisConstants;
-import io.liparakis.chunkis.command.report.StorageReportModels.*;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -52,16 +55,16 @@ public final class CisPayloadDiagnosticsReader {
         final byte[] sectionData = cursor.readBytes(sectionDataLength, "section data");
 
         final ChunkSectionPayloadAccumulator sections = inspectSectionPayloads(sectionData, sectionCount, version,
-                calculateBitsNeeded(globalPaletteSize));
+                                                                               calculateBitsNeeded(globalPaletteSize));
 
         final int blockEntities = cursor.readNonNegativeInt("block entity count");
         final ChunkEncodingKind kind = chunkEncodingKind(sections.sawUniform, sections.sawDefaultSparse,
-                sections.sawSparse, sections.sawDense);
+                                                         sections.sawSparse, sections.sawDense);
 
         return new ChunkPayloadDiagnostics(sectionCount, sections.uniformSections, sections.defaultSparseSections,
-                sections.sparseSections, sections.denseSections, blockEntities, sections.uniformBits,
-                sections.defaultSparseBits, sections.sparseBits, sections.denseBits, sections.globalBits,
-                sections.sectionReports(), kind);
+                                           sections.sparseSections, sections.denseSections, blockEntities, sections.uniformBits,
+                                           sections.defaultSparseBits, sections.sparseBits, sections.denseBits, sections.globalBits,
+                                           sections.sectionReports(), kind);
     }
 
     private static ChunkSectionPayloadAccumulator inspectSectionPayloads(final byte[] sectionData,
@@ -111,7 +114,8 @@ public final class CisPayloadDiagnosticsReader {
 
     private static void inspectDensePayloadSection(final BitReader reader,
                                                    final ChunkSectionPayloadAccumulator accumulator,
-                                                   final int sectionY, final int globalBits, final int paletteBits) throws IOException {
+                                                   final int sectionY, final int globalBits, final int paletteBits)
+            throws IOException {
         final int localSize = (int) readBits(reader, paletteBits, "local palette size");
         for (int entry = 0; entry < localSize; entry++) {
             readBits(reader, globalBits, "local palette entry");
@@ -140,7 +144,8 @@ public final class CisPayloadDiagnosticsReader {
         return 32 - Integer.numberOfLeadingZeros(maxValue - 1);
     }
 
-    public static int checkedByteCount(final int count, final int bytesPerEntry, final String field) throws IOException {
+    public static int checkedByteCount(final int count, final int bytesPerEntry, final String field)
+            throws IOException {
         if (count < 0) {
             throw new IOException("Negative " + field + " count: " + count);
         }
@@ -193,7 +198,23 @@ public final class CisPayloadDiagnosticsReader {
         return ChunkEncodingKind.UNIFORM_ONLY;
     }
 
+    public static void readFully(final FileChannel channel, final ByteBuffer buffer, final long position)
+            throws IOException {
+        long current = position;
+        while (buffer.hasRemaining()) {
+            final int read = channel.read(buffer, current);
+            if (read < 0) {
+                throw new IOException("Unexpected EOF while reading " + channel);
+            }
+            if (read == 0) {
+                throw new IOException("Read made no progress while reading " + channel);
+            }
+            current += read;
+        }
+    }
+
     public static final class RegionFileReader {
+
         private RegionFileReader() {
         }
 
@@ -215,11 +236,12 @@ public final class CisPayloadDiagnosticsReader {
             final long end = (long) offset + length;
             if (offset < HEADER_BYTES || end > fileBytes) {
                 throw new IOException("Invalid chunk range in " + regionPath.getFileName() + ": offset=" + offset +
-                        ", length=" + length + ", fileBytes=" + fileBytes);
+                                              ", length=" + length + ", fileBytes=" + fileBytes);
             }
         }
 
-        public static byte[] readChunkBytes(final FileChannel channel, final int offset, final int length) throws IOException {
+        public static byte[] readChunkBytes(final FileChannel channel, final int offset, final int length)
+                throws IOException {
             final ByteBuffer buffer = ByteBuffer.allocate(length);
             readFully(channel, buffer, offset);
             return buffer.array();
@@ -230,21 +252,8 @@ public final class CisPayloadDiagnosticsReader {
         }
     }
 
-    public static void readFully(final FileChannel channel, final ByteBuffer buffer, final long position) throws IOException {
-        long current = position;
-        while (buffer.hasRemaining()) {
-            final int read = channel.read(buffer, current);
-            if (read < 0) {
-                throw new IOException("Unexpected EOF while reading " + channel);
-            }
-            if (read == 0) {
-                throw new IOException("Read made no progress while reading " + channel);
-            }
-            current += read;
-        }
-    }
-
     private static final class ChunkSectionPayloadAccumulator {
+
         private final int globalBits;
         private final List<SectionPayloadDiagnostics> sectionReports;
         private int uniformSections;
@@ -274,17 +283,19 @@ public final class CisPayloadDiagnosticsReader {
 
         private void addDefaultSparse(final int sectionY, final int exceptionCount) {
             final long encodedBits =
-                    1L + CisConstants.BLOCK_COUNT_BITS + globalBits + CisConstants.BLOCK_COUNT_BITS + ((long) exceptionCount * (SPARSE_ENTRY_POSITION_BITS + globalBits));
+                    1L + CisConstants.BLOCK_COUNT_BITS + globalBits + CisConstants.BLOCK_COUNT_BITS + (
+                            (long) exceptionCount * (SPARSE_ENTRY_POSITION_BITS + globalBits));
             defaultSparseSections++;
             defaultSparseBits += encodedBits;
             sawDefaultSparse = true;
             sectionReports.add(new SectionPayloadDiagnostics(sectionY, SectionEncodingKind.DEFAULT_SPARSE,
-                    encodedBits, 0, 0));
+                                                             encodedBits, 0, 0));
         }
 
         private void addSparse(final int sectionY, final int blockCount) {
             final long encodedBits =
-                    1L + CisConstants.BLOCK_COUNT_BITS + ((long) blockCount * (SPARSE_ENTRY_POSITION_BITS + globalBits));
+                    1L + CisConstants.BLOCK_COUNT_BITS + ((long) blockCount * (SPARSE_ENTRY_POSITION_BITS
+                            + globalBits));
             sparseSections++;
             sparseBits += encodedBits;
             sawSparse = true;
@@ -298,7 +309,7 @@ public final class CisPayloadDiagnosticsReader {
             denseBits += encodedBits;
             sawDense = true;
             sectionReports.add(new SectionPayloadDiagnostics(sectionY, SectionEncodingKind.DENSE, encodedBits,
-                    localSize, bitsPerBlock));
+                                                             localSize, bitsPerBlock));
         }
 
         private List<SectionPayloadDiagnostics> sectionReports() {
@@ -307,6 +318,7 @@ public final class CisPayloadDiagnosticsReader {
     }
 
     private record PayloadCursor(ByteBuffer buffer) {
+
         private PayloadCursor(final byte[] buffer) {
             this(ByteBuffer.wrap(buffer));
         }
@@ -347,7 +359,7 @@ public final class CisPayloadDiagnosticsReader {
             }
             if (buffer.remaining() < bytes) {
                 throw new IOException("Malformed CIS payload: expected " + bytes + " bytes for " + field + " but " +
-                        "only" + " " + buffer.remaining() + " bytes remain");
+                                              "only" + " " + buffer.remaining() + " bytes remain");
             }
         }
     }

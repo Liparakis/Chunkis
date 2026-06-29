@@ -1,5 +1,8 @@
 package io.liparakis.chunkis.storage.io;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
@@ -7,9 +10,6 @@ import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.mapping.PropertyPacker;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -17,9 +17,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Exercises end-to-end region compaction behavior through the public storage
@@ -27,14 +26,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CisStorageCompactionTest {
 
-    /** Size of one raw region header entry used by fixture inspection helpers. */
+    /**
+     * Size of one raw region header entry used by fixture inspection helpers.
+     */
     private static final int HEADER_ENTRY_BYTES = 8;
-    /** Corrupt offset used to force compaction down the failure path. */
+    /**
+     * Corrupt offset used to force compaction down the failure path.
+     */
     private static final int INVALID_CHUNK_OFFSET = Integer.MAX_VALUE - HEADER_ENTRY_BYTES - 1;
 
-    /** Temporary filesystem sandbox for each compaction test. */
+    /**
+     * Temporary filesystem sandbox for each compaction test.
+     */
     @TempDir
     Path tempDir;
+
+    /**
+     * Reads a big-endian integer from a raw byte array.
+     */
+    private static int readInt(final byte[] data, final int offset) {
+        return ((data[offset] & 0xFF) << 24)
+                | ((data[offset + 1] & 0xFF) << 16)
+                | ((data[offset + 2] & 0xFF) << 8)
+                | (data[offset + 3] & 0xFF);
+    }
+
+    /**
+     * Writes a big-endian integer into a raw byte array.
+     */
+    private static void writeInt(final byte[] data, final int offset, final int value) {
+        data[offset] = (byte) (value >>> 24);
+        data[offset + 1] = (byte) (value >>> 16);
+        data[offset + 2] = (byte) (value >>> 8);
+        data[offset + 3] = (byte) value;
+    }
 
     @Test
     void compactRegionsRemovesSlackWithoutChangingLiveChunks() throws Exception {
@@ -102,7 +127,7 @@ class CisStorageCompactionTest {
     private CisStorage<String, String, String, String> openStorage(
             final Path storageRoot,
             final Path regionsDir
-    ) throws Exception {
+                                                                  ) throws Exception {
         final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
         final CisMapping<String, String, String> mapping = new CisMapping<>(
                 storageRoot.resolve("global_ids.json"),
@@ -114,22 +139,112 @@ class CisStorageCompactionTest {
     }
 
     /**
+     * Minimal registry adapter for string-backed block IDs.
+     */
+    private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
+
+        @Override
+        public String getId(final String block) {
+            return block;
+        }
+
+        @Override
+        public String getBlock(final String id) {
+            return id;
+        }
+
+        @Override
+        public String getAir() {
+            return "air";
+        }
+
+        @Override
+        public Collection<String> getRegisteredBlocks() {
+            return List.of("air", "stone", "dirt");
+        }
+    }
+
+    /**
+     * Minimal block-state adapter for string-backed states.
+     */
+    private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
+
+        @Override
+        public String getDefaultState(final String block) {
+            return block;
+        }
+
+        @Override
+        public String getBlock(final String state) {
+            return state;
+        }
+
+        @Override
+        public List<String> getProperties(final String block) {
+            return List.of();
+        }
+
+        @Override
+        public String getPropertyName(final String property) {
+            return property;
+        }
+
+        @Override
+        public List<Object> getPropertyValues(final String property) {
+            return List.of();
+        }
+
+        @Override
+        public int getValueIndex(final String state, final String property) {
+            return 0;
+        }
+
+        @Override
+        public String withProperty(final String state, final String property, final int i) {
+            return state;
+        }
+    }
+
+    /**
+     * Minimal NBT adapter that round-trips UTF strings for tests.
+     */
+    private static final class TestNbtAdapter implements NbtAdapter<String> {
+
+        @Override
+        public void write(final String tag, final DataOutput output) throws IOException {
+            output.writeUTF(tag);
+        }
+
+        @Override
+        public String read(final DataInput input) throws IOException {
+            return input.readUTF();
+        }
+    }
+
+    /**
      * Small harness that exercises real storage I/O while keeping fixture code
      * out of the assertions.
      */
     private final class TestStorageHarness {
-        /** Root path containing mapping files plus region storage. */
+
+        /**
+         * Root path containing mapping files plus region storage.
+         */
         private final Path storageRoot;
-        /** Directory holding generated test region files. */
+        /**
+         * Directory holding generated test region files.
+         */
         private final Path regionsDir;
-        /** Active storage instance under test. */
+        /**
+         * Active storage instance under test.
+         */
         private CisStorage<String, String, String, String> storage;
 
         private TestStorageHarness(
                 final Path storageRoot,
                 final Path regionsDir,
                 final CisStorage<String, String, String, String> storage
-        ) {
+                                  ) {
             this.storageRoot = storageRoot;
             this.regionsDir = regionsDir;
             this.storage = storage;
@@ -221,106 +336,6 @@ class CisStorageCompactionTest {
          */
         private void close() {
             storage.close();
-        }
-    }
-
-    /**
-     * Reads a big-endian integer from a raw byte array.
-     */
-    private static int readInt(final byte[] data, final int offset) {
-        return ((data[offset] & 0xFF) << 24)
-                | ((data[offset + 1] & 0xFF) << 16)
-                | ((data[offset + 2] & 0xFF) << 8)
-                | (data[offset + 3] & 0xFF);
-    }
-
-    /**
-     * Writes a big-endian integer into a raw byte array.
-     */
-    private static void writeInt(final byte[] data, final int offset, final int value) {
-        data[offset] = (byte) (value >>> 24);
-        data[offset + 1] = (byte) (value >>> 16);
-        data[offset + 2] = (byte) (value >>> 8);
-        data[offset + 3] = (byte) value;
-    }
-
-    /**
-     * Minimal registry adapter for string-backed block IDs.
-     */
-    private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
-        @Override
-        public String getId(final String block) {
-            return block;
-        }
-
-        @Override
-        public String getBlock(final String id) {
-            return id;
-        }
-
-        @Override
-        public String getAir() {
-            return "air";
-        }
-
-        @Override
-        public Collection<String> getRegisteredBlocks() {
-            return List.of("air", "stone", "dirt");
-        }
-    }
-
-    /**
-     * Minimal block-state adapter for string-backed states.
-     */
-    private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
-        @Override
-        public String getDefaultState(final String block) {
-            return block;
-        }
-
-        @Override
-        public String getBlock(final String state) {
-            return state;
-        }
-
-        @Override
-        public List<String> getProperties(final String block) {
-            return List.of();
-        }
-
-        @Override
-        public String getPropertyName(final String property) {
-            return property;
-        }
-
-        @Override
-        public List<Object> getPropertyValues(final String property) {
-            return List.of();
-        }
-
-        @Override
-        public int getValueIndex(final String state, final String property) {
-            return 0;
-        }
-
-        @Override
-        public String withProperty(final String state, final String property, final int i) {
-            return state;
-        }
-    }
-
-    /**
-     * Minimal NBT adapter that round-trips UTF strings for tests.
-     */
-    private static final class TestNbtAdapter implements NbtAdapter<String> {
-        @Override
-        public void write(final String tag, final DataOutput output) throws IOException {
-            output.writeUTF(tag);
-        }
-
-        @Override
-        public String read(final DataInput input) throws IOException {
-            return input.readUTF();
         }
     }
 }

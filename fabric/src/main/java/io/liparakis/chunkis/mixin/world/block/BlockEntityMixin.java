@@ -5,13 +5,12 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
-
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
+import io.liparakis.chunkis.world.restoration.capture.ChunkBlockEntityCapture;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
-import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
-import io.liparakis.chunkis.world.restoration.capture.ChunkBlockEntityCapture;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
@@ -79,7 +78,8 @@ public abstract class BlockEntityMixin {
             return;
         }
         if (chunk instanceof ChunkisMutationGuardDuck guardDuck
-                && guardDuck.chunkis$getMutationTrackingScope().currentCause() != ChunkMutationTrackingScope.Cause.NONE) {
+                && guardDuck.chunkis$getMutationTrackingScope().currentCause()
+                != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
         if (PendingChunkMutationSuppression.currentCause(chunk) != ChunkMutationTrackingScope.Cause.NONE) {
@@ -120,7 +120,7 @@ public abstract class BlockEntityMixin {
             delta.claimOwnership(
                     ChunkTraceReason.PLAYER_OR_COMMAND_EDIT.name(),
                     "BlockEntityMixin#handleChunkDelta"
-            );
+                                );
             ChunkOwnershipTraceHelper.traceDecision(
                     chunk.getWorld().getRegistryKey(),
                     chunk.getPos(),
@@ -129,7 +129,7 @@ public abstract class BlockEntityMixin {
                     "BlockEntityMixin#handleChunkDelta",
                     delta,
                     PendingChunkMutationSuppression.currentCause(chunk)
-            );
+                                                   );
         }
 
         BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
@@ -165,12 +165,12 @@ public abstract class BlockEntityMixin {
                     (BlockEntity) (Object) this,
                     serverWorld.getRegistryManager(),
                     delta
-            );
+                                                      );
         } catch (final Exception e) {
             Chunkis.LOGGER.error(
                     "Chunkis: Failed to proactively capture block entity NBT at {}",
                     getPos(), e
-            );
+                                );
         }
     }
 }

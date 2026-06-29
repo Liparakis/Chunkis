@@ -3,18 +3,17 @@ package io.liparakis.chunkis.world.tracking.suppression;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.WorldChunk;
-
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Tracks chunk-scoped passive load suppression before a WorldChunk instance is fully live.
@@ -43,12 +42,14 @@ public final class PendingChunkMutationSuppression {
         traceLifecycle(
                 ChunkTraceEventType.SUPPRESSION_CONTEXT_STARTED, reasonForCause(cause), source, "began pending" +
                         " suppression cause=" + cause.name().toLowerCase(), worldKey, chunkX, chunkZ
-        );
+                      );
     }
 
     public static ChunkMutationTrackingScope.Cause currentCause(final WorldChunk chunk) {
         final ChunkMutationTrackingScope.Cause cause = currentCause(chunk.getWorld().getRegistryKey(), chunk.getPos());
-        if (cause == ChunkMutationTrackingScope.Cause.BASE_APPLY && chunk.getWorld() instanceof ServerWorld serverWorld && ChunkStatus.FULL.equals(chunk.getStatus()) && serverWorld.getServer() != null && serverWorld.getServer().getThread() == Thread.currentThread()) {
+        if (cause == ChunkMutationTrackingScope.Cause.BASE_APPLY && chunk.getWorld() instanceof ServerWorld serverWorld
+                && ChunkStatus.FULL.equals(chunk.getStatus()) && serverWorld.getServer() != null
+                && serverWorld.getServer().getThread() == Thread.currentThread()) {
             end(chunk.getWorld().getRegistryKey(), chunk.getPos());
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.ASSERTIONS, ChunkTraceEventType.ASSERTION_FAILED,
@@ -59,7 +60,7 @@ public final class PendingChunkMutationSuppression {
                             chunk.getPos().x,
                             chunk.getPos().z
                     ), null, null, null, null
-            );
+                                 );
             return ChunkMutationTrackingScope.Cause.NONE;
         }
         return cause;
@@ -111,7 +112,7 @@ public final class PendingChunkMutationSuppression {
         traceLifecycle(
                 ChunkTraceEventType.SUPPRESSION_CONTEXT_ENDED, reasonForCause(removed.cause), source, "ended " +
                         "pending suppression cause=" + removed.cause.name().toLowerCase(), worldKey, chunkX, chunkZ
-        );
+                      );
     }
 
     private static ChunkTraceReason reasonForCause(final ChunkMutationTrackingScope.Cause cause) {
@@ -130,16 +131,18 @@ public final class PendingChunkMutationSuppression {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, eventType, ChunkTraceSeverity.INFO, reason, source,
                 message, worldKey.getValue().toString(), new DebugChunkKey(chunkX, chunkZ), null, null, null, null
-        );
+                             );
     }
 
     private record Key(RegistryKey<World> worldKey, int chunkX, int chunkZ) {
+
         private Key {
             Objects.requireNonNull(worldKey, "worldKey");
         }
     }
 
     private static final class Entry {
+
         private final ChunkMutationTrackingScope.Cause cause;
         private volatile boolean traced;
 

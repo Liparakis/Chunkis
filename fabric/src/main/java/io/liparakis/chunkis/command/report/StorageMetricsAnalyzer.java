@@ -1,23 +1,31 @@
 package io.liparakis.chunkis.command.report;
 
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkMixCounters;
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkPayloadDiagnostics;
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkReport;
+import io.liparakis.chunkis.command.report.StorageReportModels.DefaultSparseReport;
+import io.liparakis.chunkis.command.report.StorageReportModels.DenseComparisonAccumulator;
+import io.liparakis.chunkis.command.report.StorageReportModels.DenseSectionAnalysis;
+import io.liparakis.chunkis.command.report.StorageReportModels.DenseSectionReport;
+import io.liparakis.chunkis.command.report.StorageReportModels.EncoderInputDiagnostics;
+import io.liparakis.chunkis.command.report.StorageReportModels.RegionCoordinates;
+import io.liparakis.chunkis.command.report.StorageReportModels.RegionInspection;
+import io.liparakis.chunkis.command.report.StorageReportModels.RegionReport;
+import io.liparakis.chunkis.command.report.StorageReportModels.SectionEncodingKind;
+import io.liparakis.chunkis.command.report.StorageReportModels.SectionEncodingTotals;
+import io.liparakis.chunkis.command.report.StorageReportModels.SectionPayloadDiagnostics;
+import io.liparakis.chunkis.command.report.StorageReportModels.SectionUniformDiagnostics;
+import io.liparakis.chunkis.command.report.StorageReportModels.StorageReport;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
-import io.liparakis.chunkis.storage.io.region.CisRegionInspector;
 import io.liparakis.chunkis.storage.io.CisStorage;
+import io.liparakis.chunkis.storage.io.region.CisRegionInspector;
 import io.liparakis.chunkis.storage.model.CisChunk;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import io.liparakis.chunkis.storage.model.CisSection;
-import io.liparakis.chunkis.command.report.StorageReportModels.*;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.WorldSavePath;
-
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -33,6 +41,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.TreeMap;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.state.property.Property;
+import net.minecraft.util.WorldSavePath;
 
 public final class StorageMetricsAnalyzer {
 
@@ -46,16 +60,16 @@ public final class StorageMetricsAnalyzer {
 
     private static final Comparator<RegionReport> REGION_BY_LIVE_BYTES =
             Comparator.comparingLong(RegionReport::liveBytes)
-                    .thenComparing(RegionReport::name);
+                      .thenComparing(RegionReport::name);
 
     private static final Comparator<ChunkReport> CHUNK_BY_LIVE_BYTES =
             Comparator.comparingLong(ChunkReport::liveBytes)
-                    .thenComparing(report -> report.pos().toString());
+                      .thenComparing(report -> report.pos().toString());
 
     private static final Comparator<DenseSectionReport> DENSE_SECTION_BY_ENCODED_BYTES =
             Comparator.comparingLong(DenseSectionReport::encodedBytes)
-                    .thenComparing(report -> report.pos().toString())
-                    .thenComparingInt(DenseSectionReport::sectionY);
+                      .thenComparing(report -> report.pos().toString())
+                      .thenComparingInt(DenseSectionReport::sectionY);
 
     private StorageMetricsAnalyzer() {
         throw new AssertionError("Utility class");
@@ -89,7 +103,7 @@ public final class StorageMetricsAnalyzer {
                         storage,
                         regionPath,
                         regionSpaceByName.get(regionPath.getFileName().toString())
-                ));
+                                                   ));
             }
         }
 
@@ -98,7 +112,7 @@ public final class StorageMetricsAnalyzer {
 
     private static Map<String, CisRegionInspector.RegionSpaceUsage> indexRegionSpace(
             final Iterable<CisRegionInspector.RegionSpaceUsage> usages
-    ) {
+                                                                                    ) {
         final Map<String, CisRegionInspector.RegionSpaceUsage> byName = new HashMap<>();
         for (final CisRegionInspector.RegionSpaceUsage usage : usages) {
             byName.put(usage.name(), usage);
@@ -110,7 +124,7 @@ public final class StorageMetricsAnalyzer {
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final Path regionPath,
             final CisRegionInspector.RegionSpaceUsage regionSpace
-    ) throws IOException {
+                                                 ) throws IOException {
         final RegionCoordinates coordinates = CisPayloadDiagnosticsReader.RegionFileReader.parseCoordinates(regionPath);
         final long physicalBytes = regionSpace == null ? Files.size(regionPath) : regionSpace.physicalBytes();
         final RegionScanAccumulator accumulator = new RegionScanAccumulator(
@@ -134,11 +148,11 @@ public final class StorageMetricsAnalyzer {
                 }
 
                 CisPayloadDiagnosticsReader.RegionFileReader.validateChunkRange(regionPath, offset, length,
-                        channelBytes);
+                                                                                channelBytes);
                 final var pos = FabricCisStorageHelper.toStoragePos(
                         (coordinates.x() << 5) + (slot & 31),
                         (coordinates.z() << 5) + (slot >>> 5)
-                );
+                                                                   );
 
                 final byte[] compressed = CisPayloadDiagnosticsReader.RegionFileReader.readChunkBytes(channel, offset
                         , length);
@@ -157,7 +171,7 @@ public final class StorageMetricsAnalyzer {
                         denseAnalysis,
                         encoderInput,
                         CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata())
-                );
+                                    );
             }
         }
 
@@ -216,7 +230,7 @@ public final class StorageMetricsAnalyzer {
             final CisChunkPos pos,
             final ChunkPayloadDiagnostics payload,
             final CisChunk<BlockState> chunk
-    ) {
+                                                            ) {
         final Map<Integer, Integer> paletteSizes = new TreeMap<>();
         final Map<Integer, Integer> bitsPerBlock = new TreeMap<>();
         final BoundedTopList<DenseSectionReport> largestSections =
@@ -385,12 +399,12 @@ public final class StorageMetricsAnalyzer {
         }
 
         return counts.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer> comparingByValue().reversed()
-                        .thenComparing(Map.Entry::getKey))
-                .limit(limit)
-                .map(entry -> entry.getKey() + " x" + entry.getValue())
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("n/a");
+                     .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                                      .thenComparing(Map.Entry::getKey))
+                     .limit(limit)
+                     .map(entry -> entry.getKey() + " x" + entry.getValue())
+                     .reduce((left, right) -> left + ", " + right)
+                     .orElse("n/a");
     }
 
     private static void mergeCounts(final Map<Integer, Integer> target, final Map<Integer, Integer> source) {
@@ -422,6 +436,7 @@ public final class StorageMetricsAnalyzer {
     }
 
     private static final class WorldScanAccumulator {
+
         private final Path chunkisDir;
         private final Path vanillaDir;
         private final long vanillaBytes;
@@ -457,7 +472,7 @@ public final class StorageMetricsAnalyzer {
                 final Path vanillaDir,
                 final long vanillaBytes,
                 final int topRegions
-        ) {
+                                    ) {
             this.chunkisDir = chunkisDir;
             this.vanillaDir = vanillaDir;
             this.vanillaBytes = vanillaBytes;
@@ -549,6 +564,7 @@ public final class StorageMetricsAnalyzer {
     }
 
     private static final class RegionScanAccumulator {
+
         private final String regionName;
         private final long fileBytes;
         private final CisRegionInspector.RegionSpaceUsage regionSpace;
@@ -575,7 +591,7 @@ public final class StorageMetricsAnalyzer {
                 final String regionName,
                 final long fileBytes,
                 final CisRegionInspector.RegionSpaceUsage regionSpace
-        ) {
+                                     ) {
             this.regionName = regionName;
             this.fileBytes = fileBytes;
             this.regionSpace = regionSpace;
@@ -588,7 +604,7 @@ public final class StorageMetricsAnalyzer {
                 final DenseSectionAnalysis denseAnalysis,
                 final EncoderInputDiagnostics uniformDiagnostics,
                 final boolean hasBaseNbt
-        ) {
+                             ) {
             storedChunks++;
             this.liveBytes += liveBytes;
             if (hasBaseNbt) {
@@ -662,6 +678,7 @@ public final class StorageMetricsAnalyzer {
     }
 
     private static final class BoundedTopList<T> {
+
         private final int capacity;
         private final Comparator<T> ascendingComparator;
         private final PriorityQueue<T> heap;

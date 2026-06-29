@@ -20,7 +20,7 @@ final class ChunkMetadataEnvelope {
             final boolean fullBlockBaseline,
             final NbtCompound baseChunkNbt,
             final boolean portalChunk
-    ) {
+                             ) {
         final NbtCompound metadata = new NbtCompound();
 
         if (structureData != null && !structureData.isEmpty()) {
@@ -37,8 +37,8 @@ final class ChunkMetadataEnvelope {
                         suppressInitialRepopulation,
                         fullBlockBaseline,
                         portalChunk
-                )
-        );
+                                     )
+                    );
 
         return metadata;
     }
@@ -47,20 +47,20 @@ final class ChunkMetadataEnvelope {
             final boolean suppressInitialRepopulation,
             final boolean fullBlockBaseline,
             final boolean portalChunk
-    ) {
+                                                    ) {
         final NbtCompound chunkisMetadata = new NbtCompound();
         chunkisMetadata.putBoolean(
                 CisNbtUtil.SUPPRESS_INITIAL_REPOPULATION_KEY,
                 suppressInitialRepopulation
-        );
+                                  );
         chunkisMetadata.putBoolean(
                 CisNbtUtil.FULL_BLOCK_BASELINE_KEY,
                 fullBlockBaseline
-        );
+                                  );
         chunkisMetadata.putBoolean(
                 CisNbtUtil.PORTAL_CHUNK_KEY,
                 portalChunk
-        );
+                                  );
         return chunkisMetadata;
     }
 }

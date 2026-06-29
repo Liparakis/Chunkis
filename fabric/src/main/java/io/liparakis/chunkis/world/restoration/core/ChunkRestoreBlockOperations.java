@@ -3,6 +3,7 @@ package io.liparakis.chunkis.world.restoration.core;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
+import java.util.Set;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.util.math.BlockPos;
@@ -11,8 +12,6 @@ import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
-
-import java.util.Set;
 
 /**
  * Low-level block-grid mutation helpers used during chunk restore.
@@ -81,7 +80,7 @@ final class ChunkRestoreBlockOperations {
             final BlockPos worldPosition,
             final FailureCounters counters,
             @Nullable final String operationId
-    ) {
+                                   ) {
         final BlockState previousState = chunk.getBlockState(worldPosition);
         PayloadWatchTracer.traceRestoreApplyAttempt(
                 chunk,
@@ -90,7 +89,7 @@ final class ChunkRestoreBlockOperations {
                 state,
                 operationId,
                 "ChunkRestorer#applyBlockChange"
-        );
+                                                   );
         if (localY < chunk.getBottomY() || localY > chunk.getTopYInclusive()) {
             counters.recordOutOfBoundsY();
             PayloadWatchTracer.traceRestoreApplyFailed(
@@ -101,12 +100,12 @@ final class ChunkRestoreBlockOperations {
                     operationId,
                     "ChunkRestorer#applyBlockChange",
                     "out-of-bounds-y"
-            );
+                                                      );
             LOGGER.warn(
                     "Skipping out-of-bounds restored block at {} in chunk {}",
                     worldPosition,
                     chunkPosition
-            );
+                       );
             return false;
         }
 
@@ -123,13 +122,13 @@ final class ChunkRestoreBlockOperations {
                         operationId,
                         "ChunkRestorer#applyBlockChange",
                         "invalid-section-index"
-                );
+                                                          );
                 LOGGER.warn(
                         "Skipping restored block at {} in chunk {} with invalid section index {}",
                         worldPosition,
                         chunkPosition,
                         sectionIndex
-                );
+                           );
                 return false;
             }
 
@@ -145,13 +144,13 @@ final class ChunkRestoreBlockOperations {
                         operationId,
                         "ChunkRestorer#applyBlockChange",
                         "null-section"
-                );
+                                                          );
                 LOGGER.warn(
                         "Skipping restored block at {} in chunk {} because section {} is null",
                         worldPosition,
                         chunkPosition,
                         sectionIndex
-                );
+                           );
                 return false;
             }
 
@@ -163,7 +162,7 @@ final class ChunkRestoreBlockOperations {
                     state,
                     operationId,
                     "ChunkRestorer#applyBlockChange"
-            );
+                                                           );
             PayloadWatchTracer.traceRestoreStateAfterSetBlock(
                     chunk,
                     worldPosition,
@@ -171,7 +170,7 @@ final class ChunkRestoreBlockOperations {
                     state,
                     operationId,
                     "ChunkRestorer#applyBlockChange"
-            );
+                                                             );
 
             if (!state.hasBlockEntity()) {
                 removeStaleBlockEntityData(chunk, worldPosition);
@@ -188,13 +187,13 @@ final class ChunkRestoreBlockOperations {
                     operationId,
                     "ChunkRestorer#applyBlockChange",
                     "exception"
-            );
+                                                      );
             LOGGER.error(
                     "Failed to restore block at {} in chunk {}",
                     worldPosition,
                     chunkPosition,
                     e
-            );
+                        );
             return false;
         }
     }
@@ -202,7 +201,7 @@ final class ChunkRestoreBlockOperations {
     private static void removeStaleBlockEntityData(
             final WorldChunk chunk,
             final BlockPos worldPosition
-    ) {
+                                                  ) {
         removePendingBlockEntityNbt(chunk, worldPosition);
         removeLiveBlockEntity(chunk, worldPosition);
     }
@@ -210,7 +209,7 @@ final class ChunkRestoreBlockOperations {
     private static void removePendingBlockEntityNbt(
             final WorldChunk chunk,
             final BlockPos worldPosition
-    ) {
+                                                   ) {
         ((ChunkBlockEntityNbtAccessor) chunk)
                 .chunkis$getBlockEntityNbts()
                 .remove(worldPosition);
@@ -219,7 +218,7 @@ final class ChunkRestoreBlockOperations {
     private static void removeLiveBlockEntity(
             final WorldChunk chunk,
             final BlockPos worldPosition
-    ) {
+                                             ) {
         chunk.getBlockEntities().remove(worldPosition);
         chunk.removeBlockEntity(worldPosition);
     }

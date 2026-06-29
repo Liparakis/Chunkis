@@ -1,19 +1,18 @@
 package io.liparakis.chunkis.debug.watch;
 
-import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
-import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class ChunkTraceWatchpointsTest {
 
@@ -106,7 +105,7 @@ class ChunkTraceWatchpointsTest {
         final PayloadWatchTarget entityTarget = PayloadWatchTarget.entity(
                 "minecraft:overworld",
                 "123e4567-e89b-12d3-a456-426614174000"
-        );
+                                                                         );
         ChunkTraceWatchpoints.watchPayload(blockTarget);
         ChunkTraceWatchpoints.watchPayload(entityTarget);
 
@@ -132,7 +131,7 @@ class ChunkTraceWatchpointsTest {
         assertThat(ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 "minecraft:overworld",
                 new DebugChunkKey(0, -1)
-        )).containsExactly(blockTarget);
+                                                                )).containsExactly(blockTarget);
         assertThat(ChunkTraceWatchpoints.watchedPayloads()).containsExactly(blockTarget, entityTarget);
     }
 }

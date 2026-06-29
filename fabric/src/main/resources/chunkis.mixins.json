@@ -1,25 +1,25 @@
 {
-  "required": true,
-  "package": "io.liparakis.chunkis.mixin",
-  "compatibilityLevel": "JAVA_21",
-  "mixins": [
-    "accessor.ChunkBlockEntityNbtAccessor",
-    "world.chunk.CommonChunkMixin",
-    "storage.ChunkSerializerMixin",
-    "world.block.LeavesBlockMixin",
-    "world.block.NetherPortalBlockMixin",
-    "storage.StoragePreventionMixin",
-    "storage.ThreadedAnvilChunkStorageMixin",
-    "world.chunk.WorldChunkMixin",
-    "network.ChunkHolderMixin",
-    "world.SpawnHelperMixin",
-    "world.server.ServerWorldMixin",
-    "world.block.BlockEntityMixin",
-    "world.entity.EntityMixin",
-    "world.ChunkRegionMixin",
-    "world.dimension.PortalForcerMixin"
-  ],
-  "injectors": {
-    "defaultRequire": 1
-  }
+    "required": true,
+    "package": "io.liparakis.chunkis.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "accessor.ChunkBlockEntityNbtAccessor",
+        "network.ChunkHolderMixin",
+        "storage.ChunkSerializerMixin",
+        "storage.StoragePreventionMixin",
+        "storage.ThreadedAnvilChunkStorageMixin",
+        "world.ChunkRegionMixin",
+        "world.SpawnHelperMixin",
+        "world.block.BlockEntityMixin",
+        "world.block.LeavesBlockMixin",
+        "world.block.NetherPortalBlockMixin",
+        "world.chunk.CommonChunkMixin",
+        "world.chunk.WorldChunkMixin",
+        "world.dimension.PortalForcerMixin",
+        "world.entity.EntityMixin",
+        "world.server.ServerWorldMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
 }

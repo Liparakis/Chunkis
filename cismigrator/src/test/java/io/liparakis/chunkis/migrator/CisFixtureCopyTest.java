@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.migrator;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -12,9 +12,8 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.Inflater;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Verifies that the V8 CIS fixture files can be copied into isolated temporary
@@ -23,10 +22,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class CisFixtureCopyTest {
 
-    /** Root directory name for version 8 fixtures in the resources folder. */
+    /**
+     * Root directory name for version 8 fixtures in the resources folder.
+     */
     private static final String FIXTURE_ROOT = "V8";
 
-    /** List of expected region file names within the fixture. */
+    /**
+     * List of expected region file names within the fixture.
+     */
     private static final String[] REGION_FILES = {
             "r.-1.0.cis",
             "r.-1.1.cis",
@@ -34,21 +37,78 @@ class CisFixtureCopyTest {
             "r.0.1.cis"
     };
 
-    /** Inflate/deflate/hash buffer size; large enough to avoid repeated array grows. */
+    /**
+     * Inflate/deflate/hash buffer size; large enough to avoid repeated array grows.
+     */
     private static final int IO_BUFFER_SIZE = 8192;
 
-    /** Bytes per chunk header entry (offset int + length int). */
+    /**
+     * Bytes per chunk header entry (offset int + length int).
+     */
     private static final int HEADER_ENTRY_BYTES = 8;
 
-    /** Number of chunk slots per region file (32 × 32). */
+    /**
+     * Number of chunk slots per region file (32 × 32).
+     */
     private static final int REGION_SLOTS = 1024;
 
-    /** Temporary directory for storing isolated fixture copies. */
+    /**
+     * Temporary directory for storing isolated fixture copies.
+     */
     @TempDir
     Path tempDir;
 
     // -------------------------------------------------------------------------
     // Test
+    // -------------------------------------------------------------------------
+
+    /**
+     * Converts a byte array to a hex-encoded string.
+     */
+    private static String toHex(final byte[] bytes) {
+        final StringBuilder builder = new StringBuilder(bytes.length * 2);
+        for (final byte b : bytes) {
+            builder.append(Character.forDigit((b >>> 4) & 0xF, 16));
+            builder.append(Character.forDigit(b & 0xF, 16));
+        }
+        return builder.toString();
+    }
+
+    // -------------------------------------------------------------------------
+    // Fixture setup
+    // -------------------------------------------------------------------------
+
+    /**
+     * Inflates a zlib-compressed byte array.
+     */
+    private static byte[] inflate(final byte[] compressed) throws Exception {
+        final Inflater inflater = new Inflater();
+        inflater.setInput(compressed);
+
+        final byte[] buffer = new byte[IO_BUFFER_SIZE];
+        final ByteArrayOutputStream output = new ByteArrayOutputStream();
+        while (!inflater.finished()) {
+            final int read = inflater.inflate(buffer);
+            if (read == 0 && inflater.needsInput()) {
+                break;
+            }
+            output.write(buffer, 0, read);
+        }
+        return output.toByteArray();
+    }
+
+    /**
+     * Reads a big-endian 4-byte integer from the provided byte array.
+     */
+    private static int readInt(final byte[] data, final int offset) {
+        return ((data[offset] & 0xFF) << 24)
+                | ((data[offset + 1] & 0xFF) << 16)
+                | ((data[offset + 2] & 0xFF) << 8)
+                | (data[offset + 3] & 0xFF);
+    }
+
+    // -------------------------------------------------------------------------
+    // Hashing
     // -------------------------------------------------------------------------
 
     /**
@@ -66,12 +126,8 @@ class CisFixtureCopyTest {
         copiedVersions.forEach(version -> assertEquals(8, version));
 
         assertEquals(originalHashes, hashFixtureFiles(),
-                "Fixture hashes changed even though the test should only copy them into temp storage");
+                     "Fixture hashes changed even though the test should only copy them into temp storage");
     }
-
-    // -------------------------------------------------------------------------
-    // Fixture setup
-    // -------------------------------------------------------------------------
 
     /**
      * Copies the static V8 test resources into the temporary test directory.
@@ -104,7 +160,7 @@ class CisFixtureCopyTest {
     }
 
     // -------------------------------------------------------------------------
-    // Hashing
+    // Region scanning
     // -------------------------------------------------------------------------
 
     /**
@@ -141,22 +197,6 @@ class CisFixtureCopyTest {
     }
 
     /**
-     * Converts a byte array to a hex-encoded string.
-     */
-    private static String toHex(final byte[] bytes) {
-        final StringBuilder builder = new StringBuilder(bytes.length * 2);
-        for (final byte b : bytes) {
-            builder.append(Character.forDigit((b >>> 4) & 0xF, 16));
-            builder.append(Character.forDigit(b & 0xF, 16));
-        }
-        return builder.toString();
-    }
-
-    // -------------------------------------------------------------------------
-    // Region scanning
-    // -------------------------------------------------------------------------
-
-    /**
      * Reads every non-empty chunk slot from each region file and returns the
      * decoded version field (bytes 4–7 of the raw payload).
      *
@@ -185,34 +225,5 @@ class CisFixtureCopyTest {
         }
 
         return versions;
-    }
-
-    /**
-     * Inflates a zlib-compressed byte array.
-     */
-    private static byte[] inflate(final byte[] compressed) throws Exception {
-        final Inflater inflater = new Inflater();
-        inflater.setInput(compressed);
-
-        final byte[] buffer = new byte[IO_BUFFER_SIZE];
-        final ByteArrayOutputStream output = new ByteArrayOutputStream();
-        while (!inflater.finished()) {
-            final int read = inflater.inflate(buffer);
-            if (read == 0 && inflater.needsInput()) {
-                break;
-            }
-            output.write(buffer, 0, read);
-        }
-        return output.toByteArray();
-    }
-
-    /**
-     * Reads a big-endian 4-byte integer from the provided byte array.
-     */
-    private static int readInt(final byte[] data, final int offset) {
-        return ((data[offset] & 0xFF) << 24)
-                | ((data[offset + 1] & 0xFF) << 16)
-                | ((data[offset + 2] & 0xFF) << 8)
-                | (data[offset + 3] & 0xFF);
     }
 }

@@ -7,7 +7,6 @@ package io.liparakis.chunkis.migrator;
  * @param migratedChunks total chunks rewritten to the target format
  * @param skippedChunks  chunk positions that were valid but needed no migration
  * @param failedChunks   chunk positions that failed to migrate
- *
  * @author Liparakis
  * @version 1.0
  *
@@ -17,6 +16,15 @@ public record CisMigrationReport(
         int migratedChunks,
         int skippedChunks,
         int failedChunks) {
+
+    /**
+     * Returns an empty migration report with all counters set to zero.
+     *
+     * @return empty report
+     */
+    public static CisMigrationReport empty() {
+        return new CisMigrationReport(0, 0, 0, 0);
+    }
 
     /**
      * Returns a new report with one additional migrated chunk.
@@ -43,14 +51,5 @@ public record CisMigrationReport(
      */
     public CisMigrationReport addFailure() {
         return new CisMigrationReport(scannedChunks + 1, migratedChunks, skippedChunks, failedChunks + 1);
-    }
-
-    /**
-     * Returns an empty migration report with all counters set to zero.
-     *
-     * @return empty report
-     */
-    public static CisMigrationReport empty() {
-        return new CisMigrationReport(0, 0, 0, 0);
     }
 }

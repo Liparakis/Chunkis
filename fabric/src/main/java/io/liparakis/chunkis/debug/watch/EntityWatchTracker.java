@@ -7,13 +7,12 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.math.ChunkPos;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Tracks watched entity transfer and reload assertions across chunk unload/load boundaries.
@@ -61,7 +60,7 @@ public final class EntityWatchTracker {
                     PayloadWatchTarget.entity(entry.getKey().worldId, entry.getKey().entityUuid),
                     "entity-unload-timeout",
                     "entity@" + entry.getKey().entityUuid + " world=" + entry.getKey().worldId
-            );
+                                 );
         }
     }
 
@@ -69,11 +68,11 @@ public final class EntityWatchTracker {
             final PayloadWatchTarget target,
             final String stage,
             final ChunkPos chunkPos
-    ) {
+                                   ) {
         final EntityWatchState state = ENTITY_WATCH_STATE.computeIfAbsent(
                 new EntityWatchKey(target.worldId(), target.entityUuid()),
                 ignored -> new EntityWatchState()
-        );
+                                                                         );
         state.lastKnownChunkX = chunkPos.x;
         state.lastKnownChunkZ = chunkPos.z;
         state.hasKnownChunk = true;
@@ -91,7 +90,7 @@ public final class EntityWatchTracker {
     public static void clearPendingReload(final PayloadWatchTarget target) {
         final EntityWatchState state = ENTITY_WATCH_STATE.get(
                 new EntityWatchKey(target.worldId(), target.entityUuid())
-        );
+                                                             );
         if (state != null) {
             state.unloadedWithoutReload = false;
             state.asserted = false;
@@ -102,7 +101,7 @@ public final class EntityWatchTracker {
         final EntityWatchState state = ENTITY_WATCH_STATE.computeIfAbsent(
                 new EntityWatchKey(target.worldId(), target.entityUuid()),
                 ignored -> new EntityWatchState()
-        );
+                                                                         );
         state.lastKnownChunkX = chunkPos.x;
         state.lastKnownChunkZ = chunkPos.z;
         state.hasKnownChunk = true;
@@ -112,10 +111,10 @@ public final class EntityWatchTracker {
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target
-    ) {
+                                             ) {
         final EntityWatchState state = ENTITY_WATCH_STATE.get(
                 new EntityWatchKey(worldId, target.entityUuid())
-        );
+                                                             );
         return state == null
                 || !state.hasKnownChunk
                 || (state.lastKnownChunkX == chunkPos.x && state.lastKnownChunkZ == chunkPos.z);
@@ -127,10 +126,10 @@ public final class EntityWatchTracker {
             final PayloadWatchTarget target,
             @Nullable final String operationId,
             @Nullable final Entity liveEntity
-    ) {
+                                                ) {
         final EntityWatchState state = ENTITY_WATCH_STATE.get(
                 new EntityWatchKey(worldId, target.entityUuid())
-        );
+                                                             );
         if (state == null || !state.unloadedWithoutReload || liveEntity != null || state.asserted) {
             return;
         }
@@ -152,13 +151,15 @@ public final class EntityWatchTracker {
                 target,
                 "chunk-full-entity",
                 target.describe()
-        );
+                             );
     }
 
     private record EntityWatchKey(String worldId, String entityUuid) {
+
     }
 
     private static final class EntityWatchState {
+
         private volatile boolean unloadedWithoutReload;
         private volatile boolean asserted;
         private volatile long unloadTick;

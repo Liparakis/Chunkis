@@ -7,14 +7,13 @@ import io.liparakis.chunkis.migrator.CisVersionMap;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Objects;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.WorldSavePath;
 import org.slf4j.Logger;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Objects;
 
 /**
  * Upgrades existing CIS region files to the latest CIS format version.
@@ -71,7 +70,7 @@ public final class CisWorldMigrator {
                     report.migratedChunks(),
                     report.skippedChunks(),
                     report.failedChunks()
-            );
+                       );
         }
 
         return report;

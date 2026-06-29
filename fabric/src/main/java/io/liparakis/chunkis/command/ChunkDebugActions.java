@@ -1,23 +1,18 @@
 package io.liparakis.chunkis.command;
 
 import io.liparakis.chunkis.Chunkis;
-import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
-import io.liparakis.chunkis.debug.trace.ChunkTraceJsonl;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
-import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
-import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
+import io.liparakis.chunkis.debug.trace.ChunkTraceJsonl;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Text;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.ChunkPos;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,6 +21,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.text.Text;
+import net.minecraft.util.WorldSavePath;
+import net.minecraft.util.math.ChunkPos;
 
 public final class ChunkDebugActions {
 
@@ -115,7 +114,7 @@ public final class ChunkDebugActions {
         sendFeedback(
                 source, "[Chunkis] Retained suspect timeline for " + suspectId + " (" + timeline.size() + " " +
                         "events)", false
-        );
+                    );
         for (final ChunkTraceEvent event : timeline) {
             sendFeedback(source, ChunkDebugCommand.formatEvent(event), false);
         }
@@ -229,7 +228,7 @@ public final class ChunkDebugActions {
         return exportEvents(
                 source, ChunkTraceStore.snapshotMatching(ChunkTraceWatchpoints::matches),
                 "watched-" + count, count, true
-        );
+                           );
     }
 
     private static int exportEvents(
@@ -239,7 +238,7 @@ public final class ChunkDebugActions {
             sendFeedback(
                     source, watched ? ChunkDebugCommand.formatNoWatchedTraceMessage() : "[Chunkis] No trace " +
                                                                                         "events stored.", false
-            );
+                        );
             return 1;
         }
         final int fromIndex = Math.max(0, oldestFirst.size() - count);
@@ -267,7 +266,8 @@ public final class ChunkDebugActions {
         while (end > 0 && (encoded[end] & 0xC0) == 0x80) {
             end--;
         }
-        return new ChunkDebugCommand.ChatMessage(new String(encoded, 0, end, StandardCharsets.UTF_8) + CHAT_TRUNCATION_SUFFIX_PADDED, true);
+        return new ChunkDebugCommand.ChatMessage(
+                new String(encoded, 0, end, StandardCharsets.UTF_8) + CHAT_TRUNCATION_SUFFIX_PADDED, true);
     }
 
     private static void sendFeedback(
@@ -283,7 +283,8 @@ public final class ChunkDebugActions {
 
     private static Path writeOversizedChatDump(final ServerCommandSource source, final String message) {
         final Path path =
-                resolveExportPath(source, "chat-dump").resolveSibling("trace-chat-dump-" + FILE_TIME_FORMAT.format(Instant.now()) + ".txt");
+                resolveExportPath(source, "chat-dump").resolveSibling(
+                        "trace-chat-dump-" + FILE_TIME_FORMAT.format(Instant.now()) + ".txt");
         try {
             Files.createDirectories(path.getParent());
             Files.writeString(path, message, StandardCharsets.UTF_8);
@@ -295,7 +296,8 @@ public final class ChunkDebugActions {
 
     static Path resolveExportPath(final ServerCommandSource source, final String scope) {
         final Path saveRoot = source.getServer().getSavePath(WorldSavePath.ROOT);
-        return saveRoot.resolve("chunkis/debug").resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
+        return saveRoot.resolve("chunkis/debug").resolve(
+                "trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
     }
 
     private static int sendEventsOldestFirst(

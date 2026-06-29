@@ -1,48 +1,21 @@
 package io.liparakis.chunkis.command;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import io.liparakis.chunkis.command.report.CisPayloadDiagnosticsReader;
-import io.liparakis.chunkis.command.report.StorageReportModels.ChunkPayloadDiagnostics;
 import io.liparakis.chunkis.command.report.StorageReportModels.ChunkEncodingKind;
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkPayloadDiagnostics;
 import io.liparakis.chunkis.command.report.StorageReportModels.SectionPayloadDiagnostics;
 import io.liparakis.chunkis.storage.bits.BitWriter;
 import io.liparakis.chunkis.storage.model.CisConstants;
-import org.junit.jupiter.api.Test;
-
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
 
 /**
  * Verifies raw payload diagnostics used by {@link StorageReportCommand}.
  */
 class StorageReportCommandTest {
-
-    @Test
-    void inspectsSectionEncodingsAndBlockEntitiesFromRawChunkPayload() throws Exception {
-        final byte[] payload = buildChunkPayload();
-
-        final ChunkPayloadDiagnostics diagnostics =
-                CisPayloadDiagnosticsReader.inspectChunkPayload(payload);
-
-        assertEquals(4, diagnostics.totalSections());
-        assertEquals(1, diagnostics.uniformSections());
-        assertEquals(1, diagnostics.sparseSections());
-        assertEquals(1, diagnostics.denseSections());
-        assertEquals(1, diagnostics.defaultSparseSections());
-        assertEquals(2, diagnostics.blockEntities());
-        assertEquals(ChunkEncodingKind.MIXED, diagnostics.chunkEncodingKind());
-        assertEquals(16, diagnostics.uniformSectionBits());
-        assertEquals(42, diagnostics.sparseSectionBits());
-        assertEquals(8209, diagnostics.denseSectionBits());
-        assertEquals(57, diagnostics.defaultSparseSectionBits());
-        assertEquals(2, diagnostics.globalBits());
-        assertEquals(4, diagnostics.sections().size());
-        final SectionPayloadDiagnostics denseSection = diagnostics.sections().get(3);
-        assertEquals(7, denseSection.sectionY());
-        assertEquals(2, denseSection.localPaletteSize());
-        assertEquals(2, denseSection.bitsPerBlock());
-    }
 
     /**
      * Builds a minimal raw CIS payload that exercises uniform, sparse,
@@ -105,5 +78,31 @@ class StorageReportCommandTest {
         }
 
         return out.toByteArray();
+    }
+
+    @Test
+    void inspectsSectionEncodingsAndBlockEntitiesFromRawChunkPayload() throws Exception {
+        final byte[] payload = buildChunkPayload();
+
+        final ChunkPayloadDiagnostics diagnostics =
+                CisPayloadDiagnosticsReader.inspectChunkPayload(payload);
+
+        assertEquals(4, diagnostics.totalSections());
+        assertEquals(1, diagnostics.uniformSections());
+        assertEquals(1, diagnostics.sparseSections());
+        assertEquals(1, diagnostics.denseSections());
+        assertEquals(1, diagnostics.defaultSparseSections());
+        assertEquals(2, diagnostics.blockEntities());
+        assertEquals(ChunkEncodingKind.MIXED, diagnostics.chunkEncodingKind());
+        assertEquals(16, diagnostics.uniformSectionBits());
+        assertEquals(42, diagnostics.sparseSectionBits());
+        assertEquals(8209, diagnostics.denseSectionBits());
+        assertEquals(57, diagnostics.defaultSparseSectionBits());
+        assertEquals(2, diagnostics.globalBits());
+        assertEquals(4, diagnostics.sections().size());
+        final SectionPayloadDiagnostics denseSection = diagnostics.sections().get(3);
+        assertEquals(7, denseSection.sectionY());
+        assertEquals(2, denseSection.localPaletteSize());
+        assertEquals(2, denseSection.bitsPerBlock());
     }
 }

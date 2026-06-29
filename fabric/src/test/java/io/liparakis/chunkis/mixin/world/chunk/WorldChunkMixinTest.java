@@ -1,24 +1,72 @@
 package io.liparakis.chunkis.mixin.world.chunk;
 
-import io.liparakis.chunkis.api.ChunkisDeltaDuck;
-import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
-import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.model.ChunkTraceReason;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
-import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
-import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
-import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-
-import java.lang.reflect.Method;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.liparakis.chunkis.api.ChunkisDeltaDuck;
+import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import java.lang.reflect.Method;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
 class WorldChunkMixinTest {
+
+    private static String invokeTakeRestoreOperationId(final ChunkisDeltaDuck duck) {
+        try {
+            final Method method = WorldChunkMixin.class
+                    .getDeclaredMethod("chunkis$takeRestoreOperationId", ChunkisDeltaDuck.class);
+            method.setAccessible(true);
+            return (String) method.invoke(null, duck);
+        } catch (final Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static void invokeTracePostRestoreFailure(
+            final String worldId,
+            final DebugChunkKey chunkKey,
+            final String operationId,
+            final String failedStage
+                                                     ) {
+        try {
+            final Method method = WorldChunkMixin.class.getDeclaredMethod(
+                    "chunkis$tracePostRestoreFailure",
+                    String.class,
+                    DebugChunkKey.class,
+                    String.class,
+                    String.class
+                                                                         );
+            method.setAccessible(true);
+            method.invoke(null, worldId, chunkKey, operationId, failedStage);
+        } catch (final Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static boolean invokeShouldMarkRestoredDeltaSaved(
+            final ChunkisDeltaDuck duck,
+            final ChunkDelta<?, ?> delta
+                                                             ) {
+        try {
+            final Method method = WorldChunkMixin.class.getDeclaredMethod(
+                    "chunkis$shouldMarkRestoredDeltaSaved",
+                    ChunkisDeltaDuck.class,
+                    ChunkDelta.class
+                                                                         );
+            method.setAccessible(true);
+            return (boolean) method.invoke(null, duck, delta);
+        } catch (final Exception e) {
+            throw new AssertionError(e);
+        }
+    }
 
     @AfterEach
     void tearDown() {
@@ -45,7 +93,7 @@ class WorldChunkMixinTest {
                 new DebugChunkKey(7, -3),
                 "load-17",
                 "portal-index-update"
-        );
+                                     );
 
         final ChunkTraceEvent event = ChunkTraceStore.latest(1).getFirst();
         assertEquals(ChunkTraceEventType.RESTORE_FAILED, event.eventType());
@@ -70,54 +118,6 @@ class WorldChunkMixinTest {
         assertTrue(!invokeShouldMarkRestoredDeltaSaved(memoryDuck, dirtyDelta));
     }
 
-    private static String invokeTakeRestoreOperationId(final ChunkisDeltaDuck duck) {
-        try {
-            final Method method = WorldChunkMixin.class
-                    .getDeclaredMethod("chunkis$takeRestoreOperationId", ChunkisDeltaDuck.class);
-            method.setAccessible(true);
-            return (String) method.invoke(null, duck);
-        } catch (final Exception e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    private static void invokeTracePostRestoreFailure(
-            final String worldId,
-            final DebugChunkKey chunkKey,
-            final String operationId,
-            final String failedStage
-    ) {
-        try {
-            final Method method = WorldChunkMixin.class.getDeclaredMethod(
-                    "chunkis$tracePostRestoreFailure",
-                    String.class,
-                    DebugChunkKey.class,
-                    String.class,
-                    String.class
-            );
-            method.setAccessible(true);
-            method.invoke(null, worldId, chunkKey, operationId, failedStage);
-        } catch (final Exception e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    private static boolean invokeShouldMarkRestoredDeltaSaved(
-            final ChunkisDeltaDuck duck,
-            final ChunkDelta<?, ?> delta
-    ) {
-        try {
-            final Method method = WorldChunkMixin.class.getDeclaredMethod(
-                    "chunkis$shouldMarkRestoredDeltaSaved",
-                    ChunkisDeltaDuck.class,
-                    ChunkDelta.class
-            );
-            method.setAccessible(true);
-            return (boolean) method.invoke(null, duck, delta);
-        } catch (final Exception e) {
-            throw new AssertionError(e);
-        }
-    }
     private static final class FakeChunkisDeltaDuck implements ChunkisDeltaDuck {
 
         private final ChunkDelta<?, ?> delta = new ChunkDelta<>();

@@ -1,23 +1,24 @@
 package io.liparakis.chunkis;
 
-import io.liparakis.chunkis.command.DurabilityTestCommand;
 import io.liparakis.chunkis.command.ChunkDebugCommand;
+import io.liparakis.chunkis.command.DurabilityTestCommand;
 import io.liparakis.chunkis.command.StorageReportCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
-import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.migration.CisWorldMigrator;
 import io.liparakis.chunkis.migration.McaMigrator;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.portal.PortalChunkIndexManager;
 import io.liparakis.chunkis.portal.PortalLinkManager;
-import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
-import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
-import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
+import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import java.util.Map;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
@@ -32,8 +33,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
 import net.minecraft.util.math.ChunkPos;
-
-import java.util.Map;
 
 /**
  * Main Fabric entrypoint for Chunkis.
@@ -58,17 +57,6 @@ import java.util.Map;
  * @version 1.2
  */
 public final class ChunkisMod implements ModInitializer {
-
-    /**
-     * Fabric common initialization hook.
-     */
-    @Override
-    public void onInitialize() {
-        registerPayloads();
-        registerCommands();
-        registerEvents();
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8));
-    }
 
     /**
      * Registers Chunkis network payloads.
@@ -171,7 +159,7 @@ public final class ChunkisMod implements ModInitializer {
         }
 
         Chunkis.LOGGER.warn("Chunkis [STOPPING]: Force-saving {} dirty delta(s) for {}", pending.size(),
-                world.getRegistryKey().getValue());
+                            world.getRegistryKey().getValue());
 
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
                 FabricCisStorageHelper.getStorage(world);
@@ -221,6 +209,17 @@ public final class ChunkisMod implements ModInitializer {
         PortalChunkIndexManager.clear();
         PortalLinkManager.clear();
         ScheduledEntityReplayQueue.clear();
+    }
+
+    /**
+     * Fabric common initialization hook.
+     */
+    @Override
+    public void onInitialize() {
+        registerPayloads();
+        registerCommands();
+        registerEvents();
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8));
     }
 }
 

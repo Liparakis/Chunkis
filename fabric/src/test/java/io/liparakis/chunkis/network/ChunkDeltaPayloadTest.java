@@ -1,17 +1,16 @@
 package io.liparakis.chunkis.network;
 
-import io.netty.buffer.Unpooled;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.registry.DynamicRegistryManager;
-import org.junit.jupiter.api.Test;
-
-import java.util.Arrays;
-
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.netty.buffer.Unpooled;
+import java.util.Arrays;
+import net.minecraft.network.RegistryByteBuf;
+import net.minecraft.registry.DynamicRegistryManager;
+import org.junit.jupiter.api.Test;
 
 /**
  * Regression coverage for the Chunkis network payload wire contract.
@@ -21,6 +20,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Fabric packet format.
  */
 class ChunkDeltaPayloadTest {
+
+    private static ChunkDeltaPayload roundTrip(ChunkDeltaPayload payload) {
+        // The payload itself does not read registries, but the Fabric packet API
+        // requires a RegistryByteBuf wrapper for the registered codec type.
+        RegistryByteBuf buf = new RegistryByteBuf(Unpooled.buffer(), DynamicRegistryManager.EMPTY);
+        ChunkDeltaPayload.CODEC.encode(buf, payload);
+        return ChunkDeltaPayload.CODEC.decode(buf);
+    }
 
     @Test
     void smallPayloadStaysUncompressedAndIsCopied() {
@@ -77,13 +84,5 @@ class ChunkDeltaPayloadTest {
         assertTrue(decoded.compressed());
         assertEquals(raw.length, decoded.uncompressedSize());
         assertArrayEquals(raw, decoded.data());
-    }
-
-    private static ChunkDeltaPayload roundTrip(ChunkDeltaPayload payload) {
-        // The payload itself does not read registries, but the Fabric packet API
-        // requires a RegistryByteBuf wrapper for the registered codec type.
-        RegistryByteBuf buf = new RegistryByteBuf(Unpooled.buffer(), DynamicRegistryManager.EMPTY);
-        ChunkDeltaPayload.CODEC.encode(buf, payload);
-        return ChunkDeltaPayload.CODEC.decode(buf);
     }
 }

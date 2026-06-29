@@ -4,10 +4,11 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchType;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.debug.watch.BlockWatchTraceTracker;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
-import io.liparakis.chunkis.debug.util.DebugChunkKeys;
+import java.util.Objects;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.util.math.BlockPos;
@@ -16,9 +17,8 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 public final class ChunkLifecyclePayloadTracer {
+
     private ChunkLifecyclePayloadTracer() {
         throw new AssertionError("Utility class");
     }
@@ -29,7 +29,7 @@ public final class ChunkLifecyclePayloadTracer {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
-    ) {
+                                              ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -46,7 +46,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "proto-attach",
                     source,
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_ATTACHED,
                     "proto-attach",
@@ -61,7 +61,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " source=" + source
                             + " thread=" + Thread.currentThread().getName(),
                     null
-            );
+                                         );
         });
     }
 
@@ -71,7 +71,7 @@ public final class ChunkLifecyclePayloadTracer {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
-    ) {
+                                                             ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -87,7 +87,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "conversion-before",
                     source,
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_PRESENT_BEFORE_CONVERSION,
                     "conversion-before",
@@ -102,7 +102,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " source=" + source
                             + " thread=" + Thread.currentThread().getName(),
                     null
-            );
+                                         );
         });
     }
 
@@ -112,7 +112,7 @@ public final class ChunkLifecyclePayloadTracer {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
-    ) {
+                                                            ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -128,7 +128,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "conversion-after",
                     source,
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_PRESENT_AFTER_CONVERSION,
                     "conversion-after",
@@ -143,7 +143,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " source=" + source
                             + " thread=" + Thread.currentThread().getName(),
                     null
-            );
+                                         );
         });
     }
 
@@ -152,7 +152,7 @@ public final class ChunkLifecyclePayloadTracer {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
-    ) {
+                                                   ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -169,7 +169,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "worldchunk-attach",
                     source,
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_WORLDCHUNK_DELTA_ATTACHED,
                     "worldchunk-attach",
@@ -184,7 +184,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " source=" + source
                             + " thread=" + Thread.currentThread().getName(),
                     null
-            );
+                                         );
         });
     }
 
@@ -192,7 +192,7 @@ public final class ChunkLifecyclePayloadTracer {
             final WorldChunk chunk,
             final String operationId,
             final String source
-    ) {
+                                                  ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -201,7 +201,7 @@ public final class ChunkLifecyclePayloadTracer {
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
                 DebugChunkKeys.of(chunkPos)
-        )) {
+                                                                                            )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
@@ -213,7 +213,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "worldchunk-missing",
                     source,
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_WORLDCHUNK_DELTA_MISSING,
                     "worldchunk-missing",
@@ -227,7 +227,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " source=" + source
                             + " thread=" + Thread.currentThread().getName(),
                     null
-            );
+                                         );
         }
     }
 
@@ -236,7 +236,7 @@ public final class ChunkLifecyclePayloadTracer {
             @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
             @Nullable final String operationId,
             final String source
-    ) {
+                                                         ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -256,7 +256,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "worldchunk-constructor",
                     source,
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_WORLD_CHUNK_CONSTRUCTOR_CONSUMED,
                     "worldchunk-constructor",
@@ -275,9 +275,9 @@ public final class ChunkLifecyclePayloadTracer {
                             source,
                             Thread.currentThread().getName(),
                             chunk
-                    ),
+                                                                    ),
                     null
-            );
+                                         );
         });
     }
 
@@ -288,7 +288,7 @@ public final class ChunkLifecyclePayloadTracer {
             final String source,
             @Nullable final String operationId,
             @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta
-    ) {
+                                          ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -300,7 +300,7 @@ public final class ChunkLifecyclePayloadTracer {
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
                 DebugChunkKeys.of(chunkPos)
-        )) {
+                                                                                            )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
@@ -316,7 +316,7 @@ public final class ChunkLifecyclePayloadTracer {
                     target,
                     resolvedOperationId,
                     source
-            );
+                                                        );
             PayloadWatchTracer.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
@@ -325,7 +325,7 @@ public final class ChunkLifecyclePayloadTracer {
                     stage,
                     source,
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.assertSameAppliedChunkInstance(
                     worldId,
                     chunkPos,
@@ -333,7 +333,7 @@ public final class ChunkLifecyclePayloadTracer {
                     resolvedOperationId,
                     source,
                     chunk
-            );
+                                                             );
 
             PayloadWatchTracer.traceWatch(
                     presentEventType,
@@ -353,9 +353,9 @@ public final class ChunkLifecyclePayloadTracer {
                             source,
                             Thread.currentThread().getName(),
                             chunk
-                    ),
+                                                                    ),
                     null
-            );
+                                         );
 
             if (expectedState != null && !Objects.equals(liveState, expectedState)) {
                 PayloadWatchTracer.traceWatch(
@@ -376,9 +376,9 @@ public final class ChunkLifecyclePayloadTracer {
                                 source,
                                 Thread.currentThread().getName(),
                                 chunk
-                        ),
+                                                                        ),
                         null
-                );
+                                             );
             }
 
             if (clientChunk && expectedState != null && Objects.equals(liveState, expectedState)) {
@@ -400,9 +400,9 @@ public final class ChunkLifecyclePayloadTracer {
                                 source,
                                 Thread.currentThread().getName(),
                                 chunk
-                        ),
+                                                                        ),
                         null
-                );
+                                             );
             }
         }
     }

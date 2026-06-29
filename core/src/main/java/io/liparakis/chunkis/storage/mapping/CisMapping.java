@@ -27,20 +27,28 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * @param <B> Block type
  * @param <S> BlockState type
  * @param <P> Property type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class CisMapping<B, S, P> implements CisAdapter<S> {
+
     private static final Gson GSON = new Gson();
 
-    /** Registry view used to resolve stable block identifiers and enumerate known blocks. */
+    /**
+     * Registry view used to resolve stable block identifiers and enumerate known blocks.
+     */
     private final BlockRegistryAdapter<B> registry;
-    /** State adapter used to move between concrete block-state values and their owning blocks. */
+    /**
+     * State adapter used to move between concrete block-state values and their owning blocks.
+     */
     private final BlockStateAdapter<B, S, P> stateAdapter;
-    /** Property serializer for the variable-width property payload attached to each block id. */
+    /**
+     * Property serializer for the variable-width property payload attached to each block id.
+     */
     private final PropertyPacker<B, S, P> packer;
-    /** In-memory append-only block-id table, including unresolved tombstones from disk snapshots. */
+    /**
+     * In-memory append-only block-id table, including unresolved tombstones from disk snapshots.
+     */
     private final BlockIdRegistry<B> blockIds = new BlockIdRegistry<>();
 
     /**
@@ -75,7 +83,7 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
      * @throws IOException if loading fails
      */
     public CisMapping(Path mappingFile, BlockRegistryAdapter<B> registry, BlockStateAdapter<B, S, P> stateAdapter,
-            PropertyPacker<B, S, P> packer) throws IOException {
+                      PropertyPacker<B, S, P> packer) throws IOException {
         this.mappingFilePath = mappingFile;
         this.registry = registry;
         this.stateAdapter = stateAdapter;
@@ -99,8 +107,9 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
             Map<String, Integer> map = GSON.fromJson(reader, new TypeToken<Map<String, Integer>>() {
             }.getType());
 
-            if (map == null)
+            if (map == null) {
                 return;
+            }
 
             B air = registry.getAir();
             String airId = registry.getId(air); // "minecraft:air"

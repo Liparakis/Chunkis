@@ -1,11 +1,10 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import java.util.Objects;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtList;
-
-import java.util.Objects;
 
 /**
  * Builds the synthetic chunk NBT that Chunkis feeds into vanilla load paths.
@@ -21,7 +20,7 @@ final class ChunkLoadNbtBuilder {
             final int chunkZ,
             final int dataVersion,
             final ChunkDelta<?, NbtCompound> delta
-    ) {
+                                                          ) {
         final Object metadata = delta != null ? delta.getChunkMetadata() : null;
         final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
         final boolean usePersistedBaseChunkForBlocks =
@@ -55,7 +54,7 @@ final class ChunkLoadNbtBuilder {
     static void replaceChunkEntitiesFromDelta(
             final NbtCompound root,
             final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+                                             ) {
         Objects.requireNonNull(root, "root");
         if (delta == null) {
             return;
@@ -73,7 +72,7 @@ final class ChunkLoadNbtBuilder {
     static void putChunkMetadata(
             final NbtCompound root,
             final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+                                ) {
         Objects.requireNonNull(root, "root");
         if (delta == null) {
             return;
@@ -89,7 +88,7 @@ final class ChunkLoadNbtBuilder {
     @SuppressWarnings("unchecked")
     private static ChunkDelta<BlockState, NbtCompound> castDelta(
             final ChunkDelta<?, NbtCompound> delta
-    ) {
+                                                                ) {
         return (ChunkDelta<BlockState, NbtCompound>) delta;
     }
 }

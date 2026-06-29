@@ -1,19 +1,17 @@
 package io.liparakis.chunkis.migrator;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
-import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.io.CisStorage;
+import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.mapping.PropertyPacker;
 import io.liparakis.chunkis.storage.model.CisConstants;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.LoggerFactory;
-
-import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -21,11 +19,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
-import java.util.zip.Deflater;
-import java.util.zip.Inflater;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.LoggerFactory;
 
 /**
  * Unit tests for {@link CisStorageMigrator} using an in-process string-backed
@@ -61,6 +57,20 @@ class CisStorageMigratorTest {
     // -------------------------------------------------------------------------
     // Tests
     // -------------------------------------------------------------------------
+
+    /**
+     * Asserts that the migration report contains the expected counts.
+     */
+    private static void assertReport(
+            final CisMigrationReport report,
+            final int scanned,
+            final int migrated,
+            final int skipped) {
+        assertEquals(scanned, report.scannedChunks());
+        assertEquals(migrated, report.migratedChunks());
+        assertEquals(skipped, report.skippedChunks());
+        assertEquals(0, report.failedChunks());
+    }
 
     /**
      * Verifies that the migrator returns an empty report and does not crash
@@ -116,6 +126,10 @@ class CisStorageMigratorTest {
         harness.close();
     }
 
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
     /**
      * Verifies that migration failures do not delete the source chunk entry.
      *
@@ -143,14 +157,10 @@ class CisStorageMigratorTest {
         assertTrue(
                 harness.chunkEntryExists(legacyPos),
                 "Migration must preserve the original chunk bytes when decode fails."
-        );
+                  );
 
         harness.close();
     }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
     /**
      * Creates a {@link CisStorageMigrator} instance for the provided harness.
@@ -164,20 +174,6 @@ class CisStorageMigratorTest {
                 LoggerFactory.getLogger(CisStorageMigratorTest.class),
                 CURRENT_VERSION
         );
-    }
-
-    /**
-     * Asserts that the migration report contains the expected counts.
-     */
-    private static void assertReport(
-            final CisMigrationReport report,
-            final int scanned,
-            final int migrated,
-            final int skipped) {
-        assertEquals(scanned, report.scannedChunks());
-        assertEquals(migrated, report.migratedChunks());
-        assertEquals(skipped, report.skippedChunks());
-        assertEquals(0, report.failedChunks());
     }
 
     /**
@@ -212,6 +208,93 @@ class CisStorageMigratorTest {
     // -------------------------------------------------------------------------
 
     /**
+     * Stub implementation of {@link BlockRegistryAdapter} for testing.
+     */
+    private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
+
+        @Override
+        public String getId(final String block) {
+            return block;
+        }
+
+        @Override
+        public String getBlock(final String id) {
+            return id;
+        }
+
+        @Override
+        public String getAir() {
+            return "air";
+        }
+
+        @Override
+        public Collection<String> getRegisteredBlocks() {
+            return List.of("air", "stone", "dirt");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SPI stubs
+    // -------------------------------------------------------------------------
+
+    /**
+     * Stub implementation of {@link BlockStateAdapter} for testing.
+     */
+    private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
+
+        @Override
+        public String getDefaultState(final String block) {
+            return block;
+        }
+
+        @Override
+        public String getBlock(final String state) {
+            return state;
+        }
+
+        @Override
+        public List<String> getProperties(final String block) {
+            return List.of();
+        }
+
+        @Override
+        public String getPropertyName(final String property) {
+            return property;
+        }
+
+        @Override
+        public List<Object> getPropertyValues(final String property) {
+            return List.of();
+        }
+
+        @Override
+        public int getValueIndex(final String state, final String property) {
+            return 0;
+        }
+
+        @Override
+        public String withProperty(final String state, final String property, final int i) {
+            return state;
+        }
+    }
+
+    /**
+     * Stub implementation of {@link NbtAdapter} for testing.
+     */
+    private static final class TestNbtAdapter implements NbtAdapter<String> {
+
+        @Override
+        public void write(final String tag, final DataOutput output) throws IOException {
+            output.writeUTF(tag);
+        }
+
+        @Override
+        public String read(final DataInput input) throws IOException {
+            return input.readUTF();
+        }
+    }
+
+    /**
      * Wraps a temporary {@link CisStorage} instance and exposes helpers for
      * writing chunks and surgically rewriting chunk version bytes in region files.
      *
@@ -230,6 +313,39 @@ class CisStorageMigratorTest {
             this.storageRoot = storageRoot;
             this.regionsDir = regionsDir;
             this.storage = storage;
+        }
+
+        private static byte[] grow(final byte[] source, final int newLength) {
+            final byte[] expanded = new byte[newLength];
+            System.arraycopy(source, 0, expanded, 0, source.length);
+            return expanded;
+        }
+
+        private static byte[] inflate(final byte[] compressed) throws Exception {
+            final long decompressedSize = com.github.luben.zstd.Zstd.decompressedSize(compressed);
+            if (com.github.luben.zstd.Zstd.isError(decompressedSize)) {
+                throw new IOException(
+                        "Failed to read Zstd size: " + com.github.luben.zstd.Zstd.getErrorName(decompressedSize));
+            }
+            return com.github.luben.zstd.Zstd.decompress(compressed, (int) decompressedSize);
+        }
+
+        private static byte[] deflate(final byte[] raw) {
+            return com.github.luben.zstd.Zstd.compress(raw, 3);
+        }
+
+        private static int readInt(final byte[] data, final int offset) {
+            return ((data[offset] & 0xFF) << 24)
+                    | ((data[offset + 1] & 0xFF) << 16)
+                    | ((data[offset + 2] & 0xFF) << 8)
+                    | (data[offset + 3] & 0xFF);
+        }
+
+        private static void writeInt(final byte[] data, final int offset, final int value) {
+            data[offset] = (byte) (value >>> 24);
+            data[offset + 1] = (byte) (value >>> 16);
+            data[offset + 2] = (byte) (value >>> 8);
+            data[offset + 3] = (byte) value;
         }
 
         /**
@@ -354,96 +470,6 @@ class CisStorageMigratorTest {
         void close() {
             storage.close();
         }
-
-        private static byte[] grow(final byte[] source, final int newLength) {
-            final byte[] expanded = new byte[newLength];
-            System.arraycopy(source, 0, expanded, 0, source.length);
-            return expanded;
-        }
-
-        private static byte[] inflate(final byte[] compressed) throws Exception {
-            final long decompressedSize = com.github.luben.zstd.Zstd.decompressedSize(compressed);
-            if (com.github.luben.zstd.Zstd.isError(decompressedSize)) {
-                throw new IOException("Failed to read Zstd size: " + com.github.luben.zstd.Zstd.getErrorName(decompressedSize));
-            }
-            return com.github.luben.zstd.Zstd.decompress(compressed, (int) decompressedSize);
-        }
-
-        private static byte[] deflate(final byte[] raw) {
-            return com.github.luben.zstd.Zstd.compress(raw, 3);
-        }
-
-        private static int readInt(final byte[] data, final int offset) {
-            return ((data[offset] & 0xFF) << 24)
-                    | ((data[offset + 1] & 0xFF) << 16)
-                    | ((data[offset + 2] & 0xFF) << 8)
-                    | (data[offset + 3] & 0xFF);
-        }
-
-        private static void writeInt(final byte[] data, final int offset, final int value) {
-            data[offset] = (byte) (value >>> 24);
-            data[offset + 1] = (byte) (value >>> 16);
-            data[offset + 2] = (byte) (value >>> 8);
-            data[offset + 3] = (byte) value;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // SPI stubs
-    // -------------------------------------------------------------------------
-
-    /**
-     * Stub implementation of {@link BlockRegistryAdapter} for testing.
-     */
-    private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
-        @Override
-        public String getId(final String block) {return block;}
-
-        @Override
-        public String getBlock(final String id) {return id;}
-
-        @Override
-        public String getAir() {return "air";}
-
-        @Override
-        public Collection<String> getRegisteredBlocks() {return List.of("air", "stone", "dirt");}
-    }
-
-    /**
-     * Stub implementation of {@link BlockStateAdapter} for testing.
-     */
-    private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
-        @Override
-        public String getDefaultState(final String block) {return block;}
-
-        @Override
-        public String getBlock(final String state) {return state;}
-
-        @Override
-        public List<String> getProperties(final String block) {return List.of();}
-
-        @Override
-        public String getPropertyName(final String property) {return property;}
-
-        @Override
-        public List<Object> getPropertyValues(final String property) {return List.of();}
-
-        @Override
-        public int getValueIndex(final String state, final String property) {return 0;}
-
-        @Override
-        public String withProperty(final String state, final String property, final int i) {return state;}
-    }
-
-    /**
-     * Stub implementation of {@link NbtAdapter} for testing.
-     */
-    private static final class TestNbtAdapter implements NbtAdapter<String> {
-        @Override
-        public void write(final String tag, final DataOutput output) throws IOException {output.writeUTF(tag);}
-
-        @Override
-        public String read(final DataInput input) throws IOException {return input.readUTF();}
     }
 
 }

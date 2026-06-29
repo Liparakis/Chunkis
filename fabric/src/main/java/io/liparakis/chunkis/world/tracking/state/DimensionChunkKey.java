@@ -1,11 +1,10 @@
 package io.liparakis.chunkis.world.tracking.state;
 
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import java.util.Objects;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
-
-import java.util.Objects;
 
 /**
  * Identifies a chunk within a specific world dimension.
@@ -30,11 +29,15 @@ public final class DimensionChunkKey {
             final RegistryKey<World> dimension,
             final int chunkX,
             final int chunkZ
-    ) {
+                                      ) {
         return new DimensionChunkKey(
                 Objects.requireNonNull(dimension, "dimension"),
                 packChunkKey(chunkX, chunkZ)
         );
+    }
+
+    private static long packChunkKey(final int chunkX, final int chunkZ) {
+        return (chunkX & 0xFFFFFFFFL) | ((chunkZ & 0xFFFFFFFFL) << 32);
     }
 
     public RegistryKey<World> dimension() {
@@ -79,9 +82,5 @@ public final class DimensionChunkKey {
     @Override
     public int hashCode() {
         return hash;
-    }
-
-    private static long packChunkKey(final int chunkX, final int chunkZ) {
-        return (chunkX & 0xFFFFFFFFL) | ((chunkZ & 0xFFFFFFFFL) << 32);
     }
 }

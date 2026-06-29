@@ -2,6 +2,10 @@ package io.liparakis.chunkis.mixin.world.dimension;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.portal.PortalChunkIndexManager;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Predicate;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
@@ -18,11 +22,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * Ensures Chunkis-restored nether portals are visible to vanilla portal lookup.
@@ -62,6 +61,58 @@ public abstract class PortalForcerMixin {
     private ServerWorld world;
 
     /**
+     * Returns the distinct chunks that contain portal POIs in vanilla's search
+     * square.
+     */
+    @Unique
+    private static Set<ChunkPos> collectPortalCandidateChunks(
+            final BlockPos pos,
+            final int radius,
+            final PointOfInterestStorage poiStorage) {
+
+        final Set<ChunkPos> chunks = new HashSet<>();
+        poiStorage.getInSquare(PORTAL_POI_PREDICATE, pos, radius, PointOfInterestStorage.OccupationStatus.ANY)
+                  .forEach(point -> {
+                      final BlockPos pointPos = point.getPos();
+                      chunks.add(new ChunkPos(pointPos));
+                  });
+        return chunks;
+    }
+
+    /**
+     * Returns vanilla's portal search radius for the destination dimension.
+     *
+     * @param destIsNether whether the destination is Nether-like
+     * @return portal search radius in blocks
+     */
+    @Unique
+    private static int portalSearchRadius(final boolean destIsNether) {
+        return destIsNether ? 16 : 128;
+    }
+
+    /**
+     * Counts nether portal POIs across all chunks in the given range.
+     *
+     * <p>Uses the shared {@link #PORTAL_POI_PREDICATE} to avoid per-call
+     * lambda allocation, and a local {@code long} accumulator to avoid the
+     * {@code long[1]} heap allocation that a lambda closure would require.</p>
+     *
+     * @param range      chunk range to scan
+     * @param poiStorage POI storage for the target world
+     * @return total portal POI count across the range
+     */
+    @Unique
+    private static long countPortalPois(final SearchChunkRange range, final PointOfInterestStorage poiStorage) {
+        long count = 0;
+        for (int chunkX = range.minChunkX(); chunkX <= range.maxChunkX(); chunkX++) {
+            for (int chunkZ = range.minChunkZ(); chunkZ <= range.maxChunkZ(); chunkZ++) {
+                count += poiStorage.getInChunk(PORTAL_POI_PREDICATE, new ChunkPos(chunkX, chunkZ), PointOfInterestStorage.OccupationStatus.ANY).count();
+            }
+        }
+        return count;
+    }
+
+    /**
      * Loads chunks containing portal POI candidates after vanilla has preloaded
      * POI data for the search area.
      *
@@ -92,7 +143,7 @@ public abstract class PortalForcerMixin {
                         range.maxChunkX(),
                         range.minChunkZ(),
                         range.maxChunkZ()
-                )
+                                                              )
         );
 
         if (candidateChunks.isEmpty()) {
@@ -127,25 +178,6 @@ public abstract class PortalForcerMixin {
                     world.getRegistryKey().getValue(),
                     range.chunkCount());
         }
-    }
-
-    /**
-     * Returns the distinct chunks that contain portal POIs in vanilla's search
-     * square.
-     */
-    @Unique
-    private static Set<ChunkPos> collectPortalCandidateChunks(
-            final BlockPos pos,
-            final int radius,
-            final PointOfInterestStorage poiStorage) {
-
-        final Set<ChunkPos> chunks = new HashSet<>();
-        poiStorage.getInSquare(PORTAL_POI_PREDICATE, pos, radius, PointOfInterestStorage.OccupationStatus.ANY)
-                .forEach(point -> {
-                    final BlockPos pointPos = point.getPos();
-                    chunks.add(new ChunkPos(pointPos));
-                });
-        return chunks;
     }
 
     /**
@@ -212,39 +244,6 @@ public abstract class PortalForcerMixin {
     }
 
     /**
-     * Returns vanilla's portal search radius for the destination dimension.
-     *
-     * @param destIsNether whether the destination is Nether-like
-     * @return portal search radius in blocks
-     */
-    @Unique
-    private static int portalSearchRadius(final boolean destIsNether) {
-        return destIsNether ? 16 : 128;
-    }
-
-    /**
-     * Counts nether portal POIs across all chunks in the given range.
-     *
-     * <p>Uses the shared {@link #PORTAL_POI_PREDICATE} to avoid per-call
-     * lambda allocation, and a local {@code long} accumulator to avoid the
-     * {@code long[1]} heap allocation that a lambda closure would require.</p>
-     *
-     * @param range      chunk range to scan
-     * @param poiStorage POI storage for the target world
-     * @return total portal POI count across the range
-     */
-    @Unique
-    private static long countPortalPois(final SearchChunkRange range, final PointOfInterestStorage poiStorage) {
-        long count = 0;
-        for (int chunkX = range.minChunkX(); chunkX <= range.maxChunkX(); chunkX++) {
-            for (int chunkZ = range.minChunkZ(); chunkZ <= range.maxChunkZ(); chunkZ++) {
-                count += poiStorage.getInChunk(PORTAL_POI_PREDICATE, new ChunkPos(chunkX, chunkZ), PointOfInterestStorage.OccupationStatus.ANY).count();
-            }
-        }
-        return count;
-    }
-
-    /**
      * Inclusive chunk bounds for a block-radius portal search square.
      */
     @Unique
@@ -258,7 +257,9 @@ public abstract class PortalForcerMixin {
          * @return inclusive chunk bounds intersecting the search square
          */
         static SearchChunkRange of(final BlockPos center, final int radius) {
-            return new SearchChunkRange((center.getX() - radius) >> 4, (center.getX() + radius) >> 4, (center.getZ() - radius) >> 4, (center.getZ() + radius) >> 4);
+            return new SearchChunkRange(
+                    (center.getX() - radius) >> 4,
+                    (center.getX() + radius) >> 4, (center.getZ() - radius) >> 4, (center.getZ() + radius) >> 4);
         }
 
         /**

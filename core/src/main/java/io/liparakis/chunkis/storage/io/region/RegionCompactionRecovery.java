@@ -25,7 +25,8 @@ final class RegionCompactionRecovery {
      * Replaces the live region file with a compacted temp file and returns a
      * freshly opened channel for the new on-disk file.
      */
-    static FileChannel swapCompactedFile(final FileChannel channel, final Path tempPath, final Path regionPath) throws IOException {
+    static FileChannel swapCompactedFile(final FileChannel channel, final Path tempPath, final Path regionPath)
+            throws IOException {
         channel.close();
         try {
             Files.move(tempPath, regionPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
@@ -59,6 +60,6 @@ final class RegionCompactionRecovery {
      */
     private static FileChannel openChannel(final Path regionPath) throws IOException {
         return FileChannel.open(regionPath, StandardOpenOption.READ, StandardOpenOption.WRITE,
-                StandardOpenOption.CREATE);
+                                StandardOpenOption.CREATE);
     }
 }

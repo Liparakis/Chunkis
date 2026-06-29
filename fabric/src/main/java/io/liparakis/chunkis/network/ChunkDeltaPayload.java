@@ -1,11 +1,6 @@
 package io.liparakis.chunkis.network;
 
 import io.liparakis.chunkis.Chunkis;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
@@ -13,6 +8,10 @@ import java.util.Objects;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
+import net.minecraft.network.RegistryByteBuf;
+import net.minecraft.network.codec.PacketCodec;
+import net.minecraft.network.packet.CustomPayload;
+import net.minecraft.util.Identifier;
 
 /**
  * Network payload carrying a serialised Chunkis chunk delta, with optional
@@ -52,57 +51,48 @@ public record ChunkDeltaPayload(
         int uncompressedSize) implements CustomPayload {
 
     /**
+     * Packet channel identifier: {@code <modId>:chunk_delta}.
+     */
+    public static final CustomPayload.Id<ChunkDeltaPayload> ID =
+            new CustomPayload.Id<>(Identifier.of(Chunkis.MOD_ID, "chunk_delta"));
+    /**
      * Hard cap on incoming payload data length to guard against malformed packets.
      */
     private static final int MAX_PAYLOAD_SIZE = 1024 * 1024; // 1 MB
-
     /**
      * Minimum raw payload size in bytes before compression is attempted.
      * Deflating small payloads can make them larger, so compression is skipped below this.
      */
     private static final int COMPRESSION_THRESHOLD = 4096; // 4 KB
-
     /**
      * Compression is kept only when the deflated size is strictly below this
      * fraction of the original. Expressed as a ratio: {@code compressed < raw * threshold}.
      */
     private static final double COMPRESSION_RATIO_THRESHOLD = 0.9;
-
     /**
      * Wire flag indicating the payload data is zlib-compressed.
      */
     private static final byte FLAG_COMPRESSED = (byte) 0x01;
-
     /**
      * Wire flag indicating the payload data is uncompressed.
      */
     private static final byte FLAG_UNCOMPRESSED = (byte) 0x00;
-
     /**
      * Scratch buffer size for deflate/inflate loops.
      */
     private static final int COMPRESSION_BUFFER_SIZE = 8192;
-
     /**
      * Per-thread {@link Deflater} pool. Configured at {@link Deflater#BEST_SPEED}
      * to minimise send latency at the cost of some compression ratio.
      */
     private static final ThreadLocal<Deflater> DEFLATER_POOL =
             ThreadLocal.withInitial(() -> new Deflater(Deflater.BEST_SPEED));
-
     /**
      * Per-thread {@link Inflater} pool. Each instance is reset before reuse
      * to ensure clean state between decompressions.
      */
     private static final ThreadLocal<Inflater> INFLATER_POOL =
             ThreadLocal.withInitial(Inflater::new);
-
-    /**
-     * Packet channel identifier: {@code <modId>:chunk_delta}.
-     */
-    public static final CustomPayload.Id<ChunkDeltaPayload> ID =
-            new CustomPayload.Id<>(Identifier.of(Chunkis.MOD_ID, "chunk_delta"));
-
     /**
      * Codec wiring the static {@link #read} and instance {@link #write} methods.
      */
@@ -175,27 +165,6 @@ public record ChunkDeltaPayload(
 
         } catch (final Exception e) {
             throw new IllegalArgumentException("Failed to read ChunkDeltaPayload", e);
-        }
-    }
-
-    /**
-     * Serializes this payload into the given packet buffer.
-     *
-     * <p>
-     * Wire order: {@code chunkX | chunkZ | flags | dataLength | data | [origLength if compressed]}.
-     *
-     * @param buf the buffer to write to
-     */
-    private void write(final RegistryByteBuf buf) {
-        buf.writeInt(chunkX);
-        buf.writeInt(chunkZ);
-        buf.writeByte(compressed ? FLAG_COMPRESSED : FLAG_UNCOMPRESSED);
-        buf.writeInt(data.length);
-        buf.writeBytes(data);
-
-        if (compressed) {
-            // Receiver needs the original size to pre-allocate the decompression buffer.
-            buf.writeInt(uncompressedSize);
         }
     }
 
@@ -315,6 +284,27 @@ public record ChunkDeltaPayload(
      */
     private static boolean isCompressedFlag(final byte flags) {
         return (flags & FLAG_COMPRESSED) != 0;
+    }
+
+    /**
+     * Serializes this payload into the given packet buffer.
+     *
+     * <p>
+     * Wire order: {@code chunkX | chunkZ | flags | dataLength | data | [origLength if compressed]}.
+     *
+     * @param buf the buffer to write to
+     */
+    private void write(final RegistryByteBuf buf) {
+        buf.writeInt(chunkX);
+        buf.writeInt(chunkZ);
+        buf.writeByte(compressed ? FLAG_COMPRESSED : FLAG_UNCOMPRESSED);
+        buf.writeInt(data.length);
+        buf.writeBytes(data);
+
+        if (compressed) {
+            // Receiver needs the original size to pre-allocate the decompression buffer.
+            buf.writeInt(uncompressedSize);
+        }
     }
 
     @Override

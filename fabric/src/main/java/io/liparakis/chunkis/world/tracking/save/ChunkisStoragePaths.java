@@ -1,10 +1,9 @@
 package io.liparakis.chunkis.world.tracking.save;
 
+import java.nio.file.Path;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
-
-import java.nio.file.Path;
 
 /**
  * Pure path-resolution helpers for the Chunkis storage layout.

@@ -5,14 +5,13 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
+import java.util.Optional;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
 import net.minecraft.world.chunk.Chunk;
-
-import java.util.Optional;
 
 /**
  * Internal implementation of the {@link ChunkisApi} interface.
@@ -42,48 +41,6 @@ public final class ChunkisApiImpl implements ChunkisApi {
      */
     public static ChunkisApiImpl getInstance() {
         return INSTANCE;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage(final ServerWorld world) {
-        return FabricCisStorageHelper.getStorage(world);
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * <p>
-     * The cast to {@code ChunkDelta<BlockState, NbtCompound>} is safe because
-     * all deltas attached to chunks in the Fabric environment are constructed
-     * with exactly these type parameters.
-     */
-    @Override
-    @SuppressWarnings("unchecked")
-    public Optional<ChunkDelta<BlockState, NbtCompound>> getDelta(final Chunk chunk) {
-        if (!isChunkisDuck(chunk))
-            return Optional.empty();
-
-        final ChunkDelta<BlockState, NbtCompound> rawDelta = (ChunkDelta<BlockState, NbtCompound>) asDuck(chunk)
-                .chunkis$getDelta();
-        if (rawDelta == null)
-            return Optional.empty();
-
-        return Optional.of(rawDelta);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public boolean hasChunkisData(final Chunk chunk) {
-        if (!isChunkisDuck(chunk))
-            return false;
-
-        final ChunkDelta<?, ?> delta = asDuck(chunk).chunkis$getDelta();
-        return isNonEmptyDelta(delta);
     }
 
     /**
@@ -120,6 +77,51 @@ public final class ChunkisApiImpl implements ChunkisApi {
      */
     private static ChunkisDeltaDuck asDuck(final Chunk chunk) {
         return (ChunkisDeltaDuck) chunk;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage(final ServerWorld world) {
+        return FabricCisStorageHelper.getStorage(world);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>
+     * The cast to {@code ChunkDelta<BlockState, NbtCompound>} is safe because
+     * all deltas attached to chunks in the Fabric environment are constructed
+     * with exactly these type parameters.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Optional<ChunkDelta<BlockState, NbtCompound>> getDelta(final Chunk chunk) {
+        if (!isChunkisDuck(chunk)) {
+            return Optional.empty();
+        }
+
+        final ChunkDelta<BlockState, NbtCompound> rawDelta = (ChunkDelta<BlockState, NbtCompound>) asDuck(chunk)
+                .chunkis$getDelta();
+        if (rawDelta == null) {
+            return Optional.empty();
+        }
+
+        return Optional.of(rawDelta);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean hasChunkisData(final Chunk chunk) {
+        if (!isChunkisDuck(chunk)) {
+            return false;
+        }
+
+        final ChunkDelta<?, ?> delta = asDuck(chunk).chunkis$getDelta();
+        return isNonEmptyDelta(delta);
     }
 }
 

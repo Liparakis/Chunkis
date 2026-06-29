@@ -2,25 +2,10 @@ package io.liparakis.chunkis.migration;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.PalettesFactory;
-import net.minecraft.world.chunk.ProtoChunk;
-import net.minecraft.world.chunk.SerializedChunk;
-import net.minecraft.world.storage.RegionFile;
-import net.minecraft.world.storage.StorageKey;
-import org.slf4j.Logger;
-
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -37,6 +22,20 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.minecraft.block.BlockState;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtSizeTracker;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.WorldSavePath;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.PalettesFactory;
+import net.minecraft.world.chunk.ProtoChunk;
+import net.minecraft.world.chunk.SerializedChunk;
+import net.minecraft.world.storage.RegionFile;
+import net.minecraft.world.storage.StorageKey;
+import org.slf4j.Logger;
 
 public final class McaMigrator {
 
@@ -53,7 +52,7 @@ public final class McaMigrator {
     public static void migrateWorld(ServerWorld world) {
         Path regionDir = resolveMcaRegionDir(world);
         LOGGER.info("Checking MCA region directory for world {}: {}",
-                world.getRegistryKey().getValue(), regionDir);
+                    world.getRegistryKey().getValue(), regionDir);
 
         if (!Files.exists(regionDir)) {
             LOGGER.info("No MCA region directory found at {}; skipping migration.", regionDir);
@@ -75,7 +74,7 @@ public final class McaMigrator {
             }
         } catch (IOException e) {
             LOGGER.error("Failed to iterate region directory for dimension {}",
-                    world.getRegistryKey().getValue(), e);
+                         world.getRegistryKey().getValue(), e);
             return;
         }
 
@@ -115,7 +114,7 @@ public final class McaMigrator {
 
         int migrated = totalMigrated.get();
         LOGGER.info("Chunkis MCA Migration complete for world {}. Converted {} chunks total.",
-                world.getRegistryKey().getValue(), migrated);
+                    world.getRegistryKey().getValue(), migrated);
     }
 
     /**
@@ -152,12 +151,14 @@ public final class McaMigrator {
                     ChunkPos globalPos = new ChunkPos((rx << 5) + x, (rz << 5) + z);
 
                     try (DataInputStream in = regionFile.getChunkInputStream(globalPos)) {
-                        if (in == null)
+                        if (in == null) {
                             continue;
+                        }
 
                         NbtCompound nbt = NbtIo.readCompound(in, NbtSizeTracker.ofUnlimitedBytes());
-                        if (nbt == null)
+                        if (nbt == null) {
                             continue;
+                        }
 
                         // PointOfInterestStorage is not thread-safe: synchronize
                         // only this call so its internal Long2ObjectOpenHashMap
@@ -165,16 +166,16 @@ public final class McaMigrator {
                         ProtoChunk proto;
                         synchronized (world.getPointOfInterestStorage()) {
                             proto = Objects.requireNonNull(SerializedChunk.fromNbt(
-                                            world,
-                                            palettesFactory,
-                                            nbt)
-                                    )
-                                    .convert(
-                                            world,
-                                            world.getPointOfInterestStorage(),
-                                            storageKey,
-                                            globalPos
-                                    );
+                                                                   world,
+                                                                   palettesFactory,
+                                                                   nbt)
+                                                          )
+                                           .convert(
+                                                   world,
+                                                   world.getPointOfInterestStorage(),
+                                                   storageKey,
+                                                   globalPos
+                                                   );
                         }
 
                         ChunkDelta<BlockState, NbtCompound> delta = buildChunkDelta(proto, nbt, globalPos, mutablePos);
@@ -185,7 +186,7 @@ public final class McaMigrator {
                         }
                     } catch (Exception e) {
                         LOGGER.error("Failed to migrate chunk {} in {}",
-                                globalPos, mcaPath.getFileName(), e);
+                                     globalPos, mcaPath.getFileName(), e);
                     }
                 }
             }

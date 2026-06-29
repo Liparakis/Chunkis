@@ -3,8 +3,6 @@ package io.liparakis.chunkis.migrator;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import org.slf4j.Logger;
-
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -12,6 +10,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
 
 /**
  * Generic migrator for existing Chunkis CIS region storage.
@@ -28,16 +27,19 @@ import java.util.regex.Pattern;
  *
  * @param <S> block state type
  * @param <N> chunk NBT type
- *
  * @author Liparakis
  * @version 1.0
  */
 public final class CisStorageMigrator<S, N> {
 
-    /** Compiled pattern for validating and parsing {@code r.<x>.<z>.cis} filenames. */
+    /**
+     * Compiled pattern for validating and parsing {@code r.<x>.<z>.cis} filenames.
+     */
     private static final Pattern REGION_FILE_PATTERN = Pattern.compile("r\\.(-?\\d+)\\.(-?\\d+)\\.cis");
 
-    /** Number of chunk slots along each axis in one region file. */
+    /**
+     * Number of chunk slots along each axis in one region file.
+     */
     private static final int REGION_SIZE = 32;
 
     private final CisStorage<?, S, ?, N> storage;
@@ -176,7 +178,7 @@ public final class CisStorageMigrator<S, N> {
 
             storage.save(pos, delta);
             logger.info("Migrated CIS chunk {} from v{} to v{} via {} step(s)",
-                    pos, sourceVersion, targetVersion, path.steps().size());
+                        pos, sourceVersion, targetVersion, path.steps().size());
             return report.addMigrated();
 
         } catch (final Exception e) {

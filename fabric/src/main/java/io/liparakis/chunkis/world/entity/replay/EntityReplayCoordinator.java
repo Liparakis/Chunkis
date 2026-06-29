@@ -6,6 +6,7 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
+import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
@@ -16,8 +17,6 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.UUID;
 
 /**
  * Coordinates replay of pending Chunkis entity payloads into a loaded
@@ -67,7 +66,7 @@ public final class EntityReplayCoordinator {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             @Nullable final String operationId
-    ) {
+                                                    ) {
         if (world == null || chunk == null) {
             return;
         }
@@ -81,7 +80,7 @@ public final class EntityReplayCoordinator {
                     "entity-replay-no-runtime-delta",
                     SOURCE_BULK,
                     "entity replay skipped: runtime delta missing"
-            );
+                                                     );
             return;
         }
         if (runtimeDelta.countPendingEntities() == 0) {
@@ -94,7 +93,7 @@ public final class EntityReplayCoordinator {
                     "entity-replay-no-pending-entities",
                     SOURCE_BULK,
                     "entity replay skipped: runtime delta has no pending entity payloads"
-            );
+                                                     );
             return;
         }
 
@@ -111,7 +110,7 @@ public final class EntityReplayCoordinator {
                 "entity-replay-started",
                 SOURCE_BULK,
                 "entity replay started from runtime delta"
-        );
+                                                 );
 
         runtimeDelta.forEachPendingEntity(nbt -> {
             if (nbt == null) {
@@ -136,7 +135,7 @@ public final class EntityReplayCoordinator {
                         }
                         return entity;
                     }
-            );
+                                               );
         });
 
         if (stats[1] == 0) {
@@ -153,7 +152,7 @@ public final class EntityReplayCoordinator {
                 "entity-replay-retained-pending",
                 SOURCE_BULK,
                 "entity replay retained pending payloads after failures=" + stats[1]
-        );
+                                                 );
     }
 
     /**
@@ -180,7 +179,7 @@ public final class EntityReplayCoordinator {
             @Nullable final String operationId,
             final String entityUuid,
             @Nullable final NbtCompound fallbackEntityNbt
-    ) {
+                                                                        ) {
         if (world == null || chunk == null || entityUuid == null || entityUuid.isBlank()) {
             return new ChunkRestorer.ReplayResult(
                     ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
@@ -194,7 +193,7 @@ public final class EntityReplayCoordinator {
                     entityUuid,
                     operationId,
                     "entity replay skipped: runtime delta missing queued entity payloads"
-            );
+                                                        );
             EntityReplayDiagnostics.traceReplayDecision(
                     world,
                     chunk,
@@ -204,7 +203,7 @@ public final class EntityReplayCoordinator {
                     false,
                     "payload-missing",
                     ChunkEntityQueries.chunkColumnBox(world, chunk.getPos())
-            );
+                                                       );
             return new ChunkRestorer.ReplayResult(
                     ChunkRestorer.ReplayStatus.PAYLOAD_MISSING,
                     "runtime delta missing queued entity payloads"
@@ -224,7 +223,7 @@ public final class EntityReplayCoordinator {
                     entityUuid,
                     operationId,
                     "entity replay skipped: queued entity payload missing from runtime delta"
-            );
+                                                        );
             EntityReplayDiagnostics.traceReplayDecision(
                     world,
                     chunk,
@@ -234,7 +233,7 @@ public final class EntityReplayCoordinator {
                     false,
                     "payload-missing-for-uuid",
                     ChunkEntityQueries.chunkColumnBox(world, chunk.getPos())
-            );
+                                                       );
             return new ChunkRestorer.ReplayResult(
                     ChunkRestorer.ReplayStatus.PAYLOAD_MISSING,
                     "queued entity payload missing from runtime delta"
@@ -251,7 +250,7 @@ public final class EntityReplayCoordinator {
                     entityUuid,
                     operationId,
                     "entity replay skipped: queued entity UUID was invalid"
-            );
+                                                        );
             EntityReplayDiagnostics.traceReplayDecision(
                     world,
                     chunk,
@@ -261,7 +260,7 @@ public final class EntityReplayCoordinator {
                     false,
                     "invalid-uuid",
                     ChunkEntityQueries.chunkColumnBox(world, chunk.getPos())
-            );
+                                                       );
             return new ChunkRestorer.ReplayResult(
                     ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
                     "queued entity UUID was invalid"
@@ -279,7 +278,7 @@ public final class EntityReplayCoordinator {
                     false,
                     "chunk-not-loaded",
                     ChunkEntityQueries.chunkColumnBox(world, chunkPosition)
-            );
+                                                       );
             return new ChunkRestorer.ReplayResult(
                     ChunkRestorer.ReplayStatus.CHUNK_NOT_READY,
                     "target chunk is not loaded"
@@ -295,7 +294,7 @@ public final class EntityReplayCoordinator {
                 "entity-replay-started",
                 SOURCE_SINGLE,
                 "entity replay started from runtime delta"
-        );
+                                                 );
         PayloadWatchTracer.traceRestoreEntityApplyAttempt(world, chunkPosition, entityNbt, operationId, SOURCE_SINGLE);
 
         final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
@@ -315,7 +314,7 @@ public final class EntityReplayCoordinator {
                     }
                     return entity;
                 }
-        );
+                                           );
 
         final Entity afterReplay = world.getEntity(queuedUuid);
         final boolean materialized = afterReplay != null
@@ -323,7 +322,7 @@ public final class EntityReplayCoordinator {
                 afterReplay,
                 EntityPayloadNbt.findEntityType(replayNbt).orElse(null),
                 chunkPosition
-        );
+                                                          );
         final boolean visibleAfterReplay = ChunkEntityQueries.isVisibleFromWorldQuery(world, queuedUuid, searchBox);
         final boolean confirmed = materialized && visibleAfterReplay;
 
@@ -338,9 +337,9 @@ public final class EntityReplayCoordinator {
                 confirmed
                         ? "entity replay resolved queued entity payload"
                         : callbackStatus[0] == ChunkRestorer.ReplayStatus.ALREADY_PRESENT
-                        ? "entity replay callback resolved but queued UUID was still absent from live world"
-                        : "entity replay retained queued entity payload after unresolved spawn"
-        );
+                          ? "entity replay callback resolved but queued UUID was still absent from live world"
+                                : "entity replay retained queued entity payload after unresolved spawn"
+                                                 );
         EntityReplayDiagnostics.traceReplayDecision(
                 world,
                 chunk,
@@ -350,7 +349,7 @@ public final class EntityReplayCoordinator {
                 confirmed,
                 "after-spawn materialized=" + materialized + " visible=" + visibleAfterReplay,
                 searchBox
-        );
+                                                   );
 
         if (confirmed) {
             return callbackStatus[0] == ChunkRestorer.ReplayStatus.ALREADY_PRESENT
@@ -359,9 +358,9 @@ public final class EntityReplayCoordinator {
                     "matching live entity already present"
             )
                     : new ChunkRestorer.ReplayResult(
-                    ChunkRestorer.ReplayStatus.SPAWNED,
-                    "spawned and visible from world query"
-            );
+                            ChunkRestorer.ReplayStatus.SPAWNED,
+                            "spawned and visible from world query"
+                    );
         }
 
         return new ChunkRestorer.ReplayResult(
@@ -389,7 +388,7 @@ public final class EntityReplayCoordinator {
             final ServerWorld world,
             final ChunkPos chunkPosition,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta
-    ) {
+                                                   ) {
         if (runtimeDelta.countPendingEntities() == 0) {
             return true;
         }
@@ -419,7 +418,7 @@ public final class EntityReplayCoordinator {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             @Nullable final String operationId
-    ) {
+                                                   ) {
         final boolean suppressRepopulation = runtimeDelta.shouldSuppressInitialRepopulation();
         if (suppressRepopulation) {
             runtimeDelta.clearPendingEntities();
@@ -435,6 +434,6 @@ public final class EntityReplayCoordinator {
                 suppressRepopulation
                         ? "entity replay completed without failures; cleared legacy pending payloads"
                         : "entity replay completed without failures; retained durable entity payloads"
-        );
+                                                 );
     }
 }

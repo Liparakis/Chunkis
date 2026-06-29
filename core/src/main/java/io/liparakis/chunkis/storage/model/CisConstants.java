@@ -8,8 +8,8 @@ package io.liparakis.chunkis.storage.model;
  * - File format constants (magic numbers, versions)
  * - Geometry constants (section sizes, region sizes)
  *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class CisConstants {
 

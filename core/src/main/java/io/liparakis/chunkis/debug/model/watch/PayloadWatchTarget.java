@@ -33,6 +33,7 @@ public record PayloadWatchTarget(
         Integer blockZ,
         String entityUuid
 ) {
+
     /**
      * Validates required components for the chosen watch type.
      *
@@ -68,7 +69,7 @@ public record PayloadWatchTarget(
             final int blockX,
             final int blockY,
             final int blockZ
-    ) {
+                                          ) {
         return new PayloadWatchTarget(worldId, PayloadWatchType.BLOCK, blockX, blockY, blockZ, null);
     }
 
@@ -86,7 +87,7 @@ public record PayloadWatchTarget(
             final int blockX,
             final int blockY,
             final int blockZ
-    ) {
+                                                ) {
         return new PayloadWatchTarget(worldId, PayloadWatchType.BLOCK_ENTITY, blockX, blockY, blockZ, null);
     }
 
@@ -100,7 +101,7 @@ public record PayloadWatchTarget(
     public static PayloadWatchTarget entity(
             final String worldId,
             final String entityUuid
-    ) {
+                                           ) {
         return new PayloadWatchTarget(worldId, PayloadWatchType.ENTITY, null, null, null, entityUuid);
     }
 
@@ -133,7 +134,7 @@ public record PayloadWatchTarget(
             final int otherX,
             final int otherY,
             final int otherZ
-    ) {
+                               ) {
         return type == otherType
                 && matchesWorld(otherWorldId)
                 && hasBlockCoordinates()
@@ -152,7 +153,7 @@ public record PayloadWatchTarget(
     public boolean matchesEntity(
             final String otherWorldId,
             final String otherEntityUuid
-    ) {
+                                ) {
         return type == PayloadWatchType.ENTITY
                 && matchesWorld(otherWorldId)
                 && entityUuid != null

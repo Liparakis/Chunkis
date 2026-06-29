@@ -8,15 +8,19 @@ import java.io.IOException;
  * Adapter interface for NBT I/O operations.
  *
  * @param <N> The NBT type
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public interface NbtAdapter<N> {
 
-    /** Writes the NBT compound to the output. */
+    /**
+     * Writes the NBT compound to the output.
+     */
     void write(N tag, DataOutput output) throws IOException;
 
-    /** Reads an NBT compound from the input. */
+    /**
+     * Reads an NBT compound from the input.
+     */
     N read(DataInput input) throws IOException;
 
     /**

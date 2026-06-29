@@ -2,14 +2,13 @@ package io.liparakis.chunkis.api;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.storage.io.CisStorage;
+import java.util.Optional;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
 import net.minecraft.world.chunk.Chunk;
-
-import java.util.Optional;
 
 /**
  * Public API for interacting with the Chunkis mod storage system.

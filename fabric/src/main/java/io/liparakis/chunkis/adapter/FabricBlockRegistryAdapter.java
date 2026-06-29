@@ -1,15 +1,14 @@
 package io.liparakis.chunkis.adapter;
 
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
+import net.minecraft.registry.Registries;
+import net.minecraft.util.Identifier;
 
 /**
  * Fabric implementation of {@link BlockRegistryAdapter}.
@@ -66,6 +65,67 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
      * parsing only happens on block-cache misses.</p>
      */
     private final Map<String, Block> idToBlockCache = new ConcurrentHashMap<>(256);
+
+    /**
+     * Resolves a block's registry ID string.
+     *
+     * <p>The string is interned because registry IDs are repeated heavily in CIS
+     * metadata and mappings. Interning is safe here because the registry block set
+     * is bounded compared to arbitrary user strings.</p>
+     *
+     * @param block block to resolve
+     * @return interned registry ID string
+     */
+    private static String resolveBlockId(final Block block) {
+        return Registries.BLOCK.getId(block).toString().intern();
+    }
+
+    /**
+     * Resolves a registry ID string to a block.
+     *
+     * @param id registry ID string
+     * @return resolved block, or air if invalid/unknown
+     */
+    private static Block resolveBlock(final String id) {
+        final Identifier identifier = parseIdentifierOrAir(id);
+        return Registries.BLOCK.get(identifier);
+    }
+
+    /**
+     * Parses an identifier, falling back to air when malformed.
+     *
+     * @param id raw ID string
+     * @return parsed identifier, or air identifier
+     */
+    private static Identifier parseIdentifierOrAir(final String id) {
+        final Identifier parsed = Identifier.tryParse(id);
+        return parsed != null ? parsed : AIR_IDENTIFIER;
+    }
+
+    /**
+     * Clears a cache if it has grown beyond the configured cap.
+     *
+     * <p>The eviction strategy is intentionally simple. The registry key space is
+     * small and stable during normal play, so full clear is cheaper than bringing
+     * in an LRU dependency for this adapter.</p>
+     *
+     * @param cache cache to check
+     */
+    private static void evictIfNeeded(final Map<?, ?> cache) {
+        if (cache.size() > MAX_CACHE_SIZE) {
+            cache.clear();
+        }
+    }
+
+    /**
+     * Returns whether an ID string is unusable.
+     *
+     * @param id ID string
+     * @return {@code true} when null or empty
+     */
+    private static boolean isInvalidId(final String id) {
+        return id == null || id.isEmpty();
+    }
 
     /**
      * Returns the registry ID string for a block.
@@ -144,42 +204,6 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
     }
 
     /**
-     * Resolves a block's registry ID string.
-     *
-     * <p>The string is interned because registry IDs are repeated heavily in CIS
-     * metadata and mappings. Interning is safe here because the registry block set
-     * is bounded compared to arbitrary user strings.</p>
-     *
-     * @param block block to resolve
-     * @return interned registry ID string
-     */
-    private static String resolveBlockId(final Block block) {
-        return Registries.BLOCK.getId(block).toString().intern();
-    }
-
-    /**
-     * Resolves a registry ID string to a block.
-     *
-     * @param id registry ID string
-     * @return resolved block, or air if invalid/unknown
-     */
-    private static Block resolveBlock(final String id) {
-        final Identifier identifier = parseIdentifierOrAir(id);
-        return Registries.BLOCK.get(identifier);
-    }
-
-    /**
-     * Parses an identifier, falling back to air when malformed.
-     *
-     * @param id raw ID string
-     * @return parsed identifier, or air identifier
-     */
-    private static Identifier parseIdentifierOrAir(final String id) {
-        final Identifier parsed = Identifier.tryParse(id);
-        return parsed != null ? parsed : AIR_IDENTIFIER;
-    }
-
-    /**
      * Stores a block-to-ID mapping.
      *
      * <p>This avoids {@code computeIfAbsent} because the cache may be cleared when
@@ -203,30 +227,5 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
     private void cacheBlock(final String id, final Block block) {
         evictIfNeeded(idToBlockCache);
         idToBlockCache.putIfAbsent(id, block);
-    }
-
-    /**
-     * Clears a cache if it has grown beyond the configured cap.
-     *
-     * <p>The eviction strategy is intentionally simple. The registry key space is
-     * small and stable during normal play, so full clear is cheaper than bringing
-     * in an LRU dependency for this adapter.</p>
-     *
-     * @param cache cache to check
-     */
-    private static void evictIfNeeded(final Map<?, ?> cache) {
-        if (cache.size() > MAX_CACHE_SIZE) {
-            cache.clear();
-        }
-    }
-
-    /**
-     * Returns whether an ID string is unusable.
-     *
-     * @param id ID string
-     * @return {@code true} when null or empty
-     */
-    private static boolean isInvalidId(final String id) {
-        return id == null || id.isEmpty();
     }
 }

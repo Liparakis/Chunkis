@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
+import it.unimi.dsi.fastutil.longs.LongSet;
+import java.util.Map;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKeys;
@@ -10,9 +12,6 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.structure.Structure;
-import it.unimi.dsi.fastutil.longs.LongSet;
-
-import java.util.Map;
 
 /**
  * Direct serializer for the vanilla {@code structures} chunk payload.

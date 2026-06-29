@@ -26,15 +26,18 @@ import java.util.List;
  * @param <S> BlockState type
  * @param <P> Property type
  * @param <N> NBT type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class CisNetworkDecoder<B, S, P, N> extends AbstractCisDecoder<S, N> {
 
-    /** Registry adapter used to resolve network palette block identifiers back into blocks. */
+    /**
+     * Registry adapter used to resolve network palette block identifiers back into blocks.
+     */
     private final BlockRegistryAdapter<B> registryAdapter;
-    /** Property serializer used to rebuild block states from network palette entries. */
+    /**
+     * Property serializer used to rebuild block states from network palette entries.
+     */
     private final PropertyPacker<B, S, P> propertyPacker;
 
     /**
@@ -49,6 +52,16 @@ public final class CisNetworkDecoder<B, S, P, N> extends AbstractCisDecoder<S, N
         super(nbtAdapter, airState);
         this.registryAdapter = registryAdapter;
         this.propertyPacker = propertyPacker;
+    }
+
+    /**
+     * Validates the encoded property-data span before the shared property reader is rebound.
+     */
+    private static void validatePropertyLength(byte[] data, int offset, int propLength) throws IOException {
+        if (propLength < 0) {
+            throw new IOException("Invalid property data length: " + propLength);
+        }
+        ensureAvailable(data, offset, propLength, "property data");
     }
 
     /**
@@ -113,16 +126,6 @@ public final class CisNetworkDecoder<B, S, P, N> extends AbstractCisDecoder<S, N
     }
 
     /**
-     * Validates the encoded property-data span before the shared property reader is rebound.
-     */
-    private static void validatePropertyLength(byte[] data, int offset, int propLength) throws IOException {
-        if (propLength < 0) {
-            throw new IOException("Invalid property data length: " + propLength);
-        }
-        ensureAvailable(data, offset, propLength, "property data");
-    }
-
-    /**
      * Reconstructs network global palette states by applying decoded property payloads to each block id.
      */
     private void populateNetworkGlobalPalette(Palette<S> palette, List<B> blocks) {
@@ -133,7 +136,10 @@ public final class CisNetworkDecoder<B, S, P, N> extends AbstractCisDecoder<S, N
         }
     }
 
-    /** Result of reading the identifier half of a network global palette. */
+    /**
+     * Result of reading the identifier half of a network global palette.
+     */
     private record PaletteReadResult<B>(List<B> blocks, int offset) {
+
     }
 }

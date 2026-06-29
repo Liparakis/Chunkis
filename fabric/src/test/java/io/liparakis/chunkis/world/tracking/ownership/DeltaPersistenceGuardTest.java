@@ -1,12 +1,12 @@
 package io.liparakis.chunkis.world.tracking.ownership;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DeltaPersistenceGuardTest {
 
@@ -30,9 +30,9 @@ class DeltaPersistenceGuardTest {
                         true,
                         false,
                         CisNbtUtil.createBaseNbt(1, 1, 1)
-                ),
+                                                             ),
                 false
-        );
+                              );
 
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
         assertFalse(DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta));
@@ -48,9 +48,9 @@ class DeltaPersistenceGuardTest {
                         true,
                         true,
                         null
-                ),
+                                                             ),
                 false
-        );
+                              );
 
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
     }
@@ -83,9 +83,9 @@ class DeltaPersistenceGuardTest {
                         true,
                         false,
                         CisNbtUtil.createBaseNbt(1, 1, 1)
-                ),
+                                                             ),
                 false
-        );
+                              );
 
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
     }

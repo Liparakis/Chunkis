@@ -1,27 +1,26 @@
 package io.liparakis.chunkis.world.tracking.state;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
-import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
-import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import java.util.List;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 import org.junit.jupiter.api.AfterEach;
-import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GlobalChunkTrackerTest {
 
@@ -44,9 +43,9 @@ class GlobalChunkTrackerTest {
                         false,
                         false,
                         baseChunkNbt
-                ),
+                                                             ),
                 false
-        );
+                                 );
         final ChunkDelta<String, NbtCompound> weakerIncoming = new ChunkDelta<>();
 
         assertTrue(GlobalChunkTracker.shouldKeepExistingAuthoritativeDelta(existing, weakerIncoming));
@@ -68,7 +67,7 @@ class GlobalChunkTrackerTest {
         final RegistryKey<World> overworld = RegistryKey.of(
                 RegistryKeys.WORLD,
                 Identifier.of("minecraft", "overworld")
-        );
+                                                           );
 
         GlobalChunkTracker.noteChunkUnloaded(overworld, 4, -3, true);
 
@@ -87,7 +86,7 @@ class GlobalChunkTrackerTest {
         final RegistryKey<World> overworld = RegistryKey.of(
                 RegistryKeys.WORLD,
                 Identifier.of("minecraft", "overworld")
-        );
+                                                           );
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
@@ -95,12 +94,12 @@ class GlobalChunkTrackerTest {
 
         final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(6);
         assertTrue(latest.stream().anyMatch(event ->
-                event.reason() == ChunkTraceReason.TRACKER_DIRTY_MAP_PUT
-                        && "WorldChunkMixin#setBlockState".equals(event.source())
-                        && "minecraft:overworld".equals(event.worldId())
-                        && event.chunkKey() != null
-                        && event.chunkKey().x() == 7
-                        && event.chunkKey().z() == 9));
+                                                    event.reason() == ChunkTraceReason.TRACKER_DIRTY_MAP_PUT
+                                                            && "WorldChunkMixin#setBlockState".equals(event.source())
+                                                            && "minecraft:overworld".equals(event.worldId())
+                                                            && event.chunkKey() != null
+                                                            && event.chunkKey().x() == 7
+                                                            && event.chunkKey().z() == 9));
     }
 
     @Test
@@ -109,7 +108,7 @@ class GlobalChunkTrackerTest {
         final RegistryKey<World> overworld = RegistryKey.of(
                 RegistryKeys.WORLD,
                 Identifier.of("minecraft", "overworld")
-        );
+                                                           );
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
@@ -125,7 +124,8 @@ class GlobalChunkTrackerTest {
 
         final List<ChunkTraceEvent> events = ChunkTraceStore.latest(4);
         assertTrue(events.stream().anyMatch(event -> event.reason() == ChunkTraceReason.TRACKER_MARK_SAVED));
-        assertTrue(events.stream().anyMatch(event -> event.reason() == ChunkTraceReason.TRACKER_UNLOAD_CACHE_INVALIDATED));
+        assertTrue(events.stream().anyMatch(event -> event.reason()
+                == ChunkTraceReason.TRACKER_UNLOAD_CACHE_INVALIDATED));
     }
 
     @Test
@@ -133,7 +133,7 @@ class GlobalChunkTrackerTest {
         final RegistryKey<World> overworld = RegistryKey.of(
                 RegistryKeys.WORLD,
                 Identifier.of("minecraft", "overworld")
-        );
+                                                           );
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
         GlobalChunkTracker.addDelta(overworld, 3, 4, delta, "test");
@@ -144,7 +144,7 @@ class GlobalChunkTrackerTest {
                 4,
                 delta,
                 delta.getMutationGeneration()
-        ));
+                                                         ));
 
         final ChunkDelta<String, NbtCompound> replacement = new ChunkDelta<>();
         replacement.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
@@ -156,7 +156,7 @@ class GlobalChunkTrackerTest {
                 4,
                 delta,
                 delta.getMutationGeneration()
-        ));
+                                                          ));
     }
 
     @Test
@@ -165,7 +165,7 @@ class GlobalChunkTrackerTest {
         final RegistryKey<World> overworld = RegistryKey.of(
                 RegistryKeys.WORLD,
                 Identifier.of("minecraft", "overworld")
-        );
+                                                           );
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
         delta.addBlockEntityData(1, 64, 1, new NbtCompound());
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
@@ -174,9 +174,9 @@ class GlobalChunkTrackerTest {
 
         final List<ChunkTraceEvent> events = ChunkTraceStore.latest(4);
         assertTrue(events.stream().anyMatch(event ->
-                event.eventType() == ChunkTraceEventType.ASSERTION_FAILED
-                        && event.reason() == ChunkTraceReason.INVALID_PAYLOAD
-                        && "WorldChunkMixin#setBlockEntity".equals(event.source())));
+                                                    event.eventType() == ChunkTraceEventType.ASSERTION_FAILED
+                                                            && event.reason() == ChunkTraceReason.INVALID_PAYLOAD
+                                                            && "WorldChunkMixin#setBlockEntity".equals(event.source())));
     }
 }
 

@@ -1,11 +1,11 @@
 package io.liparakis.chunkis.world.restoration.core;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkRestorerTest {
 
@@ -24,7 +24,7 @@ class ChunkRestorerTest {
         assertEquals(
                 "sections=[0,2], blockChanges=[(1,5,3)=stone, (4,32,6)=dirt], blockEntities=[(1,5,3)=minecraft:chest]",
                 description
-        );
+                    );
     }
 
     @Test

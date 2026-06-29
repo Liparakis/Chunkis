@@ -175,7 +175,7 @@ public final class LeafTickContext {
         LOGGER.error(
                 "Leaf tick context exit without matching enter. Resetting context. (thread: {})",
                 Thread.currentThread().getName()
-        );
+                    );
 
         CONTEXT.remove();
     }

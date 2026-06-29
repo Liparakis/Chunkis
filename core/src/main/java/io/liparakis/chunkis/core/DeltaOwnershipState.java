@@ -4,6 +4,7 @@ package io.liparakis.chunkis.core;
  * Tracks the ownership and dirty state metadata for a ChunkDelta.
  */
 final class DeltaOwnershipState {
+
     String ownershipReason;
     String ownershipSource;
     String firstMutationSource;

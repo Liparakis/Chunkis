@@ -38,10 +38,10 @@ final class ChunkDebugOutput {
     static String formatEvent(final ChunkTraceEvent event, final DateTimeFormatter timeFormat) {
         final StringBuilder sb = new StringBuilder(192);
         sb.append('#').append(event.eventId())
-                .append(' ').append(timeFormat.format(Instant.ofEpochMilli(event.timestampMillis())))
-                .append(" UTC ").append(event.eventType())
-                .append(' ').append(event.severity()).append('/').append(event.reason())
-                .append(" [").append(event.domain()).append(']');
+          .append(' ').append(timeFormat.format(Instant.ofEpochMilli(event.timestampMillis())))
+          .append(" UTC ").append(event.eventType())
+          .append(' ').append(event.severity()).append('/').append(event.reason())
+          .append(" [").append(event.domain()).append(']');
 
         if (event.worldId() != null) {
             sb.append(" world=").append(event.worldId());
@@ -72,8 +72,8 @@ final class ChunkDebugOutput {
         }
 
         sb.append(" src=").append(event.source())
-                .append(" thread=").append(event.threadName())
-                .append(" msg=").append(event.message());
+          .append(" thread=").append(event.threadName())
+          .append(" msg=").append(event.message());
         return sb.toString();
     }
 
@@ -111,7 +111,7 @@ final class ChunkDebugOutput {
         final List<ChunkTraceEvent> payloadEvents = ChunkTraceStore.latestMatching(
                 1,
                 event -> event.payloadWatchTarget() != null
-        );
+                                                                                  );
         if (payloadEvents.isEmpty()) {
             return "[Chunkis] No watched trace events stored. Store currently has no payload-watch events. "
                     + formatWatchpointSummary();
@@ -126,13 +126,13 @@ final class ChunkDebugOutput {
     static String formatPendingSnapshot(final ChunkDebugCommand.PendingChunkSnapshot snapshot) {
         final StringBuilder sb = new StringBuilder(128);
         sb.append("chunk=").append(snapshot.chunkKey().x()).append(',').append(snapshot.chunkKey().z())
-                .append(" trackerDirty=").append(snapshot.trackerDirty())
-                .append(" asyncQueued=").append(snapshot.asyncPending() != null);
+          .append(" trackerDirty=").append(snapshot.trackerDirty())
+          .append(" asyncQueued=").append(snapshot.asyncPending() != null);
 
         if (snapshot.asyncPending() != null) {
             sb.append(" asyncOp=").append(snapshot.asyncPending().operationId())
-                    .append(" asyncGeneration=").append(snapshot.asyncPending().generation())
-                    .append(" asyncDirty=").append(snapshot.asyncPending().dirtyState());
+              .append(" asyncGeneration=").append(snapshot.asyncPending().generation())
+              .append(" asyncDirty=").append(snapshot.asyncPending().dirtyState());
         }
         return sb.toString();
     }
@@ -143,15 +143,15 @@ final class ChunkDebugOutput {
     static String formatSuspectSummary(final ChunkTraceSuspect suspect) {
         final StringBuilder sb = new StringBuilder(160);
         sb.append("id=").append(suspect.suspectId())
-                .append(" chunk=").append(suspect.chunkKey().x()).append(',').append(suspect.chunkKey().z());
+          .append(" chunk=").append(suspect.chunkKey().x()).append(',').append(suspect.chunkKey().z());
         if (suspect.regionKey() != null) {
             sb.append(" region=").append(suspect.regionKey().x()).append(',').append(suspect.regionKey().z());
         }
         sb.append(" reason=").append(suspect.reason())
-                .append(" latest=").append(suspect.latestEvent().eventType())
-                .append('#').append(suspect.latestEvent().eventId())
-                .append(" severity=").append(suspect.severity())
-                .append(" occurrences=").append(suspect.occurrenceCount());
+          .append(" latest=").append(suspect.latestEvent().eventType())
+          .append('#').append(suspect.latestEvent().eventId())
+          .append(" severity=").append(suspect.severity())
+          .append(" occurrences=").append(suspect.occurrenceCount());
         return sb.toString();
     }
 
@@ -165,45 +165,45 @@ final class ChunkDebugOutput {
     static String formatSuspectDetail(final ChunkTraceSuspect suspect, final DateTimeFormatter timeFormat) {
         final StringBuilder sb = new StringBuilder(384);
         sb.append("suspectId=").append(suspect.suspectId())
-                .append(" chunk=").append(suspect.chunkKey().x()).append(',').append(suspect.chunkKey().z());
+          .append(" chunk=").append(suspect.chunkKey().x()).append(',').append(suspect.chunkKey().z());
         if (suspect.regionKey() != null) {
             sb.append(" region=").append(suspect.regionKey().x()).append(',').append(suspect.regionKey().z());
         }
         sb.append(" reason=").append(suspect.reason())
-                .append(" original=").append(suspect.originalFailureEvent().eventType())
-                .append('#').append(suspect.originalFailureEvent().eventId())
-                .append(" latest=").append(suspect.latestEvent().eventType())
-                .append('#').append(suspect.latestEvent().eventId())
-                .append(" severity=").append(suspect.severity())
-                .append(" firstSeen=").append(timeFormat.format(
-                        Instant.ofEpochMilli(suspect.firstSeenTimestampMillis()))).append(" UTC")
-                .append(" lastSeen=").append(timeFormat.format(
-                        Instant.ofEpochMilli(suspect.lastSeenTimestampMillis()))).append(" UTC")
-                .append(" occurrences=").append(suspect.occurrenceCount());
+          .append(" original=").append(suspect.originalFailureEvent().eventType())
+          .append('#').append(suspect.originalFailureEvent().eventId())
+          .append(" latest=").append(suspect.latestEvent().eventType())
+          .append('#').append(suspect.latestEvent().eventId())
+          .append(" severity=").append(suspect.severity())
+          .append(" firstSeen=").append(timeFormat.format(
+                  Instant.ofEpochMilli(suspect.firstSeenTimestampMillis()))).append(" UTC")
+          .append(" lastSeen=").append(timeFormat.format(
+                  Instant.ofEpochMilli(suspect.lastSeenTimestampMillis()))).append(" UTC")
+          .append(" occurrences=").append(suspect.occurrenceCount());
         if (suspect.operationId() != null) {
             sb.append(" op=").append(suspect.operationId());
         }
         sb.append(" timeline=").append(suspect.copiedTimeline().size())
-                .append(" latestMsg=").append(suspect.latestMessage())
-                .append(" inspect=/chunkis debug suspect timeline ").append(suspect.suspectId());
+          .append(" latestMsg=").append(suspect.latestMessage())
+          .append(" inspect=/chunkis debug suspect timeline ").append(suspect.suspectId());
         return sb.toString();
     }
 
     private static String formatChunks(final List<DebugChunkKey> chunks) {
         return chunks.stream()
-                .map(chunk -> chunk.x() + "," + chunk.z())
-                .collect(Collectors.joining(" "));
+                     .map(chunk -> chunk.x() + "," + chunk.z())
+                     .collect(Collectors.joining(" "));
     }
 
     private static String formatRegions(final List<DebugRegionKey> regions) {
         return regions.stream()
-                .map(region -> region.x() + "," + region.z())
-                .collect(Collectors.joining(" "));
+                      .map(region -> region.x() + "," + region.z())
+                      .collect(Collectors.joining(" "));
     }
 
     private static String formatPayloads(final List<PayloadWatchTarget> payloads) {
         return payloads.stream()
-                .map(PayloadWatchTarget::describe)
-                .collect(Collectors.joining(" | "));
+                       .map(PayloadWatchTarget::describe)
+                       .collect(Collectors.joining(" | "));
     }
 }

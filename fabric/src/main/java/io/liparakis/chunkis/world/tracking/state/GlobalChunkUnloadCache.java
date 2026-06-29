@@ -22,7 +22,7 @@ final class GlobalChunkUnloadCache {
             @Override
             protected boolean removeEldestEntry(
                     final Map.Entry<DimensionChunkKey, ChunkDelta<?, ?>> eldest
-            ) {
+                                               ) {
                 final boolean evict = size() > MAX_CACHE_SIZE;
                 if (evict) {
                     GlobalChunkUnloadCache.this.onEvict.accept(eldest.getKey());

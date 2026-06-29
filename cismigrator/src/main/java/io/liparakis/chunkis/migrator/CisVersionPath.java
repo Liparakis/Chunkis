@@ -7,9 +7,8 @@ import java.util.List;
  * format.
  *
  * @param fromVersion starting version
- * @param toVersion target version
- * @param steps ordered upgrade steps
- *
+ * @param toVersion   target version
+ * @param steps       ordered upgrade steps
  * @author Liparakis
  * @version 1.0
  */

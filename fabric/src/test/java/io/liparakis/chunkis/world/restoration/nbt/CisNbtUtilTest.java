@@ -1,16 +1,15 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
-import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.liparakis.chunkis.core.ChunkDelta;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
+import org.junit.jupiter.api.Test;
 
 /**
  * Unit tests for {@link CisNbtUtil}, covering structure metadata extraction,
@@ -18,6 +17,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * legacy, explicit-true, and explicit-false cases.
  */
 class CisNbtUtilTest {
+
+    /**
+     * Builds a minimal synthetic chunk root carrying the Chunkis delta marker,
+     * suitable for passing to {@link CisNbtUtil#shouldSuppressInitialRepopulation}.
+     *
+     * @return root compound with {@link CisNbtUtil#HAS_DELTA_KEY} set to {@code true}
+     */
+    private static NbtCompound buildRootWithDeltaMarker() {
+        final NbtCompound root = new NbtCompound();
+        final NbtCompound chunkisData = new NbtCompound();
+        chunkisData.putBoolean(CisNbtUtil.HAS_DELTA_KEY, true);
+        root.put(CisNbtUtil.CHUNKIS_DATA_KEY, chunkisData);
+        return root;
+    }
 
     /**
      * Verifies that structure metadata containing only references is
@@ -28,14 +41,18 @@ class CisNbtUtilTest {
         final NbtCompound structures = new NbtCompound();
         structures.put(CisNbtUtil.STRUCTURE_REFERENCES_KEY, new NbtCompound());
         structures.getCompound(CisNbtUtil.STRUCTURE_REFERENCES_KEY)
-                .orElseThrow()
-                .putLongArray("minecraft:village", new long[]{1L});
+                  .orElseThrow()
+                  .putLongArray("minecraft:village", new long[]{1L});
 
         final NbtCompound extracted = CisNbtUtil.extractPersistedStructureMetadata(structures);
 
         assertNotNull(extracted);
         assertEquals(structures, extracted);
     }
+
+    // -------------------------------------------------------------------------
+    // shouldSuppressInitialRepopulation
+    // -------------------------------------------------------------------------
 
     /**
      * Verifies that extracting metadata from a null compound returns null.
@@ -44,10 +61,6 @@ class CisNbtUtilTest {
     void returnsNullWhenExtractingFromNullMetadata() {
         assertNull(CisNbtUtil.extractPersistedStructureMetadata(null));
     }
-
-    // -------------------------------------------------------------------------
-    // shouldSuppressInitialRepopulation
-    // -------------------------------------------------------------------------
 
     /**
      * Verifies that the suppression flag is correctly round-trip encoded
@@ -58,8 +71,8 @@ class CisNbtUtilTest {
         final NbtCompound structures = new NbtCompound();
         structures.put(CisNbtUtil.STRUCTURE_STARTS_KEY, new NbtCompound());
         structures.getCompound(CisNbtUtil.STRUCTURE_STARTS_KEY)
-                .orElseThrow()
-                .putString("minecraft:village", "start");
+                  .orElseThrow()
+                  .putString("minecraft:village", "start");
 
         final NbtCompound metadata = CisNbtUtil.createChunkMetadata(structures, true);
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
@@ -120,9 +133,9 @@ class CisNbtUtilTest {
                         true,
                         false,
                         baseChunk
-                ),
+                                                             ),
                 false
-        );
+                              );
 
         final CisNbtUtil.LoadChunkNbtResult result =
                 CisNbtUtil.buildLoadChunkNbt(3, 7, 3953, delta);
@@ -135,6 +148,10 @@ class CisNbtUtilTest {
         final NbtList entities = result.root().getList("entities").orElseThrow();
         assertEquals(1, entities.size());
     }
+
+    // -------------------------------------------------------------------------
+    // Shared fixture builder
+    // -------------------------------------------------------------------------
 
     @Test
     void buildLoadChunkNbtSkipsPersistedBaseForAuthoritativeFullBaseline() {
@@ -152,9 +169,9 @@ class CisNbtUtilTest {
                         true,
                         true,
                         baseChunk
-                ),
+                                                             ),
                 false
-        );
+                              );
 
         final CisNbtUtil.LoadChunkNbtResult result =
                 CisNbtUtil.buildLoadChunkNbt(3, 7, 3953, delta);
@@ -163,24 +180,6 @@ class CisNbtUtilTest {
         assertEquals(CisNbtUtil.STATUS_EMPTY, result.root().getString(CisNbtUtil.STATUS_KEY).orElseThrow());
         assertFalse(result.root().contains("sentinel_block_from_stale_base"));
         assertTrue(result.root().contains(CisNbtUtil.CHUNKIS_DATA_KEY));
-    }
-
-    // -------------------------------------------------------------------------
-    // Shared fixture builder
-    // -------------------------------------------------------------------------
-
-    /**
-     * Builds a minimal synthetic chunk root carrying the Chunkis delta marker,
-     * suitable for passing to {@link CisNbtUtil#shouldSuppressInitialRepopulation}.
-     *
-     * @return root compound with {@link CisNbtUtil#HAS_DELTA_KEY} set to {@code true}
-     */
-    private static NbtCompound buildRootWithDeltaMarker() {
-        final NbtCompound root = new NbtCompound();
-        final NbtCompound chunkisData = new NbtCompound();
-        chunkisData.putBoolean(CisNbtUtil.HAS_DELTA_KEY, true);
-        root.put(CisNbtUtil.CHUNKIS_DATA_KEY, chunkisData);
-        return root;
     }
 }
 

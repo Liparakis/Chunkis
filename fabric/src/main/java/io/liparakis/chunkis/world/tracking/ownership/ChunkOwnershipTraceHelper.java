@@ -4,9 +4,9 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.ChunkPos;
@@ -26,7 +26,7 @@ public final class ChunkOwnershipTraceHelper {
             final String source,
             final ChunkDelta<?, ?> delta,
             final ChunkMutationTrackingScope.Cause passiveCause
-    ) {
+                                    ) {
         traceDecision(
                 worldKey,
                 pos != null ? new DebugChunkKey(pos.x, pos.z) : null,
@@ -35,7 +35,7 @@ public final class ChunkOwnershipTraceHelper {
                 source,
                 delta,
                 passiveCause
-        );
+                     );
     }
 
     public static void traceDecision(
@@ -46,7 +46,7 @@ public final class ChunkOwnershipTraceHelper {
             final String source,
             final ChunkDelta<?, ?> delta,
             final ChunkMutationTrackingScope.Cause passiveCause
-    ) {
+                                    ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.CHUNKIS_OWNERSHIP_DECISION,
@@ -60,14 +60,14 @@ public final class ChunkOwnershipTraceHelper {
                 null,
                 delta != null && delta.isDirty(),
                 null
-        );
+                             );
     }
 
     private static String describeDecision(
             final String decision,
             final ChunkDelta<?, ?> delta,
             final ChunkMutationTrackingScope.Cause passiveCause
-    ) {
+                                          ) {
         final Object metadata = delta != null ? delta.getChunkMetadata() : null;
         return "decision=" + decision
                 + ", hasDelta=" + (delta != null)
@@ -80,7 +80,8 @@ public final class ChunkOwnershipTraceHelper {
                 + ", firstMutationSource=" + (delta != null ? delta.getFirstMutationSource() : null)
                 + ", ownershipReason=" + (delta != null ? delta.getOwnershipReason() : null)
                 + ", ownershipSource=" + (delta != null ? delta.getOwnershipSource() : null)
-                + ", passiveContext=" + (passiveCause != null ? passiveCause.name() : ChunkMutationTrackingScope.Cause.NONE.name());
+                + ", passiveContext=" + (passiveCause != null ? passiveCause.name()
+                : ChunkMutationTrackingScope.Cause.NONE.name());
     }
 }
 

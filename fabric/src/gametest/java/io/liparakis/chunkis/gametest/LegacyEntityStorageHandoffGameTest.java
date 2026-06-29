@@ -2,10 +2,13 @@ package io.liparakis.chunkis.gametest;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -25,10 +28,6 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
-
 /**
  * Verifies the one-time handoff from legacy Chunkis-owned entity payloads to
  * vanilla entity storage.
@@ -40,6 +39,55 @@ import java.util.UUID;
  */
 @SuppressWarnings("unused")
 public final class LegacyEntityStorageHandoffGameTest {
+
+    private static SerializedEntity createLegacyEntityPayload(final ServerWorld world, final BlockPos pos) {
+        final Entity entity = Objects.requireNonNull(
+                EntityType.COW.create(world, SpawnReason.COMMAND),
+                "Failed to create test cow entity");
+        entity.refreshPositionAndAngles(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
+
+        try (ErrorReporter.Logging logging = new ErrorReporter.Logging(
+                entity.getErrorReporterContext(),
+                io.liparakis.chunkis.Chunkis.LOGGER)) {
+
+            final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
+            entity.writeData(writeView);
+
+            final NbtCompound nbt = writeView.getNbt();
+            CisNbtUtil.ensureEntityIdPresent(nbt, entity);
+            return new SerializedEntity(entity.getUuid(), nbt);
+        }
+    }
+
+    private static void clearNonPlayerEntities(final ServerWorld world, final ChunkPos chunkPos) {
+        for (final Entity entity : getChunkEntities(world, chunkPos)) {
+            if (!(entity instanceof PlayerEntity)) {
+                entity.discard();
+            }
+        }
+    }
+
+    private static int countEntitiesWithUuid(final ServerWorld world, final ChunkPos chunkPos, final UUID uuid) {
+        int count = 0;
+        for (final Entity entity : getChunkEntities(world, chunkPos)) {
+            if (uuid.equals(entity.getUuid())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static List<Entity> getChunkEntities(final ServerWorld world, final ChunkPos chunkPos) {
+        return world.getOtherEntities(
+                null,
+                new Box(
+                        chunkPos.getStartX(),
+                        world.getBottomY(),
+                        chunkPos.getStartZ(),
+                        chunkPos.getEndX() + 1,
+                        world.getBottomY() + world.getHeight(),
+                        chunkPos.getEndZ() + 1));
+    }
 
     @GameTest(maxTicks = 200)
     public void rewritesLegacyEntityPayloadsOutOfCisAfterFirstReplay(final TestContext context) {
@@ -107,56 +155,8 @@ public final class LegacyEntityStorageHandoffGameTest {
         context.complete();
     }
 
-    private static SerializedEntity createLegacyEntityPayload(final ServerWorld world, final BlockPos pos) {
-        final Entity entity = Objects.requireNonNull(
-                EntityType.COW.create(world, SpawnReason.COMMAND),
-                "Failed to create test cow entity");
-        entity.refreshPositionAndAngles(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
-
-        try (ErrorReporter.Logging logging = new ErrorReporter.Logging(
-                entity.getErrorReporterContext(),
-                io.liparakis.chunkis.Chunkis.LOGGER)) {
-
-            final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
-            entity.writeData(writeView);
-
-            final NbtCompound nbt = writeView.getNbt();
-            CisNbtUtil.ensureEntityIdPresent(nbt, entity);
-            return new SerializedEntity(entity.getUuid(), nbt);
-        }
-    }
-
-    private static void clearNonPlayerEntities(final ServerWorld world, final ChunkPos chunkPos) {
-        for (final Entity entity : getChunkEntities(world, chunkPos)) {
-            if (!(entity instanceof PlayerEntity)) {
-                entity.discard();
-            }
-        }
-    }
-
-    private static int countEntitiesWithUuid(final ServerWorld world, final ChunkPos chunkPos, final UUID uuid) {
-        int count = 0;
-        for (final Entity entity : getChunkEntities(world, chunkPos)) {
-            if (uuid.equals(entity.getUuid())) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private static List<Entity> getChunkEntities(final ServerWorld world, final ChunkPos chunkPos) {
-        return world.getOtherEntities(
-                null,
-                new Box(
-                        chunkPos.getStartX(),
-                        world.getBottomY(),
-                        chunkPos.getStartZ(),
-                        chunkPos.getEndX() + 1,
-                        world.getBottomY() + world.getHeight(),
-                        chunkPos.getEndZ() + 1));
-    }
-
     private record SerializedEntity(UUID uuid, NbtCompound nbt) {
+
     }
 }
 

@@ -1,11 +1,6 @@
 package io.liparakis.chunkis.adapter;
 
 import io.liparakis.chunkis.spi.NbtAdapter;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtSizeTracker;
-import org.jspecify.annotations.NonNull;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
@@ -16,6 +11,10 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtSizeTracker;
+import org.jspecify.annotations.NonNull;
 
 /**
  * NBT adapter for Chunkis' length-prefixed NBT payload format.
@@ -72,6 +71,203 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
             ThreadLocal.withInitial(BufferHolder::new);
 
     /**
+     * Writes a serialized payload as {@code int length + bytes}.
+     *
+     * <p>The payload is written directly from the reusable buffer's backing array.
+     * Only bytes in {@code [0, size)} are valid.</p>
+     *
+     * @param output target output
+     * @param buffer serialized payload buffer
+     * @throws IOException if output fails or the payload exceeds the size limit
+     */
+    private static void writeLengthPrefixedPayload(
+            final DataOutput output,
+            final ReusableByteArrayOutputStream buffer
+                                                  ) throws IOException {
+        final int size = buffer.size();
+
+        validatePayloadSize(size);
+
+        output.writeInt(size);
+        output.write(buffer.array(), 0, size);
+    }
+
+    /**
+     * Reads and validates the length prefix.
+     *
+     * @param input source input
+     * @return validated payload length
+     * @throws IOException if the length is invalid
+     */
+    private static int readAndValidateLength(final DataInput input) throws IOException {
+        final int length = input.readInt();
+        validateReadLength(length);
+        return length;
+    }
+
+    /**
+     * Reads compressed NBT directly from a bounded stream view.
+     *
+     * <p>The bounded stream prevents the NBT parser from consuming bytes belonging
+     * to the next payload. Any unread bytes are drained before return so the outer
+     * stream stays aligned.</p>
+     *
+     * @param input  source stream
+     * @param length exact payload byte length
+     * @return parsed NBT compound
+     * @throws IOException if reading or parsing fails
+     */
+    private static NbtCompound readCompressedStreaming(
+            final DataInputStream input,
+            final int length
+                                                      ) throws IOException {
+        final BufferHolder holder = BUFFER_POOL.get();
+
+        try (BoundedInputStream bounded = new BoundedInputStream(input, length)) {
+            final NbtCompound nbt = NbtIo.readCompressed(
+                    bounded,
+                    NbtSizeTracker.of(MAX_NBT_SIZE)
+                                                        );
+
+            drainRemaining(bounded, holder);
+            return nbt;
+        }
+    }
+
+    /**
+     * Reads compressed NBT from a generic {@link DataInput}.
+     *
+     * @param input  source input
+     * @param length exact payload byte length
+     * @return parsed NBT compound
+     * @throws IOException if reading or parsing fails
+     */
+    private static NbtCompound readCompressedBuffered(
+            final DataInput input,
+            final int length
+                                                     ) throws IOException {
+        final BufferHolder holder = BUFFER_POOL.get();
+        final byte[] buffer = holder.getReadBuffer(length);
+
+        try {
+            input.readFully(buffer, 0, length);
+
+            try (ByteArrayInputStream stream = new ByteArrayInputStream(buffer, 0, length)) {
+                return NbtIo.readCompressed(stream, NbtSizeTracker.of(MAX_NBT_SIZE));
+            }
+        } finally {
+            holder.releaseReadBufferIfOversized();
+        }
+    }
+
+    /**
+     * Reads raw NBT directly from a bounded stream view.
+     *
+     * @param input  source stream
+     * @param length exact payload byte length
+     * @return parsed NBT compound
+     * @throws IOException if reading or parsing fails
+     */
+    private static NbtCompound readRawStreaming(
+            final DataInputStream input,
+            final int length
+                                               ) throws IOException {
+        final BufferHolder holder = BUFFER_POOL.get();
+
+        try (BoundedInputStream bounded = new BoundedInputStream(input, length);
+             DataInputStream nbtInput = new DataInputStream(bounded)) {
+            final NbtCompound nbt = NbtIo.readCompound(
+                    nbtInput,
+                    NbtSizeTracker.of(MAX_NBT_SIZE)
+                                                      );
+
+            drainRemaining(bounded, holder);
+            return nbt;
+        }
+    }
+
+    /**
+     * Reads raw NBT from a generic {@link DataInput}.
+     *
+     * @param input  source input
+     * @param length exact payload byte length
+     * @return parsed NBT compound
+     * @throws IOException if reading or parsing fails
+     */
+    private static NbtCompound readRawBuffered(
+            final DataInput input,
+            final int length
+                                              ) throws IOException {
+        final BufferHolder holder = BUFFER_POOL.get();
+        final byte[] buffer = holder.getReadBuffer(length);
+
+        try {
+            input.readFully(buffer, 0, length);
+
+            try (ByteArrayInputStream byteInput = new ByteArrayInputStream(buffer, 0, length);
+                 DataInputStream nbtInput = new DataInputStream(byteInput)) {
+                return NbtIo.readCompound(nbtInput, NbtSizeTracker.of(MAX_NBT_SIZE));
+            }
+        } finally {
+            holder.releaseReadBufferIfOversized();
+        }
+    }
+
+    /**
+     * Drains unread bytes from a bounded payload stream.
+     *
+     * @param input  bounded payload stream
+     * @param holder thread-local buffer holder
+     * @throws IOException if draining fails
+     */
+    private static void drainRemaining(
+            final BoundedInputStream input,
+            final BufferHolder holder
+                                      ) throws IOException {
+        final byte[] scratch = holder.drainBuffer;
+
+        while (input.read(scratch, 0, scratch.length) != -1) {
+            // Drain only. Bytes are intentionally discarded.
+        }
+    }
+
+    /**
+     * Validates serialized payload size before writing.
+     *
+     * @param size serialized payload size
+     * @throws IOException if the size is invalid
+     */
+    private static void validatePayloadSize(final int size) throws IOException {
+        if (size <= 0 || size > MAX_NBT_SIZE) {
+            throw new IOException(
+                    "Invalid NBT payload size: "
+                            + size
+                            + " bytes (expected 1–"
+                            + MAX_NBT_SIZE
+                            + ")"
+            );
+        }
+    }
+
+    /**
+     * Validates a payload length read from storage.
+     *
+     * @param length declared payload length
+     * @throws IOException if the length is invalid
+     */
+    private static void validateReadLength(final int length) throws IOException {
+        if (length <= 0 || length > MAX_NBT_SIZE) {
+            throw new IOException(
+                    "Invalid NBT payload size: "
+                            + length
+                            + " bytes (expected 1–"
+                            + MAX_NBT_SIZE
+                            + ")"
+            );
+        }
+    }
+
+    /**
      * Writes compressed NBT.
      *
      * @param nbt    NBT compound to write
@@ -94,7 +290,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     public void writeCompressed(
             final NbtCompound nbt,
             final DataOutput output
-    ) throws IOException {
+                               ) throws IOException {
         Objects.requireNonNull(nbt, "nbt");
         Objects.requireNonNull(output, "output");
 
@@ -150,7 +346,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     public void writeRaw(
             final NbtCompound nbt,
             final DataOutput output
-    ) throws IOException {
+                        ) throws IOException {
         Objects.requireNonNull(nbt, "nbt");
         Objects.requireNonNull(output, "output");
 
@@ -187,222 +383,23 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     }
 
     /**
-     * Writes a serialized payload as {@code int length + bytes}.
-     *
-     * <p>The payload is written directly from the reusable buffer's backing array.
-     * Only bytes in {@code [0, size)} are valid.</p>
-     *
-     * @param output target output
-     * @param buffer serialized payload buffer
-     * @throws IOException if output fails or the payload exceeds the size limit
-     */
-    private static void writeLengthPrefixedPayload(
-            final DataOutput output,
-            final ReusableByteArrayOutputStream buffer
-    ) throws IOException {
-        final int size = buffer.size();
-
-        validatePayloadSize(size);
-
-        output.writeInt(size);
-        output.write(buffer.array(), 0, size);
-    }
-
-    /**
-     * Reads and validates the length prefix.
-     *
-     * @param input source input
-     * @return validated payload length
-     * @throws IOException if the length is invalid
-     */
-    private static int readAndValidateLength(final DataInput input) throws IOException {
-        final int length = input.readInt();
-        validateReadLength(length);
-        return length;
-    }
-
-    /**
-     * Reads compressed NBT directly from a bounded stream view.
-     *
-     * <p>The bounded stream prevents the NBT parser from consuming bytes belonging
-     * to the next payload. Any unread bytes are drained before return so the outer
-     * stream stays aligned.</p>
-     *
-     * @param input  source stream
-     * @param length exact payload byte length
-     * @return parsed NBT compound
-     * @throws IOException if reading or parsing fails
-     */
-    private static NbtCompound readCompressedStreaming(
-            final DataInputStream input,
-            final int length
-    ) throws IOException {
-        final BufferHolder holder = BUFFER_POOL.get();
-
-        try (BoundedInputStream bounded = new BoundedInputStream(input, length)) {
-            final NbtCompound nbt = NbtIo.readCompressed(
-                    bounded,
-                    NbtSizeTracker.of(MAX_NBT_SIZE)
-            );
-
-            drainRemaining(bounded, holder);
-            return nbt;
-        }
-    }
-
-    /**
-     * Reads compressed NBT from a generic {@link DataInput}.
-     *
-     * @param input  source input
-     * @param length exact payload byte length
-     * @return parsed NBT compound
-     * @throws IOException if reading or parsing fails
-     */
-    private static NbtCompound readCompressedBuffered(
-            final DataInput input,
-            final int length
-    ) throws IOException {
-        final BufferHolder holder = BUFFER_POOL.get();
-        final byte[] buffer = holder.getReadBuffer(length);
-
-        try {
-            input.readFully(buffer, 0, length);
-
-            try (ByteArrayInputStream stream = new ByteArrayInputStream(buffer, 0, length)) {
-                return NbtIo.readCompressed(stream, NbtSizeTracker.of(MAX_NBT_SIZE));
-            }
-        } finally {
-            holder.releaseReadBufferIfOversized();
-        }
-    }
-
-    /**
-     * Reads raw NBT directly from a bounded stream view.
-     *
-     * @param input  source stream
-     * @param length exact payload byte length
-     * @return parsed NBT compound
-     * @throws IOException if reading or parsing fails
-     */
-    private static NbtCompound readRawStreaming(
-            final DataInputStream input,
-            final int length
-    ) throws IOException {
-        final BufferHolder holder = BUFFER_POOL.get();
-
-        try (BoundedInputStream bounded = new BoundedInputStream(input, length);
-             DataInputStream nbtInput = new DataInputStream(bounded)) {
-            final NbtCompound nbt = NbtIo.readCompound(
-                    nbtInput,
-                    NbtSizeTracker.of(MAX_NBT_SIZE)
-            );
-
-            drainRemaining(bounded, holder);
-            return nbt;
-        }
-    }
-
-    /**
-     * Reads raw NBT from a generic {@link DataInput}.
-     *
-     * @param input  source input
-     * @param length exact payload byte length
-     * @return parsed NBT compound
-     * @throws IOException if reading or parsing fails
-     */
-    private static NbtCompound readRawBuffered(
-            final DataInput input,
-            final int length
-    ) throws IOException {
-        final BufferHolder holder = BUFFER_POOL.get();
-        final byte[] buffer = holder.getReadBuffer(length);
-
-        try {
-            input.readFully(buffer, 0, length);
-
-            try (ByteArrayInputStream byteInput = new ByteArrayInputStream(buffer, 0, length);
-                 DataInputStream nbtInput = new DataInputStream(byteInput)) {
-                return NbtIo.readCompound(nbtInput, NbtSizeTracker.of(MAX_NBT_SIZE));
-            }
-        } finally {
-            holder.releaseReadBufferIfOversized();
-        }
-    }
-
-    /**
-     * Drains unread bytes from a bounded payload stream.
-     *
-     * @param input  bounded payload stream
-     * @param holder thread-local buffer holder
-     * @throws IOException if draining fails
-     */
-    private static void drainRemaining(
-            final BoundedInputStream input,
-            final BufferHolder holder
-    ) throws IOException {
-        final byte[] scratch = holder.drainBuffer;
-
-        while (input.read(scratch, 0, scratch.length) != -1) {
-            // Drain only. Bytes are intentionally discarded.
-        }
-    }
-
-    /**
-     * Validates serialized payload size before writing.
-     *
-     * @param size serialized payload size
-     * @throws IOException if the size is invalid
-     */
-    private static void validatePayloadSize(final int size) throws IOException {
-        if (size <= 0 || size > MAX_NBT_SIZE) {
-            throw new IOException(
-                    "Invalid NBT payload size: "
-                            + size
-                            + " bytes (expected 1–"
-                            + MAX_NBT_SIZE
-                            + ")"
-            );
-        }
-    }
-
-    /**
-     * Validates a payload length read from storage.
-     *
-     * @param length declared payload length
-     * @throws IOException if the length is invalid
-     */
-    private static void validateReadLength(final int length) throws IOException {
-        if (length <= 0 || length > MAX_NBT_SIZE) {
-            throw new IOException(
-                    "Invalid NBT payload size: "
-                            + length
-                            + " bytes (expected 1–"
-                            + MAX_NBT_SIZE
-                            + ")"
-            );
-        }
-    }
-
-    /**
      * Per-thread reusable buffer holder.
      */
     private static final class BufferHolder {
 
         /**
+         * Scratch buffer for draining bounded streams.
+         */
+        private final byte[] drainBuffer = new byte[BUFFER_SIZE];
+        /**
          * Reusable serialized output buffer.
          */
         private ReusableByteArrayOutputStream writeBuffer =
                 new ReusableByteArrayOutputStream(BUFFER_SIZE);
-
         /**
          * Reusable generic-input read buffer.
          */
         private byte[] readBuffer = new byte[BUFFER_SIZE];
-
-        /**
-         * Scratch buffer for draining bounded streams.
-         */
-        private final byte[] drainBuffer = new byte[BUFFER_SIZE];
 
         /**
          * Returns a reset write buffer.
@@ -525,7 +522,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
                 final byte @NonNull [] bytes,
                 final int offset,
                 final int length
-        ) throws IOException {
+                       ) throws IOException {
             if (length == 0) {
                 return 0;
             }

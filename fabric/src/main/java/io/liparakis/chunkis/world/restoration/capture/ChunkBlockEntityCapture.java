@@ -4,6 +4,7 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.model.CisConstants;
+import java.util.Objects;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
@@ -16,8 +17,6 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
-
-import java.util.Objects;
 
 /**
  * Captures block entities from chunks into Chunkis delta storage.
@@ -71,7 +70,7 @@ public final class ChunkBlockEntityCapture {
             final BlockEntity blockEntity,
             final RegistryWrapper.WrapperLookup registryManager,
             final ChunkDelta<?, NbtCompound> delta
-    ) {
+                                         ) {
         Objects.requireNonNull(blockEntity, "blockEntity");
         Objects.requireNonNull(registryManager, "registryManager");
         Objects.requireNonNull(delta, "delta");
@@ -111,7 +110,7 @@ public final class ChunkBlockEntityCapture {
             final WorldChunk chunk,
             final RegistryWrapper.WrapperLookup registryManager,
             final ChunkDelta<?, NbtCompound> delta
-    ) {
+                                           ) {
         Objects.requireNonNull(chunk, "chunk");
         Objects.requireNonNull(registryManager, "registryManager");
         Objects.requireNonNull(delta, "delta");
@@ -148,7 +147,7 @@ public final class ChunkBlockEntityCapture {
             @Nullable final BlockEntity blockEntity,
             final RegistryWrapper.WrapperLookup registryManager,
             final ChunkDelta<?, NbtCompound> delta
-    ) {
+                                                        ) {
         if (blockEntity == null || blockEntity.isRemoved()) {
             return;
         }
@@ -186,7 +185,7 @@ public final class ChunkBlockEntityCapture {
     private static NbtCompound trySerializeBlockEntity(
             final BlockEntity blockEntity,
             final RegistryWrapper.WrapperLookup registryManager
-    ) {
+                                                      ) {
         try {
             final NbtCompound nbt = blockEntity.createNbtWithIdentifyingData(registryManager);
             if (nbt == null || nbt.isEmpty()) {
@@ -199,7 +198,7 @@ public final class ChunkBlockEntityCapture {
                     blockEntity.getPos(),
                     blockEntity.getType(),
                     e
-            );
+                       );
             return null;
         }
     }
@@ -218,14 +217,14 @@ public final class ChunkBlockEntityCapture {
     private static NbtCompound injectBlockEntityId(
             final BlockEntity blockEntity,
             final NbtCompound nbt
-    ) {
+                                                  ) {
         final var typeId = BlockEntityType.getId(blockEntity.getType());
         if (typeId == null) {
             LOGGER.warn(
                     "Chunkis: Block entity at {} has unregistered type: {}",
                     blockEntity.getPos(),
                     blockEntity.getType()
-            );
+                       );
             return null;
         }
         nbt.putString(BLOCK_ENTITY_ID_KEY, typeId.toString());
@@ -248,13 +247,13 @@ public final class ChunkBlockEntityCapture {
             final BlockPos worldPos,
             final NbtCompound nbt,
             final ChunkDelta<?, NbtCompound> delta
-    ) {
+                                    ) {
         delta.addBlockEntityData(
                 worldPos.getX() & CisConstants.COORD_MASK,
                 worldPos.getY(),
                 worldPos.getZ() & CisConstants.COORD_MASK,
                 nbt
-        );
+                                );
     }
 
     /**
@@ -274,7 +273,7 @@ public final class ChunkBlockEntityCapture {
             final BlockEntity blockEntity,
             final NbtCompound nbt,
             final ChunkDelta<?, NbtCompound> delta
-    ) {
+                                                ) {
         storeInDelta(worldPos, nbt, delta);
         if (serverWorld != null && chunkPos != null) {
             PayloadWatchTracer.traceCapturedBlockEntity(
@@ -283,7 +282,7 @@ public final class ChunkBlockEntityCapture {
                     worldPos,
                     blockEntity,
                     nbt
-            );
+                                                       );
         }
     }
 
@@ -297,12 +296,12 @@ public final class ChunkBlockEntityCapture {
     private static void removeFromDelta(
             final BlockPos worldPos,
             final ChunkDelta<?, NbtCompound> delta
-    ) {
+                                       ) {
         delta.removeBlockEntityData(
                 worldPos.getX() & CisConstants.COORD_MASK,
                 worldPos.getY(),
                 worldPos.getZ() & CisConstants.COORD_MASK
-        );
+                                   );
     }
 
     /**
@@ -322,7 +321,7 @@ public final class ChunkBlockEntityCapture {
             @Nullable final ChunkPos chunkPos,
             final BlockPos pos,
             final String reason
-    ) {
+                                    ) {
         if (serverWorld != null && chunkPos != null) {
             PayloadWatchTracer.traceSkippedBlockEntityCapture(serverWorld, chunkPos, pos, reason);
         }

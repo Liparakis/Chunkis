@@ -3,9 +3,14 @@ package io.liparakis.chunkis.world.restoration.core;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
-import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
+import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.BlockEntityType;
@@ -21,12 +26,6 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 /**
  * Applies persisted chunk delta entries into a live chunk during restore.
@@ -57,7 +56,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final ChunkDelta<BlockState, NbtCompound> sourceDelta,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             @Nullable final String operationId
-    ) {
+                           ) {
         this.world = world;
         this.chunk = chunk;
         this.chunkPosition = chunk.getPos();
@@ -68,6 +67,42 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         if (this.replayLegacyEntities && this.runtimeDelta != null) {
             this.runtimeDelta.setEntities(sourceDelta.getEntitiesList(), false);
         }
+    }
+
+    private static boolean isBlockEntityNbtCompatibleWithState(
+            final NbtCompound nbt,
+            final BlockState currentState
+                                                              ) {
+        final Optional<String> rawId = nbt.getString(BLOCK_ENTITY_ID_KEY);
+        if (rawId.isEmpty()) {
+            return false;
+        }
+
+        final Identifier id = Identifier.tryParse(rawId.get());
+        if (id == null) {
+            return false;
+        }
+
+        final BlockEntityType<?> type = Registries.BLOCK_ENTITY_TYPE.get(id);
+        return type != null && type.supports(currentState);
+    }
+
+    private static boolean shouldReplayLegacyEntities(
+            final ChunkDelta<BlockState, NbtCompound> sourceDelta
+                                                     ) {
+        return sourceDelta != null && sourceDelta.countNonNullEntities() > 0;
+    }
+
+    private static Set<UUID> collectPersistedEntityUuids(
+            final ChunkDelta<BlockState, NbtCompound> sourceDelta
+                                                        ) {
+        final Set<UUID> uuids = new HashSet<>();
+        sourceDelta.forEachEntity(nbt -> {
+            if (nbt != null) {
+                EntityPayloadNbt.findUuid(nbt).ifPresent(uuids::add);
+            }
+        });
+        return uuids;
     }
 
     /**
@@ -123,7 +158,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final int localY,
             final int localZ,
             final BlockState state
-    ) {
+                          ) {
         blockApplyFailureCounters.recordVisitedInstruction();
         if (state == null) {
             blockApplyFailureCounters.recordNullState();
@@ -139,7 +174,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 state,
                 operationId,
                 BLOCK_TRACE_SOURCE
-        );
+                                                         );
 
         if (!ChunkRestorer.applyBlockChange(
                 chunk,
@@ -151,14 +186,14 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 worldPos,
                 blockApplyFailureCounters,
                 operationId
-        )) {
+                                           )) {
             PayloadWatchTracer.traceRestoreBlockFailure(
                     world,
                     chunkPosition,
                     worldPos,
                     operationId,
                     "restore failed before block reached live world"
-            );
+                                                       );
             return;
         }
 
@@ -174,7 +209,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final int localY,
             final int localZ,
             final NbtCompound nbt
-    ) {
+                                ) {
         if (nbt != null) {
             restoreBlockEntity(localX, localY, localZ, nbt);
         }
@@ -189,16 +224,16 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                     nbt,
                     operationId,
                     ENTITY_TRACE_SOURCE
-            );
+                                                                   );
         }
         if (replayLegacyEntities && nbt != null) {
             EntityPayloadNbt.findUuid(nbt)
-                    .ifPresent(uuid -> ScheduledEntityReplayQueue.schedule(
-                            world,
-                            chunkPosition,
-                            uuid.toString(),
-                            nbt
-                    ));
+                            .ifPresent(uuid -> ScheduledEntityReplayQueue.schedule(
+                                    world,
+                                    chunkPosition,
+                                    uuid.toString(),
+                                    nbt
+                                                                                  ));
         } else if (nbt != null) {
             final String entityUuid = EntityPayloadNbt.findUuidString(nbt).orElse("<missing-uuid>");
             PayloadWatchTracer.traceRestoreEntitySkipped(
@@ -207,13 +242,13 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                     entityUuid,
                     operationId,
                     "restore skipped: replayLegacyEntities=false"
-            );
+                                                        );
         }
     }
 
     private boolean shouldCleanupReplayedEntities(
             final ChunkDelta<BlockState, NbtCompound> sourceDelta
-    ) {
+                                                 ) {
         return replayLegacyEntities
                 && sourceDelta != null
                 && sourceDelta.shouldSuppressInitialRepopulation();
@@ -228,7 +263,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final int localY,
             final int localZ,
             final BlockState state
-    ) {
+                                        ) {
         if (runtimeDelta != null) {
             runtimeDelta.addBlockChange(localX, localY, localZ, state, false);
         }
@@ -242,7 +277,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final int localY,
             final int localZ,
             final NbtCompound nbt
-    ) {
+                                   ) {
         final BlockPos worldPos = chunkPosition.getBlockPos(localX, localY, localZ);
         final BlockState currentState = chunk.getBlockState(worldPos);
 
@@ -253,7 +288,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                     worldPos,
                     operationId,
                     "restore skipped: missing block state"
-            );
+                                                             );
             return;
         }
 
@@ -264,7 +299,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                     worldPos,
                     operationId,
                     "restore skipped: block entity type incompatible with current block state"
-            );
+                                                             );
             return;
         }
 
@@ -273,7 +308,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 currentState,
                 nbt,
                 world.getRegistryManager()
-        );
+                                                                 );
         if (blockEntity == null) {
             LOGGER.warn("Failed to create block entity from NBT at {}", worldPos);
             PayloadWatchTracer.traceRestoreBlockEntitySkipped(
@@ -282,7 +317,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                     worldPos,
                     operationId,
                     "restore skipped: block entity could not be created from NBT"
-            );
+                                                             );
             return;
         }
 
@@ -293,42 +328,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         }
         restoredBlockEntitiesCount++;
         PayloadWatchTracer.traceRestoredBlockEntity(world, chunkPosition, worldPos, blockEntity, nbt, operationId);
-    }
-
-    private static boolean isBlockEntityNbtCompatibleWithState(
-            final NbtCompound nbt,
-            final BlockState currentState
-    ) {
-        final Optional<String> rawId = nbt.getString(BLOCK_ENTITY_ID_KEY);
-        if (rawId.isEmpty()) {
-            return false;
-        }
-
-        final Identifier id = Identifier.tryParse(rawId.get());
-        if (id == null) {
-            return false;
-        }
-
-        final BlockEntityType<?> type = Registries.BLOCK_ENTITY_TYPE.get(id);
-        return type != null && type.supports(currentState);
-    }
-
-    private static boolean shouldReplayLegacyEntities(
-            final ChunkDelta<BlockState, NbtCompound> sourceDelta
-    ) {
-        return sourceDelta != null && sourceDelta.countNonNullEntities() > 0;
-    }
-
-    private static Set<UUID> collectPersistedEntityUuids(
-            final ChunkDelta<BlockState, NbtCompound> sourceDelta
-    ) {
-        final Set<UUID> uuids = new HashSet<>();
-        sourceDelta.forEachEntity(nbt -> {
-            if (nbt != null) {
-                EntityPayloadNbt.findUuid(nbt).ifPresent(uuids::add);
-            }
-        });
-        return uuids;
     }
 }
 

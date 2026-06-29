@@ -7,6 +7,7 @@ import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
+import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
@@ -17,8 +18,6 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.UUID;
 
 /**
  * Emits detailed diagnostics for entity replay decisions.
@@ -53,7 +52,7 @@ final class EntityReplayDiagnostics {
             final boolean materialized,
             final String decision,
             final Box searchBox
-    ) {
+                                   ) {
         final ChunkPos chunkPos = chunk.getPos();
         final UUID uuid = ChunkEntityQueries.parseUuid(entityUuid).orElse(null);
         final Entity liveEntity = uuid == null ? null : world.getEntity(uuid);
@@ -68,7 +67,7 @@ final class EntityReplayDiagnostics {
                         ? guardDuck.chunkis$getMutationTrackingScope().currentCause()
                         : ChunkMutationTrackingScope.Cause.NONE;
         final boolean visibleByQuery = uuid != null && ChunkEntityQueries.isVisibleFromWorldQuery(world, uuid,
-                searchBox);
+                                                                                                  searchBox);
 
         final String message = String.format(
                 "entity replay materialization: uuid=%s nbtType=%s nbtBlockPos=%s " +
@@ -92,7 +91,7 @@ final class EntityReplayDiagnostics {
                 visibleByQuery,
                 decision,
                 Thread.currentThread().getName()
-        );
+                                            );
 
         io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
                 io.liparakis.chunkis.debug.model.ChunkisDebugDomain.ENTITY_REPLAY,
@@ -107,7 +106,7 @@ final class EntityReplayDiagnostics {
                 null,
                 null,
                 null
-        );
+                                                              );
 
         Chunkis.LOGGER.debug("Chunkis {}", message);
     }

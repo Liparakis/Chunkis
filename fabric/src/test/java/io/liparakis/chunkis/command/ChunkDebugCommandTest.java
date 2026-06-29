@@ -1,23 +1,22 @@
 package io.liparakis.chunkis.command;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
-import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
+import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChunkDebugCommandTest {
 
@@ -94,7 +93,7 @@ class ChunkDebugCommandTest {
                                 true
                         )
                 )
-        );
+                                                                        );
 
         assertTrue(formatted.contains("chunk=7,-2"));
         assertTrue(formatted.contains("trackerDirty=true"));

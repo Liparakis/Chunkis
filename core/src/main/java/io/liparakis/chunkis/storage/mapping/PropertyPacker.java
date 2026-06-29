@@ -33,27 +33,36 @@ import java.util.concurrent.ConcurrentHashMap;
  * @param <B> Block type
  * @param <S> BlockState type
  * @param <P> Property type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class PropertyPacker<B, S, P> {
 
-    /** Default number of block entries the metadata cache is sized to hold before resizing. */
+    /**
+     * Default number of block entries the metadata cache is sized to hold before resizing.
+     */
     private static final int DEFAULT_CACHE_CAPACITY = 512;
-    /** Load factor used for the metadata cache's backing concurrent hash map. */
+    /**
+     * Load factor used for the metadata cache's backing concurrent hash map.
+     */
     private static final float CACHE_LOAD_FACTOR = 0.75f;
 
-    /** Adapter used to enumerate properties and rebuild block states. */
+    /**
+     * Adapter used to enumerate properties and rebuild block states.
+     */
     private final BlockStateAdapter<B, S, P> adapter;
-    /** Optional direct state-value accessor for adapters that can expose property values cheaply. */
+    /**
+     * Optional direct state-value accessor for adapters that can expose property values cheaply.
+     */
     private final PropertyValueAdapter<S, P> propertyValueAdapter;
-    /** Cache of precomputed property metadata keyed by block identity. */
+    /**
+     * Cache of precomputed property metadata keyed by block identity.
+     */
     private final Map<B, PropertyMeta<P>[]> cache;
 
     /**
      * Creates a PropertyPacker with default cache settings.
-     * 
+     *
      * @param adapter The block state adapter
      */
     public PropertyPacker(BlockStateAdapter<B, S, P> adapter) {
@@ -62,7 +71,7 @@ public final class PropertyPacker<B, S, P> {
 
     /**
      * Creates a PropertyPacker with custom initial cache capacity.
-     * 
+     *
      * @param adapter       The block state adapter
      * @param cacheCapacity Initial cache capacity (should match expected block type
      *                      count)
@@ -78,10 +87,19 @@ public final class PropertyPacker<B, S, P> {
     }
 
     /**
+     * Narrows a generic adapter reference once at construction time so the hot
+     * read path can avoid repeated instanceof checks.
+     */
+    @SuppressWarnings("unchecked")
+    private static <S, P> PropertyValueAdapter<S, P> castValueAdapter(final PropertyValueAdapter<?, ?> valueAdapter) {
+        return (PropertyValueAdapter<S, P>) valueAdapter;
+    }
+
+    /**
      * Gets or creates property metadata for a block.
      * This method is thread-safe and ensures metadata is computed only once per
      * block.
-     * 
+     *
      * @param block The block to get metadata for
      * @return Cached property metadata array
      */
@@ -98,7 +116,7 @@ public final class PropertyPacker<B, S, P> {
 
     /**
      * Writes all property values of a BlockState to the BitWriter.
-     * 
+     *
      * @param writer The bit writer
      * @param state  The block state
      * @param metas  Pre-computed property metadata (from getPropertyMetas)
@@ -112,18 +130,10 @@ public final class PropertyPacker<B, S, P> {
             writer.write(valueIndex, meta.bits);
         }
     }
-    /**
-     * Narrows a generic adapter reference once at construction time so the hot
-     * read path can avoid repeated instanceof checks.
-     */
-    @SuppressWarnings("unchecked")
-    private static <S, P> PropertyValueAdapter<S, P> castValueAdapter(final PropertyValueAdapter<?, ?> valueAdapter) {
-        return (PropertyValueAdapter<S, P>) valueAdapter;
-    }
 
     /**
      * Reads property values from BitReader and reconstructs the BlockState.
-     * 
+     *
      * @param reader The bit reader
      * @param block  The block type
      * @param metas  Pre-computed property metadata (from getPropertyMetas)
@@ -142,31 +152,29 @@ public final class PropertyPacker<B, S, P> {
 
     /**
      * Stores metadata for a single block property to enable fast bit-packing.
-     * 
-     * @param property The property instance
-     * @param bits     Number of bits required to encode all possible values
+     *
+     * @param property          The property instance
+     * @param bits              Number of bits required to encode all possible values
      * @param defaultValueIndex Encoded value index used by the block's default state
-     * @param <P>      Property type
+     * @param <P>               Property type
      */
     public record PropertyMeta<P>(P property, int bits, Map<Object, Integer> valueIndices, int defaultValueIndex) {
 
         // Singleton empty array to avoid repeated allocations
-        /** Shared zero-allocation result for blocks that expose no serializable properties. */
+        /**
+         * Shared zero-allocation result for blocks that expose no serializable properties.
+         */
         private static final PropertyMeta<?>[] EMPTY_ARRAY = new PropertyMeta<?>[0];
 
         /**
          * Compact canonical constructor that calculates the minimum number of bits
          * needed to represent the given number of values.
-         * 
+         *
          * @param property The property
          * @param bits     Number of possible values (will be converted to bit count)
          */
         public PropertyMeta {
             bits = calculateBitsRequired(bits);
-        }
-
-        int getValueIndex(final Object value) {
-            return valueIndices.getOrDefault(value, -1);
         }
 
         /**
@@ -178,7 +186,7 @@ public final class PropertyPacker<B, S, P> {
          * - 3 values → 2 bits (0, 1, 2, with 3 unused)
          * - 4 values → 2 bits (0, 1, 2, 3)
          * - 5 values → 3 bits (0-4, with 5-7 unused)
-         * 
+         *
          * @param valueCount Number of values to encode
          * @return Minimum bits required (at least 1)
          */
@@ -194,7 +202,7 @@ public final class PropertyPacker<B, S, P> {
         /**
          * Creates property metadata array for a block.
          * Properties are sorted by name for deterministic serialization.
-         * 
+         *
          * @param adapter The block state adapter
          * @param block   The block
          * @return Array of property metadata
@@ -223,6 +231,7 @@ public final class PropertyPacker<B, S, P> {
             }
             return metas;
         }
+
         /**
          * Builds a stable value-to-index lookup using the adapter's canonical
          * property-value ordering.
@@ -237,6 +246,7 @@ public final class PropertyPacker<B, S, P> {
             }
             return indexMap;
         }
+
         /**
          * Returns the shared zero-length metadata array for property-less blocks.
          */
@@ -252,6 +262,10 @@ public final class PropertyPacker<B, S, P> {
         @SuppressWarnings("unchecked")
         private static <P> PropertyMeta<P>[] newArray(int size) {
             return (PropertyMeta<P>[]) new PropertyMeta<?>[size];
+        }
+
+        int getValueIndex(final Object value) {
+            return valueIndices.getOrDefault(value, -1);
         }
     }
 }

@@ -50,6 +50,7 @@ public record ChunkTraceSuspect(
         /** Human-readable description from the most recent occurrence. */
         String latestMessage
 ) {
+
     public ChunkTraceSuspect {
         // Defensive copy so callers cannot mutate the stored timeline.
         copiedTimeline = List.copyOf(copiedTimeline);

@@ -3,16 +3,6 @@ package io.liparakis.chunkis.portal;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtIo;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.WorldChunk;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -22,6 +12,15 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.WorldSavePath;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.World;
+import net.minecraft.world.chunk.WorldChunk;
 
 /**
  * Dimension-local index of chunks that currently contain nether portal blocks.
@@ -55,7 +54,7 @@ public final class PortalChunkIndexManager {
             final ServerWorld world,
             final ChunkPos pos,
             final boolean hasPortalBlocks
-    ) {
+                                  ) {
         getIndex(world).update(pos, hasPortalBlocks);
     }
 
@@ -65,7 +64,7 @@ public final class PortalChunkIndexManager {
             final int maxChunkX,
             final int minChunkZ,
             final int maxChunkZ
-    ) {
+                                                      ) {
         return getIndex(world).getPortalChunksInRange(minChunkX, maxChunkX, minChunkZ, maxChunkZ);
     }
 
@@ -89,18 +88,18 @@ public final class PortalChunkIndexManager {
         return INDICES.computeIfAbsent(
                 world.getRegistryKey(),
                 ignored -> new PortalChunkIndex(resolveIndexPath(world))
-        );
+                                      );
     }
 
     private static Path resolveIndexPath(final ServerWorld world) {
         return ChunkisStoragePaths.computePortalIndexFile(
                 Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT),
                 world.getRegistryKey()
-        );
+                                                         );
     }
 
     private static boolean chunkHasPortalBlocks(final WorldChunk chunk) {
-        final boolean[] found = { false };
+        final boolean[] found = {false};
         final java.util.function.Predicate<BlockState> portalPredicate = state -> state.isOf(Blocks.NETHER_PORTAL);
 
         chunk.forEachBlockMatchingPredicate(portalPredicate, (pos, state) -> found[0] = true);
@@ -108,6 +107,7 @@ public final class PortalChunkIndexManager {
     }
 
     private static final class PortalChunkIndex {
+
         private final Path path;
         private final LongOpenHashSet portalChunks;
         private boolean dirty;
@@ -116,6 +116,27 @@ public final class PortalChunkIndexManager {
             this.path = Objects.requireNonNull(path, "path");
             this.portalChunks = load(path);
             this.dirty = false;
+        }
+
+        private static LongOpenHashSet load(final Path path) {
+            final LongOpenHashSet chunks = new LongOpenHashSet();
+
+            if (!Files.isRegularFile(path)) {
+                return chunks;
+            }
+
+            try (DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
+                final NbtCompound root = NbtIo.readCompound(input);
+                root.getLongArray(PORTAL_CHUNKS_KEY).ifPresent(values -> {
+                    for (final long value : values) {
+                        chunks.add(value);
+                    }
+                });
+            } catch (final Exception e) {
+                Chunkis.LOGGER.warn("Chunkis: Failed to load portal index {}", path, e);
+            }
+
+            return chunks;
         }
 
         synchronized void update(final ChunkPos pos, final boolean hasPortalBlocks) {
@@ -137,7 +158,7 @@ public final class PortalChunkIndexManager {
                 final int maxChunkX,
                 final int minChunkZ,
                 final int maxChunkZ
-        ) {
+                                                         ) {
             final Set<ChunkPos> chunks = new LinkedHashSet<>();
 
             for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
@@ -173,27 +194,6 @@ public final class PortalChunkIndexManager {
             } catch (final IOException e) {
                 Chunkis.LOGGER.error("Chunkis: Failed to save portal index {}", path, e);
             }
-        }
-
-        private static LongOpenHashSet load(final Path path) {
-            final LongOpenHashSet chunks = new LongOpenHashSet();
-
-            if (!Files.isRegularFile(path)) {
-                return chunks;
-            }
-
-            try (DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
-                final NbtCompound root = NbtIo.readCompound(input);
-                root.getLongArray(PORTAL_CHUNKS_KEY).ifPresent(values -> {
-                    for (final long value : values) {
-                        chunks.add(value);
-                    }
-                });
-            } catch (final Exception e) {
-                Chunkis.LOGGER.warn("Chunkis: Failed to load portal index {}", path, e);
-            }
-
-            return chunks;
         }
     }
 }

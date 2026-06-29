@@ -1,12 +1,11 @@
 package io.liparakis.chunkis.client;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
 
 class ClientDeltaNetworkingTest {
 
@@ -16,7 +15,7 @@ class ClientDeltaNetworkingTest {
                 ChunkTraceReason.MAPPING_LOOKUP_FAILED,
                 ClientDeltaNetworking.classifyClientSyncFailure(
                         new IOException("Unknown Block ID 42 - stream desync detected"))
-        );
+                    );
     }
 
     @Test
@@ -25,7 +24,7 @@ class ClientDeltaNetworkingTest {
                 ChunkTraceReason.DECODE_FAILED,
                 ClientDeltaNetworking.classifyClientSyncFailure(
                         new IOException("Invalid property data length: -1"))
-        );
+                    );
     }
 
     @Test
@@ -33,7 +32,7 @@ class ClientDeltaNetworkingTest {
         assertEquals(
                 ChunkTraceReason.IO_EXCEPTION,
                 ClientDeltaNetworking.classifyClientSyncFailure(new IllegalStateException("boom"))
-        );
+                    );
     }
 
     @Test
@@ -43,6 +42,6 @@ class ClientDeltaNetworkingTest {
         assertEquals(
                 "completed client delta apply compressedOnWire=true decodedBytes=512",
                 ClientDeltaNetworking.describeIncomingPayload(payload, "completed client delta apply")
-        );
+                    );
     }
 }

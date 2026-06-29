@@ -1,4 +1,5 @@
 package io.liparakis.chunkis.storage.model;
+
 import java.util.Arrays;
 
 /**
@@ -8,33 +9,35 @@ import java.util.Arrays;
  * Optimized for branch prediction and minimal garbage collection pressure.
  *
  * @param <S> the type representing a block state
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class CisSection<S> {
-    /** Number of block slots in a 16x16x16 section. */
-    private static final int VOLUME = 4096;
-    /** Initial sparse-array capacity sized for very small deltas. */
-    private static final int INITIAL_SPARSE_CAPACITY = 4;
-    /** Mask applied when widening a packed coordinate key back to an array index. */
-    private static final int COORD_MASK = 0xFFFF;
 
     /**
      * Section is empty (default state).
      */
     public static final byte MODE_EMPTY = 0;
-
     /**
      * Section stores blocks in sparse arrays (key-value pairs).
      */
     public static final byte MODE_SPARSE = 1;
-
     /**
      * Section stores blocks in a flat array representing the full 16x16x16 volume.
      */
     public static final byte MODE_DENSE = 2;
-
+    /**
+     * Number of block slots in a 16x16x16 section.
+     */
+    private static final int VOLUME = 4096;
+    /**
+     * Initial sparse-array capacity sized for very small deltas.
+     */
+    private static final int INITIAL_SPARSE_CAPACITY = 4;
+    /**
+     * Mask applied when widening a packed coordinate key back to an array index.
+     */
+    private static final int COORD_MASK = 0xFFFF;
     /**
      * The current storage mode (EMPTY, SPARSE, or DENSE).
      */
@@ -67,16 +70,6 @@ public final class CisSection<S> {
     }
 
     /**
-     * Checks if the section is empty (contains no blocks).
-     *
-     * @return true if empty
-     */
-    @SuppressWarnings("unused") // used from the fabric module
-    public boolean isEmpty() {
-        return mode == MODE_EMPTY;
-    }
-
-    /**
      * Packs local coordinates into a single 16-bit short value.
      * Format: YYYY ZZZZ XXXX (4 bits per dimension)
      *
@@ -87,6 +80,16 @@ public final class CisSection<S> {
      */
     private static short packCoordinate(int x, int y, int z) {
         return (short) ((y << 8) | (z << 4) | x);
+    }
+
+    /**
+     * Checks if the section is empty (contains no blocks).
+     *
+     * @return true if empty
+     */
+    @SuppressWarnings("unused") // used from the fabric module
+    public boolean isEmpty() {
+        return mode == MODE_EMPTY;
     }
 
     /**

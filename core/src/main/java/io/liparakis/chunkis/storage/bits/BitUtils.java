@@ -11,8 +11,8 @@ package io.liparakis.chunkis.storage.bits;
  * {@link BitWriter}.
  * </p>
  *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class BitUtils {
 

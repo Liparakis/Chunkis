@@ -6,13 +6,14 @@ import java.util.Collection;
  * Adapter interface for interacting with the Block Registry.
  *
  * @param <B> The Block type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public interface BlockRegistryAdapter<B> {
 
-    /** Gets the string identifier for the given block. */
+    /**
+     * Gets the string identifier for the given block.
+     */
     String getId(B block);
 
     /**
@@ -20,7 +21,9 @@ public interface BlockRegistryAdapter<B> {
      */
     B getBlock(String id);
 
-    /** Gets the "Air" block instance. */
+    /**
+     * Gets the "Air" block instance.
+     */
     B getAir();
 
     /**

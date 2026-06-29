@@ -62,6 +62,7 @@ public record ChunkTraceEvent(
         /** Human-readable payload summary for watch events, or {@code null}. */
         String payloadWatchSummary
 ) {
+
     /**
      * Convenience constructor for non-payload-watch events. Equivalent to
      * the canonical constructor with {@link #payloadWatchTarget},
@@ -84,7 +85,7 @@ public record ChunkTraceEvent(
             final String operationId,
             final Boolean dirtyState,
             final Integer byteSize
-    ) {
+                          ) {
         this(
                 eventId, timestampMillis, threadName,
                 domain, eventType, severity, reason,
@@ -92,7 +93,7 @@ public record ChunkTraceEvent(
                 worldId, chunkKey, regionKey, operationId,
                 dirtyState, byteSize,
                 null, null, null
-        );
+            );
     }
 
     /**

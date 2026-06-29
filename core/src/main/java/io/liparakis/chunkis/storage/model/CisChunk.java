@@ -12,11 +12,11 @@ import java.util.Arrays;
  * operations.
  *
  * @param <S> the type representing a block state
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class CisChunk<S> {
+
     /**
      * Bit-shift value for world Y to section Y conversion.
      */
@@ -64,7 +64,8 @@ public final class CisChunk<S> {
      */
     public void addUniqueBlock(int x, int y, int z, S state) {
         getOrCreateSection(y >> SECTION_SHIFT)
-                .appendDeltaBlock(x & CisConstants.COORD_MASK, y & CisConstants.COORD_MASK, z & CisConstants.COORD_MASK, state);
+                .appendDeltaBlock(
+                        x & CisConstants.COORD_MASK, y & CisConstants.COORD_MASK, z & CisConstants.COORD_MASK, state);
     }
 
     private CisSection<S> getOrCreateSection(final int sectionY) {

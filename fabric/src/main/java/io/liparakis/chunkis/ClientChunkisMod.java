@@ -25,18 +25,6 @@ import net.fabricmc.api.Environment;
 public final class ClientChunkisMod implements ClientModInitializer {
 
     /**
-     * Fabric client initialization hook.
-     */
-    @Override
-    public void onInitializeClient() {
-        Chunkis.LOGGER.info("Chunkis Client initializing...");
-
-        ClientDeltaNetworking.register();
-
-        logInitializationComplete();
-    }
-
-    /**
      * Logs final client initialization state.
      *
      * <p>Split out so the init method stays tiny and the metrics branch remains
@@ -49,5 +37,17 @@ public final class ClientChunkisMod implements ClientModInitializer {
         }
 
         Chunkis.LOGGER.info("Chunkis Client initialized.");
+    }
+
+    /**
+     * Fabric client initialization hook.
+     */
+    @Override
+    public void onInitializeClient() {
+        Chunkis.LOGGER.info("Chunkis Client initializing...");
+
+        ClientDeltaNetworking.register();
+
+        logInitializationComplete();
     }
 }

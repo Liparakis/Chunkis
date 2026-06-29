@@ -36,7 +36,7 @@ final class RegionCompactionIO {
 
         Files.deleteIfExists(tempPath);
         try (FileChannel dest = FileChannel.open(tempPath, StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                                                 StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
             RegionFile.writeFully(dest, ByteBuffer.allocate(RegionFile.HEADER_SIZE), 0);
             final ByteBuffer newHeader = writeLiveChunks(dest, source, offsets, lengths, maxChunkLen);
             RegionFile.writeFully(dest, newHeader.flip(), 0);
@@ -75,7 +75,8 @@ final class RegionCompactionIO {
                     continue;
                 }
 
-                if (newLength != lengths[i] || newOffset < RegionFile.HEADER_SIZE || newOffset + newLength > compactedDataEnd) {
+                if (newLength != lengths[i] || newOffset < RegionFile.HEADER_SIZE
+                        || newOffset + newLength > compactedDataEnd) {
                     throw new IOException("Compacted header mismatch for slot " + i);
                 }
 

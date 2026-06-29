@@ -3,9 +3,10 @@ package io.liparakis.chunkis.debug.trace;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
-import io.liparakis.chunkis.debug.util.DebugChunkKeys;
+import java.util.Objects;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
@@ -14,9 +15,8 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Objects;
-
 public final class RestorePayloadTracer {
+
     private RestorePayloadTracer() {
         throw new AssertionError("Utility class");
     }
@@ -27,7 +27,7 @@ public final class RestorePayloadTracer {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId
-    ) {
+                                          ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -48,7 +48,7 @@ public final class RestorePayloadTracer {
                     "restore-start",
                     "ChunkRestorer#restore",
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_RESTORE_STARTED,
                     "restore-start",
@@ -67,9 +67,9 @@ public final class RestorePayloadTracer {
                             "ChunkRestorer#restore",
                             Thread.currentThread().getName(),
                             chunk
-                    ),
+                                                                    ),
                     null
-            );
+                                         );
         });
     }
 
@@ -80,7 +80,7 @@ public final class RestorePayloadTracer {
             @Nullable final BlockState expectedState,
             final String operationId,
             final String source
-    ) {
+                                                     ) {
         PayloadWatchTracer.traceRestoreMutationStage(
                 ChunkTraceEventType.WATCH_RESTORE_INSTRUCTION_VISITED,
                 "restore-instruction-visited",
@@ -91,7 +91,7 @@ public final class RestorePayloadTracer {
                 operationId,
                 source,
                 null
-        );
+                                                    );
     }
 
     public static void traceRestoreApplyAttempt(
@@ -101,7 +101,7 @@ public final class RestorePayloadTracer {
             @Nullable final BlockState expectedState,
             final String operationId,
             final String source
-    ) {
+                                               ) {
         PayloadWatchTracer.traceRestoreMutationStage(
                 ChunkTraceEventType.WATCH_RESTORE_APPLY_ATTEMPT,
                 "restore-apply-attempt",
@@ -112,7 +112,7 @@ public final class RestorePayloadTracer {
                 operationId,
                 source,
                 null
-        );
+                                                    );
     }
 
     public static void traceRestoreSetBlockReturned(
@@ -122,7 +122,7 @@ public final class RestorePayloadTracer {
             @Nullable final BlockState expectedState,
             final String operationId,
             final String source
-    ) {
+                                                   ) {
         PayloadWatchTracer.traceRestoreSetBlockReturned(
                 ChunkTraceEventType.WATCH_RESTORE_SETBLOCK_RETURNED,
                 "restore-setblock-returned",
@@ -133,7 +133,7 @@ public final class RestorePayloadTracer {
                 operationId,
                 source,
                 null
-        );
+                                                       );
     }
 
     public static void traceRestoreStateAfterSetBlock(
@@ -143,7 +143,7 @@ public final class RestorePayloadTracer {
             @Nullable final BlockState expectedState,
             final String operationId,
             final String source
-    ) {
+                                                     ) {
         PayloadWatchTracer.traceRestoreMutationStage(
                 ChunkTraceEventType.WATCH_RESTORE_STATE_AFTER_SETBLOCK,
                 "restore-state-after-setblock",
@@ -154,7 +154,7 @@ public final class RestorePayloadTracer {
                 operationId,
                 source,
                 null
-        );
+                                                    );
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final PayloadWatchTarget target = PayloadWatchTracer.watchedBlockTarget(worldId, pos);
         if (target == null || expectedState == null || Objects.equals(chunk.getBlockState(pos), expectedState)) {
@@ -173,7 +173,7 @@ public final class RestorePayloadTracer {
                 operationId,
                 null,
                 null
-        );
+                                                              );
     }
 
     public static void traceRestoreApplyFailed(
@@ -184,7 +184,7 @@ public final class RestorePayloadTracer {
             final String operationId,
             final String source,
             final String reason
-    ) {
+                                              ) {
         PayloadWatchTracer.traceRestoreMutationStage(
                 ChunkTraceEventType.WATCH_RESTORE_APPLY_FAILED,
                 "restore-apply-failed",
@@ -195,7 +195,7 @@ public final class RestorePayloadTracer {
                 operationId,
                 source,
                 reason
-        );
+                                                    );
     }
 
     public static void traceRestoreSkipped(
@@ -203,7 +203,7 @@ public final class RestorePayloadTracer {
             final ChunkDelta<BlockState, NbtCompound> expectedDelta,
             final String operationId,
             final String source
-    ) {
+                                          ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -226,7 +226,7 @@ public final class RestorePayloadTracer {
                     "restore-skipped",
                     source,
                     chunk
-            );
+                                                          );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_RESTORE_SKIPPED,
                     "restore-skipped",
@@ -245,9 +245,9 @@ public final class RestorePayloadTracer {
                             source,
                             Thread.currentThread().getName(),
                             chunk
-                    ),
+                                                                    ),
                     null
-            );
+                                         );
         });
     }
 
@@ -256,7 +256,7 @@ public final class RestorePayloadTracer {
             final BlockPos pos,
             final BlockState state,
             final String operationId
-    ) {
+                                         ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -278,7 +278,7 @@ public final class RestorePayloadTracer {
                 "restore-applied",
                 "ChunkRestorer.RestorationVisitor#visitBlock",
                 chunk
-            );
+                                                      );
         PayloadWatchTracer.traceWatch(
                 ChunkTraceEventType.WATCH_RESTORE_APPLIED,
                 "restore-applied",
@@ -297,9 +297,9 @@ public final class RestorePayloadTracer {
                         "ChunkRestorer.RestorationVisitor#visitBlock",
                         Thread.currentThread().getName(),
                         chunk
-                ),
+                                                                ),
                 null
-        );
+                                     );
     }
 
     public static void traceRestoreBlockFailure(
@@ -308,7 +308,7 @@ public final class RestorePayloadTracer {
             final BlockPos pos,
             final String operationId,
             final String message
-    ) {
+                                               ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -317,7 +317,7 @@ public final class RestorePayloadTracer {
                 pos.getX(),
                 pos.getY(),
                 pos.getZ()
-        );
+                                                                            );
         if (target == null) {
             return;
         }
@@ -332,6 +332,6 @@ public final class RestorePayloadTracer {
                 target,
                 target.describe(),
                 null
-        );
+                                     );
     }
 }

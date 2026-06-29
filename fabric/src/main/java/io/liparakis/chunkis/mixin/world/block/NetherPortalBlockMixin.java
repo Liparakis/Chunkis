@@ -2,6 +2,7 @@ package io.liparakis.chunkis.mixin.world.block;
 
 import io.liparakis.chunkis.portal.PortalArrivalFallback;
 import io.liparakis.chunkis.portal.PortalLinkManager;
+import java.util.Optional;
 import net.minecraft.block.NetherPortalBlock;
 import net.minecraft.entity.Entity;
 import net.minecraft.registry.RegistryKey;
@@ -16,8 +17,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-
-import java.util.Optional;
 
 /**
  * Replaces vanilla fallback portal creation with Chunkis-controlled arrival logic.
@@ -39,6 +38,51 @@ import java.util.Optional;
  */
 @Mixin(NetherPortalBlock.class)
 public abstract class NetherPortalBlockMixin {
+
+    /**
+     * Queries vanilla's portal forcer for an existing destination portal.
+     *
+     * <p>Returns the portal position if one is found, or empty if vanilla would
+     * have fallen back to creating a new portal. The caller is responsible for
+     * recording the link and deciding whether vanilla should continue.
+     *
+     * @param destinationWorld     target world to search in
+     * @param scaledDestinationPos vanilla-scaled destination position
+     * @param destinationIsNether  whether the target world is the Nether
+     * @param worldBorder          target world border
+     * @return the found destination portal position, or empty
+     */
+    @Unique
+    private static Optional<BlockPos> chunkis$findExistingDestinationPortal(
+            final ServerWorld destinationWorld,
+            final BlockPos scaledDestinationPos,
+            final boolean destinationIsNether,
+            final WorldBorder worldBorder
+                                                                           ) {
+        return destinationWorld
+                .getPortalForcer()
+                .getPortalPos(scaledDestinationPos, destinationIsNether, worldBorder);
+    }
+
+    /**
+     * Returns whether the source and destination worlds form a vanilla
+     * Overworld–Nether portal pair.
+     *
+     * @param sourceWorld      source world
+     * @param destinationWorld destination world
+     * @return {@code true} if traveling Overworld → Nether or Nether → Overworld
+     */
+    @Unique
+    private static boolean chunkis$isNetherOverworldPair(
+            final World sourceWorld,
+            final ServerWorld destinationWorld
+                                                        ) {
+        final RegistryKey<World> sourceKey = sourceWorld.getRegistryKey();
+        final RegistryKey<World> destinationKey = destinationWorld.getRegistryKey();
+
+        return sourceKey == World.NETHER && destinationKey == World.OVERWORLD
+                || sourceKey == World.OVERWORLD && destinationKey == World.NETHER;
+    }
 
     /**
      * Intercepts destination portal lookup before vanilla can create a fallback portal.
@@ -74,7 +118,7 @@ public abstract class NetherPortalBlockMixin {
             final boolean destinationIsNether,
             final WorldBorder worldBorder,
             final CallbackInfoReturnable<TeleportTarget> cir
-    ) {
+                                                    ) {
         if (!(entity instanceof ServerPlayerEntity)) {
             return;
         }
@@ -93,7 +137,7 @@ public abstract class NetherPortalBlockMixin {
                         entity,
                         sourceWorld,
                         sourcePortalPos
-                );
+                                                 );
 
         if (linkedTarget.isPresent()) {
             cir.setReturnValue(linkedTarget.get());
@@ -102,12 +146,12 @@ public abstract class NetherPortalBlockMixin {
 
         final Optional<BlockPos> existingDestination = chunkis$findExistingDestinationPortal(
                 destinationWorld, scaledDestinationPos, destinationIsNether, worldBorder
-        );
+                                                                                            );
 
         if (existingDestination.isPresent()) {
             PortalLinkManager.registerBidirectionalIfPresent(
                     sourceWorld, sourcePortalPos, destinationWorld, existingDestination.get()
-            );
+                                                            );
             // Existing portal found — let vanilla handle teleportation normally.
             return;
         }
@@ -119,52 +163,7 @@ public abstract class NetherPortalBlockMixin {
                         sourceWorld,
                         sourcePortalPos,
                         scaledDestinationPos
-                )
-        );
-    }
-
-    /**
-     * Queries vanilla's portal forcer for an existing destination portal.
-     *
-     * <p>Returns the portal position if one is found, or empty if vanilla would
-     * have fallen back to creating a new portal. The caller is responsible for
-     * recording the link and deciding whether vanilla should continue.
-     *
-     * @param destinationWorld     target world to search in
-     * @param scaledDestinationPos vanilla-scaled destination position
-     * @param destinationIsNether  whether the target world is the Nether
-     * @param worldBorder          target world border
-     * @return the found destination portal position, or empty
-     */
-    @Unique
-    private static Optional<BlockPos> chunkis$findExistingDestinationPortal(
-            final ServerWorld destinationWorld,
-            final BlockPos scaledDestinationPos,
-            final boolean destinationIsNether,
-            final WorldBorder worldBorder
-    ) {
-        return destinationWorld
-                .getPortalForcer()
-                .getPortalPos(scaledDestinationPos, destinationIsNether, worldBorder);
-    }
-
-    /**
-     * Returns whether the source and destination worlds form a vanilla
-     * Overworld–Nether portal pair.
-     *
-     * @param sourceWorld      source world
-     * @param destinationWorld destination world
-     * @return {@code true} if traveling Overworld → Nether or Nether → Overworld
-     */
-    @Unique
-    private static boolean chunkis$isNetherOverworldPair(
-            final World sourceWorld,
-            final ServerWorld destinationWorld
-    ) {
-        final RegistryKey<World> sourceKey = sourceWorld.getRegistryKey();
-        final RegistryKey<World> destinationKey = destinationWorld.getRegistryKey();
-
-        return sourceKey == World.NETHER && destinationKey == World.OVERWORLD
-                || sourceKey == World.OVERWORLD && destinationKey == World.NETHER;
+                                            )
+                          );
     }
 }

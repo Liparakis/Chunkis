@@ -1,8 +1,8 @@
 package io.liparakis.chunkis.migrator;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
 
 /**
  * Unit tests for {@link CisMigrationReport}, verifying that the report
@@ -18,9 +18,9 @@ class CisMigrationReportTest {
     @Test
     void accumulatesCountersImmutably() {
         final CisMigrationReport report = CisMigrationReport.empty()
-                .addMigrated()
-                .addSkipped()
-                .addFailure();
+                                                            .addMigrated()
+                                                            .addSkipped()
+                                                            .addFailure();
 
         assertEquals(3, report.scannedChunks());
         assertEquals(1, report.migratedChunks());

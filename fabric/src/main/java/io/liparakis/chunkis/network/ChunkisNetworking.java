@@ -6,16 +6,15 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkEncoder;
+import java.util.Objects;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
-
-import java.util.Objects;
 
 /**
  * Lightweight networking handler that sends Chunkis chunk deltas to players.
@@ -80,7 +79,7 @@ public final class ChunkisNetworking {
                     ChunkTraceReason.EMPTY_DELTA,
                     "skipped delta send because chunk had no non-empty delta",
                     null
-            );
+                            );
             return;
         }
         if (isPlayerUnavailable(player)) {
@@ -91,7 +90,7 @@ public final class ChunkisNetworking {
                     ChunkTraceReason.PLAYER_UNAVAILABLE,
                     "skipped delta send because player was unavailable",
                     null
-            );
+                            );
             return;
         }
 
@@ -108,7 +107,7 @@ public final class ChunkisNetworking {
                 operationId,
                 delta.isDirty(),
                 null
-        );
+                             );
         encodeAndSend(player, chunkPos, worldId, delta, operationId);
     }
 
@@ -128,7 +127,7 @@ public final class ChunkisNetworking {
             final String worldId,
             final ChunkDelta<?, ?> delta,
             final String operationId
-    ) {
+                                     ) {
         try {
             final byte[] rawData = ENCODER_POOL.get().encode(delta);
 
@@ -140,7 +139,7 @@ public final class ChunkisNetworking {
                         ChunkTraceReason.PAYLOAD_TOO_LARGE,
                         "skipped delta send because payload exceeded size limit",
                         rawData.length
-                );
+                                );
                 Chunkis.LOGGER.error(
                         "Chunkis: Delta too large for chunk ({}, {}): {} bytes - skipping",
                         pos.x, pos.z, rawData.length);
@@ -162,7 +161,7 @@ public final class ChunkisNetworking {
                     operationId,
                     delta.isDirty(),
                     payload.data().length
-            );
+                                 );
 
         } catch (final Exception e) {
             traceSyncFailure(
@@ -172,7 +171,7 @@ public final class ChunkisNetworking {
                     ChunkTraceReason.IO_EXCEPTION,
                     "delta send failed with exception",
                     null
-            );
+                            );
             Chunkis.LOGGER.error("Chunkis: Failed to send delta for chunk ({}, {})", pos.x, pos.z, e);
         }
     }
@@ -192,7 +191,7 @@ public final class ChunkisNetworking {
             final ChunkTraceReason reason,
             final String message,
             final Integer byteSize
-    ) {
+                                        ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CLIENT_SYNC,
                 ChunkTraceEventType.CLIENT_SYNC_FAILED,
@@ -208,14 +207,14 @@ public final class ChunkisNetworking {
                 operationId,
                 null,
                 byteSize
-        );
+                             );
     }
 
     static String describePayloadOutcome(
             final String playerName,
             final int rawBytes,
             final ChunkDeltaPayload payload
-    ) {
+                                        ) {
         return "sent delta to player "
                 + playerName
                 + " rawBytes="

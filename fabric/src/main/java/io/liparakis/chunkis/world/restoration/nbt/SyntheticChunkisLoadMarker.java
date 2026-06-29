@@ -23,7 +23,7 @@ final class SyntheticChunkisLoadMarker {
     static void putLoadBaseChunkUsage(
             final NbtCompound root,
             final CisNbtUtil.PersistedBaseChunkUsage baseChunkUsage
-    ) {
+                                     ) {
         final NbtCompound chunkisData = getOrCreateCompound(root, CisNbtUtil.CHUNKIS_DATA_KEY);
         chunkisData.putString(CisNbtUtil.LOAD_BASE_CHUNK_USAGE_KEY, baseChunkUsage.name());
     }
@@ -31,7 +31,7 @@ final class SyntheticChunkisLoadMarker {
     private static NbtCompound getOrCreateCompound(
             final NbtCompound parent,
             final String key
-    ) {
+                                                  ) {
         final NbtCompound existing = CisNbtUtil.getCompoundOrNull(parent, key);
         if (existing != null) {
             return existing;

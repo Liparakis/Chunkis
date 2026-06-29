@@ -40,12 +40,36 @@ final class RegionFileCache {
     }
 
     /**
+     * Compacts then closes one region file, logging failures without propagating them.
+     */
+    static void closeRegionFile(final RegionFile regionFile) {
+        try {
+            regionFile.compact();
+        } catch (final Exception e) {
+            Chunkis.LOGGER.warn("Chunkis: Failed to compact CIS region file", e);
+        }
+
+        try {
+            regionFile.close();
+        } catch (final Exception e) {
+            Chunkis.LOGGER.warn("Chunkis: Failed to close CIS region file", e);
+        }
+    }
+
+    /**
+     * Converts a chunk position to its owning 32x32 region key.
+     */
+    static RegionKey regionKey(final CisChunkPos pos) {
+        return new RegionKey(pos.x() >> REGION_SHIFT, pos.z() >> REGION_SHIFT);
+    }
+
+    /**
      * Returns the cached region file for {@code pos}, opening and caching it when needed.
      *
      * @param pos    chunk position
      * @param create whether to create the region file when it does not exist on disk
      * @return the open region file, or {@code null} when {@code create} is false and
-     * the region file is absent
+     *         the region file is absent
      * @throws IOException if the region file cannot be opened
      */
     RegionFile get(final CisChunkPos pos, final boolean create) throws IOException {
@@ -98,23 +122,6 @@ final class RegionFileCache {
     }
 
     /**
-     * Compacts then closes one region file, logging failures without propagating them.
-     */
-    static void closeRegionFile(final RegionFile regionFile) {
-        try {
-            regionFile.compact();
-        } catch (final Exception e) {
-            Chunkis.LOGGER.warn("Chunkis: Failed to compact CIS region file", e);
-        }
-
-        try {
-            regionFile.close();
-        } catch (final Exception e) {
-            Chunkis.LOGGER.warn("Chunkis: Failed to close CIS region file", e);
-        }
-    }
-
-    /**
      * Builds the canonical on-disk path for one region key.
      */
     private Path regionPath(final RegionKey key) {
@@ -131,12 +138,5 @@ final class RegionFileCache {
         if (regionFile != null) {
             closeRegionFile(regionFile);
         }
-    }
-
-    /**
-     * Converts a chunk position to its owning 32x32 region key.
-     */
-    static RegionKey regionKey(final CisChunkPos pos) {
-        return new RegionKey(pos.x() >> REGION_SHIFT, pos.z() >> REGION_SHIFT);
     }
 }

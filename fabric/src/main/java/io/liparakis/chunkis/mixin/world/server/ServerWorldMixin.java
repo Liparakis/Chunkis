@@ -4,14 +4,14 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
-import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityNbtCapture;
-import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
-import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
-import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
-import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
-import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
+import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -24,8 +24,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ServerWorld.class)
 public abstract class ServerWorldMixin {
@@ -37,7 +37,7 @@ public abstract class ServerWorldMixin {
     private void chunkis$drainScheduledEntityReplayQueue(
             final java.util.function.BooleanSupplier shouldKeepTicking,
             final CallbackInfo ci
-    ) {
+                                                        ) {
         ScheduledEntityReplayQueue.tick((ServerWorld) (Object) this);
     }
 
@@ -45,7 +45,7 @@ public abstract class ServerWorldMixin {
     private void chunkis$afterSpawnEntity(
             final Entity entity,
             final CallbackInfoReturnable<Boolean> cir
-    ) {
+                                         ) {
         if (!cir.getReturnValueZ()
                 || entity == null
                 || entity instanceof PlayerEntity
@@ -74,7 +74,7 @@ public abstract class ServerWorldMixin {
                     SOURCE,
                     null,
                     null
-            );
+                                                   );
             return;
         }
 
@@ -89,7 +89,7 @@ public abstract class ServerWorldMixin {
             delta.claimOwnership(
                     ChunkTraceReason.PLAYER_OR_COMMAND_EDIT.name(),
                     SOURCE
-            );
+                                );
             ChunkOwnershipTraceHelper.traceDecision(
                     world.getRegistryKey(),
                     chunkPos,
@@ -98,7 +98,7 @@ public abstract class ServerWorldMixin {
                     SOURCE,
                     delta,
                     null
-            );
+                                                   );
         }
         BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(world, chunk, delta);
 
@@ -109,9 +109,9 @@ public abstract class ServerWorldMixin {
 
         delta.removeEntitiesMatching(nbt -> nbt != null
                 && nbt.getIntArray("UUID")
-                .map(Uuids::toUuid)
-                .map(entity.getUuid()::equals)
-                .orElse(false));
+                      .map(Uuids::toUuid)
+                      .map(entity.getUuid()::equals)
+                      .orElse(false));
         delta.putEntity(entity.getId(), entityNbt);
         GlobalChunkTracker.markDirty(chunk, SOURCE);
     }

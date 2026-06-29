@@ -12,15 +12,22 @@ import java.util.Arrays;
  * reset for reuse to minimize garbage collection overhead.
  * </p>
  *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class BitWriter {
-    /** The raw buffer storing written data */
+
+    /**
+     * The raw buffer storing written data
+     */
     private byte[] buffer;
-    /** Index of the byte currently being written into {@link #buffer}. */
+    /**
+     * Index of the byte currently being written into {@link #buffer}.
+     */
     private int index;
-    /** Bit cursor within the current output byte, counted from the most significant bit. */
+    /**
+     * Bit cursor within the current output byte, counted from the most significant bit.
+     */
     private int bitIndex;
 
     public BitWriter(int initialCapacity) {

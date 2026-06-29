@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.portal;
 
+import java.util.ArrayDeque;
+import java.util.HashSet;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.BlockEntity;
@@ -8,9 +10,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayDeque;
-import java.util.HashSet;
 
 /**
  * Arrival-tile and portal-egress search helpers for fallback portal travel.
@@ -42,7 +41,7 @@ final class PortalArrivalSpots {
             final int lowerZ,
             final Direction.Axis axis,
             final BlockPos target
-    ) {
+                                                        ) {
         final Direction forward = egressForward(axis);
         final EgressResult front = findBestEgressSide(
                 world,
@@ -52,7 +51,7 @@ final class PortalArrivalSpots {
                 axis,
                 forward,
                 target
-        );
+                                                     );
         final EgressResult back = findBestEgressSide(
                 world,
                 lowerX,
@@ -61,7 +60,7 @@ final class PortalArrivalSpots {
                 axis,
                 forward.getOpposite(),
                 target
-        );
+                                                    );
 
         final EgressResult better = chooseBetterEgress(front, back);
         if (better == null || better.bfsCount() < EGRESS_MIN_BFS_COUNT) {
@@ -79,7 +78,7 @@ final class PortalArrivalSpots {
             final int lowerZ,
             final Direction.Axis axis,
             final BlockPos target
-    ) {
+                                       ) {
         final Direction normal = choosePreferredArrivalSide(axis, target, lowerX, lowerZ);
         final double centerX = lowerX + 0.5 + (axis == Direction.Axis.Z ? 0.5 : 0.0) + normal.getOffsetX();
         final double centerZ = lowerZ + 0.5 + (axis == Direction.Axis.X ? 0.5 : 0.0) + normal.getOffsetZ();
@@ -90,7 +89,7 @@ final class PortalArrivalSpots {
                 arrivalPos.getX(),
                 lowerY,
                 arrivalPos.getZ()
-        );
+                                                      );
         return new EgressResult(arrival, 0, distanceScore, 0);
     }
 
@@ -102,7 +101,7 @@ final class PortalArrivalSpots {
             final int x,
             final int y,
             final int z
-    ) {
+                                           ) {
         final BlockPos.Mutable mutable = new BlockPos.Mutable();
 
         mutable.set(x, y, z);
@@ -134,7 +133,7 @@ final class PortalArrivalSpots {
             final Direction.Axis axis,
             final Direction normal,
             final BlockPos target
-    ) {
+                                                            ) {
         final Direction widthDirection = widthDirection(axis);
 
         Vec3d bestArrival = null;
@@ -174,7 +173,7 @@ final class PortalArrivalSpots {
             final BlockPos target,
             final int lowerX,
             final int lowerZ
-    ) {
+                                                       ) {
         final Direction forward = egressForward(axis);
         final Direction backward = forward.getOpposite();
 
@@ -183,13 +182,13 @@ final class PortalArrivalSpots {
                 lowerX + forward.getOffsetX(),
                 target.getY(),
                 lowerZ + forward.getOffsetZ()
-        );
+                                                     );
         final long backwardScore = egressDistanceScore(
                 target,
                 lowerX + backward.getOffsetX(),
                 target.getY(),
                 lowerZ + backward.getOffsetZ()
-        );
+                                                      );
 
         return forwardScore <= backwardScore ? forward : backward;
     }
@@ -197,7 +196,7 @@ final class PortalArrivalSpots {
     private static @Nullable EgressResult chooseBetterEgress(
             final @Nullable EgressResult first,
             final @Nullable EgressResult second
-    ) {
+                                                            ) {
         if (first == null) {
             return second;
         }
@@ -239,7 +238,7 @@ final class PortalArrivalSpots {
             final int startX,
             final int startY,
             final int startZ
-    ) {
+                                                  ) {
         final int maxTiles = (2 * EGRESS_BFS_RADIUS + 1) * (2 * EGRESS_BFS_RADIUS + 1);
         final ArrayDeque<Long> queue = new ArrayDeque<>(maxTiles);
         final HashSet<Long> visited = new HashSet<>(maxTiles);
@@ -288,5 +287,6 @@ final class PortalArrivalSpots {
      * Result of an egress search on one side of a portal face.
      */
     record EgressResult(Vec3d arrival, int walkableCount, long distanceScore, int bfsCount) {
+
     }
 }

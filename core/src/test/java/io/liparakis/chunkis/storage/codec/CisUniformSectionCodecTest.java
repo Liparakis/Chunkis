@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.storage.codec;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
@@ -8,9 +10,6 @@ import io.liparakis.chunkis.storage.bits.BitReader;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.mapping.PropertyPacker;
 import io.liparakis.chunkis.storage.model.CisConstants;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -21,8 +20,8 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CisUniformSectionCodecTest {
 
@@ -32,6 +31,22 @@ class CisUniformSectionCodecTest {
 
     @TempDir
     Path tempDir;
+
+    private static ChunkDelta<String, String> createMixedSectionDelta() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        for (int y = 64; y < 80; y++) {
+            for (int z = 0; z < 16; z++) {
+                for (int x = 0; x < 16; x++) {
+                    if ((x * 31 + y * 7 + z) % 23 == 0) {
+                        delta.addBlockChange(x, y, z, "block:" + ((x + z) & 7));
+                    } else if ((x + z) % 9 != 0) {
+                        delta.addBlockChange(x, y, z, "stone");
+                    }
+                }
+            }
+        }
+        return delta;
+    }
 
     @Test
     void encodesFullSingleStateSectionUsingUniformSentinelAndRoundTrips() throws Exception {
@@ -71,7 +86,7 @@ class CisUniformSectionCodecTest {
         }
 
         final ChunkDelta<String, String> decoded = harness.decoder.decode(encoded);
-        final int[] blockCount = { 0 };
+        final int[] blockCount = {0};
         decoded.forEachBlock((x, y, z, state) -> {
             blockCount[0]++;
             assertThat(state).isEqualTo("stone");
@@ -141,8 +156,8 @@ class CisUniformSectionCodecTest {
                 .containsExactly(new SectionEncodingInfo(SECTION_Y_64, "default_sparse", 241, 0));
 
         final ChunkDelta<String, String> decoded = harness.decoder.decode(encoded);
-        final int[] stoneCount = { 0 };
-        final int[] airCount = { 0 };
+        final int[] stoneCount = {0};
+        final int[] airCount = {0};
         decoded.forEachBlock((x, y, z, state) -> {
             if ("stone".equals(state)) {
                 stoneCount[0]++;
@@ -230,25 +245,6 @@ class CisUniformSectionCodecTest {
         );
     }
 
-    private record CodecHarness(CisEncoder<String, String> encoder, CisDecoder<String, String> decoder) {
-    }
-
-    private static ChunkDelta<String, String> createMixedSectionDelta() {
-        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
-        for (int y = 64; y < 80; y++) {
-            for (int z = 0; z < 16; z++) {
-                for (int x = 0; x < 16; x++) {
-                    if ((x * 31 + y * 7 + z) % 23 == 0) {
-                        delta.addBlockChange(x, y, z, "block:" + ((x + z) & 7));
-                    } else if ((x + z) % 9 != 0) {
-                        delta.addBlockChange(x, y, z, "stone");
-                    }
-                }
-            }
-        }
-        return delta;
-    }
-
     private Map<Long, String> snapshot(final ChunkDelta<String, String> delta) {
         final Map<Long, String> out = new LinkedHashMap<>();
         delta.forEachBlock((x, y, z, state) -> out.put((((long) y) << 8) | ((long) (z & 15) << 4) | (x & 15), state));
@@ -312,12 +308,28 @@ class CisUniformSectionCodecTest {
         }
     }
 
+    private record CodecHarness(CisEncoder<String, String> encoder, CisDecoder<String, String> decoder) {
+
+    }
+
     private record SectionEncodingInfo(int sectionY, String encoding, int blockCount, int localSize) {
+
     }
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
+
         private static final String AIR = "air";
         private static final Map<String, String> BLOCKS = canonicalBlocks();
+
+        private static Map<String, String> canonicalBlocks() {
+            final Map<String, String> blocks = new LinkedHashMap<>();
+            blocks.put(AIR, AIR);
+            blocks.put("stone", "stone");
+            for (int i = 0; i < 300; i++) {
+                blocks.put("block:" + i, "block:" + i);
+            }
+            return blocks;
+        }
 
         @Override
         public String getId(final String block) {
@@ -338,19 +350,10 @@ class CisUniformSectionCodecTest {
         public Collection<String> getRegisteredBlocks() {
             return BLOCKS.values();
         }
-
-        private static Map<String, String> canonicalBlocks() {
-            final Map<String, String> blocks = new LinkedHashMap<>();
-            blocks.put(AIR, AIR);
-            blocks.put("stone", "stone");
-            for (int i = 0; i < 300; i++) {
-                blocks.put("block:" + i, "block:" + i);
-            }
-            return blocks;
-        }
     }
 
     private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
+
         @Override
         public String getDefaultState(final String block) {
             return block;
@@ -388,6 +391,7 @@ class CisUniformSectionCodecTest {
     }
 
     private static final class TestNbtAdapter implements NbtAdapter<String> {
+
         @Override
         public void writeCompressed(final String tag, final DataOutput output) throws IOException {
             output.writeUTF(tag);

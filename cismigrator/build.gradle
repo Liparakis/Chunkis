@@ -26,12 +26,12 @@ repositories {
 }
 
 dependencies {
-    api             'io.liparakis.chunkis:chunkis-core:3.0.0'
-    implementation  'org.slf4j:slf4j-api:2.0.9'
+    api 'io.liparakis.chunkis:chunkis-core:3.0.0'
+    implementation 'org.slf4j:slf4j-api:2.0.9'
 
     testImplementation 'com.github.luben:zstd-jni:1.5.7-11'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
-    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 test {

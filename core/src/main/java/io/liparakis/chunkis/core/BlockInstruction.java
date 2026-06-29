@@ -41,11 +41,10 @@ import io.liparakis.chunkis.storage.model.CisConstants;
  *                     for deep worlds)
  * @param z            the z-coordinate within the chunk (0-15)
  * @param paletteIndex the index into the chunk's BlockState palette
+ * @author Liparakis
+ * @version 1
  * @see ChunkDelta
  * @see Palette
- *
- * @version 1
- * @author Liparakis
  */
 public record BlockInstruction(byte x, int y, byte z, int paletteIndex) {
 

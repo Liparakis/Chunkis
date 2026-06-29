@@ -8,11 +8,10 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
-import net.minecraft.util.math.ChunkPos;
-import org.jetbrains.annotations.Nullable;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.util.math.ChunkPos;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Tracks decoded watched block payloads across restore and later visibility stages.
@@ -44,7 +43,7 @@ public final class BlockWatchTraceTracker {
                         state.operationId,
                         null,
                         null
-                );
+                                     );
             }
         }
     }
@@ -54,7 +53,7 @@ public final class BlockWatchTraceTracker {
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
             final String operationId
-    ) {
+                                        ) {
         final WatchTraceState state = get(worldId, chunkPos, target);
         if (state != null && operationId.equals(state.operationId)) {
             state.protoAttachedSeen = true;
@@ -66,12 +65,12 @@ public final class BlockWatchTraceTracker {
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
             final String operationId
-    ) {
+                                            ) {
         final WatchTraceKey key = key(worldId, chunkPos, target);
         final WatchTraceState previous = WATCH_TRACE_STATE.put(
                 key,
                 new WatchTraceState(operationId)
-        );
+                                                              );
         if (previous != null && !previous.hasVisibilityEvent) {
             traceIncompleteWatch(key, previous.operationId);
         }
@@ -91,7 +90,7 @@ public final class BlockWatchTraceTracker {
                     previous.operationId,
                     null,
                     null
-            );
+                                 );
         }
     }
 
@@ -99,7 +98,7 @@ public final class BlockWatchTraceTracker {
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target
-    ) {
+                                                     ) {
         final WatchTraceState state = get(worldId, chunkPos, target);
         return state != null ? state.operationId : null;
     }
@@ -109,7 +108,7 @@ public final class BlockWatchTraceTracker {
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
             @Nullable final String operationId
-    ) {
+                                         ) {
         if (operationId == null) {
             return;
         }
@@ -124,7 +123,7 @@ public final class BlockWatchTraceTracker {
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
             @Nullable final String operationId
-    ) {
+                                              ) {
         if (operationId == null) {
             return;
         }
@@ -139,7 +138,7 @@ public final class BlockWatchTraceTracker {
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
             @Nullable final String operationId
-    ) {
+                                               ) {
         if (operationId == null) {
             return false;
         }
@@ -153,7 +152,7 @@ public final class BlockWatchTraceTracker {
             final PayloadWatchTarget target,
             @Nullable final String operationId,
             final String source
-    ) {
+                                                ) {
         if (operationId == null) {
             return;
         }
@@ -178,7 +177,7 @@ public final class BlockWatchTraceTracker {
                 operationId,
                 null,
                 null
-        );
+                             );
     }
 
     public static void recordAppliedChunkInstance(
@@ -187,7 +186,7 @@ public final class BlockWatchTraceTracker {
             final PayloadWatchTarget target,
             @Nullable final String operationId,
             final String chunkInstanceId
-    ) {
+                                                 ) {
         if (operationId == null) {
             return;
         }
@@ -204,7 +203,7 @@ public final class BlockWatchTraceTracker {
             @Nullable final String operationId,
             final String source,
             final String actualChunkInstanceId
-    ) {
+                                                     ) {
         if (operationId == null) {
             return;
         }
@@ -230,7 +229,7 @@ public final class BlockWatchTraceTracker {
                 operationId,
                 null,
                 null
-        );
+                             );
     }
 
     public static void markWorldConstructorConsumed(
@@ -238,7 +237,7 @@ public final class BlockWatchTraceTracker {
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
             final String operationId
-    ) {
+                                                   ) {
         final WatchTraceState state = get(worldId, chunkPos, target);
         if (state != null && operationId.equals(state.operationId)) {
             state.worldConstructorConsumedSeen = true;
@@ -249,7 +248,7 @@ public final class BlockWatchTraceTracker {
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target
-    ) {
+                                                ) {
         return WATCH_TRACE_STATE.get(key(worldId, chunkPos, target));
     }
 
@@ -257,7 +256,7 @@ public final class BlockWatchTraceTracker {
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target
-    ) {
+                                    ) {
         return new WatchTraceKey(
                 worldId,
                 chunkPos.x,
@@ -285,7 +284,7 @@ public final class BlockWatchTraceTracker {
                 PayloadWatchTarget.block(key.worldId, key.blockX, key.blockY, key.blockZ),
                 "trace-incomplete",
                 "pos=" + key.blockX + ',' + key.blockY + ',' + key.blockZ
-        );
+                             );
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.ASSERTIONS,
                 ChunkTraceEventType.ASSERTION_FAILED,
@@ -299,7 +298,7 @@ public final class BlockWatchTraceTracker {
                 operationId,
                 null,
                 null
-        );
+                             );
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.ASSERTIONS,
                 ChunkTraceEventType.ASSERTION_FAILED,
@@ -313,7 +312,7 @@ public final class BlockWatchTraceTracker {
                 operationId,
                 null,
                 null
-        );
+                             );
     }
 
     private record WatchTraceKey(
@@ -324,9 +323,11 @@ public final class BlockWatchTraceTracker {
             int blockY,
             int blockZ
     ) {
+
     }
 
     private static final class WatchTraceState {
+
         private final String operationId;
         private volatile boolean hasVisibilityEvent;
         private volatile boolean restoreDecisionSeen;

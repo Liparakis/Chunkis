@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.world.entity.capture;
 
+import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.entity.EntityType;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
@@ -7,9 +9,6 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.Uuids;
 import net.minecraft.util.math.BlockPos;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Reads entity payload metadata from Chunkis-managed NBT compounds.
@@ -20,9 +19,9 @@ import java.util.UUID;
  */
 public final class EntityPayloadNbt {
 
-    private static final String ENTITY_ID_KEY  = "id";
+    private static final String ENTITY_ID_KEY = "id";
     private static final String ENTITY_UUID_KEY = "UUID";
-    private static final String ENTITY_POS_KEY  = "Pos";
+    private static final String ENTITY_POS_KEY = "Pos";
 
     private EntityPayloadNbt() {
         throw new AssertionError("Utility class");
@@ -109,12 +108,12 @@ public final class EntityPayloadNbt {
             return Optional.empty();
         }
         return nbt.getList(ENTITY_POS_KEY)
-                .filter(pos -> pos.size() >= 3)
-                .map(pos -> new BlockPos(
-                        (int) Math.floor(pos.getDouble(0).orElse(0.0D)),
-                        (int) Math.floor(pos.getDouble(1).orElse(0.0D)),
-                        (int) Math.floor(pos.getDouble(2).orElse(0.0D))
-                ));
+                  .filter(pos -> pos.size() >= 3)
+                  .map(pos -> new BlockPos(
+                          (int) Math.floor(pos.getDouble(0).orElse(0.0D)),
+                          (int) Math.floor(pos.getDouble(1).orElse(0.0D)),
+                          (int) Math.floor(pos.getDouble(2).orElse(0.0D))
+                  ));
     }
 
     /**

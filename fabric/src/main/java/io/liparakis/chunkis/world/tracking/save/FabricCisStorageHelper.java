@@ -8,10 +8,17 @@ import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
-import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.io.CisStorage;
+import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.mapping.PropertyPacker;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -24,14 +31,6 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Thread-safe helper for managing {@link CisStorage} instances per world dimension.
@@ -57,10 +56,10 @@ public final class FabricCisStorageHelper {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FabricCisStorageHelper.class);
 
-    private static final BlockRegistryAdapter<Block>                       REGISTRY_ADAPTER      = new FabricBlockRegistryAdapter();
-    private static final BlockStateAdapter<Block, BlockState, Property<?>> STATE_ADAPTER         = new FabricBlockStateAdapter();
-    private static final NbtAdapter<NbtCompound>                           NBT_ADAPTER           = new FabricNbtAdapter();
-    private static final BlockState                                        DEFAULT_BLOCK_STATE    = Blocks.AIR.getDefaultState();
+    private static final BlockRegistryAdapter<Block> REGISTRY_ADAPTER = new FabricBlockRegistryAdapter();
+    private static final BlockStateAdapter<Block, BlockState, Property<?>> STATE_ADAPTER = new FabricBlockStateAdapter();
+    private static final NbtAdapter<NbtCompound> NBT_ADAPTER = new FabricNbtAdapter();
+    private static final BlockState DEFAULT_BLOCK_STATE = Blocks.AIR.getDefaultState();
     /**
      * Active storage wrappers keyed by dimension registry key.
      * {@link ConcurrentHashMap#compute} is used for atomic create-or-replace,
@@ -108,7 +107,9 @@ public final class FabricCisStorageHelper {
 
         // Slow path: atomic create-or-replace via compute
         return storageMap.compute(key, (k, current) -> {
-            if (current != null && current.isOpen()) return current;
+            if (current != null && current.isOpen()) {
+                return current;
+            }
             closeQuietly(current);
             return openStorageWrapper(world, k);
         }).getStorage();
@@ -131,7 +132,9 @@ public final class FabricCisStorageHelper {
         final StorageWrapper wrapper = storageMap.remove(key);
         pathCache.remove(key);
 
-        if (wrapper == null) return;
+        if (wrapper == null) {
+            return;
+        }
 
         try {
             wrapper.close();
@@ -238,7 +241,7 @@ public final class FabricCisStorageHelper {
     private static CisStorage<Block, BlockState, Property<?>, NbtCompound> buildStorage(
             final ServerWorld world) throws IOException {
 
-        final Path storageDir  = resolveAndCreateStorageDir(world);
+        final Path storageDir = resolveAndCreateStorageDir(world);
         final Path mappingFile = ChunkisStoragePaths.computeMappingFile(
                 Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT),
                 world.getRegistryKey());
@@ -265,7 +268,9 @@ public final class FabricCisStorageHelper {
         final RegistryKey<World> key = world.getRegistryKey();
 
         final Path cached = pathCache.get(key);
-        if (cached != null) return cached;
+        if (cached != null) {
+            return cached;
+        }
 
         final Path storageDir = ChunkisStoragePaths.computeRegionsDirectory(
                 Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT),
@@ -283,7 +288,9 @@ public final class FabricCisStorageHelper {
      * @param wrapper the wrapper to close, may be null
      */
     private static void closeQuietly(final StorageWrapper wrapper) {
-        if (wrapper == null) return;
+        if (wrapper == null) {
+            return;
+        }
         try {
             wrapper.close();
         } catch (final Exception e) {
@@ -328,7 +335,9 @@ public final class FabricCisStorageHelper {
         CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage() {
             lock.readLock().lock();
             try {
-                if (!open) throw new IllegalStateException("Storage has been closed");
+                if (!open) {
+                    throw new IllegalStateException("Storage has been closed");
+                }
                 return storage;
             } finally {
                 lock.readLock().unlock();
@@ -352,7 +361,9 @@ public final class FabricCisStorageHelper {
         void close() {
             lock.writeLock().lock();
             try {
-                if (!open) return;
+                if (!open) {
+                    return;
+                }
                 storage.close();
                 open = false;
             } finally {

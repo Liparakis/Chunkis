@@ -52,7 +52,9 @@ public final class ChunkTraceJsonl {
         root.addProperty("source", event.source());
         root.addProperty("message", event.message());
 
-        if (event.worldId() != null) root.addProperty("worldId", event.worldId());
+        if (event.worldId() != null) {
+            root.addProperty("worldId", event.worldId());
+        }
         if (event.chunkKey() != null) {
             root.addProperty("chunkX", event.chunkKey().x());
             root.addProperty("chunkZ", event.chunkKey().z());
@@ -61,15 +63,25 @@ public final class ChunkTraceJsonl {
             root.addProperty("regionX", event.regionKey().x());
             root.addProperty("regionZ", event.regionKey().z());
         }
-        if (event.operationId() != null) root.addProperty("operationId", event.operationId());
-        if (event.dirtyState() != null) root.addProperty("dirtyState", event.dirtyState());
-        if (event.byteSize() != null) root.addProperty("byteSize", event.byteSize());
+        if (event.operationId() != null) {
+            root.addProperty("operationId", event.operationId());
+        }
+        if (event.dirtyState() != null) {
+            root.addProperty("dirtyState", event.dirtyState());
+        }
+        if (event.byteSize() != null) {
+            root.addProperty("byteSize", event.byteSize());
+        }
 
         if (event.payloadWatchTarget() != null) {
             addPayloadWatchFields(root, event);
         }
-        if (event.payloadWatchStage() != null) root.addProperty("payloadStage", event.payloadWatchStage());
-        if (event.payloadWatchSummary() != null) root.addProperty("payloadSummary", event.payloadWatchSummary());
+        if (event.payloadWatchStage() != null) {
+            root.addProperty("payloadStage", event.payloadWatchStage());
+        }
+        if (event.payloadWatchSummary() != null) {
+            root.addProperty("payloadSummary", event.payloadWatchSummary());
+        }
 
         return root.toString();
     }

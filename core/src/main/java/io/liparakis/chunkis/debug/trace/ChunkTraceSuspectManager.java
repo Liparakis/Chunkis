@@ -1,9 +1,10 @@
 package io.liparakis.chunkis.debug.trace;
 
-import io.liparakis.chunkis.debug.model.*;
+import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
-import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -22,11 +23,9 @@ public final class ChunkTraceSuspectManager {
 
     private static final AtomicLong SUSPECT_IDS = new AtomicLong();
     private static final Object MONITOR = new Object();
-
-    private static int suspectCapacity = DEFAULT_SUSPECT_CAPACITY;
-
     private static final Map<Long, ChunkTraceSuspect> SUSPECTS_BY_ID = new HashMap<>();
     private static final Map<SuspectKey, Long> SUSPECT_IDS_BY_KEY = new HashMap<>();
+    private static int suspectCapacity = DEFAULT_SUSPECT_CAPACITY;
 
     private ChunkTraceSuspectManager() {
         throw new AssertionError("Utility class");
@@ -36,8 +35,8 @@ public final class ChunkTraceSuspectManager {
         synchronized (MONITOR) {
             final List<ChunkTraceSuspect> result = new ArrayList<>(SUSPECTS_BY_ID.values());
             result.sort(Comparator.comparingLong(ChunkTraceSuspect::lastSeenTimestampMillis)
-                    .thenComparingLong(ChunkTraceSuspect::suspectId)
-                    .reversed());
+                                  .thenComparingLong(ChunkTraceSuspect::suspectId)
+                                  .reversed());
             return result;
         }
     }
@@ -131,7 +130,7 @@ public final class ChunkTraceSuspectManager {
             final ChunkTraceEvent event,
             final Suspicion suspicion,
             final List<ChunkTraceEvent> capturedTimeline
-    ) {
+                                     ) {
         synchronized (MONITOR) {
             final SuspectKey key = new SuspectKey(event.chunkKey(), suspicion.reason());
             final Long existingId = SUSPECT_IDS_BY_KEY.get(key);
@@ -147,7 +146,7 @@ public final class ChunkTraceSuspectManager {
                                 event.timestampMillis(), event.timestampMillis(),
                                 1, capturedTimeline, suspicion.message()
                         )
-                );
+                                  );
                 evictOldestSuspectIfNeeded();
                 return;
             }
@@ -175,7 +174,7 @@ public final class ChunkTraceSuspectManager {
                             mergeTimeline(existing.copiedTimeline(), capturedTimeline),
                             suspicion.message()
                     )
-            );
+                              );
         }
     }
 
@@ -203,10 +202,14 @@ public final class ChunkTraceSuspectManager {
     private static List<ChunkTraceEvent> mergeTimeline(
             final List<ChunkTraceEvent> existing,
             final List<ChunkTraceEvent> captured
-    ) {
+                                                      ) {
         final Map<Long, ChunkTraceEvent> merged = new LinkedHashMap<>();
-        for (final ChunkTraceEvent e : existing) merged.put(e.eventId(), e);
-        for (final ChunkTraceEvent e : captured) merged.put(e.eventId(), e);
+        for (final ChunkTraceEvent e : existing) {
+            merged.put(e.eventId(), e);
+        }
+        for (final ChunkTraceEvent e : captured) {
+            merged.put(e.eventId(), e);
+        }
 
         final List<ChunkTraceEvent> timeline = new ArrayList<>(merged.values());
         final int fromIndex = Math.max(0, timeline.size() - ChunkTraceStore.DEFAULT_SUSPECT_TIMELINE_CAPACITY);
@@ -216,7 +219,7 @@ public final class ChunkTraceSuspectManager {
     private static ChunkTraceSeverity moreSevere(
             final ChunkTraceSeverity left,
             final ChunkTraceSeverity right
-    ) {
+                                                ) {
         return left.ordinal() >= right.ordinal() ? left : right;
     }
 
@@ -233,10 +236,14 @@ public final class ChunkTraceSuspectManager {
             ChunkTraceReason reason,
             ChunkTraceSeverity severity,
             String message
-    ) {}
+    ) {
+
+    }
 
     private record SuspectKey(
             DebugChunkKey chunkKey,
             ChunkTraceReason reason
-    ) {}
+    ) {
+
+    }
 }

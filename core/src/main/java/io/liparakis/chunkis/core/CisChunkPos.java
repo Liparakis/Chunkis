@@ -10,8 +10,10 @@ package io.liparakis.chunkis.core;
  *
  * @param x The chunk X coordinate
  * @param z The chunk Z coordinate
- * <p>
- * @version 1
+ *          <p>
  * @author Liparakis
+ * @version 1
  */
-public record CisChunkPos(int x, int z) {}
+public record CisChunkPos(int x, int z) {
+
+}

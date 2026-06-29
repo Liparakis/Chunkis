@@ -8,11 +8,11 @@ import java.util.Arrays;
  * and query packed block instructions within a ChunkDelta.
  */
 final class BlockInstructionStorage {
-    private static final int INITIAL_CAPACITY = 64;
 
+    private static final int INITIAL_CAPACITY = 64;
+    final Long2IntOpenHashMap positionMap;
     long[] packedInstructions;
     int instructionCount;
-    final Long2IntOpenHashMap positionMap;
 
     BlockInstructionStorage() {
         this.packedInstructions = new long[INITIAL_CAPACITY];

@@ -14,9 +14,8 @@ import java.io.IOException;
  *
  * @param <S> The BlockState type
  * @param <N> The NBT type
- *
- * @version 1
  * @author Liparakis
+ * @version 1
  */
 public final class CisEncoder<S, N> extends AbstractCisEncoder<S, N> {
 
@@ -26,14 +25,16 @@ public final class CisEncoder<S, N> extends AbstractCisEncoder<S, N> {
     @SuppressWarnings("rawtypes")
     private static final ThreadLocal<EncoderContext> CONTEXT = ThreadLocal.withInitial(EncoderContext::new);
 
-    /** Palette adapter that knows how to encode one block-state entry into the CIS palette stream. */
+    /**
+     * Palette adapter that knows how to encode one block-state entry into the CIS palette stream.
+     */
     private final CisAdapter<S> cisAdapter;
 
     /**
      * Constructs a new CisEncoder.
      */
     public CisEncoder(CisAdapter<S> cisAdapter, BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter,
-            S airState) {
+                      S airState) {
         super(nbtAdapter, airState);
         this.cisAdapter = cisAdapter;
     }

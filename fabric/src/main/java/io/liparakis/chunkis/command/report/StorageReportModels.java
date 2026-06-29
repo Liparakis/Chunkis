@@ -6,11 +6,36 @@ import java.util.List;
 import java.util.Map;
 
 public final class StorageReportModels {
+
     private StorageReportModels() {
         throw new AssertionError("Utility class");
     }
 
-    public record RegionCoordinates(int x, int z) {}
+    public enum SectionEncodingKind {
+        UNIFORM,
+        DEFAULT_SPARSE,
+        SPARSE,
+        DENSE
+    }
+
+    public enum ChunkEncodingKind {
+        EMPTY("empty"),
+        UNIFORM_ONLY("uniform"),
+        DEFAULT_SPARSE_ONLY("default-sparse"),
+        SPARSE_ONLY("sparse"),
+        DENSE_ONLY("dense"),
+        MIXED("mixed");
+
+        public final String label;
+
+        ChunkEncodingKind(final String label) {
+            this.label = label;
+        }
+    }
+
+    public record RegionCoordinates(int x, int z) {
+
+    }
 
     public record StorageReport(
             Path chunkisDir,
@@ -55,7 +80,9 @@ public final class StorageReportModels {
             int fullUniformCandidateSections,
             int implicitAirRejectedUniformSections,
             int sanityRejectedUniformSections
-    ) {}
+    ) {
+
+    }
 
     public record RegionReport(
             String name,
@@ -69,7 +96,9 @@ public final class StorageReportModels {
             long reuseMisses,
             int storedChunks,
             int baseChunks
-    ) {}
+    ) {
+
+    }
 
     public record ChunkReport(
             CisChunkPos pos,
@@ -81,7 +110,9 @@ public final class StorageReportModels {
             int denseSections,
             int blockEntities,
             ChunkEncodingKind chunkEncodingKind
-    ) {}
+    ) {
+
+    }
 
     public record RegionInspection(
             RegionReport regionReport,
@@ -94,19 +125,25 @@ public final class StorageReportModels {
             List<DenseSectionReport> denseSectionReports,
             DenseComparisonAccumulator denseComparison,
             EncoderInputDiagnostics uniformDiagnostics
-    ) {}
+    ) {
+
+    }
 
     public record EncoderInputDiagnostics(
             int uniformCandidateSections,
             int fullUniformCandidateSections,
             int implicitAirRejectedUniformSections,
             int sanityRejectedUniformSections
-    ) {}
+    ) {
+
+    }
 
     public record SectionUniformDiagnostics(
             int explicitBlockCount,
             boolean singleExplicitState
-    ) {}
+    ) {
+
+    }
 
     public record ChunkPayloadDiagnostics(
             int totalSections,
@@ -122,7 +159,9 @@ public final class StorageReportModels {
             int globalBits,
             List<SectionPayloadDiagnostics> sections,
             ChunkEncodingKind chunkEncodingKind
-    ) {}
+    ) {
+
+    }
 
     public record DenseSectionReport(
             CisChunkPos pos,
@@ -133,7 +172,9 @@ public final class StorageReportModels {
             long sparseMarginBytes,
             long defaultSparseMarginBytes,
             String commonStates
-    ) {}
+    ) {
+
+    }
 
     public record DenseSectionAnalysis(
             Map<Integer, Integer> paletteSizeDistribution,
@@ -146,11 +187,15 @@ public final class StorageReportModels {
             int denseBeatsDefaultSparseCount,
             long denseVsDefaultSparseMarginTotal,
             long denseVsDefaultSparseWorstMargin
-    ) {}
+    ) {
+
+    }
 
     public record DefaultSparseReport(
             int exceptionCount
-    ) {}
+    ) {
+
+    }
 
     public record SectionPayloadDiagnostics(
             int sectionY,
@@ -158,31 +203,12 @@ public final class StorageReportModels {
             long encodedBits,
             int localPaletteSize,
             int bitsPerBlock
-    ) {}
+    ) {
 
-    public enum SectionEncodingKind {
-        UNIFORM,
-        DEFAULT_SPARSE,
-        SPARSE,
-        DENSE
-    }
-
-    public enum ChunkEncodingKind {
-        EMPTY("empty"),
-        UNIFORM_ONLY("uniform"),
-        DEFAULT_SPARSE_ONLY("default-sparse"),
-        SPARSE_ONLY("sparse"),
-        DENSE_ONLY("dense"),
-        MIXED("mixed");
-
-        public final String label;
-
-        ChunkEncodingKind(final String label) {
-            this.label = label;
-        }
     }
 
     public static final class SectionEncodingTotals {
+
         public int uniformSections;
         public int defaultSparseSections;
         public int sparseSections;
@@ -226,6 +252,7 @@ public final class StorageReportModels {
     }
 
     public static final class ChunkMixCounters {
+
         public int denseOnlyChunks;
         public int sparseOnlyChunks;
         public int uniformOnlyChunks;
@@ -237,7 +264,8 @@ public final class StorageReportModels {
                 case DEFAULT_SPARSE_ONLY, SPARSE_ONLY -> sparseOnlyChunks++;
                 case UNIFORM_ONLY -> uniformOnlyChunks++;
                 case MIXED -> mixedChunks++;
-                case EMPTY -> {}
+                case EMPTY -> {
+                }
             }
         }
 
@@ -256,6 +284,7 @@ public final class StorageReportModels {
     }
 
     public static final class DenseComparisonAccumulator {
+
         public int samples;
         public int denseBeatsSparseCount;
         public long denseVsSparseMarginTotal;
@@ -268,7 +297,7 @@ public final class StorageReportModels {
                 final long sparseMargin,
                 final long defaultSparseMargin,
                 final boolean hasDefaultSparseEncoding
-        ) {
+                          ) {
             samples++;
             if (sparseMargin > 0L) {
                 denseBeatsSparseCount++;
@@ -295,7 +324,7 @@ public final class StorageReportModels {
                 denseVsDefaultSparseWorstMargin = Math.min(
                         denseVsDefaultSparseWorstMargin,
                         analysis.denseVsDefaultSparseWorstMargin()
-                );
+                                                          );
             }
         }
 
@@ -311,7 +340,7 @@ public final class StorageReportModels {
                 denseVsDefaultSparseWorstMargin = Math.min(
                         denseVsDefaultSparseWorstMargin,
                         other.denseVsDefaultSparseWorstMargin
-                );
+                                                          );
             }
         }
 

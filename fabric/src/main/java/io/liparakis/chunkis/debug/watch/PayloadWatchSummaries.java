@@ -1,6 +1,10 @@
 package io.liparakis.chunkis.debug.watch;
 
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
@@ -9,11 +13,6 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
-
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.util.UUID;
 
 /**
  * Formatting and tiny lookup helpers for payload watch trace summaries.
@@ -46,7 +45,7 @@ public final class PayloadWatchSummaries {
             final String source,
             final String threadName,
             @Nullable final WorldChunk chunk
-    ) {
+                                                   ) {
         if (!target.hasBlockCoordinates()) {
             return target.describe()
                     + " expectedState=" + expectedState
@@ -72,7 +71,7 @@ public final class PayloadWatchSummaries {
             final PayloadWatchTarget target,
             @Nullable final BlockEntity blockEntity,
             @Nullable final NbtCompound nbt
-    ) {
+                                             ) {
         final String type = blockEntity != null
                 ? String.valueOf(net.minecraft.block.entity.BlockEntityType.getId(blockEntity.getType()))
                 : nbt != null ? nbt.getString("id").orElse("<missing-id>") : "<missing>";
@@ -84,7 +83,7 @@ public final class PayloadWatchSummaries {
     public static String summarizeEntity(
             final PayloadWatchTarget target,
             final NbtCompound nbt
-    ) {
+                                        ) {
         return "uuid=" + target.entityUuid()
                 + " type=" + nbt.getString("id").orElse("<missing-id>")
                 + " pos=" + nbt.getList("Pos").map(Object::toString).orElse("[]")
@@ -96,9 +95,10 @@ public final class PayloadWatchSummaries {
             @Nullable final NbtCompound expectedNbt,
             @Nullable final Entity liveEntity,
             final WorldChunk chunk
-    ) {
+                                                           ) {
         return "uuid=" + target.entityUuid()
-                + " expectedType=" + (expectedNbt != null ? expectedNbt.getString("id").orElse("<missing-id>") : "<unknown>")
+                + " expectedType=" + (expectedNbt != null ? expectedNbt.getString("id").orElse("<missing-id>")
+                : "<unknown>")
                 + " actualServerEntityPresent=" + (liveEntity != null)
                 + " actualServerEntityType=" + (liveEntity != null ? liveEntity.getType() : "<missing>")
                 + " chunkStatus=" + chunk.getStatus()
@@ -111,7 +111,7 @@ public final class PayloadWatchSummaries {
             final Entity entity,
             final Entity.RemovalReason reason,
             final String source
-    ) {
+                                               ) {
         return "uuid=" + target.entityUuid()
                 + " actualServerEntityPresent=false"
                 + " actualServerEntityType=" + entity.getType()
@@ -129,7 +129,7 @@ public final class PayloadWatchSummaries {
             final PayloadWatchTarget target,
             final Entity entity,
             final String source
-    ) {
+                                            ) {
         return "uuid=" + target.entityUuid()
                 + " actualServerEntityPresent=" + !entity.isRemoved()
                 + " actualServerEntityType=" + entity.getType()
@@ -162,9 +162,9 @@ public final class PayloadWatchSummaries {
             return null;
         }
         return nbt.getIntArray("UUID")
-                .map(net.minecraft.util.Uuids::toUuid)
-                .map(UUID::toString)
-                .orElse(null);
+                  .map(net.minecraft.util.Uuids::toUuid)
+                  .map(UUID::toString)
+                  .orElse(null);
     }
 
     public static String worldId(final ServerWorld world) {

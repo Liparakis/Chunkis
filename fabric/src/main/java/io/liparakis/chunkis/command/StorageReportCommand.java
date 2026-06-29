@@ -4,16 +4,15 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import io.liparakis.chunkis.command.report.StorageMetricsAnalyzer;
-import io.liparakis.chunkis.command.report.StorageReportRenderer;
 import io.liparakis.chunkis.command.report.StorageReportModels.StorageReport;
+import io.liparakis.chunkis.command.report.StorageReportRenderer;
+import java.io.IOException;
 import net.minecraft.command.permission.Permission;
 import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
-
-import java.io.IOException;
 
 /**
  * Reports physical and logical Chunkis storage usage for one world/dimension.
@@ -34,15 +33,15 @@ public final class StorageReportCommand {
     public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(
                 CommandManager.literal("chunkis_storage_report")
-                        .requires(source -> source.getPermissions()
-                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                        .executes(context -> run(context, DEFAULT_TOP_REGIONS))
-                        .then(CommandManager.argument("topRegions", IntegerArgumentType.integer(1, 32))
-                                .executes(context -> run(
-                                        context,
-                                        IntegerArgumentType.getInteger(context, "topRegions")
-                                )))
-        );
+                              .requires(source -> source.getPermissions()
+                                                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                              .executes(context -> run(context, DEFAULT_TOP_REGIONS))
+                              .then(CommandManager.argument("topRegions", IntegerArgumentType.integer(1, 32))
+                                                  .executes(context -> run(
+                                                          context,
+                                                          IntegerArgumentType.getInteger(context, "topRegions")
+                                                                          )))
+                           );
     }
 
     /**

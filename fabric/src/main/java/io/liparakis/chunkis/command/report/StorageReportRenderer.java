@@ -1,13 +1,15 @@
 package io.liparakis.chunkis.command.report;
 
-import io.liparakis.chunkis.command.report.StorageReportModels.*;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkReport;
+import io.liparakis.chunkis.command.report.StorageReportModels.DenseSectionReport;
+import io.liparakis.chunkis.command.report.StorageReportModels.RegionReport;
+import io.liparakis.chunkis.command.report.StorageReportModels.StorageReport;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringJoiner;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.Text;
 
 public final class StorageReportRenderer {
 
@@ -25,7 +27,7 @@ public final class StorageReportRenderer {
             final ServerWorld world,
             final StorageReport report,
             final int topRegions
-    ) {
+                                 ) {
         final int baseFreeChunks = report.storedChunks() - report.baseChunks();
         final double baseShare = report.storedChunks() == 0
                 ? 0.0
@@ -39,69 +41,69 @@ public final class StorageReportRenderer {
                 source, "  Chunkis bytes: " + formatBytes(report.chunkisBytes())
                         + " | live: " + formatBytes(report.liveBytes())
                         + " | slack: " + formatBytes(report.slackBytes())
-        );
+                );
         sendLine(
                 source, "  Free blocks: " + report.freeBlocks()
                         + " | reusable: " + formatBytes(report.reusableBytes())
                         + " | largest free: " + formatBytes(report.largestFreeBlock())
                         + " | reuse hits/misses: " + report.reuseHits() + "/" + report.reuseMisses()
-        );
+                );
         sendLine(
                 source, "  Stored chunks: " + report.storedChunks()
                         + " | with base NBT: " + report.baseChunks()
                         + " (" + formatPercent(baseShare) + ")"
                         + " | sparse-only: " + baseFreeChunks
-        );
+                );
         sendLine(
                 source, "  Avg live / chunk: " + formatBytes(averageBytes(
                         report.liveBytes(),
                         report.storedChunks()
-                ))
+                                                                         ))
                         + " | block entities: " + report.blockEntities()
-        );
+                );
         sendLine(
                 source, "  Vanilla region bytes: " + formatBytes(report.vanillaBytes())
                         + " | Chunkis live / vanilla: " + formatPercent(liveVsVanilla)
-        );
+                );
         sendLine(
                 source, "  Sections: empty " + report.emptySections()
                         + " | uniform " + report.uniformSections()
                         + " | default-sparse " + report.defaultSparseSections()
                         + " | sparse " + report.sparseSections()
                         + " | dense " + report.denseSections()
-        );
+                );
         sendLine(
                 source, "  Avg bytes / section: empty 0 B"
                         + " | uniform " + formatBytes(averageSectionBytes(
                         report.uniformSectionBits(),
                         report.uniformSections()
-                ))
+                                                                         ))
                         + " | default-sparse "
                         + formatBytes(averageSectionBytes(
                         report.defaultSparseSectionBits(),
                         report.defaultSparseSections()
-                ))
+                                                         ))
                         + " | sparse " + formatBytes(averageSectionBytes(
                         report.sparseSectionBits(),
                         report.sparseSections()
-                ))
+                                                                        ))
                         + " | dense " + formatBytes(averageSectionBytes(
                         report.denseSectionBits(),
                         report.denseSections()
-                ))
-        );
+                                                                       ))
+                );
         sendLine(
                 source, "  Chunk section mix: dense-only " + report.denseOnlyChunks()
                         + " | sparse-only " + report.sparseOnlyChunks()
                         + " | uniform-only " + report.uniformOnlyChunks()
                         + " | mixed " + report.mixedChunks()
-        );
+                );
         sendLine(
                 source, "  Uniform candidates: " + report.uniformCandidateSections()
                         + " | full single-state: " + report.fullUniformCandidateSections()
                         + " | rejected implicit-air: " + report.implicitAirRejectedUniformSections()
                         + " | rejected sanity: " + report.sanityRejectedUniformSections()
-        );
+                );
 
         sendDenseSummary(source, report);
         sendLine(source, "  Chunkis dir: " + report.chunkisDir());
@@ -119,31 +121,31 @@ public final class StorageReportRenderer {
         sendLine(
                 source, "  Dense palette sizes: " + formatDistribution(report.densePaletteSizes())
                         + " | bits/block: " + formatDistribution(report.denseBitsPerBlock())
-        );
+                );
         sendLine(
                 source, "  Dense vs sparse: beat " + report.denseBeatsSparseCount() + "/" + report.denseSections()
                         + " | avg margin " + formatBytes(safeAverage(
                         report.denseVsSparseMarginTotal(),
                         report.denseSections()
-                ))
+                                                                    ))
                         + " | worst " + formatSignedBytes(report.denseVsSparseWorstMargin())
-        );
+                );
         sendLine(
                 source, "  Dense vs default-sparse: beat " + report.denseBeatsDefaultSparseCount()
                         + "/" + report.denseSections()
                         + " | avg margin " + formatBytes(safeAverage(
                         report.denseVsDefaultSparseMarginTotal(),
                         report.denseSections()
-                ))
+                                                                    ))
                         + " | worst " + formatSignedBytes(report.denseVsDefaultSparseWorstMargin())
-        );
+                );
     }
 
     private static void sendRegionSummary(
             final ServerCommandSource source,
             final StorageReport report,
             final int topRegions
-    ) {
+                                         ) {
         final int limit = Math.min(topRegions, report.regions().size());
         if (limit == 0) {
             sendLine(source, "  No Chunkis region files found.");
@@ -159,11 +161,11 @@ public final class StorageReportRenderer {
                             + " | slack " + formatBytes(region.slackBytes())
                             + " (" + formatPercent(
                             slackPercent(region.fileBytes(), region.slackBytes())
-                    ) + ")"
+                                                  ) + ")"
                             + " | free-list " + region.freeBlockCount()
                             + " | stored " + region.storedChunks()
                             + " | base " + region.baseChunks()
-            );
+                    );
         }
     }
 
@@ -184,7 +186,7 @@ public final class StorageReportRenderer {
                             + chunk.sparseSections() + "/" + chunk.denseSections()
                             + " | block entities " + chunk.blockEntities()
                             + " | mix " + chunk.chunkEncodingKind().label
-            );
+                    );
         }
     }
 
@@ -205,7 +207,7 @@ public final class StorageReportRenderer {
                             + " | vs sparse " + formatSignedBytes(dense.sparseMarginBytes())
                             + " | vs ds " + formatSignedBytes(dense.defaultSparseMarginBytes())
                             + " | top " + dense.commonStates()
-            );
+                    );
         }
     }
 
@@ -245,8 +247,8 @@ public final class StorageReportRenderer {
 
         final StringJoiner joiner = new StringJoiner(", ");
         distribution.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(entry -> joiner.add(entry.getKey() + "x" + entry.getValue()));
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> joiner.add(entry.getKey() + "x" + entry.getValue()));
         return joiner.toString();
     }
 

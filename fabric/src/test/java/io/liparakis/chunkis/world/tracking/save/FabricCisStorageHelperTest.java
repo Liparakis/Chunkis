@@ -1,15 +1,13 @@
 package io.liparakis.chunkis.world.tracking.save;
 
-import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.nio.file.Path;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 import org.junit.jupiter.api.Test;
-
-import java.nio.file.Path;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Verifies the persisted storage-path contract for Chunkis dimensions.
@@ -41,9 +39,9 @@ class FabricCisStorageHelperTest {
                 RegistryKeys.WORLD,
                 Identifier.of("minecraft", "the_nether"));
         final Path dimensionChunkisDir = SAVE_ROOT.resolve("dimensions")
-                .resolve("minecraft")
-                .resolve("the_nether")
-                .resolve("chunkis");
+                                                  .resolve("minecraft")
+                                                  .resolve("the_nether")
+                                                  .resolve("chunkis");
 
         assertEquals(
                 dimensionChunkisDir.resolve("regions"),
@@ -53,9 +51,9 @@ class FabricCisStorageHelperTest {
                 ChunkisStoragePaths.computeMappingFile(SAVE_ROOT, nether));
         assertEquals(
                 SAVE_ROOT.resolve("dimensions")
-                        .resolve("minecraft")
-                        .resolve("the_nether")
-                        .resolve("region"),
+                         .resolve("minecraft")
+                         .resolve("the_nether")
+                         .resolve("region"),
                 ChunkisStoragePaths.computeVanillaRegionDirectory(SAVE_ROOT, nether));
     }
 
@@ -65,8 +63,8 @@ class FabricCisStorageHelperTest {
                 RegistryKeys.WORLD,
                 Identifier.of("example", "overworld"));
         final Path dimensionBase = SAVE_ROOT.resolve("dimensions")
-                .resolve("example")
-                .resolve("overworld");
+                                            .resolve("example")
+                                            .resolve("overworld");
 
         assertEquals(
                 dimensionBase.resolve("chunkis").resolve("regions"),
