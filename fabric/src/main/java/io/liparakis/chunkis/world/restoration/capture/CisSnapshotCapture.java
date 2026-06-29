@@ -75,6 +75,7 @@ public final class CisSnapshotCapture {
         PayloadWatchTracer.traceCapturedBlocks(chunk);
         target.clearBlockPayloads(false);
         target.clearBlockEntityPayloads(false);
+        target.ensureBlockCapacity(liveNonAirBlocks);
 
         final ChunkSection[] sections = chunk.getSectionArray();
         for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
@@ -89,7 +90,7 @@ public final class CisSnapshotCapture {
                     for (int localX = 0; localX < SECTION_SIZE; localX++) {
                         final BlockState state = section.getBlockState(localX, localY, localZ);
                         if (!state.isAir()) {
-                            target.addBlockChange(localX, worldY, localZ, state, false);
+                            target.appendSnapshotBlockChange(localX, worldY, localZ, state);
                         }
                     }
                 }

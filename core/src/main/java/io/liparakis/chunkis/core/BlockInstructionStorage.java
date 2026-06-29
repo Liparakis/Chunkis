@@ -34,6 +34,13 @@ final class BlockInstructionStorage {
         return copy;
     }
 
+    void copyInto(final BlockInstructionStorage target) {
+        target.packedInstructions = Arrays.copyOf(this.packedInstructions, this.packedInstructions.length);
+        target.instructionCount = this.instructionCount;
+        target.positionMap.clear();
+        target.positionMap.putAll(this.positionMap);
+    }
+
     void clear() {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;

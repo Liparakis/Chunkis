@@ -168,7 +168,7 @@ public final class ChunkDelta<S, N> {
     private ChunkDelta(
             final Palette<S> blockPalette,
             final Predicate<S> isEmptyState
-                      ) {
+    ) {
         this.blockPalette = blockPalette;
         this.isEmptyState = isEmptyState;
         this.instructions = new BlockInstructionStorage();
@@ -241,10 +241,7 @@ public final class ChunkDelta<S, N> {
                 this.isEmptyState
         );
 
-        snap.instructions.packedInstructions = Arrays.copyOf(this.instructions.packedInstructions, this.instructions.packedInstructions.length);
-        snap.instructions.instructionCount = this.instructions.instructionCount;
-        snap.instructions.positionMap.clear();
-        snap.instructions.positionMap.putAll(this.instructions.positionMap);
+        this.instructions.copyInto(snap.instructions);
 
         if (this.blockEntities != null) {
             snap.blockEntities = new Long2ObjectOpenHashMap<>(this.blockEntities.size());
@@ -312,7 +309,7 @@ public final class ChunkDelta<S, N> {
                     null,
                     true,
                     null
-                                 );
+            );
         }
         ownershipState.pendingMutationSource = null;
     }
@@ -330,7 +327,7 @@ public final class ChunkDelta<S, N> {
             final int y,
             final int z,
             final S newState
-                              ) {
+    ) {
         addBlockChange(x, y, z, newState, true);
     }
 
@@ -349,7 +346,7 @@ public final class ChunkDelta<S, N> {
             final int z,
             final S newState,
             final boolean markDirty
-                              ) {
+    ) {
         if (newState == null) {
             return;
         }
@@ -380,7 +377,7 @@ public final class ChunkDelta<S, N> {
             final long posKey,
             final int index,
             final boolean markDirty
-                                          ) {
+    ) {
         final long newInstruction = packInstruction(paletteId, posKey);
 
         if (instructions.packedInstructions[index] == newInstruction) {
@@ -405,7 +402,7 @@ public final class ChunkDelta<S, N> {
             final int paletteId,
             final long posKey,
             final boolean markDirty
-                                  ) {
+    ) {
         instructions.add(packInstruction(paletteId, posKey), posKey);
 
         if (markDirty) {
@@ -449,7 +446,7 @@ public final class ChunkDelta<S, N> {
             final int y,
             final int z,
             final boolean markDirty
-                                     ) {
+    ) {
         if (blockEntities == null) {
             return;
         }
@@ -511,7 +508,34 @@ public final class ChunkDelta<S, N> {
             final int y,
             final int z,
             final int paletteId
-                                  ) {
+    ) {
+        final long posKey = BlockInstruction.packPos(x, y, z);
+        instructions.add(packInstruction(paletteId, posKey), posKey);
+    }
+
+    /**
+     * Appends a block change for bulk replay/capture paths.
+     *
+     * <p>The caller is expected to rebuild the block payload from scratch and to
+     * guarantee position uniqueness for this pass. This avoids the
+     * duplicate-detection work done by {@link #addBlockChange(int, int, int, Object, boolean)}.</p>
+     *
+     * @param x     local chunk X coordinate
+     * @param y     block Y coordinate
+     * @param z     local chunk Z coordinate
+     * @param state captured block state
+     */
+    public void appendSnapshotBlockChange(
+            final int x,
+            final int y,
+            final int z,
+            final S state
+    ) {
+        if (state == null) {
+            return;
+        }
+
+        final int paletteId = blockPalette.getOrAdd(state);
         final long posKey = BlockInstruction.packPos(x, y, z);
         instructions.add(packInstruction(paletteId, posKey), posKey);
     }
@@ -529,7 +553,7 @@ public final class ChunkDelta<S, N> {
             final int y,
             final int z,
             final N nbt
-                                  ) {
+    ) {
         addBlockEntityData(x, y, z, nbt, true);
     }
 
@@ -548,7 +572,7 @@ public final class ChunkDelta<S, N> {
             final int z,
             final N nbt,
             final boolean markDirty
-                                  ) {
+    ) {
         if (nbt == null) {
             return;
         }
@@ -824,7 +848,8 @@ public final class ChunkDelta<S, N> {
 
         boolean changed = false;
         if (activeEntities != null && !activeEntities.isEmpty()) {
-            changed = activeEntities.values().removeIf(predicate);
+            changed = activeEntities.values()
+                    .removeIf(predicate);
         }
         if (!pendingEntities.isEmpty()) {
             final List<N> filtered = new ArrayList<>(pendingEntities.size());
@@ -908,7 +933,7 @@ public final class ChunkDelta<S, N> {
     public boolean updateChunkMetadataWithEncodedPayload(
             final N metadata,
             final byte[] encodedPayload
-                                                        ) {
+    ) {
         if (metadata == null || encodedPayload == null) {
             if (chunkMetadata == null && encodedChunkMetadata == null) {
                 return false;
@@ -1031,7 +1056,7 @@ public final class ChunkDelta<S, N> {
                         BlockInstruction.unpackY(posKey),
                         BlockInstruction.unpackZ(posKey),
                         entry.getValue()
-                                        );
+                );
             }
         }
 
@@ -1073,7 +1098,7 @@ public final class ChunkDelta<S, N> {
                     BlockInstruction.unpackY(posKey),
                     BlockInstruction.unpackZ(posKey),
                     state
-                              );
+            );
         }
     }
 
@@ -1128,7 +1153,7 @@ public final class ChunkDelta<S, N> {
                     null,
                     false,
                     null
-                                 );
+            );
         }
     }
 
@@ -1160,7 +1185,7 @@ public final class ChunkDelta<S, N> {
                     null,
                     false,
                     null
-                                 );
+            );
         }
         return true;
     }

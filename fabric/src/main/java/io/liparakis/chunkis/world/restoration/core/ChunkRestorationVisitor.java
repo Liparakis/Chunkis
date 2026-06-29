@@ -388,7 +388,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final BlockState state
     ) {
         if (runtimeDelta != null) {
-            runtimeDelta.addBlockChange(localX, localY, localZ, state, false);
+            runtimeDelta.appendSnapshotBlockChange(localX, localY, localZ, state);
         }
     }
 
