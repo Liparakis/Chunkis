@@ -94,6 +94,7 @@ public final class ChunkisApiImpl implements ChunkisApi {
      * @param chunk the chunk to test
      * @return true if the chunk is a ChunkisDeltaDuck
      */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private static boolean isChunkisDuck(final Chunk chunk) {
         return chunk instanceof ChunkisDeltaDuck;
     }

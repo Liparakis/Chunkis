@@ -34,17 +34,8 @@ public final class BlockPayloadTracer {
             final long mutationGeneration,
             @Nullable final String message
     ) {
-        if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
-            return;
-        }
-
         final String worldId = PayloadWatchSummaries.worldId(chunk);
-        final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedBlock(
-                worldId,
-                pos.getX(),
-                pos.getY(),
-                pos.getZ()
-        );
+        final PayloadWatchTarget target = PayloadWatchTracer.watchedBlockTarget(worldId, pos);
         if (target == null) {
             return;
         }

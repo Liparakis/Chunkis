@@ -79,9 +79,11 @@ public final class ScheduledEntityReplayQueue {
                         entityNbt == null ? null : entityNbt.copy()
                 )
         );
+        final int after = QUEUE.size();
+        final String threadName = Thread.currentThread().getName();
         final String message = String.format(
                 "entity replay scheduled: uuid=%s queueBefore=%d queueAfter=%d thread=%s",
-                entityUuid, before, QUEUE.size(), Thread.currentThread().getName()
+                entityUuid, before, after, threadName
         );
 
         io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
@@ -99,7 +101,13 @@ public final class ScheduledEntityReplayQueue {
                 null
         );
 
-        Chunkis.LOGGER.debug("Chunkis {}", message);
+        Chunkis.LOGGER.debug(
+                "Chunkis entity replay scheduled uuid={} queueBefore={} queueAfter={} thread={}",
+                entityUuid,
+                before,
+                after,
+                threadName
+        );
     }
 
     /**
@@ -188,11 +196,12 @@ public final class ScheduledEntityReplayQueue {
         }
 
         if (visited != 0) {
+            final int queueAfter = QUEUE.size();
+            final boolean serverThread = world.getServer() == null || world.getServer().isOnThread();
+            final String threadName = Thread.currentThread().getName();
             final String message = String.format(
                     "entity replay drain finished: visited=%d queueBefore=%d queueAfter=%d serverThread=%b thread=%s",
-                    visited, queueBefore, QUEUE.size(),
-                    world.getServer() == null || world.getServer().isOnThread(),
-                    Thread.currentThread().getName()
+                    visited, queueBefore, queueAfter, serverThread, threadName
             );
 
             io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
@@ -210,7 +219,14 @@ public final class ScheduledEntityReplayQueue {
                     null
             );
 
-            Chunkis.LOGGER.debug("Chunkis {}", message);
+            Chunkis.LOGGER.debug(
+                    "Chunkis entity replay drain finished visited={} queueBefore={} queueAfter={} serverThread={} thread={}",
+                    visited,
+                    queueBefore,
+                    queueAfter,
+                    serverThread,
+                    threadName
+            );
         }
     }
 
@@ -323,12 +339,13 @@ public final class ScheduledEntityReplayQueue {
             final String decision,
             final int queueBefore
     ) {
+        final int queueAfter = QUEUE.size();
+        final boolean serverThread = world.getServer() == null || world.getServer().isOnThread();
+        final String threadName = Thread.currentThread().getName();
         final String message = String.format(
                 "entity replay drain: chunk=%d,%d uuid=%s decision=%s queueBefore=%d queueAfter=%d serverThread=%b thread=%s",
                 replay.chunkX, replay.chunkZ, replay.entityUuid,
-                decision, queueBefore, QUEUE.size(),
-                world.getServer() == null || world.getServer().isOnThread(),
-                Thread.currentThread().getName()
+                decision, queueBefore, queueAfter, serverThread, threadName
         );
 
         io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
@@ -346,7 +363,17 @@ public final class ScheduledEntityReplayQueue {
                 null
         );
 
-        Chunkis.LOGGER.debug("Chunkis {}", message);
+        Chunkis.LOGGER.debug(
+                "Chunkis entity replay drain chunk={},{} uuid={} decision={} queueBefore={} queueAfter={} serverThread={} thread={}",
+                replay.chunkX,
+                replay.chunkZ,
+                replay.entityUuid,
+                decision,
+                queueBefore,
+                queueAfter,
+                serverThread,
+                threadName
+        );
     }
 
     /**

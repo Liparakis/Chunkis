@@ -55,8 +55,8 @@ class PendingChunkMutationSuppressionTest {
                         || event.eventType() == ChunkTraceEventType.SUPPRESSION_CONTEXT_ENDED);
 
         assertEquals(2, events.size());
-        assertEquals(ChunkTraceEventType.SUPPRESSION_CONTEXT_STARTED, events.get(0).eventType());
-        assertEquals(ChunkTraceReason.PASSIVE_VANILLA_LOAD, events.get(0).reason());
+        assertEquals(ChunkTraceEventType.SUPPRESSION_CONTEXT_STARTED, events.getFirst().eventType());
+        assertEquals(ChunkTraceReason.PASSIVE_VANILLA_LOAD, events.getFirst().reason());
         assertEquals("PendingChunkMutationSuppressionTest#begin", events.get(0).source());
         assertTrue(events.get(0).message().contains("passive_load"));
         assertEquals(ChunkTraceEventType.SUPPRESSION_CONTEXT_ENDED, events.get(1).eventType());

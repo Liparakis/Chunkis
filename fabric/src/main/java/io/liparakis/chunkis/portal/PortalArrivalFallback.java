@@ -71,20 +71,6 @@ public final class PortalArrivalFallback {
             Integer.getInteger("chunkis.portal.fallbackCooldownTicks", 40);
 
     /**
-     * Steps outward from the portal face to search for a valid egress tile.
-     */
-
-    /**
-     * BFS radius used when counting connected walkable tiles from a candidate egress position.
-     * A fixed radius of 2 gives a 5×5 tile budget, sufficient to distinguish open areas from
-     * narrow ledges without excessive world queries.
-     */
-
-    /**
-     * Minimum connected walkable tiles required to accept an egress position.
-     */
-
-    /**
      * Default state for obsidian blocks used in portal frames.
      */
     private static final BlockState OBSIDIAN_STATE = Blocks.OBSIDIAN.getDefaultState();
@@ -485,15 +471,6 @@ public final class PortalArrivalFallback {
         return result[0];
     }
 
-    
-    /**
-     * Strict passability check for egress tiles — the player must physically fit here.
-     * Checks if a block state prevents an entity from standing in its space.
-     *
-     * @param state       block state to check
-     * @param blockEntity block entity at the position, if any
-     * @return {@code true} if impassable
-     */
     /**
      * Last-resort arrival at the motion-blocking surface above the target column.
      * Delegates final position refinement to {@link NetherPortal#findOpenPosition}.
@@ -693,19 +670,6 @@ public final class PortalArrivalFallback {
         return support;
     }
 
-    /**
-     * Counts walkable tiles reachable from ({@code startX}, {@code startY}, {@code startZ}) via
-     * horizontal BFS, bounded to a {@value #EGRESS_BFS_RADIUS}-block Chebyshev radius.
-     *
-     * <p>Y is fixed throughout — all tiles are checked at the same height as the starting
-     * position. Visited positions are encoded as packed longs to avoid per-node heap allocation.
-     *
-     * @param world  destination world
-     * @param startX X coordinate of the starting tile
-     * @param startY Y coordinate of the starting tile
-     * @param startZ Z coordinate of the starting tile
-     * @return number of connected walkable tiles including the start tile
-     */
     /**
      * Compares two portal sites and returns the one with the better (lower) score.
      */

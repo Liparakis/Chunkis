@@ -2,7 +2,6 @@ package io.liparakis.chunkis.debug.trace;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
-import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchType;
 import io.liparakis.chunkis.debug.watch.BlockWatchTraceTracker;
@@ -35,17 +34,9 @@ public final class ChunkLifecyclePayloadTracer {
             return;
         }
         final ChunkPos chunkPos = chunk.getPos();
-        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
-                worldId,
-                DebugChunkKeys.of(chunkPos)
-        )) {
-            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
-                continue;
-            }
-            final BlockState expectedState = PayloadWatchTracer.findWatchedBlockState(delta, target, chunkPos, worldId);
-            if (expectedState == null) {
-                continue;
-            }
+        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+            final PayloadWatchTarget target = match.target();
+            final BlockState expectedState = match.expectedState();
             BlockWatchTraceTracker.markProtoAttached(worldId, chunkPos, target, operationId);
             PayloadWatchTracer.traceChunkIdentityAndStatus(
                     worldId,
@@ -71,7 +62,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " thread=" + Thread.currentThread().getName(),
                     null
             );
-        }
+        });
     }
 
     public static void traceProtoDeltaPresentBeforeConversion(
@@ -85,17 +76,9 @@ public final class ChunkLifecyclePayloadTracer {
             return;
         }
         final ChunkPos chunkPos = chunk.getPos();
-        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
-                worldId,
-                DebugChunkKeys.of(chunkPos)
-        )) {
-            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
-                continue;
-            }
-            final BlockState expectedState = PayloadWatchTracer.findWatchedBlockState(delta, target, chunkPos, worldId);
-            if (expectedState == null) {
-                continue;
-            }
+        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+            final PayloadWatchTarget target = match.target();
+            final BlockState expectedState = match.expectedState();
             PayloadWatchTracer.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
@@ -120,7 +103,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " thread=" + Thread.currentThread().getName(),
                     null
             );
-        }
+        });
     }
 
     public static void traceProtoDeltaPresentAfterConversion(
@@ -134,17 +117,9 @@ public final class ChunkLifecyclePayloadTracer {
             return;
         }
         final ChunkPos chunkPos = chunk.getPos();
-        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
-                worldId,
-                DebugChunkKeys.of(chunkPos)
-        )) {
-            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
-                continue;
-            }
-            final BlockState expectedState = PayloadWatchTracer.findWatchedBlockState(delta, target, chunkPos, worldId);
-            if (expectedState == null) {
-                continue;
-            }
+        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+            final PayloadWatchTarget target = match.target();
+            final BlockState expectedState = match.expectedState();
             PayloadWatchTracer.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
@@ -169,7 +144,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " thread=" + Thread.currentThread().getName(),
                     null
             );
-        }
+        });
     }
 
     public static void traceWorldChunkDeltaAttached(
@@ -183,17 +158,9 @@ public final class ChunkLifecyclePayloadTracer {
         }
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final ChunkPos chunkPos = chunk.getPos();
-        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
-                worldId,
-                DebugChunkKeys.of(chunkPos)
-        )) {
-            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
-                continue;
-            }
-            final BlockState expectedState = PayloadWatchTracer.findWatchedBlockState(delta, target, chunkPos, worldId);
-            if (expectedState == null) {
-                continue;
-            }
+        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+            final PayloadWatchTarget target = match.target();
+            final BlockState expectedState = match.expectedState();
             PayloadWatchTracer.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
@@ -218,7 +185,7 @@ public final class ChunkLifecyclePayloadTracer {
                             + " thread=" + Thread.currentThread().getName(),
                     null
             );
-        }
+        });
     }
 
     public static void traceWorldChunkDeltaMissing(
@@ -276,18 +243,10 @@ public final class ChunkLifecyclePayloadTracer {
 
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final ChunkPos chunkPos = chunk.getPos();
-        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
-                worldId,
-                DebugChunkKeys.of(chunkPos)
-        )) {
-            if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
-                continue;
-            }
-            final BlockState expectedState = PayloadWatchTracer.resolveExpectedState(chunk, expectedDelta, target, chunkPos, worldId);
-            if (expectedState == null) {
-                continue;
-            }
-            final String resolvedOperationId = PayloadWatchTracer.resolveOperationId(worldId, chunkPos, target, operationId);
+        PayloadWatchTracer.forEachResolvedWatchedBlockState(chunk, expectedDelta, operationId, match -> {
+            final PayloadWatchTarget target = match.target();
+            final BlockState expectedState = match.expectedState();
+            final String resolvedOperationId = match.operationId();
             BlockWatchTraceTracker.markWorldConstructorConsumed(worldId, chunkPos, target, resolvedOperationId);
             PayloadWatchTracer.traceChunkIdentityAndStatus(
                     worldId,
@@ -319,7 +278,7 @@ public final class ChunkLifecyclePayloadTracer {
                     ),
                     null
             );
-        }
+        });
     }
 
     public static void traceLiveChunkState(

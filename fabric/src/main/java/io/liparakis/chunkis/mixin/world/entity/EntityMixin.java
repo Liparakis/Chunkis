@@ -89,6 +89,7 @@ public abstract class EntityMixin {
         );
     }
 
+    @Unique
     @SuppressWarnings("unchecked")
     private void chunkis$removeEntityPayload(final ServerWorld world, final Entity entity) {
         final ChunkPos chunkPos = entity.getChunkPos();
@@ -110,6 +111,7 @@ public abstract class EntityMixin {
         ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
     }
 
+    @Unique
     private static boolean chunkis$shouldPreserveEntityPayload(final Entity.RemovalReason reason) {
         return reason == Entity.RemovalReason.UNLOADED_TO_CHUNK
                 || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER;

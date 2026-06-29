@@ -14,7 +14,6 @@ import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.WorldChunk;
 
@@ -56,17 +55,6 @@ final class GlobalChunkTrackerTrace {
                 dirtyState,
                 null
         );
-    }
-
-    static void traceTracker(
-            final RegistryKey<World> dimension,
-            final ChunkPos pos,
-            final ChunkTraceReason reason,
-            final String message,
-            final String source,
-            final Boolean dirtyState
-    ) {
-        traceTracker(dimension, new DebugChunkKey(pos.x, pos.z), reason, message, source, dirtyState);
     }
 
     static void traceTracker(

@@ -50,7 +50,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     private final ChunkRestorer.BlockApplyFailureCounters blockApplyFailureCounters;
     private int appliedBlocksCount;
     private int restoredBlockEntitiesCount;
-    private int restoredEntitiesCount;
 
     ChunkRestorationVisitor(
             final ServerWorld world,
@@ -112,10 +111,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
 
     int restoredBlockEntitiesCount() {
         return restoredBlockEntitiesCount;
-    }
-
-    int restoredEntitiesCount() {
-        return restoredEntitiesCount;
     }
 
     ChunkRestorer.BlockApplyFailureCounters blockApplyFailureCounters() {

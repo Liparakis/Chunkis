@@ -53,26 +53,13 @@ public final class PersistedBaseChunkReloadGameTest {
         final BlockPos targetArrival = targetChunk.getBlockPos(8, 115, 8);
         final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
 
-        world.setChunkForced(targetChunk.x, targetChunk.z, true);
-        world.getChunk(targetChunk.x, targetChunk.z);
-
-        final PigEntity pig = EntityType.PIG.create(world, SpawnReason.COMMAND);
+        forceAndLoad(world, targetChunk);
+        final PigEntity pig = createConfiguredPig(context, world, targetChunk);
         if (pig == null) {
-            context.throwGameTestException(Text.literal("Failed to create pig entity."));
             return;
         }
-        pig.refreshPositionAndAngles(
-                targetChunk.getStartX() + 14.5D,
-                115.0D,
-                targetChunk.getStartZ() + 4.5D,
-                0.0F,
-                0.0F
-        );
-        pig.setAiDisabled(true);
-        pig.setNoGravity(true);
-        pig.setInvulnerable(true);
         final UUID pigUuid = pig.getUuid();
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.entity("minecraft:overworld", pigUuid.toString()));
+        watchEntity(pigUuid);
         final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
         context.assertTrue(world.spawnEntity(pig), Text.literal("Expected pig spawn to succeed."));
 
@@ -117,20 +104,14 @@ public final class PersistedBaseChunkReloadGameTest {
     public void restoredChunkAirDeletionSurvivesSecondReload(final TestContext context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
-        final ChunkPos targetChunk = new ChunkPos(new ChunkPos(anchor).x + 640, new ChunkPos(anchor).z + 640);
-        final BlockPos targetArrival = targetChunk.getBlockPos(8, 100, 8);
-        final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
-        final BlockPos primary = targetChunk.getBlockPos(8, 64, 8);
-
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", primary.getX(), primary.getY(), primary.getZ()));
-
-        world.setChunkForced(targetChunk.x, targetChunk.z, true);
-        world.getChunk(targetChunk.x, targetChunk.z);
-        world.setBlockState(primary, Blocks.DIAMOND_BLOCK.getDefaultState());
-
-        final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
+        final AirDeletionTestSetup setup = createAirDeletionTestSetup(context, 640);
+        final AirDeletionScenario scenario = setup.scenario();
+        final ServerWorld world = scenario.world();
+        final ChunkPos targetChunk = scenario.targetChunk();
+        final BlockPos targetArrival = scenario.targetArrival();
+        final BlockPos farArrival = scenario.farArrival();
+        final BlockPos primary = scenario.primary();
+        final ServerPlayerEntity player = setup.player();
         teleportPlayer(player, world, targetArrival);
         world.getChunkManager().save(false);
         AsyncCisSaveManager.flushAndClose(world);
@@ -171,19 +152,15 @@ public final class PersistedBaseChunkReloadGameTest {
     public void persistedBaseChunkReloadPreservesAirDeletion(final TestContext context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
-        final ChunkPos targetChunk = new ChunkPos(new ChunkPos(anchor).x + 620, new ChunkPos(anchor).z + 620);
-        final BlockPos targetArrival = targetChunk.getBlockPos(8, 100, 8);
-        final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
-        final BlockPos primary = targetChunk.getBlockPos(8, 64, 8);
+        final AirDeletionTestSetup setup = createAirDeletionTestSetup(context, 620);
+        final AirDeletionScenario scenario = setup.scenario();
+        final ServerWorld world = scenario.world();
+        final ChunkPos targetChunk = scenario.targetChunk();
+        final BlockPos targetArrival = scenario.targetArrival();
+        final BlockPos farArrival = scenario.farArrival();
+        final BlockPos primary = scenario.primary();
+        final ServerPlayerEntity player = setup.player();
 
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", primary.getX(), primary.getY(), primary.getZ()));
-
-        world.setChunkForced(targetChunk.x, targetChunk.z, true);
-        world.getChunk(targetChunk.x, targetChunk.z);
-
-        world.setBlockState(primary, Blocks.DIAMOND_BLOCK.getDefaultState());
         world.setBlockState(primary, Blocks.AIR.getDefaultState());
 
         context.assertTrue(
@@ -191,7 +168,6 @@ public final class PersistedBaseChunkReloadGameTest {
                 Text.literal("Expected watched block to be air immediately after deletion.")
         );
 
-        final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
         teleportPlayer(player, world, targetArrival);
         world.getChunkManager().save(false);
         AsyncCisSaveManager.flushAndClose(world);
@@ -238,9 +214,7 @@ public final class PersistedBaseChunkReloadGameTest {
         final BlockPos secondary = targetChunk.getBlockPos(9, 64, 8);
         final BlockPos chestPos = targetChunk.getBlockPos(10, 64, 8);
 
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", primary.getX(), primary.getY(), primary.getZ()));
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", secondary.getX(), secondary.getY(), secondary.getZ()));
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", chestPos.getX(), chestPos.getY(), chestPos.getZ()));
+        watchBlocks(primary, secondary, chestPos);
 
         world.setChunkForced(targetChunk.x, targetChunk.z, true);
         final WorldChunk chunk = world.getChunk(targetChunk.x, targetChunk.z);
@@ -303,30 +277,17 @@ public final class PersistedBaseChunkReloadGameTest {
         final BlockPos secondary = targetChunk.getBlockPos(9, 64, 8);
         final int churnCycles = 12;
 
-        world.setChunkForced(targetChunk.x, targetChunk.z, true);
-        world.getChunk(targetChunk.x, targetChunk.z);
+        forceAndLoad(world, targetChunk);
         world.setBlockState(primary, Blocks.DIAMOND_BLOCK.getDefaultState());
         world.setBlockState(secondary, Blocks.GOLD_BLOCK.getDefaultState());
 
-        final PigEntity pig = EntityType.PIG.create(world, SpawnReason.COMMAND);
+        final PigEntity pig = createConfiguredPig(context, world, targetChunk);
         if (pig == null) {
-            context.throwGameTestException(Text.literal("Failed to create pig entity."));
             return;
         }
-        pig.refreshPositionAndAngles(
-                targetChunk.getStartX() + 14.5D,
-                115.0D,
-                targetChunk.getStartZ() + 4.5D,
-                0.0F,
-                0.0F
-        );
-        pig.setAiDisabled(true);
-        pig.setNoGravity(true);
-        pig.setInvulnerable(true);
         final UUID pigUuid = pig.getUuid();
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", primary.getX(), primary.getY(), primary.getZ()));
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", secondary.getX(), secondary.getY(), secondary.getZ()));
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.entity("minecraft:overworld", pigUuid.toString()));
+        watchBlocks(primary, secondary);
+        watchEntity(pigUuid);
         final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
         context.assertTrue(world.spawnEntity(pig), Text.literal("Expected pig spawn to succeed."));
 
@@ -412,6 +373,95 @@ public final class PersistedBaseChunkReloadGameTest {
                 0.0F,
                 true
         );
+    }
+
+    private static void forceAndLoad(final ServerWorld world, final ChunkPos chunkPos) {
+        world.setChunkForced(chunkPos.x, chunkPos.z, true);
+        world.getChunk(chunkPos.x, chunkPos.z);
+    }
+
+    private static AirDeletionScenario createAirDeletionScenario(
+            final TestContext context,
+            final int chunkOffset
+    ) {
+        final ServerWorld world = context.getWorld();
+        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
+        final ChunkPos targetChunk = new ChunkPos(
+                new ChunkPos(anchor).x + chunkOffset,
+                new ChunkPos(anchor).z + chunkOffset
+        );
+        final BlockPos targetArrival = targetChunk.getBlockPos(8, 100, 8);
+        return new AirDeletionScenario(
+                world,
+                targetChunk,
+                targetArrival,
+                targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE),
+                targetChunk.getBlockPos(8, 64, 8)
+        );
+    }
+
+    private static AirDeletionTestSetup createAirDeletionTestSetup(
+            final TestContext context,
+            final int chunkOffset
+    ) {
+        final AirDeletionScenario scenario = createAirDeletionScenario(context, chunkOffset);
+        watchBlocks(scenario.primary());
+        forceAndLoad(scenario.world(), scenario.targetChunk());
+        scenario.world().setBlockState(scenario.primary(), Blocks.DIAMOND_BLOCK.getDefaultState());
+        return new AirDeletionTestSetup(
+                scenario,
+                context.createMockCreativeServerPlayerInWorld()
+        );
+    }
+
+    private static void watchBlocks(final BlockPos... positions) {
+        for (final BlockPos pos : positions) {
+            ChunkTraceWatchpoints.watchPayload(
+                    PayloadWatchTarget.block("minecraft:overworld", pos.getX(), pos.getY(), pos.getZ())
+            );
+        }
+    }
+
+    private static void watchEntity(final UUID entityUuid) {
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.entity("minecraft:overworld", entityUuid.toString()));
+    }
+
+    private static PigEntity createConfiguredPig(
+            final TestContext context,
+            final ServerWorld world,
+            final ChunkPos targetChunk
+    ) {
+        final PigEntity pig = EntityType.PIG.create(world, SpawnReason.COMMAND);
+        if (pig == null) {
+            context.throwGameTestException(Text.literal("Failed to create pig entity."));
+            return null;
+        }
+        pig.refreshPositionAndAngles(
+                targetChunk.getStartX() + 14.5D,
+                115.0D,
+                targetChunk.getStartZ() + 4.5D,
+                0.0F,
+                0.0F
+        );
+        pig.setAiDisabled(true);
+        pig.setNoGravity(true);
+        pig.setInvulnerable(true);
+        return pig;
+    }
+
+    private record AirDeletionScenario(
+            ServerWorld world,
+            ChunkPos targetChunk,
+            BlockPos targetArrival,
+            BlockPos farArrival,
+            BlockPos primary
+    ) {
+    }
+
+    private record AirDeletionTestSetup(
+            AirDeletionScenario scenario,
+            ServerPlayerEntity player
+    ) {
     }
 
     private static boolean hasMatchingChestBlockEntity(
@@ -509,7 +559,7 @@ public final class PersistedBaseChunkReloadGameTest {
         final ChunkDelta<BlockState, NbtCompound> storedDelta =
                 storage.load(new CisChunkPos(chunkPos.x, chunkPos.z));
         context.assertTrue(
-                storedDelta != null && containsEntityUuid(storedDelta, entityUuid),
+                containsEntityUuid(storedDelta, entityUuid),
                 Text.literal("Stored delta was missing watched entity after " + stage
                         + ". Save trace: " + describeSaveTrace(chunkPos))
         );

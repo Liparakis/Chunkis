@@ -35,8 +35,6 @@ public final class ChunkDebugActions {
     private static final int CHAT_TRUNCATION_SUFFIX_BYTES =
             CHAT_TRUNCATION_SUFFIX_PADDED.getBytes(StandardCharsets.UTF_8).length;
 
-    private static final DateTimeFormatter TIME_FORMAT =
-            DateTimeFormatter.ofPattern("HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
     private static final DateTimeFormatter FILE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").withZone(ZoneOffset.UTC);
 
@@ -44,9 +42,7 @@ public final class ChunkDebugActions {
         throw new AssertionError("Utility class");
     }
 
-    public static int setLevel(
-            final ServerCommandSource source, final ChunkisDebugLevel level,
-            final String message) {
+    public static int setLevel(final ServerCommandSource source, final ChunkisDebugLevel level, final String message) {
         ChunkisDebugConfig.setLevel(level);
         sendFeedback(source, "[Chunkis] " + message, true);
         return 1;
@@ -117,8 +113,8 @@ public final class ChunkDebugActions {
             return 1;
         }
         sendFeedback(
-                source, "[Chunkis] Retained suspect timeline for " + suspectId
-                        + " (" + timeline.size() + " events)", false
+                source, "[Chunkis] Retained suspect timeline for " + suspectId + " (" + timeline.size() + " " +
+                        "events)", false
         );
         for (final ChunkTraceEvent event : timeline) {
             sendFeedback(source, ChunkDebugCommand.formatEvent(event), false);
@@ -194,8 +190,7 @@ public final class ChunkDebugActions {
             source.sendError(Text.literal("[Chunkis] No watchpoints configured."));
             return 0;
         }
-        final List<ChunkTraceEvent> newestFirst =
-                ChunkTraceStore.latestMatching(count, ChunkTraceWatchpoints::matches);
+        final List<ChunkTraceEvent> newestFirst = ChunkTraceStore.latestMatching(count, ChunkTraceWatchpoints::matches);
         if (newestFirst.isEmpty()) {
             sendFeedback(source, ChunkDebugCommand.formatNoWatchedTraceMessage(), false);
             return 1;
@@ -215,8 +210,7 @@ public final class ChunkDebugActions {
         for (final DebugChunkKey chunkKey : watchedChunks) {
             final var snapshot = new ChunkDebugCommand.PendingChunkSnapshot(
                     chunkKey,
-                    trackerPending.containsKey(new ChunkPos(chunkKey.x(), chunkKey.z())),
-                    asyncPending.get(chunkKey)
+                    trackerPending.containsKey(new ChunkPos(chunkKey.x(), chunkKey.z())), asyncPending.get(chunkKey)
             );
             sendFeedback(source, ChunkDebugCommand.formatPendingSnapshot(snapshot), false);
         }
@@ -224,10 +218,7 @@ public final class ChunkDebugActions {
     }
 
     public static int exportLatest(final ServerCommandSource source, final int count) {
-        return exportEvents(
-                source, ChunkTraceStore.snapshotMatching(event -> true),
-                "latest-" + count, count, false
-        );
+        return exportEvents(source, ChunkTraceStore.snapshotMatching(event -> true), "latest-" + count, count, false);
     }
 
     public static int exportWatched(final ServerCommandSource source, final int count) {
@@ -246,9 +237,8 @@ public final class ChunkDebugActions {
             final String scope, final int count, final boolean watched) {
         if (oldestFirst.isEmpty()) {
             sendFeedback(
-                    source,
-                    watched ? ChunkDebugCommand.formatNoWatchedTraceMessage() : "[Chunkis] No trace events stored.",
-                    false
+                    source, watched ? ChunkDebugCommand.formatNoWatchedTraceMessage() : "[Chunkis] No trace " +
+                                                                                        "events stored.", false
             );
             return 1;
         }
@@ -277,10 +267,7 @@ public final class ChunkDebugActions {
         while (end > 0 && (encoded[end] & 0xC0) == 0x80) {
             end--;
         }
-        return new ChunkDebugCommand.ChatMessage(
-                new String(encoded, 0, end, StandardCharsets.UTF_8) + CHAT_TRUNCATION_SUFFIX_PADDED,
-                true
-        );
+        return new ChunkDebugCommand.ChatMessage(new String(encoded, 0, end, StandardCharsets.UTF_8) + CHAT_TRUNCATION_SUFFIX_PADDED, true);
     }
 
     private static void sendFeedback(
@@ -295,8 +282,8 @@ public final class ChunkDebugActions {
     }
 
     private static Path writeOversizedChatDump(final ServerCommandSource source, final String message) {
-        final Path path = resolveExportPath(source, "chat-dump")
-                .resolveSibling("trace-chat-dump-" + FILE_TIME_FORMAT.format(Instant.now()) + ".txt");
+        final Path path =
+                resolveExportPath(source, "chat-dump").resolveSibling("trace-chat-dump-" + FILE_TIME_FORMAT.format(Instant.now()) + ".txt");
         try {
             Files.createDirectories(path.getParent());
             Files.writeString(path, message, StandardCharsets.UTF_8);
@@ -308,8 +295,7 @@ public final class ChunkDebugActions {
 
     static Path resolveExportPath(final ServerCommandSource source, final String scope) {
         final Path saveRoot = source.getServer().getSavePath(WorldSavePath.ROOT);
-        return saveRoot.resolve("chunkis/debug")
-                .resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
+        return saveRoot.resolve("chunkis/debug").resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
     }
 
     private static int sendEventsOldestFirst(

@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.util;
+package io.liparakis.chunkis.world.restoration.nbt;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
@@ -18,10 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * legacy, explicit-true, and explicit-false cases.
  */
 class CisNbtUtilTest {
-
-    // -------------------------------------------------------------------------
-    // extractPersistedStructureMetadata
-    // -------------------------------------------------------------------------
 
     /**
      * Verifies that structure metadata containing only references is

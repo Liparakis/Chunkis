@@ -62,11 +62,6 @@ public final class CisNbtUtil {
     public static final String Z_POS_KEY = "zPos";
 
     /**
-     * Vanilla key for serialized block entity payloads inside chunk NBT.
-     */
-    public static final String BLOCK_ENTITIES_KEY = "block_entities";
-
-    /**
      * Vanilla root key for structure metadata.
      */
     public static final String STRUCTURES_KEY = "structures";
@@ -133,25 +128,6 @@ public final class CisNbtUtil {
 
     private CisNbtUtil() {
         throw new AssertionError("Utility class");
-    }
-
-    /**
-     * Creates a minimal vanilla-compatible chunk NBT compound.
-     *
-     * <p>The status is set to {@link #STATUS_EMPTY} so vanilla can regenerate
-     * terrain if no persisted base chunk replaces this synthetic shell later.</p>
-     *
-     * @param pos         chunk position
-     * @param dataVersion Minecraft data version
-     * @return newly created base chunk NBT
-     */
-    public static NbtCompound createBaseNbt(
-            final ChunkPos pos,
-            final int dataVersion
-    ) {
-        Objects.requireNonNull(pos, "pos");
-
-        return createBaseNbt(pos.x, pos.z, dataVersion);
     }
 
     /**
@@ -246,54 +222,6 @@ public final class CisNbtUtil {
             final ChunkDelta<?, NbtCompound> delta
     ) {
         return ChunkLoadNbtBuilder.buildLoadChunkNbt(chunkX, chunkZ, dataVersion, delta);
-    }
-
-    /**
-     * Merges sparse Chunkis block entity payloads into a vanilla-compatible base
-     * chunk NBT compound.
-     *
-     * <p>Persisted base chunks may carry older block entity NBT. When a player
-     * updates a chest inventory later, the sparse delta block entity must replace
-     * the older base payload before vanilla deserializes the chunk.</p>
-     *
-     * @param root  base chunk NBT to mutate
-     * @param delta chunk delta containing newer block entity payloads
-     */
-    public static void replaceChunkBlockEntitiesFromDelta(
-            final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
-        ChunkLoadNbtBuilder.replaceChunkBlockEntitiesFromDelta(root, delta);
-    }
-
-    /**
-     * Replaces the vanilla {@code entities} list in chunk NBT from the delta's
-     * saved entity payloads.
-     *
-     * @param root  base chunk NBT to mutate
-     * @param delta chunk delta carrying authoritative non-player entities
-     */
-    public static void replaceChunkEntitiesFromDelta(
-            final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
-        ChunkLoadNbtBuilder.replaceChunkEntitiesFromDelta(root, delta);
-    }
-
-    /**
-     * Copies persisted chunk metadata into synthetic chunk NBT.
-     *
-     * <p>Currently this exports vanilla structure metadata so structure starts and
-     * references survive Chunkis' regenerate-on-load flow.</p>
-     *
-     * @param root  root chunk NBT
-     * @param delta chunk delta, may be {@code null}
-     */
-    public static void putChunkMetadata(
-            final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
-        ChunkLoadNbtBuilder.putChunkMetadata(root, delta);
     }
 
     /**
@@ -487,19 +415,6 @@ public final class CisNbtUtil {
     }
 
     /**
-     * Returns whether a metadata payload contains persisted vanilla structure data.
-     *
-     * <p>Used by hot save paths to avoid rebuilding metadata envelopes when there
-     * is no structure payload to preserve.</p>
-     *
-     * @param chunkMetadata metadata stored in the delta
-     * @return {@code true} if structure metadata exists
-     */
-    public static boolean hasPersistedStructureMetadata(final NbtCompound chunkMetadata) {
-        return StructureMetadataNbt.hasPersistedStructureMetadata(chunkMetadata);
-    }
-
-    /**
      * Returns whether metadata says the CIS block payload contains a complete
      * generated block baseline.
      *
@@ -639,16 +554,6 @@ public final class CisNbtUtil {
         return rawMetadata instanceof NbtCompound metadata
                 ? readSuppressInitialRepopulationFlag(metadata)
                 : null;
-    }
-
-    /**
-     * Returns whether synthetic chunk NBT contains the Chunkis delta marker.
-     *
-     * @param root synthetic chunk NBT
-     * @return {@code true} if the marker exists and is true
-     */
-    private static boolean hasChunkisDeltaMarker(final NbtCompound root) {
-        return SyntheticChunkisLoadMarker.hasDeltaMarker(root);
     }
 
     /**

@@ -1,12 +1,14 @@
 package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.world.entity.capture.LiveEntitySnapshotCapture;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.util.Uuids;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,10 +21,12 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
         final UUID unresolvedPendingUuid = UUID.randomUUID();
 
         final ChunkDelta<Object, NbtCompound> existingDelta = new ChunkDelta<>();
-        existingDelta.setEntities(List.of(
-                entityNbt(restoredLiveUuid),
-                entityNbt(unresolvedPendingUuid)
-        ), false);
+        existingDelta.setEntities(
+                List.of(
+                        entityNbt(restoredLiveUuid),
+                        entityNbt(unresolvedPendingUuid)
+                ), false
+        );
 
         final List<NbtCompound> merged = invokeMerge(existingDelta, List.of(entityNbt(restoredLiveUuid)));
 
@@ -31,18 +35,26 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
         assertEquals(unresolvedPendingUuid, uuidOf(merged.get(1)));
     }
 
-    @SuppressWarnings("unchecked")
     private static List<NbtCompound> invokeMerge(
             final ChunkDelta<Object, NbtCompound> existingDelta,
             final List<NbtCompound> liveEntities
     ) throws Exception {
-        final Method method = ThreadedAnvilChunkStorageMixin.class.getDeclaredMethod(
-                "chunkis$mergePendingEntities",
+        final ChunkDelta<Object, NbtCompound> targetDelta = new ChunkDelta<>();
+        targetDelta.setEntities(liveEntities, false);
+        final Set<String> liveEntityUuids = liveEntities.stream()
+                .map(ThreadedAnvilChunkStorageMixinEntityMergeTest::uuidOf)
+                .map(UUID::toString)
+                .collect(java.util.stream.Collectors.toSet());
+
+        final Method method = LiveEntitySnapshotCapture.class.getDeclaredMethod(
+                "copyUnresolvedPendingEntities",
                 ChunkDelta.class,
-                List.class
+                Set.class,
+                ChunkDelta.class
         );
         method.setAccessible(true);
-        return (List<NbtCompound>) method.invoke(null, existingDelta, liveEntities);
+        method.invoke(null, existingDelta, liveEntityUuids, targetDelta);
+        return targetDelta.getEntitiesList();
     }
 
     private static NbtCompound entityNbt(final UUID uuid) {

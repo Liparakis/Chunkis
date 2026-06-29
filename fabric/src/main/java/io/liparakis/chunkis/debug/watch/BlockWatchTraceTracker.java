@@ -8,7 +8,6 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
-import net.minecraft.block.BlockState;
 import net.minecraft.util.math.ChunkPos;
 import org.jetbrains.annotations.Nullable;
 
@@ -66,13 +65,12 @@ public final class BlockWatchTraceTracker {
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
-            final String operationId,
-            final BlockState expectedState
+            final String operationId
     ) {
         final WatchTraceKey key = key(worldId, chunkPos, target);
         final WatchTraceState previous = WATCH_TRACE_STATE.put(
                 key,
-                new WatchTraceState(operationId, expectedState)
+                new WatchTraceState(operationId)
         );
         if (previous != null && !previous.hasVisibilityEvent) {
             traceIncompleteWatch(key, previous.operationId);
@@ -330,7 +328,6 @@ public final class BlockWatchTraceTracker {
 
     private static final class WatchTraceState {
         private final String operationId;
-        private final BlockState expectedState;
         private volatile boolean hasVisibilityEvent;
         private volatile boolean restoreDecisionSeen;
         private volatile boolean decodedPayloadNotAppliedAsserted;
@@ -339,9 +336,8 @@ public final class BlockWatchTraceTracker {
         private volatile boolean protoAttachedSeen;
         private volatile boolean worldConstructorConsumedSeen;
 
-        private WatchTraceState(final String operationId, final BlockState expectedState) {
+        private WatchTraceState(final String operationId) {
             this.operationId = operationId;
-            this.expectedState = expectedState;
         }
     }
 }

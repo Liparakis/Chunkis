@@ -2,12 +2,12 @@ package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
@@ -234,8 +234,6 @@ public class ChunkSerializerMixin {
                 SOURCE + "#chunkis$restoreChunkDelta"
         );
         delta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(delta));
-        final boolean hasPersistedBaseChunk =
-                CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
         final boolean usePersistedBaseChunkForBlocks =
                 CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(delta.getChunkMetadata());
         final int protoSectionsBeforeRestore = ChunkSectionDebugUtil.countNonEmptySections(chunk);

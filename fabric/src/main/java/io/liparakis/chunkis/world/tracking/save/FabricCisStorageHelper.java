@@ -155,6 +155,7 @@ public final class FabricCisStorageHelper {
      * @param delta   delta to save
      * @return {@code true} when the payload was written and the tracker entry was cleared
      */
+    @SuppressWarnings("UnusedReturnValue")
     public static boolean saveTrackedDelta(
             final ServerWorld world,
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
@@ -178,6 +179,7 @@ public final class FabricCisStorageHelper {
      * @param operationId trace/storage operation id
      * @return {@code true} when the payload was written and the tracker entry was cleared
      */
+    @SuppressWarnings("UnusedReturnValue")
     public static boolean saveTrackedDelta(
             final ServerWorld world,
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,

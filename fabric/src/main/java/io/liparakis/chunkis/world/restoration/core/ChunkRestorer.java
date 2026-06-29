@@ -7,7 +7,6 @@ import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
@@ -231,8 +230,7 @@ public final class ChunkRestorer {
         }
 
         final int appliedCount = visitor.appliedBlocksCount()
-                + visitor.restoredBlockEntitiesCount()
-                + visitor.restoredEntitiesCount();
+                + visitor.restoredBlockEntitiesCount();
         final boolean restoreEmptyResult = ChunkTraceInvariants.shouldReportRestoreEmptyResult(
                 protoDelta,
                 appliedCount,
@@ -245,8 +243,7 @@ public final class ChunkRestorer {
                 ChunkTraceReason.NONE,
                 RESTORE_SOURCE,
                 "sparse delta replay: blocks=" + visitor.appliedBlocksCount()
-                        + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
-                        + ", entities=" + visitor.restoredEntitiesCount(),
+                        + ", blockEntities=" + visitor.restoredBlockEntitiesCount(),
                 world.getRegistryKey().getValue().toString(),
                 DebugChunkKeys.of(chunkPos),
                 null,
@@ -276,7 +273,6 @@ public final class ChunkRestorer {
                 RESTORE_SOURCE,
                 "restore completed: blocks=" + visitor.appliedBlocksCount()
                         + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
-                        + ", entities=" + visitor.restoredEntitiesCount()
                         + ", blockReplay=" + visitor.blockApplyFailureCounters().describe(),
                 world.getRegistryKey().getValue().toString(),
                 DebugChunkKeys.of(chunkPos),

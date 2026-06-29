@@ -38,63 +38,35 @@ final class StructureMetadataNbt {
             return null;
         }
 
-        final NbtCompound envelopedStructures =
-                getCompoundOrNull(chunkMetadata, CisNbtUtil.STRUCTURES_KEY);
+        final NbtCompound envelopedStructures = getCompoundOrNull(chunkMetadata, CisNbtUtil.STRUCTURES_KEY);
 
         if (envelopedStructures != null) {
-            return hasStructureData(envelopedStructures)
-                    ? envelopedStructures.copy()
-                    : null;
+            return hasStructureData(envelopedStructures) ? envelopedStructures.copy() : null;
         }
 
         return hasStructureData(chunkMetadata) ? chunkMetadata.copy() : null;
     }
 
-    /**
-     * Returns whether persisted metadata contains vanilla structure data.
-     *
-     * @param chunkMetadata metadata stored in the delta
-     * @return {@code true} if structure metadata exists
-     */
-    static boolean hasPersistedStructureMetadata(final NbtCompound chunkMetadata) {
-        if (chunkMetadata == null || chunkMetadata.isEmpty()) {
-            return false;
-        }
-
-        final NbtCompound envelopedStructures =
-                getCompoundOrNull(chunkMetadata, CisNbtUtil.STRUCTURES_KEY);
-
-        return envelopedStructures != null
-                ? hasStructureData(envelopedStructures)
-                : hasStructureData(chunkMetadata);
-    }
-
-    /**
+        /**
      * Returns whether a structures compound contains starts or references.
      *
      * @param structures vanilla structures compound
      * @return {@code true} if structure starts or references exist
      */
     static boolean hasStructureData(final NbtCompound structures) {
-        return structures != null
-                && !structures.isEmpty()
-                && (
-                getCompoundOrNull(structures, CisNbtUtil.STRUCTURE_STARTS_KEY) != null
-                        || getCompoundOrNull(structures, CisNbtUtil.STRUCTURE_REFERENCES_KEY) != null
-        );
+        return structures != null && !structures.isEmpty() && (getCompoundOrNull(structures,
+                CisNbtUtil.STRUCTURE_STARTS_KEY) != null || getCompoundOrNull(structures,
+                CisNbtUtil.STRUCTURE_REFERENCES_KEY) != null);
     }
 
     /**
      * Returns a nested compound, or {@code null} when the parent/key is absent.
      *
      * @param parent parent compound, may be {@code null}
-     * @param key nested compound key
+     * @param key    nested compound key
      * @return nested compound, or {@code null}
      */
-    static NbtCompound getCompoundOrNull(
-            final NbtCompound parent,
-            final String key
-    ) {
+    static NbtCompound getCompoundOrNull(final NbtCompound parent, final String key) {
         if (parent == null || !parent.contains(key)) {
             return null;
         }

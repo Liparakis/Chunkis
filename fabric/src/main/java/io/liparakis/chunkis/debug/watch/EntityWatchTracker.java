@@ -12,6 +12,7 @@ import net.minecraft.util.math.ChunkPos;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,14 +27,14 @@ public final class EntityWatchTracker {
     private static final long ENTITY_RELOAD_TIMEOUT_TICKS = 40L;
     private static final ConcurrentHashMap<EntityWatchKey, EntityWatchState> ENTITY_WATCH_STATE =
             new ConcurrentHashMap<>();
-    private static volatile long currentServerTick;
+    private static final AtomicLong CURRENT_SERVER_TICK = new AtomicLong();
 
     private EntityWatchTracker() {
         throw new AssertionError("Utility class");
     }
 
     public static void tickAssertions() {
-        currentServerTick++;
+        final long currentServerTick = CURRENT_SERVER_TICK.incrementAndGet();
         for (final Map.Entry<EntityWatchKey, EntityWatchState> entry : ENTITY_WATCH_STATE.entrySet()) {
             final EntityWatchState state = entry.getValue();
             if (!state.unloadedWithoutReload
@@ -78,7 +79,7 @@ public final class EntityWatchTracker {
         state.hasKnownChunk = true;
         if ("entity-manager-unload".equals(stage)) {
             state.unloadedWithoutReload = true;
-            state.unloadTick = currentServerTick;
+            state.unloadTick = CURRENT_SERVER_TICK.get();
             return;
         }
         if ("entity-manager-load".equals(stage)) {

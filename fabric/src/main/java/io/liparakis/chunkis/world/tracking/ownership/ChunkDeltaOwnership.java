@@ -45,7 +45,7 @@ public final class ChunkDeltaOwnership {
     }
 
     public static boolean hasRestorableChunkisState(final ChunkDelta<?, ?> delta) {
-        return delta != null && (hasReplayPayload(delta) || hasChunkisPersistenceAnchor(delta));
+        return (hasReplayPayload(delta) || hasChunkisPersistenceAnchor(delta));
     }
 }
 

@@ -157,6 +157,7 @@ public final class GlobalChunkTracker {
         markSavedIfUnchanged(world.getRegistryKey(), position.x, position.z, liveDelta, generation);
     }
 
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public static boolean isCurrentDirtyDelta(
             final World world,
             final ChunkPos position,

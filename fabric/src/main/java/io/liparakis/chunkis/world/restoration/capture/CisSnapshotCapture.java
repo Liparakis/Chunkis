@@ -30,24 +30,6 @@ public final class CisSnapshotCapture {
         throw new AssertionError("Utility class");
     }
 
-    /**
-     * Rebuilds {@code target} as a full authoritative snapshot of {@code chunk}.
-     *
-     * <p>Only non-air blocks are written because air is implicit in CIS snapshot
-     * restore. Existing block and block-entity payloads on {@code target} are
-     * cleared first so the result is a fresh snapshot, not a merge.</p>
-     *
-     * @param chunk  live world chunk to snapshot
-     * @param target reusable delta that receives the snapshot payload
-     * @return {@code target}, for call chaining
-     */
-    public static ChunkDelta<BlockState, NbtCompound> capture(
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> target
-    ) {
-        return capture(chunk, target, null);
-    }
-
     public static ChunkDelta<BlockState, NbtCompound> capture(
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> target,

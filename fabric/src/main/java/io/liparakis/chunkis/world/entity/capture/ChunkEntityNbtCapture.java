@@ -12,13 +12,11 @@ import net.minecraft.util.Uuids;
 import java.util.UUID;
 
 /**
- * Serializes live {@link Entity} instances to NBT for storage in Chunkis delta
- * payloads.
+ * Serializes live {@link Entity} instances to NBT for storage in Chunkis delta payloads.
  *
  * <p>Failure modes are intentionally non-fatal: a broken entity must not abort
- * the capture of other entities in the same chunk. All failure paths return
- * {@code null} and log at {@code DEBUG} level so they surface in verbose
- * sessions without cluttering normal output.</p>
+ * the capture of other entities in the same chunk. All failure paths return {@code null} and log at
+ * {@code DEBUG} level so they surface in verbose sessions without cluttering normal output.</p>
  *
  * <p><b>Threading:</b> must be called on the server thread. Entity NBT
  * serialization is not thread-safe.</p>
@@ -30,19 +28,17 @@ public final class ChunkEntityNbtCapture {
     }
 
     /**
-     * Serializes {@code entity} to an {@link NbtCompound} suitable for storage
-     * in a Chunkis chunk delta.
+     * Serializes {@code entity} to an {@link NbtCompound} suitable for storage in a Chunkis chunk
+     * delta.
      *
      * <p>Uses Minecraft's {@link NbtWriteView} / {@link ErrorReporter.Logging}
-     * pipeline so that per-field serialization errors are captured and logged
-     * rather than propagated as exceptions. After serialization,
-     * {@link CisNbtUtil#ensureEntityIdPresent} injects the entity type ID if
-     * the vanilla serializer omitted it.</p>
+     * pipeline so that per-field serialization errors are captured and logged rather than propagated
+     * as exceptions. After serialization, {@link CisNbtUtil#ensureEntityIdPresent} injects the entity
+     * type ID if the vanilla serializer omitted it.</p>
      *
      * <p>Returns {@code null} if serialization throws — for example, if the
-     * entity's registry manager is unavailable or the entity type is
-     * unregistered. {@code null} tells the caller to skip this entity rather
-     * than storing corrupt data.</p>
+     * entity's registry manager is unavailable or the entity type is unregistered. {@code null} tells
+     * the caller to skip this entity rather than storing corrupt data.</p>
      *
      * @param entity the entity to serialize; must not be {@code null}
      * @return serialized NBT, or {@code null} on failure
@@ -58,17 +54,15 @@ public final class ChunkEntityNbtCapture {
             CisNbtUtil.ensureEntityIdPresent(nbt, entity);
             return nbt;
         } catch (final Exception e) {
-            Chunkis.LOGGER.debug(
-                    "Chunkis: Skipped entity capture for {} in chunk {}",
-                    entity.getType(), entity.getChunkPos(), e
-            );
+            Chunkis.LOGGER.debug("Chunkis: Skipped entity capture for {} in chunk {}", entity.getType(),
+                                 entity.getChunkPos(), e);
             return null;
         }
     }
 
     /**
-     * Returns the UUID string from {@code entityNbt}, or {@code null} if the
-     * NBT is missing, malformed, or contains an invalid UUID array.
+     * Returns the UUID string from {@code entityNbt}, or {@code null} if the NBT is missing,
+     * malformed, or contains an invalid UUID array.
      *
      * @param entityNbt entity NBT compound; may be {@code null}
      * @return UUID as a string, or {@code null}
@@ -83,9 +77,8 @@ public final class ChunkEntityNbtCapture {
      * Parses the {@code UUID} int-array field from {@code entityNbt}.
      *
      * <p>{@link Uuids#toUuid} throws {@link IllegalArgumentException} if the
-     * stored array is not exactly 4 ints. This is treated as a missing UUID
-     * (returns {@code null}) since corrupt NBT cannot be meaningfully recovered
-     * from at this layer.</p>
+     * stored array is not exactly 4 ints. This is treated as a missing UUID (returns {@code null})
+     * since corrupt NBT cannot be meaningfully recovered from at this layer.</p>
      *
      * @param entityNbt entity NBT compound; may be {@code null}
      * @return parsed {@link UUID}, or {@code null} if missing or invalid
@@ -96,8 +89,6 @@ public final class ChunkEntityNbtCapture {
         }
         // Uuids.toUuid throws IllegalArgumentException for non-4-element arrays;
         // orElse(null) collapses both the missing-key and the malformed-array cases.
-        return entityNbt.getIntArray("UUID")
-                .map(Uuids::toUuid)
-                .orElse(null);
+        return entityNbt.getIntArray("UUID").map(Uuids::toUuid).orElse(null);
     }
 }

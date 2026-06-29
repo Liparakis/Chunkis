@@ -7,7 +7,6 @@ import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
 import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
-import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import net.minecraft.command.argument.UuidArgumentType;
 import net.minecraft.command.permission.Permission;
@@ -15,7 +14,6 @@ import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 
-import java.nio.file.Path;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
@@ -210,10 +208,6 @@ public final class ChunkDebugCommand {
 
     static ChatMessage truncateForChat(final String message) {
         return ChunkDebugActions.truncateForChat(message);
-    }
-
-    static Path resolveExportPath(final ServerCommandSource source, final String scope) {
-        return ChunkDebugActions.resolveExportPath(source, scope);
     }
 
     public record PendingChunkSnapshot(

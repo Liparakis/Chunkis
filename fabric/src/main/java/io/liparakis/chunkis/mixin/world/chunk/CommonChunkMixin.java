@@ -3,13 +3,10 @@ package io.liparakis.chunkis.mixin.world.chunk;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Mixin;
@@ -156,23 +153,6 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
         if ((Object) this instanceof WorldChunk worldChunk) {
             GlobalChunkTracker.markDirty(worldChunk);
         }
-    }
-
-    @Unique
-    @SuppressWarnings("unchecked")
-    private void chunkis$traceWorldChunkDeltaAttachment() {
-        if (!((Object) this instanceof WorldChunk worldChunk)) {
-            return;
-        }
-        if (chunkis$restoreOperationId == null || chunkis$delta == null) {
-            return;
-        }
-        PayloadWatchTracer.traceWorldChunkDeltaAttached(
-                worldChunk,
-                (ChunkDelta<BlockState, NbtCompound>) chunkis$delta,
-                chunkis$restoreOperationId,
-                "CommonChunkMixin#chunkis$traceWorldChunkDeltaAttachment"
-        );
     }
 }
 

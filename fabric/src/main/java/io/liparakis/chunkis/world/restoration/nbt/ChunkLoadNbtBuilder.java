@@ -52,25 +52,6 @@ final class ChunkLoadNbtBuilder {
         return new CisNbtUtil.LoadChunkNbtResult(root, baseChunkUsage);
     }
 
-    static void replaceChunkBlockEntitiesFromDelta(
-            final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
-        Objects.requireNonNull(root, "root");
-        if (delta == null) {
-            return;
-        }
-
-        final NbtList blockEntities = new NbtList();
-        delta.getBlockEntities().long2ObjectEntrySet().forEach(entry -> {
-            final NbtCompound nbt = entry.getValue();
-            if (nbt != null) {
-                blockEntities.add(nbt.copy());
-            }
-        });
-        root.put(CisNbtUtil.BLOCK_ENTITIES_KEY, blockEntities);
-    }
-
     static void replaceChunkEntitiesFromDelta(
             final NbtCompound root,
             final ChunkDelta<BlockState, NbtCompound> delta
