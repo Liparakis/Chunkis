@@ -50,9 +50,9 @@ public final class ChunkEntityNbtCapture {
         try (final ErrorReporter.Logging logging = new ErrorReporter.Logging(
                 entity.getErrorReporterContext(), Chunkis.LOGGER)) {
             final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
-            entity.writeData(writeView);
-            // writeData always populates the write view before returning;
-            // getNbt() is assumed non-null here.
+            if (!entity.saveSelfData(writeView)) {
+                return null;
+            }
             final NbtCompound nbt = writeView.getNbt();
             CisNbtUtil.ensureEntityIdPresent(nbt, entity);
             return nbt;

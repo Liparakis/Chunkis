@@ -2,7 +2,9 @@ package io.liparakis.chunkis.world.entity.replay;
 
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
+import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
+import java.util.stream.Stream;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
@@ -42,8 +44,7 @@ final class EntityReplaySpawnResolver {
             final Entity entity, final NbtCompound nbt, @Nullable final String operationId) {
         final Entity existing = world.getEntity(entity.getUuid());
 
-        if (ChunkEntityQueries.isMatchingLiveEntity(existing, entity.getType(), chunkPosition)
-                && ChunkEntityQueries.isVisibleFromWorldQuery(world, entity.getUuid(), searchBox)) {
+        if (ChunkEntityQueries.isMatchingLiveEntity(existing, entity.getType(), chunkPosition)) {
             PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getUuidAsString(), operationId,
                     "restore skipped: entity already present in world");
             return SpawnOutcome.ALREADY_PRESENT;
@@ -55,22 +56,24 @@ final class EntityReplaySpawnResolver {
             return SpawnOutcome.DUPLICATE_UUID_CONFLICT;
         }
 
-        if (world.spawnEntity(entity)) {
-            if (ChunkEntityQueries.isVisibleFromWorldQuery(world, entity.getUuid(), searchBox)) {
-                PayloadWatchTracer.traceRestoredEntity(world, chunkPosition, entity, nbt, operationId);
-                return SpawnOutcome.SPAWNED;
-            }
-            PayloadWatchTracer.traceRestoreEntitySkipped(world,
-                    chunkPosition,
-                    entity.getUuidAsString(),
-                    operationId,
-                    "restore skipped: spawnEntity returned true but world query did not find entity");
-            return SpawnOutcome.SPAWN_ACCEPTED_NOT_VISIBLE;
+        world.loadEntities(Stream.of(entity));
+        if (ChunkEntityQueries.isVisibleFromWorldQuery(world, entity.getUuid(), searchBox)
+                || ChunkEntityQueries.isMatchingLiveEntity(world.getEntity(entity.getUuid()), entity.getType(),
+                chunkPosition)) {
+            PayloadWatchTracer.traceRestoredEntity(world, chunkPosition, entity, nbt, operationId);
+            return SpawnOutcome.SPAWNED;
         }
-
-        PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getUuidAsString(), operationId,
-                "restore skipped: ServerWorld.spawnEntity returned false");
-        return SpawnOutcome.SPAWN_REJECTED;
+        PayloadWatchTracer.traceRestoreEntitySkipped(world,
+                chunkPosition,
+                entity.getUuidAsString(),
+                operationId,
+                "restore skipped: loaded entity was not visible in world"
+                        + " entityChunk=" + entity.getChunkPos()
+                        + " entityPos=" + entity.getBlockPos()
+                        + " removed=" + entity.isRemoved()
+                        + " alive=" + entity.isAlive()
+                        + " nbtPos=" + EntityPayloadNbt.describeRawPos(nbt));
+        return SpawnOutcome.SPAWN_ACCEPTED_NOT_VISIBLE;
     }
 
     /**

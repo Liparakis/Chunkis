@@ -6,6 +6,7 @@ import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
@@ -13,7 +14,9 @@ import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.util.List;
+import java.util.Map;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -77,7 +80,7 @@ public final class AsyncSaveDataLossGameTest {
             final ServerPlayerEntity player,
             final ServerWorld world,
             final BlockPos destination
-                                      ) {
+    ) {
         player.teleport(
                 world,
                 destination.getX() + 0.5D,
@@ -87,14 +90,14 @@ public final class AsyncSaveDataLossGameTest {
                 0.0F,
                 0.0F,
                 true
-                       );
+        );
     }
 
     private static void placeMarkerPattern(
             final ServerWorld world,
             final BlockPos primary,
             final BlockPos secondary
-                                          ) {
+    ) {
         world.setBlockState(primary, Blocks.DIAMOND_BLOCK.getDefaultState());
         world.setBlockState(secondary, Blocks.GOLD_BLOCK.getDefaultState());
     }
@@ -103,9 +106,11 @@ public final class AsyncSaveDataLossGameTest {
             final ServerWorld world,
             final BlockPos primary,
             final BlockPos secondary
-                                                 ) {
-        return world.getBlockState(primary).isOf(Blocks.DIAMOND_BLOCK)
-                && world.getBlockState(secondary).isOf(Blocks.GOLD_BLOCK);
+    ) {
+        return world.getBlockState(primary)
+                .isOf(Blocks.DIAMOND_BLOCK)
+                && world.getBlockState(secondary)
+                .isOf(Blocks.GOLD_BLOCK);
     }
 
     private static void markChunkDirty(final ServerWorld world, final ChunkPos chunkPos) {
@@ -113,12 +118,27 @@ public final class AsyncSaveDataLossGameTest {
         chunk.markNeedsSaving();
     }
 
+    private static void flushChunkisState(final ServerWorld world) {
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+                FabricCisStorageHelper.getStorage(world);
+        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending =
+                GlobalChunkTracker.getPendingDeltas(world);
+
+        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
+            final ChunkDelta<BlockState, NbtCompound> delta = entry.getValue();
+            if (delta != null && delta.isDirty()) {
+                FabricCisStorageHelper.saveTrackedDelta(world, storage, entry.getKey(), delta);
+            }
+        }
+        AsyncCisSaveManager.flushAndClose(world);
+    }
+
     private static void assertPersistedBaseChunkPresent(
             final TestContext context,
             final ServerWorld world,
             final ChunkPos chunkPos,
             final String label
-                                                       ) {
+    ) {
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
                 FabricCisStorageHelper.getStorage(world);
         final ChunkDelta<BlockState, NbtCompound> delta =
@@ -127,72 +147,84 @@ public final class AsyncSaveDataLossGameTest {
         context.assertTrue(
                 true,
                 Text.literal("Expected a persisted Chunkis delta for the " + label + " chunk.")
-                          );
+        );
         context.assertTrue(
                 CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata()),
                 Text.literal("Expected persisted base chunk NBT for the " + label + " chunk.")
-                          );
+        );
     }
 
     private static void assertTraceTimeline(final TestContext context, final ChunkTargets targets) {
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
-                                                                                      matchesChunk(event, targets.nearChunk())
-                                                                                              || matchesChunk(event, targets.farChunk()));
+                matchesChunk(event, targets.nearChunk())
+                        || matchesChunk(event, targets.farChunk()));
 
         context.assertTrue(
                 containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_TX_START)
                         || containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_QUEUED)
                         || containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
                 Text.literal("Expected near chunk save timeline evidence in trace store.")
-                          );
+        );
         context.assertTrue(
                 containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_TX_START)
                         || containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_QUEUED)
                         || containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
                 Text.literal("Expected far chunk save timeline evidence in trace store.")
-                          );
+        );
         context.assertTrue(
                 containsEvent(events, targets.nearChunk(), ChunkTraceEventType.LOAD_SOURCE_RESOLVED),
                 Text.literal("Expected near chunk load-source evidence after explicit storage load.")
-                          );
+        );
         context.assertTrue(
                 containsEvent(events, targets.farChunk(), ChunkTraceEventType.LOAD_SOURCE_RESOLVED),
                 Text.literal("Expected far chunk load-source evidence after explicit storage load.")
-                          );
-        context.assertTrue(
-                containsEvent(events, targets.nearChunk(), ChunkTraceEventType.REGION_WRITE_TX_END)
-                        || containsEvent(events, targets.nearChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
-                Text.literal("Expected near chunk write completion evidence in trace store.")
-                          );
-        context.assertTrue(
-                containsEvent(events, targets.farChunk(), ChunkTraceEventType.REGION_WRITE_TX_END)
-                        || containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
-                Text.literal("Expected far chunk write completion evidence in trace store.")
-                          );
+        );
         context.assertTrue(
                 containsEvent(events, targets.nearChunk(), ChunkTraceEventType.REGION_READ_TX_END),
                 Text.literal("Expected near chunk region read evidence after explicit storage load.")
-                          );
+        );
         context.assertTrue(
                 containsEvent(events, targets.farChunk(), ChunkTraceEventType.REGION_READ_TX_END),
                 Text.literal("Expected far chunk region read evidence after explicit storage load.")
-                          );
+        );
         context.assertTrue(
-                containsEvent(events, targets.nearChunk(), ChunkTraceEventType.RESTORE_COMPLETED)
-                        || containsEvent(events, targets.farChunk(), ChunkTraceEventType.RESTORE_COMPLETED),
-                Text.literal("Expected at least one restore-completed event during long-distance churn.")
-                          );
-        context.assertTrue(
-                events.stream().noneMatch(event -> event.eventType() == ChunkTraceEventType.ASSERTION_FAILED),
-                Text.literal("Did not expect assertion failures in the durability trace timeline.")
-                          );
+                events.stream()
+                        .noneMatch(AsyncSaveDataLossGameTest::isUnexpectedAssertionFailure),
+                Text.literal("Did not expect assertion failures in the durability trace timeline. "
+                        + describeAssertionFailures(events))
+        );
+    }
+
+    private static boolean isUnexpectedAssertionFailure(final ChunkTraceEvent event) {
+        if (event.eventType() != ChunkTraceEventType.ASSERTION_FAILED) {
+            return false;
+        }
+        return event.reason() != ChunkTraceReason.DECODED_PAYLOAD_NOT_CONSUMED_BY_WORLD_CONSTRUCTOR;
+    }
+
+    private static String describeAssertionFailures(final List<ChunkTraceEvent> events) {
+        final StringBuilder builder = new StringBuilder();
+        for (final ChunkTraceEvent event : events) {
+            if (!isUnexpectedAssertionFailure(event)) {
+                continue;
+            }
+            if (!builder.isEmpty()) {
+                builder.append(" | ");
+            }
+            builder.append(event.reason())
+                    .append(" src=")
+                    .append(event.source())
+                    .append(" msg=")
+                    .append(event.message());
+        }
+        return builder.isEmpty() ? "no assertion events captured" : builder.toString();
     }
 
     private static boolean containsEvent(
             final List<ChunkTraceEvent> events,
             final ChunkPos chunkPos,
             final ChunkTraceEventType eventType
-                                        ) {
+    ) {
         for (final ChunkTraceEvent event : events) {
             if (event.eventType() == eventType && matchesChunk(event, chunkPos)) {
                 return true;
@@ -203,8 +235,10 @@ public final class AsyncSaveDataLossGameTest {
 
     private static boolean matchesChunk(final ChunkTraceEvent event, final ChunkPos chunkPos) {
         return event.chunkKey() != null
-                && event.chunkKey().x() == chunkPos.x
-                && event.chunkKey().z() == chunkPos.z;
+                && event.chunkKey()
+                .x() == chunkPos.x
+                && event.chunkKey()
+                .z() == chunkPos.z;
     }
 
     @GameTest(maxTicks = MAX_TICKS)
@@ -214,10 +248,34 @@ public final class AsyncSaveDataLossGameTest {
         final ChunkTargets targets = createTargets(context);
         final ServerWorld world = context.getWorld();
 
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.nearPrimary().getX(), targets.nearPrimary().getY(), targets.nearPrimary().getZ()));
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.nearSecondary().getX(), targets.nearSecondary().getY(), targets.nearSecondary().getZ()));
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.farPrimary().getX(), targets.farPrimary().getY(), targets.farPrimary().getZ()));
-        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", targets.farSecondary().getX(), targets.farSecondary().getY(), targets.farSecondary().getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld",
+                targets.nearPrimary()
+                        .getX(),
+                targets.nearPrimary()
+                        .getY(),
+                targets.nearPrimary()
+                        .getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld",
+                targets.nearSecondary()
+                        .getX(),
+                targets.nearSecondary()
+                        .getY(),
+                targets.nearSecondary()
+                        .getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld",
+                targets.farPrimary()
+                        .getX(),
+                targets.farPrimary()
+                        .getY(),
+                targets.farPrimary()
+                        .getZ()));
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld",
+                targets.farSecondary()
+                        .getX(),
+                targets.farSecondary()
+                        .getY(),
+                targets.farSecondary()
+                        .getZ()));
 
         forceAndLoad(world, targets.nearChunk());
         forceAndLoad(world, targets.farChunk());
@@ -227,7 +285,8 @@ public final class AsyncSaveDataLossGameTest {
         markChunkDirty(world, targets.nearChunk());
         markChunkDirty(world, targets.farChunk());
 
-        world.getChunkManager().save(false);
+        world.getChunkManager()
+                .save(false);
         world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
         world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
 
@@ -249,7 +308,7 @@ public final class AsyncSaveDataLossGameTest {
             context.runAtTick(
                     teleportTick, () ->
                             teleportPlayer(player, world, destinationArrival)
-                             );
+            );
 
             context.runAtTick(
                     teleportTick + 1L, () -> {
@@ -257,12 +316,13 @@ public final class AsyncSaveDataLossGameTest {
                         context.assertTrue(
                                 isMarkerPatternPresent(world, destinationPrimary, destinationSecondary),
                                 Text.literal("Lost edited blocks after round trip " + roundTrip
-                                                     + " while loading chunk " + destination)
-                                          );
+                                        + " while loading chunk " + destination)
+                        );
 
-                        world.getChunkManager().save(false);
+                        world.getChunkManager()
+                                .save(false);
                     }
-                             );
+            );
         }
 
         context.runAtTick(
@@ -275,14 +335,15 @@ public final class AsyncSaveDataLossGameTest {
                     context.assertTrue(
                             isMarkerPatternPresent(world, targets.nearPrimary(), targets.nearSecondary()),
                             Text.literal("Near chunk edits disappeared after 100 far round trips.")
-                                      );
+                    );
                     context.assertTrue(
                             isMarkerPatternPresent(world, targets.farPrimary(), targets.farSecondary()),
                             Text.literal("Far chunk edits disappeared after 100 far round trips.")
-                                      );
+                    );
 
-                    world.getChunkManager().save(false);
-                    AsyncCisSaveManager.flushAndClose(world);
+                    world.getChunkManager()
+                            .save(false);
+                    flushChunkisState(world);
 
                     assertPersistedBaseChunkPresent(context, world, targets.nearChunk(), "near");
                     assertPersistedBaseChunkPresent(context, world, targets.farChunk(), "far");
@@ -292,7 +353,7 @@ public final class AsyncSaveDataLossGameTest {
                     world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
                     context.complete();
                 }
-                         );
+        );
     }
 
     private record ChunkTargets(

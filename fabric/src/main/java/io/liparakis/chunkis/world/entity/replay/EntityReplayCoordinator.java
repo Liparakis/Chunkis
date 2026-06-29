@@ -60,14 +60,6 @@ public final class EntityReplayCoordinator {
      * pending list is marked as legacy (suppressed initial repopulation), the pending
      * list is cleared.</p>
      *
-     * <p><b>Note on {@code ALREADY_PRESENT} accounting:</b> entities found already in
-     * the world are counted as failures so that {@code clearPendingEntities()} is not
-     * called prematurely. They are scheduled for a retry tick which removes the pending
-     * entry via {@link ScheduledEntityReplayQueue#tick}. This is intentional: it
-     * ensures the pending list is cleaned up through the queue rather than by this
-     * method directly. The trade-off is that the failure counter and trace message
-     * will be non-zero even when every entity is actually present.</p>
-     *
      * @param world        target server world; defensive null-check applied
      * @param chunk        target chunk; defensive null-check applied
      * @param runtimeDelta delta containing pending entity payloads; may be {@code null}
@@ -124,6 +116,22 @@ public final class EntityReplayCoordinator {
                 "entity replay started from runtime delta"
         );
 
+        if (!world.canSpawnEntitiesAt(chunkPosition)) {
+            runtimeDelta.forEachPendingEntity(nbt -> EntityPayloadNbt.findUuidString(nbt)
+                    .ifPresent(uuid -> ScheduledEntityReplayQueue.schedule(world, chunkPosition, uuid, nbt)));
+            PayloadWatchTracer.traceEntityReplayState(
+                    world,
+                    chunk,
+                    runtimeDelta,
+                    operationId,
+                    ChunkTraceEventType.WATCH_SKIPPED,
+                    "entity-replay-retained-pending",
+                    SOURCE_BULK,
+                    "entity replay retained pending payloads because chunk is not entity-ready"
+            );
+            return;
+        }
+
         runtimeDelta.forEachPendingEntity(nbt -> {
             if (nbt == null) {
                 return;
@@ -141,7 +149,7 @@ public final class EntityReplayCoordinator {
                                         entity,
                                         nbt,
                                         operationId);
-                        if (outcome.succeeded()) {
+                        if (outcome.succeeded() || outcome.status() == ChunkRestorer.ReplayStatus.ALREADY_PRESENT) {
                             stats[0]++;
                             ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
                         } else {
@@ -303,6 +311,22 @@ public final class EntityReplayCoordinator {
             return new ChunkRestorer.ReplayResult(
                     ChunkRestorer.ReplayStatus.CHUNK_NOT_READY,
                     "target chunk is not loaded"
+            );
+        }
+        if (!world.canSpawnEntitiesAt(chunkPosition)) {
+            EntityReplayDiagnostics.traceReplayDecision(
+                    world,
+                    chunk,
+                    runtimeDelta,
+                    entityUuid,
+                    entityNbt,
+                    false,
+                    "chunk-not-entity-ready",
+                    ChunkEntityQueries.chunkColumnBox(world, chunkPosition)
+            );
+            return new ChunkRestorer.ReplayResult(
+                    ChunkRestorer.ReplayStatus.CHUNK_NOT_READY,
+                    "target chunk is not entity-ready"
             );
         }
 

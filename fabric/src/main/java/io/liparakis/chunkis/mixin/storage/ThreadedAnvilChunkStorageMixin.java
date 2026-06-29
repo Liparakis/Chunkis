@@ -459,6 +459,20 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 delta,
                 ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
         );
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.LOAD_SOURCE_RESOLVED,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.CHUNKIS_STORAGE,
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                "load source resolved: using restorable Chunkis delta",
+                chunkis$worldId(),
+                chunkis$debugChunkKey(chunkPos),
+                null,
+                null,
+                delta.isDirty(),
+                null
+        );
 
         final CisNbtUtil.LoadChunkNbtResult loadNbt =
                 CisNbtUtil.buildLoadChunkNbt(chunkPos, chunkis$getGameDataVersion(), delta);
@@ -492,7 +506,12 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         }
 
         final var cisPos = FabricCisStorageHelper.toStoragePos(chunkPos);
-        return storage.contains(cisPos) ? storage.load(cisPos) : null;
+        if (!storage.contains(cisPos)) {
+            return null;
+        }
+        final ChunkDelta<BlockState, NbtCompound> storedDelta = storage.load(cisPos);
+        storedDelta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(storedDelta));
+        return storedDelta;
     }
 
     /**

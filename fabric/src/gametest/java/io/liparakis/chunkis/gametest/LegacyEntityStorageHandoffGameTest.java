@@ -51,7 +51,7 @@ public final class LegacyEntityStorageHandoffGameTest {
                 io.liparakis.chunkis.Chunkis.LOGGER)) {
 
             final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
-            entity.writeData(writeView);
+            entity.saveSelfData(writeView);
 
             final NbtCompound nbt = writeView.getNbt();
             CisNbtUtil.ensureEntityIdPresent(nbt, entity);
@@ -107,13 +107,22 @@ public final class LegacyEntityStorageHandoffGameTest {
         final SerializedEntity legacyEntity = createLegacyEntityPayload(world, anchor);
         final ChunkDelta<BlockState, NbtCompound> legacyDelta = new ChunkDelta<>();
         legacyDelta.setSuppressInitialRepopulation(true);
+        legacyDelta.setChunkMetadata(CisNbtUtil.createChunkMetadata(null, true), false);
         legacyDelta.addPendingEntity(legacyEntity.nbt());
         storage.save(cisChunkPos, legacyDelta);
 
         final ChunkDelta<BlockState, NbtCompound> persistedLegacyDelta = storage.load(cisChunkPos);
+        persistedLegacyDelta.setSuppressInitialRepopulation(
+                CisNbtUtil.shouldSuppressInitialRepopulation(persistedLegacyDelta));
         context.assertTrue(
-                persistedLegacyDelta.getEntitiesList().size() == 1,
+                persistedLegacyDelta.getEntitiesList()
+                        .size() == 1,
                 Text.literal("Expected one legacy entity payload before replay."));
+
+        world.loadChunks(chunkPos, 1);
+        context.assertTrue(
+                world.canSpawnEntitiesAt(chunkPos),
+                Text.literal("Expected legacy handoff chunk to be entity-ready before synchronous replay."));
 
         final WorldChunk chunk = world.getWorldChunk(anchor);
         final ChunkDelta<BlockState, NbtCompound> runtimeDelta = new ChunkDelta<>();
@@ -127,7 +136,7 @@ public final class LegacyEntityStorageHandoffGameTest {
                 countEntitiesWithUuid(world, chunkPos, legacyEntity.uuid()) == 1,
                 Text.literal("Expected exactly one spawned legacy entity after first replay."));
         context.assertTrue(
-                runtimeDelta.getEntitiesList().isEmpty(),
+                runtimeDelta.countPendingEntities() == 0,
                 Text.literal("Expected runtime delta to drop legacy entity payloads after replay."));
 
         storage.save(cisChunkPos, runtimeDelta);
@@ -138,7 +147,8 @@ public final class LegacyEntityStorageHandoffGameTest {
         final ChunkDelta<BlockState, NbtCompound> rewrittenDelta = reopenedStorage.load(cisChunkPos);
 
         context.assertTrue(
-                rewrittenDelta.getEntitiesList().isEmpty(),
+                rewrittenDelta.getEntitiesList()
+                        .isEmpty(),
                 Text.literal("Expected rewritten CIS delta to contain no entity payloads after handoff."));
 
         final int entitiesBeforeSecondRestore = countEntitiesWithUuid(world, chunkPos, legacyEntity.uuid());
