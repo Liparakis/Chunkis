@@ -2,6 +2,7 @@ package io.liparakis.chunkis.world.tracking.save;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
@@ -297,7 +298,7 @@ final class AsyncCisSaveWorker implements Runnable {
             ChunkPos pos,
             CisChunkPos cisPos,
             ChunkDelta<BlockState, NbtCompound> liveDelta,
-            ChunkDelta<BlockState, NbtCompound> snapshot,
+            ChunkDeltaView<BlockState, NbtCompound> snapshot,
             long generation,
             String operationId,
             long posKey
@@ -319,7 +320,7 @@ final class AsyncCisSaveWorker implements Runnable {
                 final ChunkPos pos,
                 final CisChunkPos cisPos,
                 final ChunkDelta<BlockState, NbtCompound> liveDelta,
-                final ChunkDelta<BlockState, NbtCompound> snapshot,
+                final ChunkDeltaView<BlockState, NbtCompound> snapshot,
                 final long generation,
                 final String operationId
         ) {

@@ -2,6 +2,7 @@ package io.liparakis.chunkis.storage.io;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
@@ -121,7 +122,7 @@ public final class CisStorage<B, S, P, N> {
         this.regionFiles = new RegionFileCache(this.storageDir);
 
         this.encoder = ThreadLocal.withInitial(() -> new CisEncoder<>(
-                this.mapping, safeStateAdapter, safeNbtAdapter,
+                this.mapping, safeNbtAdapter,
                 safeAirState
         ));
 
@@ -231,7 +232,7 @@ public final class CisStorage<B, S, P, N> {
      * @return prepared save payload
      * @throws IOException if encoding or mapping flush fails
      */
-    public PreparedSave prepareSave(final CisChunkPos pos, final ChunkDelta<S, N> delta) throws IOException {
+    public PreparedSave prepareSave(final CisChunkPos pos, final ChunkDeltaView<S, N> delta) throws IOException {
         Objects.requireNonNull(pos, "pos");
         Objects.requireNonNull(delta, "delta");
 

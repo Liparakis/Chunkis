@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.storage.codec;
 
 import io.liparakis.chunkis.core.BlockInstruction;
-import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.bits.BitWriter;
 import io.liparakis.chunkis.storage.model.CisChunk;
@@ -95,7 +95,7 @@ public abstract class AbstractCisEncoder<S, N> {
     /**
      * Orchestrates the complete encoding process for one chunk delta.
      */
-    protected byte[] encodeInternal(ChunkDelta<S, N> delta) throws IOException {
+    protected byte[] encodeInternal(ChunkDeltaView<S, N> delta) throws IOException {
         EncoderContext<S> ctx = getContext();
         ctx.reset();
 
@@ -158,7 +158,7 @@ public abstract class AbstractCisEncoder<S, N> {
         dos.write(sectionData);
     }
 
-    private void writeBlockEntities(DataOutputStream dos, ChunkDelta<S, N> delta) throws IOException {
+    private void writeBlockEntities(DataOutputStream dos, ChunkDeltaView<S, N> delta) throws IOException {
         Long2ObjectMap<N> bes = delta.getBlockEntities();
 
         // Count non-null entries up front; null entries represent deletions and
@@ -189,7 +189,7 @@ public abstract class AbstractCisEncoder<S, N> {
         }
     }
 
-    private void writeEntities(DataOutputStream dos, ChunkDelta<S, N> delta) throws IOException {
+    private void writeEntities(DataOutputStream dos, ChunkDeltaView<S, N> delta) throws IOException {
         final int entityCount = delta.countNonNullEntities();
         dos.writeInt(entityCount);
 
@@ -215,7 +215,7 @@ public abstract class AbstractCisEncoder<S, N> {
      * behavior (structure starts/references). The payload is cached on the delta
      * after first serialization to avoid re-encoding on repeated flushes.
      */
-    private void writeChunkMetadata(DataOutputStream dos, ChunkDelta<S, N> delta) throws IOException {
+    private void writeChunkMetadata(DataOutputStream dos, ChunkDeltaView<S, N> delta) throws IOException {
         final N metadata = delta.getChunkMetadata();
         dos.writeBoolean(metadata != null);
 
@@ -261,7 +261,7 @@ public abstract class AbstractCisEncoder<S, N> {
      * always added as index 0 in the palette so that local palette entries that
      * map to "no explicit block" have a stable target.</p>
      */
-    private EncodedChunkInput<S> fromDelta(ChunkDelta<S, N> delta) {
+    private EncodedChunkInput<S> fromDelta(ChunkDeltaView<S, N> delta) {
         final CisChunk<S> chunk = new CisChunk<>();
         final EncoderContext<S> ctx = getContext();
         final List<S> usedStates = ctx.seenStateList;

@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.world.tracking.save;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaSnapshotView;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -72,7 +73,7 @@ public final class AsyncCisSaveManager {
 
         final var cisPos = FabricCisStorageHelper.toStoragePos(pos);
         final long generation = liveDelta.getMutationGeneration();
-        final ChunkDelta<BlockState, NbtCompound> snapshot = liveDelta.snapshot(NbtCompound::copy);
+        final ChunkDeltaSnapshotView<BlockState, NbtCompound> snapshot = liveDelta.snapshotView(NbtCompound::copy);
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,

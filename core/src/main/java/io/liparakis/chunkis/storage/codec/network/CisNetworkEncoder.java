@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.storage.codec.network;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
@@ -64,6 +65,10 @@ public final class CisNetworkEncoder<B, S, P, N> extends AbstractCisEncoder<S, N
      * Encodes a chunk delta into compressed binary format.
      */
     public byte[] encode(ChunkDelta<S, N> delta) throws IOException {
+        return encodeInternal(delta);
+    }
+
+    public byte[] encode(final ChunkDeltaView<S, N> delta) throws IOException {
         return encodeInternal(delta);
     }
 

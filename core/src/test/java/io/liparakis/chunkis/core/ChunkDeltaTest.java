@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 
 class ChunkDeltaTest {
@@ -39,6 +40,29 @@ class ChunkDeltaTest {
         delta.forEachBlock((x, y, z, state) -> blocks.put(BlockInstruction.packPos(x, y, z), state));
 
         assertThat(delta.getBlockChangesCount()).isEqualTo(2);
+        assertThat(blocks).containsExactly(
+                org.assertj.core.data.MapEntry.entry(BlockInstruction.packPos(1, 64, 1), "stone"),
+                org.assertj.core.data.MapEntry.entry(BlockInstruction.packPos(2, 65, 3), "dirt")
+        );
+    }
+
+    @Test
+    void snapshotViewPreservesReadablePayloadWithoutMutableBlockIndexState() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        final Map<Long, String> blocks = new LinkedHashMap<>();
+
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.addBlockChange(2, 65, 3, "dirt");
+        delta.addBlockEntityData(1, 64, 1, "chest");
+        delta.addPendingEntity("zombie");
+
+        final ChunkDeltaView<String, String> snapshot = delta.snapshotView(UnaryOperator.identity());
+
+        snapshot.forEachBlock((x, y, z, state) -> blocks.put(BlockInstruction.packPos(x, y, z), state));
+
+        assertThat(snapshot.getBlockChangesCount()).isEqualTo(2);
+        assertThat(snapshot.getBlockEntities()).hasSize(1);
+        assertThat(snapshot.countNonNullEntities()).isEqualTo(1);
         assertThat(blocks).containsExactly(
                 org.assertj.core.data.MapEntry.entry(BlockInstruction.packPos(1, 64, 1), "stone"),
                 org.assertj.core.data.MapEntry.entry(BlockInstruction.packPos(2, 65, 3), "dirt")

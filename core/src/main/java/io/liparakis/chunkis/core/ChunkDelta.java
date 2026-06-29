@@ -45,14 +45,9 @@ import java.util.function.UnaryOperator;
  * @see BlockInstruction
  * @see Palette
  */
-public final class ChunkDelta<S, N> {
+public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
     private static final String SOURCE = "ChunkDelta";
-
-    /**
-     * Initial block instruction capacity.
-     */
-    private static final int INITIAL_CAPACITY = 64;
 
     /**
      * Mask for the low 32 bits containing the packed local block position.
@@ -150,13 +145,6 @@ public final class ChunkDelta<S, N> {
      * <p>Used by decode paths where the block-state adapter is not available yet.
      * In this mode, no state is treated as empty.</p>
      */
-
-    /**
-     * Creates an empty delta with no empty-state predicate.
-     *
-     * <p>Used by decode paths where the block-state adapter is not available yet.
-     * In this mode, no state is treated as empty.</p>
-     */
     @SuppressWarnings("unchecked")
     public ChunkDelta() {
         this((Predicate<S>) NEVER_EMPTY_STATE);
@@ -186,26 +174,6 @@ public final class ChunkDelta<S, N> {
      */
     private static long packInstruction(final int paletteId, final long posKey) {
         return ((long) paletteId << Integer.SIZE) | (posKey & POSITION_MASK);
-    }
-
-    /**
-     * Extracts the packed local position from an instruction.
-     *
-     * @param instruction packed instruction
-     * @return packed local position
-     */
-    private static long instructionPosKey(final long instruction) {
-        return instruction & POSITION_MASK;
-    }
-
-    /**
-     * Extracts the palette id from an instruction.
-     *
-     * @param instruction packed instruction
-     * @return palette id
-     */
-    private static int instructionPaletteId(final long instruction) {
-        return (int) (instruction >>> Integer.SIZE);
     }
 
     /**
@@ -283,6 +251,34 @@ public final class ChunkDelta<S, N> {
         snap.ownershipState.firstMutationSource = this.ownershipState.firstMutationSource;
 
         return snap;
+    }
+
+    /**
+     * Creates a detached read-only snapshot tailored for async encode/save work.
+     *
+     * <p>Unlike {@link #snapshot(UnaryOperator)}, this captures only the read
+     * payload required by persistence code and skips mutable lookup state such as
+     * the block position index.</p>
+     *
+     * @param payloadCopier copies each stored payload value
+     * @return read-only snapshot view of this delta
+     */
+    public ChunkDeltaSnapshotView<S, N> snapshotView(final UnaryOperator<N> payloadCopier) {
+        return new ChunkDeltaSnapshotView<>(
+                this.instructions.packedInstructions,
+                this.instructions.instructionCount,
+                this.blockPalette,
+                this.blockEntities,
+                this.activeEntities,
+                this.pendingEntities,
+                this.chunkMetadata,
+                this.encodedChunkMetadata,
+                this.sourceVersion,
+                this.ownershipState.mutationGeneration,
+                this.suppressInitialRepopulation,
+                isDirty(),
+                payloadCopier
+        );
     }
 
     /**
@@ -738,23 +734,7 @@ public final class ChunkDelta<S, N> {
      * @return number of non-null entity payloads
      */
     public int countNonNullEntities() {
-        int count = 0;
-
-        if (activeEntities != null) {
-            for (final N nbt : activeEntities.values()) {
-                if (nbt != null) {
-                    count++;
-                }
-            }
-        }
-
-        for (final N nbt : pendingEntities) {
-            if (nbt != null) {
-                count++;
-            }
-        }
-
-        return count;
+        return ChunkDeltaViews.countNonNullEntities(activeEntities, pendingEntities);
     }
 
     /**
@@ -778,17 +758,7 @@ public final class ChunkDelta<S, N> {
      * @param consumer entity payload consumer
      */
     public void forEachEntity(final Consumer<? super N> consumer) {
-        Objects.requireNonNull(consumer, "consumer");
-
-        if (activeEntities != null) {
-            for (final N nbt : activeEntities.values()) {
-                consumer.accept(nbt);
-            }
-        }
-
-        for (final N nbt : pendingEntities) {
-            consumer.accept(nbt);
-        }
+        ChunkDeltaViews.forEachEntity(activeEntities, pendingEntities, consumer);
     }
 
     /**
@@ -1030,11 +1000,13 @@ public final class ChunkDelta<S, N> {
      * @return {@code true} if empty
      */
     public boolean isEmpty() {
-        return instructions.instructionCount == 0
-                && (blockEntities == null || blockEntities.isEmpty())
-                && (activeEntities == null || activeEntities.isEmpty())
-                && pendingEntities.isEmpty()
-                && chunkMetadata == null;
+        return ChunkDeltaViews.isEmpty(
+                instructions.instructionCount,
+                blockEntities,
+                activeEntities,
+                pendingEntities,
+                chunkMetadata
+        );
     }
 
     /**
@@ -1080,26 +1052,12 @@ public final class ChunkDelta<S, N> {
      * @param visitor block visitor
      */
     public void forEachBlock(final BlockVisitor<S> visitor) {
-        Objects.requireNonNull(visitor, "visitor");
-
-        for (int i = 0; i < instructions.instructionCount; i++) {
-            final long instruction = instructions.packedInstructions[i];
-            final int paletteIndex = instructionPaletteId(instruction);
-            final S state = blockPalette.get(paletteIndex);
-
-            if (state == null) {
-                continue;
-            }
-
-            final long posKey = instructionPosKey(instruction);
-
-            visitor.visitBlock(
-                    BlockInstruction.unpackX(posKey),
-                    BlockInstruction.unpackY(posKey),
-                    BlockInstruction.unpackZ(posKey),
-                    state
-            );
-        }
+        ChunkDeltaViews.forEachPackedBlock(
+                instructions.packedInstructions,
+                instructions.instructionCount,
+                blockPalette,
+                visitor
+        );
     }
 
     /**
@@ -1118,11 +1076,22 @@ public final class ChunkDelta<S, N> {
         markDirtyInternal();
     }
 
+    /**
+     * Marks this delta dirty and records the caller-provided mutation source.
+     *
+     * @param source mutation source label for trace/debug attribution
+     */
     public void markDirty(final String source) {
         prepareForMutation(source);
         markDirtyInternal();
     }
 
+    /**
+     * Marks this delta dirty only if it is currently clean.
+     *
+     * @param source mutation source label for trace/debug attribution
+     * @return {@code true} if the delta transitioned from clean to dirty
+     */
     public boolean markDirtyIfClean(final String source) {
         if (isDirty()) {
             return false;
@@ -1235,6 +1204,14 @@ public final class ChunkDelta<S, N> {
         this.suppressInitialRepopulation = suppressInitialRepopulation;
     }
 
+    /**
+     * Claims ownership metadata for this delta if no claim has been recorded yet.
+     *
+     * @param reason ownership reason stored with the delta
+     * @param source caller/source claiming ownership
+     * @return {@code true} if the claim was stored
+     */
+    @SuppressWarnings("UnusedReturnValue")
     public boolean claimOwnership(final String reason, final String source) {
         if (reason == null || reason.isBlank()) {
             return false;
@@ -1247,22 +1224,47 @@ public final class ChunkDelta<S, N> {
         return true;
     }
 
+    /**
+     * Returns whether this delta already has ownership metadata attached.
+     *
+     * @return {@code true} if ownership has been claimed
+     */
     public boolean hasOwnershipClaim() {
         return ownershipState.ownershipReason != null && !ownershipState.ownershipReason.isBlank();
     }
 
+    /**
+     * Returns the stored ownership reason.
+     *
+     * @return ownership reason, or {@code null}
+     */
     public String getOwnershipReason() {
         return ownershipState.ownershipReason;
     }
 
+    /**
+     * Returns the source that claimed ownership.
+     *
+     * @return ownership source, or {@code null}
+     */
     public String getOwnershipSource() {
         return ownershipState.ownershipSource;
     }
 
+    /**
+     * Returns the first recorded mutation source after the delta became dirty.
+     *
+     * @return first mutation source, or {@code null}
+     */
     public String getFirstMutationSource() {
         return ownershipState.firstMutationSource;
     }
 
+    /**
+     * Stashes a source label to be consumed by the next dirtying mutation.
+     *
+     * @param source mutation source label
+     */
     public void prepareForMutation(final String source) {
         ownershipState.pendingMutationSource = source;
     }

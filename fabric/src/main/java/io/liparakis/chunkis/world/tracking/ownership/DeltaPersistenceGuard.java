@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.world.tracking.ownership;
 
 import io.liparakis.chunkis.Chunkis;
-import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.ChunkPos;
@@ -39,7 +39,7 @@ public final class DeltaPersistenceGuard {
      * @param delta the candidate delta; {@code null} is treated as safe (not rejected)
      * @return {@code true} if the delta should be rejected
      */
-    public static boolean shouldRejectSparseDeltaWithoutBase(final ChunkDelta<?, ?> delta) {
+    public static boolean shouldRejectSparseDeltaWithoutBase(final ChunkDeltaView<?, ?> delta) {
         if (delta == null) {
             return false;
         }
@@ -56,7 +56,7 @@ public final class DeltaPersistenceGuard {
      * @param trustV11SnapshotPayload true if v11 snapshots are trusted baseline sources
      * @return {@code true} if the delta should be rejected
      */
-    public static boolean shouldRejectSparseDeltaWithoutBase(final ChunkDelta<?, ?> delta,
+    public static boolean shouldRejectSparseDeltaWithoutBase(final ChunkDeltaView<?, ?> delta,
             final boolean trustV11SnapshotPayload) {
         if (delta == null) {
             return false;
@@ -73,7 +73,7 @@ public final class DeltaPersistenceGuard {
      * @param delta candidate delta
      * @return true if payload is invalid block-entity only
      */
-    public static boolean hasInvalidBlockEntityOnlyPayloadWithoutBase(final ChunkDelta<?, ?> delta) {
+    public static boolean hasInvalidBlockEntityOnlyPayloadWithoutBase(final ChunkDeltaView<?, ?> delta) {
         if (delta == null) {
             return false;
         }
@@ -97,7 +97,7 @@ public final class DeltaPersistenceGuard {
     public static void logRejectedSparseDeltaWithoutBase(
             final ServerWorld world,
             final ChunkPos pos,
-            final ChunkDelta<?, ?> delta,
+            final ChunkDeltaView<?, ?> delta,
             final String path,
             final String caller) {
         if (delta == null) {
@@ -121,7 +121,7 @@ public final class DeltaPersistenceGuard {
      * @param delta candidate delta
      * @return description summary text
      */
-    public static String describeDeltaShape(final ChunkDelta<?, ?> delta) {
+    public static String describeDeltaShape(final ChunkDeltaView<?, ?> delta) {
         if (delta == null) {
             return "null";
         }
@@ -148,7 +148,7 @@ public final class DeltaPersistenceGuard {
      * @param delta candidate delta
      * @return description lifecycle text
      */
-    public static String describeLifecycleState(final ChunkDelta<?, ?> delta) {
+    public static String describeLifecycleState(final ChunkDeltaView<?, ?> delta) {
         if (delta == null) {
             return "null";
         }
@@ -171,7 +171,7 @@ public final class DeltaPersistenceGuard {
      * @param delta candidate delta
      * @return true if snapshot payload is authoritative v11
      */
-    public static boolean hasAuthoritativeV11SnapshotPayload(final ChunkDelta<?, ?> delta) {
+    public static boolean hasAuthoritativeV11SnapshotPayload(final ChunkDeltaView<?, ?> delta) {
         return delta != null
                 && delta.getSourceVersion() >= io.liparakis.chunkis.storage.model.CisConstants.VERSION
                 && delta.getBlockChangesCount() > 0;
@@ -181,7 +181,7 @@ public final class DeltaPersistenceGuard {
      * Returns whether the delta still depends on replay payloads rather than a
      * fully authoritative snapshot baseline.
      */
-    private static boolean hasReplayPayload(final ChunkDelta<?, ?> delta) {
+    private static boolean hasReplayPayload(final ChunkDeltaView<?, ?> delta) {
         return delta.getBlockChangesCount() > 0
                 || !delta.getBlockEntities()
                 .isEmpty()
@@ -194,7 +194,7 @@ public final class DeltaPersistenceGuard {
      * @param delta candidate delta
      * @return section count integer
      */
-    private static int countSections(final ChunkDelta<?, ?> delta) {
+    private static int countSections(final ChunkDeltaView<?, ?> delta) {
         final java.util.Set<Integer> sections = new java.util.HashSet<>();
         delta.forEachBlock((x, y, z, state) -> sections.add(y >> 4));
         delta.getBlockEntities()

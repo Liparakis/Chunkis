@@ -2,6 +2,7 @@ package io.liparakis.chunkis.debug.trace;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -141,7 +142,7 @@ public final class PayloadWatchTracer {
      * @param message     description detail text
      * @param byteSize    estimated size of payload in bytes, may be null
      */
-    public static void traceDeltaStage(final String worldId, final ChunkPos chunkPos, final ChunkDelta<BlockState,
+    public static void traceDeltaStage(final String worldId, final ChunkPos chunkPos, final ChunkDeltaView<BlockState,
                     NbtCompound> delta, final String operationId, final ChunkTraceEventType eventType, final String stage,
             final String source, final String message, final Integer byteSize) {
         traceDeltaStageInternal(worldId, DebugChunkKeys.of(chunkPos), chunkPos.getStartX(), chunkPos.getStartZ(),
@@ -164,7 +165,7 @@ public final class PayloadWatchTracer {
      * @param byteSize    estimated size of payload in bytes, may be null
      */
     public static void traceDeltaStage(final String worldId, final DebugChunkKey chunkKey, final int chunkStartX,
-            final int chunkStartZ, final ChunkDelta<BlockState, NbtCompound> delta,
+            final int chunkStartZ, final ChunkDeltaView<BlockState, NbtCompound> delta,
             final String operationId, final ChunkTraceEventType eventType,
             final String stage, final String source, final String message,
             final Integer byteSize) {
@@ -189,7 +190,7 @@ public final class PayloadWatchTracer {
      */
     private static void traceDeltaStageInternal(final String worldId, final DebugChunkKey chunkKey,
             final int chunkStartX, final int chunkStartZ,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDeltaView<BlockState, NbtCompound> delta,
             final String operationId, final ChunkTraceEventType eventType,
             final String stage, final String source, final String message,
             final Integer byteSize) {
@@ -262,7 +263,7 @@ public final class PayloadWatchTracer {
      * @param storageEntryPresent true if storage bytes were successfully loaded
      */
     public static void traceDecodeOutcome(final ServerWorld world, final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> delta, final String operationId,
+            final ChunkDeltaView<BlockState, NbtCompound> delta, final String operationId,
             final boolean storageEntryPresent) {
         final String worldId = PayloadWatchSummaries.worldId(world);
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
@@ -757,7 +758,7 @@ public final class PayloadWatchTracer {
      * @return true if matching updates exist
      */
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    static boolean contains(final ChunkDelta<BlockState, NbtCompound> delta, final PayloadWatchTarget target,
+    static boolean contains(final ChunkDeltaView<BlockState, NbtCompound> delta, final PayloadWatchTarget target,
             final int chunkStartX, final int chunkStartZ, final String worldId) {
         final boolean[] found = {false};
 
@@ -812,7 +813,7 @@ public final class PayloadWatchTracer {
      * @return matching entity NBT compound if found, or null
      */
     @Nullable
-    static NbtCompound findWatchedEntityNbt(final ChunkDelta<BlockState, NbtCompound> delta, final String entityUuid) {
+    static NbtCompound findWatchedEntityNbt(final ChunkDeltaView<BlockState, NbtCompound> delta, final String entityUuid) {
         final NbtCompound[] found = {null};
         delta.forEachEntity(entityNbt -> {
             if (found[0] != null || entityNbt == null) {
@@ -836,7 +837,7 @@ public final class PayloadWatchTracer {
      * @return expected BlockState if found, or null
      */
     @Nullable
-    static BlockState findWatchedBlockState(final ChunkDelta<BlockState, NbtCompound> delta,
+    static BlockState findWatchedBlockState(final ChunkDeltaView<BlockState, NbtCompound> delta,
             final PayloadWatchTarget target, final ChunkPos chunkPos,
             final String worldId) {
         final BlockState[] found = {null};
@@ -864,7 +865,7 @@ public final class PayloadWatchTracer {
     static void forEachWatchedBlockState(
             final String worldId,
             final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDeltaView<BlockState, NbtCompound> delta,
             final Consumer<WatchedBlockState> consumer
     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
@@ -1060,7 +1061,7 @@ public final class PayloadWatchTracer {
      * @param operationId active trace session operation ID
      */
     static void registerDecodedWatchTargets(final String worldId, final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> delta, final String operationId) {
+            final ChunkDeltaView<BlockState, NbtCompound> delta, final String operationId) {
         if (operationId == null) {
             return;
         }

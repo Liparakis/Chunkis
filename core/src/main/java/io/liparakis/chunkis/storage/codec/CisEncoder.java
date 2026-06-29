@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.storage.codec;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.spi.BlockStateAdapter;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisAdapter;
 
@@ -33,7 +33,7 @@ public final class CisEncoder<S, N> extends AbstractCisEncoder<S, N> {
     /**
      * Constructs a new CisEncoder.
      */
-    public CisEncoder(CisAdapter<S> cisAdapter, BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter,
+    public CisEncoder(CisAdapter<S> cisAdapter, NbtAdapter<N> nbtAdapter,
                       S airState) {
         super(nbtAdapter, airState);
         this.cisAdapter = cisAdapter;
@@ -43,6 +43,10 @@ public final class CisEncoder<S, N> extends AbstractCisEncoder<S, N> {
      * Encodes a ChunkDelta into the current Chunkis CIS binary format.
      */
     public byte[] encode(ChunkDelta<S, N> delta) throws IOException {
+        return encodeInternal(delta);
+    }
+
+    public byte[] encode(final ChunkDeltaView<S, N> delta) throws IOException {
         return encodeInternal(delta);
     }
 
