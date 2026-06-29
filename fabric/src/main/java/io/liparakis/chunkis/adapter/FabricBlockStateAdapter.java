@@ -27,9 +27,6 @@ import net.minecraft.state.property.Property;
  *
  * <p>
  * Thread-safe for concurrent access.
- *
- * @author Liparakis
- * @version 1.1
  */
 public final class FabricBlockStateAdapter
         implements BlockStateAdapter<Block, BlockState, Property<?>>, PropertyValueAdapter<BlockState, Property<?>> {
@@ -43,11 +40,11 @@ public final class FabricBlockStateAdapter
     private final Map<Block, List<Property<?>>> blockPropertiesCache = new ConcurrentHashMap<>(256);
     private final Map<Property<?>, List<Object>> propertyValuesCache = new ConcurrentHashMap<>(512);
 
-    // -------------------------------------------------------------------------
-    // Reflection bootstrap — resolves Property.getValues() once at class load.
-    // This handles remapped method names across Minecraft mapping sets
-    // (e.g., intermediary vs. named) and return type changes (List vs. Collection).
-    // -------------------------------------------------------------------------
+    /**
+     * Map caching each property's values to their integer indices.
+     *
+     * <p>This facilitates O(1) value-to-index conversions during state serialization.</p>
+     */
     private final Map<Property<?>, Map<Object, Integer>> valueIndexCache = new ConcurrentHashMap<>(512);
 
     /**
@@ -256,6 +253,14 @@ public final class FabricBlockStateAdapter
         return getOrCreateIndexMap(property).getOrDefault(currentValue, -1);
     }
 
+    /**
+     * Retrieves the raw object value of a property from the block state.
+     *
+     * @param state    the block state to query, must not be null
+     * @param property the property to query, must not be null
+     * @return the property value object
+     * @throws NullPointerException if state or property is null
+     */
     @Override
     public Object getPropertyValue(final BlockState state, final Property<?> property) {
         Objects.requireNonNull(state, "BlockState cannot be null");
@@ -313,7 +318,8 @@ public final class FabricBlockStateAdapter
      * @return immutable list of properties, never null
      */
     private List<Property<?>> resolveProperties(final Block block) {
-        final Collection<Property<?>> properties = block.getStateManager().getProperties();
+        final Collection<Property<?>> properties = block.getStateManager()
+                .getProperties();
         // Fast path for the common case of stateless blocks (e.g., stone)
         return properties.isEmpty() ? EMPTY_PROPERTIES : List.copyOf(properties);
     }

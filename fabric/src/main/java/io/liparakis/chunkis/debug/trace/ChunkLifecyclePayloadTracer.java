@@ -17,19 +17,36 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
+/**
+ * Diagnostic tracer backing chunk loading, conversion, and world attachment lifecycles.
+ */
 public final class ChunkLifecyclePayloadTracer {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkLifecyclePayloadTracer() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Logs trace information when a decoded delta state is attached to a proto chunk.
+     *
+     * @param worldId     target world dimension registry ID string
+     * @param chunk       the target proto chunk instance
+     * @param delta       the attached chunk delta
+     * @param operationId active trace session operation ID
+     * @param source      class/method trace source trigger label
+     */
     public static void traceProtoDeltaAttached(
             final String worldId,
             final Chunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
-                                              ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -46,7 +63,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "proto-attach",
                     source,
                     chunk
-                                                          );
+            );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_ATTACHED,
                     "proto-attach",
@@ -59,19 +76,29 @@ public final class ChunkLifecyclePayloadTracer {
                     "expectedState=" + expectedState
                             + " chunkStatus=" + chunk.getStatus()
                             + " source=" + source
-                            + " thread=" + Thread.currentThread().getName(),
+                            + " thread=" + Thread.currentThread()
+                            .getName(),
                     null
-                                         );
+            );
         });
     }
 
+    /**
+     * Logs trace information showing that a delta exists on a proto chunk before conversion takes place.
+     *
+     * @param worldId     target world dimension registry ID string
+     * @param chunk       the target proto chunk instance
+     * @param delta       the attached chunk delta
+     * @param operationId active trace session operation ID
+     * @param source      class/method trace source trigger label
+     */
     public static void traceProtoDeltaPresentBeforeConversion(
             final String worldId,
             final Chunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
-                                                             ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -87,7 +114,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "conversion-before",
                     source,
                     chunk
-                                                          );
+            );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_PRESENT_BEFORE_CONVERSION,
                     "conversion-before",
@@ -100,19 +127,29 @@ public final class ChunkLifecyclePayloadTracer {
                     "expectedState=" + expectedState
                             + " chunkStatus=" + chunk.getStatus()
                             + " source=" + source
-                            + " thread=" + Thread.currentThread().getName(),
+                            + " thread=" + Thread.currentThread()
+                            .getName(),
                     null
-                                         );
+            );
         });
     }
 
+    /**
+     * Logs trace information showing that a delta exists on a proto chunk after conversion took place.
+     *
+     * @param worldId     target world dimension registry ID string
+     * @param chunk       the target proto chunk instance
+     * @param delta       the attached chunk delta
+     * @param operationId active trace session operation ID
+     * @param source      class/method trace source trigger label
+     */
     public static void traceProtoDeltaPresentAfterConversion(
             final String worldId,
             final Chunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
-                                                            ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -128,7 +165,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "conversion-after",
                     source,
                     chunk
-                                                          );
+            );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_PRESENT_AFTER_CONVERSION,
                     "conversion-after",
@@ -141,18 +178,27 @@ public final class ChunkLifecyclePayloadTracer {
                     "expectedState=" + expectedState
                             + " chunkStatus=" + chunk.getStatus()
                             + " source=" + source
-                            + " thread=" + Thread.currentThread().getName(),
+                            + " thread=" + Thread.currentThread()
+                            .getName(),
                     null
-                                         );
+            );
         });
     }
 
+    /**
+     * Logs trace information when a delta has been attached to a live WorldChunk instance.
+     *
+     * @param chunk       the WorldChunk instance
+     * @param delta       the attached chunk delta
+     * @param operationId active trace session operation ID
+     * @param source      class/method trace source trigger label
+     */
     public static void traceWorldChunkDeltaAttached(
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId,
             final String source
-                                                   ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -169,7 +215,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "worldchunk-attach",
                     source,
                     chunk
-                                                          );
+            );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_WORLDCHUNK_DELTA_ATTACHED,
                     "worldchunk-attach",
@@ -182,17 +228,25 @@ public final class ChunkLifecyclePayloadTracer {
                     "expectedState=" + expectedState
                             + " chunkStatus=" + chunk.getStatus()
                             + " source=" + source
-                            + " thread=" + Thread.currentThread().getName(),
+                            + " thread=" + Thread.currentThread()
+                            .getName(),
                     null
-                                         );
+            );
         });
     }
 
+    /**
+     * Logs trace information indicating that a WorldChunk contains no attached Chunkis delta.
+     *
+     * @param chunk       the WorldChunk instance
+     * @param operationId active trace session operation ID
+     * @param source      class/method trace source trigger label
+     */
     public static void traceWorldChunkDeltaMissing(
             final WorldChunk chunk,
             final String operationId,
             final String source
-                                                  ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || operationId == null) {
             return;
         }
@@ -201,7 +255,7 @@ public final class ChunkLifecyclePayloadTracer {
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
                 DebugChunkKeys.of(chunkPos)
-                                                                                            )) {
+        )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
@@ -213,7 +267,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "worldchunk-missing",
                     source,
                     chunk
-                                                          );
+            );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_WORLDCHUNK_DELTA_MISSING,
                     "worldchunk-missing",
@@ -225,18 +279,27 @@ public final class ChunkLifecyclePayloadTracer {
                     target,
                     "chunkStatus=" + chunk.getStatus()
                             + " source=" + source
-                            + " thread=" + Thread.currentThread().getName(),
+                            + " thread=" + Thread.currentThread()
+                            .getName(),
                     null
-                                         );
+            );
         }
     }
 
+    /**
+     * Logs trace information when a delta is consumed in the WorldChunk constructor.
+     *
+     * @param chunk         the WorldChunk instance
+     * @param expectedDelta the expected delta state, if any, may be null
+     * @param operationId   active trace session operation ID, if any, may be null
+     * @param source        class/method trace source trigger label
+     */
     public static void traceWorldChunkConstructorConsumed(
             final WorldChunk chunk,
             @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
             @Nullable final String operationId,
             final String source
-                                                         ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -256,7 +319,7 @@ public final class ChunkLifecyclePayloadTracer {
                     "worldchunk-constructor",
                     source,
                     chunk
-                                                          );
+            );
             PayloadWatchTracer.traceWatch(
                     ChunkTraceEventType.WATCH_WORLD_CHUNK_CONSTRUCTOR_CONSUMED,
                     "worldchunk-constructor",
@@ -273,14 +336,25 @@ public final class ChunkLifecyclePayloadTracer {
                             null,
                             chunk.getStatus(),
                             source,
-                            Thread.currentThread().getName(),
+                            Thread.currentThread()
+                                    .getName(),
                             chunk
-                                                                    ),
+                    ),
                     null
-                                         );
+            );
         });
     }
 
+    /**
+     * Traces the live state block matching of a chunk currently loaded in the world.
+     *
+     * @param chunk            the WorldChunk instance
+     * @param presentEventType event type to log when block matches
+     * @param stage            text label indicating the lifecycle stage name
+     * @param source           class/method trace source trigger label
+     * @param operationId      active trace session operation ID, may be null
+     * @param expectedDelta    the expected delta, may be null
+     */
     public static void traceLiveChunkState(
             final WorldChunk chunk,
             final ChunkTraceEventType presentEventType,
@@ -288,27 +362,35 @@ public final class ChunkLifecyclePayloadTracer {
             final String source,
             @Nullable final String operationId,
             @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta
-                                          ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
 
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final ChunkPos chunkPos = chunk.getPos();
-        final boolean clientChunk = chunk.getWorld().isClient();
+        final boolean clientChunk = chunk.getWorld()
+                .isClient();
 
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
                 DebugChunkKeys.of(chunkPos)
-                                                                                            )) {
+        )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
 
             final BlockPos pos = new BlockPos(target.blockX(), target.blockY(), target.blockZ());
             final BlockState liveState = chunk.getBlockState(pos);
-            final BlockState expectedState = PayloadWatchTracer.resolveExpectedState(chunk, expectedDelta, target, chunkPos, worldId);
-            final String resolvedOperationId = PayloadWatchTracer.resolveOperationId(worldId, chunkPos, target, operationId);
+            final BlockState expectedState = PayloadWatchTracer.resolveExpectedState(chunk,
+                    expectedDelta,
+                    target,
+                    chunkPos,
+                    worldId);
+            final String resolvedOperationId = PayloadWatchTracer.resolveOperationId(worldId,
+                    chunkPos,
+                    target,
+                    operationId);
             PayloadWatchTracer.markVisibilitySeen(worldId, chunkPos, target, resolvedOperationId);
             PayloadWatchTracer.assertRestoreDecisionSeen(
                     worldId,
@@ -316,7 +398,7 @@ public final class ChunkLifecyclePayloadTracer {
                     target,
                     resolvedOperationId,
                     source
-                                                        );
+            );
             PayloadWatchTracer.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
@@ -325,7 +407,7 @@ public final class ChunkLifecyclePayloadTracer {
                     stage,
                     source,
                     chunk
-                                                          );
+            );
             PayloadWatchTracer.assertSameAppliedChunkInstance(
                     worldId,
                     chunkPos,
@@ -333,7 +415,7 @@ public final class ChunkLifecyclePayloadTracer {
                     resolvedOperationId,
                     source,
                     chunk
-                                                             );
+            );
 
             PayloadWatchTracer.traceWatch(
                     presentEventType,
@@ -351,11 +433,12 @@ public final class ChunkLifecyclePayloadTracer {
                             clientChunk ? liveState : null,
                             chunk.getStatus(),
                             source,
-                            Thread.currentThread().getName(),
+                            Thread.currentThread()
+                                    .getName(),
                             chunk
-                                                                    ),
+                    ),
                     null
-                                         );
+            );
 
             if (expectedState != null && !Objects.equals(liveState, expectedState)) {
                 PayloadWatchTracer.traceWatch(
@@ -374,11 +457,12 @@ public final class ChunkLifecyclePayloadTracer {
                                 clientChunk ? liveState : null,
                                 chunk.getStatus(),
                                 source,
-                                Thread.currentThread().getName(),
+                                Thread.currentThread()
+                                        .getName(),
                                 chunk
-                                                                        ),
+                        ),
                         null
-                                             );
+                );
             }
 
             if (clientChunk && expectedState != null && Objects.equals(liveState, expectedState)) {
@@ -398,11 +482,12 @@ public final class ChunkLifecyclePayloadTracer {
                                 liveState,
                                 chunk.getStatus(),
                                 source,
-                                Thread.currentThread().getName(),
+                                Thread.currentThread()
+                                        .getName(),
                                 chunk
-                                                                        ),
+                        ),
                         null
-                                             );
+                );
             }
         }
     }

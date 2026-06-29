@@ -21,9 +21,6 @@ import org.jetbrains.annotations.NotNull;
  * <p>
  * This class is purely additive — it never retains world, chunk, or block
  * references.
- *
- * @author Liparakis
- * @version 1.1
  */
 @Environment(EnvType.CLIENT)
 public final class ClientDeltaMetrics {
@@ -113,10 +110,10 @@ public final class ClientDeltaMetrics {
         final String message = messageSupplier.get();
         if (cause != null) {
             Chunkis.LOGGER.error("{} — error #{} (logging every {}th)",
-                                 message, errors, ERROR_LOG_INTERVAL, cause);
+                    message, errors, ERROR_LOG_INTERVAL, cause);
         } else {
             Chunkis.LOGGER.error("{} — error #{} (logging every {}th)",
-                                 message, errors, ERROR_LOG_INTERVAL);
+                    message, errors, ERROR_LOG_INTERVAL);
         }
     }
 
@@ -221,7 +218,7 @@ public final class ClientDeltaMetrics {
         @Override
         public @NotNull String toString() {
             return String.format("Packets: %d, Avg: %.1f bytes, %.1f blocks, %.2fμs, Errors: %d",
-                                 packets, avgBytes(), avgBlocks(), avgDecodeMicros(), errors);
+                    packets, avgBytes(), avgBlocks(), avgDecodeMicros(), errors);
         }
     }
 }

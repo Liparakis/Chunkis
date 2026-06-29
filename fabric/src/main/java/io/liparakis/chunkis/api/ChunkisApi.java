@@ -17,9 +17,6 @@ import net.minecraft.world.chunk.Chunk;
  * for a world, as well as helper methods for working with Chunkis-managed
  * chunks.
  * </p>
- *
- * @author Liparakis
- * @version 1.0
  */
 public interface ChunkisApi {
 

@@ -21,31 +21,45 @@ import net.minecraft.text.Text;
  */
 public final class StorageReportCommand {
 
+    /**
+     * Default count of top-sized regions listed in the summary.
+     */
     private static final int DEFAULT_TOP_REGIONS = 8;
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private StorageReportCommand() {
         throw new AssertionError("Utility class");
     }
 
     /**
      * Registers the {@code /chunkis_storage_report} command.
+     *
+     * @param dispatcher command dispatcher registry
      */
     public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(
                 CommandManager.literal("chunkis_storage_report")
-                              .requires(source -> source.getPermissions()
-                                                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                              .executes(context -> run(context, DEFAULT_TOP_REGIONS))
-                              .then(CommandManager.argument("topRegions", IntegerArgumentType.integer(1, 32))
-                                                  .executes(context -> run(
-                                                          context,
-                                                          IntegerArgumentType.getInteger(context, "topRegions")
-                                                                          )))
-                           );
+                        .requires(source -> source.getPermissions()
+                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                        .executes(context -> run(context, DEFAULT_TOP_REGIONS))
+                        .then(CommandManager.argument("topRegions", IntegerArgumentType.integer(1, 32))
+                                .executes(context -> run(
+                                        context,
+                                        IntegerArgumentType.getInteger(context, "topRegions")
+                                )))
+        );
     }
 
     /**
      * Executes the storage report and sends the formatted result to the caller.
+     *
+     * @param context    command context information
+     * @param topRegions number of top region sizing entries to highlight
+     * @return 1 on success, 0 on IO failure
      */
     private static int run(final CommandContext<ServerCommandSource> context, final int topRegions) {
         final ServerCommandSource source = context.getSource();

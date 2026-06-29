@@ -16,17 +16,32 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
+/**
+ * Diagnostic payload tracer tracking server world entity capture, materialize, and chunk re-entry events.
+ */
 public final class EntityPayloadTracer {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private EntityPayloadTracer() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Logs trace information when in-memory entities are captured during a chunk delta write.
+     *
+     * @param world    target world instance
+     * @param chunkPos coordinates of the enclosing chunk
+     * @param entities list of captured entity compounds
+     */
     public static void traceCapturedEntities(
             final ServerWorld world,
             final ChunkPos chunkPos,
             final List<NbtCompound> entities
-                                            ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || entities.isEmpty()) {
             return;
         }
@@ -37,7 +52,8 @@ public final class EntityPayloadTracer {
                 continue;
             }
 
-            final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(PayloadWatchSummaries.worldId(world), entityUuid);
+            final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(PayloadWatchSummaries.worldId(world),
+                    entityUuid);
             if (target == null) {
                 continue;
             }
@@ -53,24 +69,33 @@ public final class EntityPayloadTracer {
                     target,
                     PayloadWatchSummaries.summarizeEntity(target, entityNbt),
                     null
-                                         );
+            );
         }
     }
 
+    /**
+     * Logs trace information when an entity is materialized and restored to the live world.
+     *
+     * @param world       target world instance
+     * @param chunkPos    coordinates of the enclosing chunk
+     * @param entity      materialized entity instance
+     * @param nbt         source compound NBT
+     * @param operationId active restore operation ID
+     */
     public static void traceRestoredEntity(
             final ServerWorld world,
             final ChunkPos chunkPos,
             final Entity entity,
             final NbtCompound nbt,
             final String operationId
-                                          ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
                 entity.getUuidAsString()
-                                                                             );
+        );
         if (target == null) {
             return;
         }
@@ -85,16 +110,25 @@ public final class EntityPayloadTracer {
                 target,
                 PayloadWatchSummaries.summarizeEntity(target, nbt),
                 null
-                                     );
+        );
     }
 
+    /**
+     * Logs trace information when an entity instruction has been visited during restore processing.
+     *
+     * @param world       target world instance
+     * @param chunkPos    coordinates of the enclosing chunk
+     * @param nbt         source entity NBT
+     * @param operationId active restore operation ID
+     * @param source      class/method trace source label
+     */
     public static void traceRestoreEntityInstructionVisited(
             final ServerWorld world,
             final ChunkPos chunkPos,
             final NbtCompound nbt,
             final String operationId,
             final String source
-                                                           ) {
+    ) {
         PayloadWatchTracer.traceEntityRestoreStage(
                 world,
                 chunkPos,
@@ -105,16 +139,25 @@ public final class EntityPayloadTracer {
                 source,
                 "decoded entity payload visited by restore",
                 null
-                                                  );
+        );
     }
 
+    /**
+     * Logs trace information when attempting to apply/materialize a decoded entity into the world.
+     *
+     * @param world       target world instance
+     * @param chunkPos    coordinates of the enclosing chunk
+     * @param nbt         source entity NBT
+     * @param operationId active restore operation ID
+     * @param source      class/method trace source label
+     */
     public static void traceRestoreEntityApplyAttempt(
             final ServerWorld world,
             final ChunkPos chunkPos,
             final NbtCompound nbt,
             final String operationId,
             final String source
-                                                     ) {
+    ) {
         PayloadWatchTracer.traceEntityRestoreStage(
                 world,
                 chunkPos,
@@ -125,23 +168,32 @@ public final class EntityPayloadTracer {
                 source,
                 "attempting to materialize decoded entity payload into live server world",
                 null
-                                                  );
+        );
     }
 
+    /**
+     * Logs trace information when restoring an entity payload was skipped.
+     *
+     * @param world       target world instance
+     * @param chunkPos    coordinates of the enclosing chunk
+     * @param entityUuid  entity UUID string
+     * @param operationId active restore operation ID
+     * @param message     reason why restore was skipped
+     */
     public static void traceRestoreEntitySkipped(
             final ServerWorld world,
             final ChunkPos chunkPos,
             final String entityUuid,
             final String operationId,
             final String message
-                                                ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
                 entityUuid
-                                                                             );
+        );
         if (target == null) {
             return;
         }
@@ -156,16 +208,25 @@ public final class EntityPayloadTracer {
                 target,
                 target.describe(),
                 null
-                                     );
+        );
     }
 
+    /**
+     * Logs trace information verifying entity presence after the enclosing chunk becomes sendable.
+     *
+     * @param world         target world instance
+     * @param chunk         target world chunk
+     * @param expectedDelta expected delta payload model, may be null
+     * @param operationId   active restore operation ID, may be null
+     * @param source        class/method trace source label
+     */
     public static void traceEntityPresenceAfterChunkFull(
             final ServerWorld world,
             final WorldChunk chunk,
             @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
             @Nullable final String operationId,
             final String source
-                                                        ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -183,7 +244,7 @@ public final class EntityPayloadTracer {
                     target,
                     resolvedOperationId,
                     liveEntity
-                                                        );
+            );
             PayloadWatchTracer.traceWatch(
                     liveEntity != null
                             ? ChunkTraceEventType.WATCH_PRESENT_AFTER_CHUNK_FULL
@@ -199,10 +260,22 @@ public final class EntityPayloadTracer {
                     target,
                     PayloadWatchSummaries.summarizeExpectedEntityAndPresence(target, expectedNbt, liveEntity, chunk),
                     null
-                                         );
+            );
         });
     }
 
+    /**
+     * Logs trace information matching entity presence state against expected models.
+     *
+     * @param world         target world instance
+     * @param chunk         target world chunk
+     * @param expectedDelta expected delta payload model, may be null
+     * @param operationId   active restore operation ID, may be null
+     * @param eventType     event classification type
+     * @param stage         lifecycle stage name
+     * @param source        class/method trace source label
+     * @param message       custom detail description message text
+     */
     public static void traceEntityReplayState(
             final ServerWorld world,
             final WorldChunk chunk,
@@ -212,7 +285,7 @@ public final class EntityPayloadTracer {
             final String stage,
             final String source,
             final String message
-                                             ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || chunk == null) {
             return;
         }
@@ -235,17 +308,26 @@ public final class EntityPayloadTracer {
                     target,
                     PayloadWatchSummaries.summarizeExpectedEntityAndPresence(target, expectedNbt, liveEntity, chunk),
                     null
-                                         );
+            );
         });
     }
 
+    /**
+     * Logs trace information when a tracked entity gets removed from the live world.
+     *
+     * @param world       target world instance
+     * @param entity      removed entity instance
+     * @param reason      removal reason code
+     * @param operationId active restore operation ID, may be null
+     * @param source      class/method trace source label
+     */
     public static void traceLiveEntityRemoved(
             final ServerWorld world,
             final Entity entity,
             final Entity.RemovalReason reason,
             @Nullable final String operationId,
             final String source
-                                             ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || entity == null) {
             return;
         }
@@ -253,7 +335,7 @@ public final class EntityPayloadTracer {
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
                 entity.getUuidAsString()
-                                                                             );
+        );
         if (target == null) {
             return;
         }
@@ -270,9 +352,19 @@ public final class EntityPayloadTracer {
                 target,
                 PayloadWatchSummaries.summarizeRemovedEntity(target, entity, reason, source),
                 null
-                                     );
+        );
     }
 
+    /**
+     * Logs trace information when an entity transfers between world chunks.
+     *
+     * @param world       target world instance
+     * @param entity      transferring entity instance
+     * @param operationId active restore operation ID, may be null
+     * @param stage       lifecycle stage name
+     * @param source      class/method trace source label
+     * @param message     description detail text
+     */
     public static void traceEntityChunkTransfer(
             final ServerWorld world,
             final Entity entity,
@@ -280,7 +372,7 @@ public final class EntityPayloadTracer {
             final String stage,
             final String source,
             final String message
-                                               ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || entity == null) {
             return;
         }
@@ -288,7 +380,7 @@ public final class EntityPayloadTracer {
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
                 entity.getUuidAsString()
-                                                                             );
+        );
         if (target == null) {
             return;
         }
@@ -305,9 +397,19 @@ public final class EntityPayloadTracer {
                 target,
                 PayloadWatchSummaries.summarizeLiveEntity(target, entity, source),
                 null
-                                     );
+        );
     }
 
+    /**
+     * Logs trace information when an entity starts or stops being tracked by players.
+     *
+     * @param world   target world instance
+     * @param entity  tracked entity instance
+     * @param player  associated server player entity
+     * @param stage   lifecycle stage name
+     * @param source  class/method trace source label
+     * @param message description detail text
+     */
     public static void traceEntityTrackingEvent(
             final ServerWorld world,
             final Entity entity,
@@ -315,7 +417,7 @@ public final class EntityPayloadTracer {
             final String stage,
             final String source,
             final String message
-                                               ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || entity == null || player == null) {
             return;
         }
@@ -323,7 +425,7 @@ public final class EntityPayloadTracer {
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
                 entity.getUuidAsString()
-                                                                             );
+        );
         if (target == null) {
             return;
         }
@@ -342,19 +444,29 @@ public final class EntityPayloadTracer {
                 null,
                 target,
                 PayloadWatchSummaries.summarizeLiveEntity(target, entity, source)
-                        + " player=" + player.getName().getString()
+                        + " player=" + player.getName()
+                        .getString()
                         + " playerId=" + player.getUuidAsString(),
                 null
-                                     );
+        );
     }
 
+    /**
+     * Logs trace information verifying entity presence during chunk re-entry events.
+     *
+     * @param world   target world instance
+     * @param chunk   target world chunk
+     * @param stage   lifecycle stage name
+     * @param source  class/method trace source label
+     * @param message description detail text
+     */
     public static void traceEntityChunkReentry(
             final ServerWorld world,
             final WorldChunk chunk,
             final String stage,
             final String source,
             final String message
-                                              ) {
+    ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || world == null || chunk == null) {
             return;
         }
@@ -382,9 +494,10 @@ public final class EntityPayloadTracer {
                               + " chunkStatus=" + chunk.getStatus()
                               + " chunkInstanceId=" + PayloadWatchSummaries.chunkInstanceId(chunk)
                               + " source=" + source
-                              + " thread=" + Thread.currentThread().getName(),
+                              + " thread=" + Thread.currentThread()
+                                             .getName(),
                     null
-                                         );
+            );
         });
     }
 }

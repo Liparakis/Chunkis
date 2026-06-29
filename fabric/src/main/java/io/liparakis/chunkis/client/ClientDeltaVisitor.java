@@ -30,8 +30,6 @@ import net.minecraft.util.math.BlockPos;
  * {@link #reset} call that provided them and the {@link ChunkDelta.DeltaVisitor}
  * methods that consume them.
  *
- * @author Liparakis
- * @version 1.1
  */
 @Environment(EnvType.CLIENT)
 final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, NbtCompound> {
@@ -139,7 +137,8 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
      */
     @Override
     public void visitEntity(final NbtCompound nbt) {
-        clientDelta.getEntitiesList().add(nbt);
+        clientDelta.getEntitiesList()
+                .add(nbt);
 
         EntityType.loadEntityWithPassengers(nbt, world, SpawnReason.LOAD, entity -> {
             if (isEntityUntracked(entity.getId())) {
@@ -156,7 +155,8 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
      * @return true if the block state at pos has a block entity
      */
     private boolean canHaveBlockEntity(final BlockPos pos) {
-        return world.getBlockState(pos).hasBlockEntity();
+        return world.getBlockState(pos)
+                .hasBlockEntity();
     }
 
     /**

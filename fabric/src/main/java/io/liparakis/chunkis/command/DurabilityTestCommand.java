@@ -70,6 +70,11 @@ public final class DurabilityTestCommand {
      */
     private static final int MIN_DELAY_MS = 10;
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private DurabilityTestCommand() {
         throw new AssertionError("Utility class");
     }
@@ -88,21 +93,21 @@ public final class DurabilityTestCommand {
     public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(
                 CommandManager.literal("durability_test")
-                              .requires(source -> source.getPermissions()
-                                                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                              .then(CommandManager.argument("pos1", Vec3ArgumentType.vec3())
-                                                  .then(CommandManager.argument("pos2", Vec3ArgumentType.vec3())
-                                                                      .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
-                                                                                          // Note: integer(1) accepts values < MIN_DELAY_MS; the floor
-                                                                                          // is enforced by Math.max in runTest instead.
-                                                                                          .then(CommandManager.argument("delayMs", IntegerArgumentType.integer(1))
-                                                                                                              .executes(DurabilityTestCommand::runTest))))));
+                        .requires(source -> source.getPermissions()
+                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                        .then(CommandManager.argument("pos1", Vec3ArgumentType.vec3())
+                                .then(CommandManager.argument("pos2", Vec3ArgumentType.vec3())
+                                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
+                                                // Note: integer(1) accepts values < MIN_DELAY_MS; the floor
+                                                // is enforced by Math.max in runTest instead.
+                                                .then(CommandManager.argument("delayMs", IntegerArgumentType.integer(1))
+                                                        .executes(DurabilityTestCommand::runTest))))));
 
         dispatcher.register(
                 CommandManager.literal("durability_test_stop")
-                              .requires(source -> source.getPermissions()
-                                                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                              .executes(DurabilityTestCommand::stopTest));
+                        .requires(source -> source.getPermissions()
+                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                        .executes(DurabilityTestCommand::stopTest));
     }
 
     /**
@@ -157,7 +162,7 @@ public final class DurabilityTestCommand {
                 () -> Text.literal(
                         "[Chunkis] Starting durability test: " + count + " cycles at " + delayMs + "ms delay"),
                 true
-                           );
+        );
 
         executor.scheduleAtFixedRate(
                 () -> {
@@ -165,77 +170,83 @@ public final class DurabilityTestCommand {
                     if (!teleportQueued.compareAndSet(false, true)) {
                         return;
                     }
-                    source.getServer().execute(() -> {
-                        try {
-                            final int left = remaining.decrementAndGet();
+                    source.getServer()
+                            .execute(() -> {
+                                try {
+                                    final int left = remaining.decrementAndGet();
 
-                            // left == -1 on the (count+1)th call: all count teleports are done.
-                            if (left < 0) {
-                                if (shutdownAndClear(executor, runId)) {
+                                    // left == -1 on the (count+1)th call: all count teleports are done.
+                                    if (left < 0) {
+                                        if (shutdownAndClear(executor, runId)) {
+                                            trace(
+                                                    ChunkTraceEventType.DURABILITY_TEST_STOPPED,
+                                                    ChunkTraceSeverity.INFO,
+                                                    ChunkTraceReason.NONE,
+                                                    "durability test completed",
+                                                    worldId(source),
+                                                    null,
+                                                    runId
+                                            );
+                                        }
+                                        source.sendFeedback(
+                                                () -> Text.literal("[Chunkis] Durability test complete."),
+                                                true
+                                        );
+                                        return;
+                                    }
+
+                                    if (player.isRemoved()) {
+                                        if (shutdownAndClear(executor, runId)) {
+                                            traceFailed("player was removed during durability test",
+                                                    worldId(source),
+                                                    runId);
+                                        }
+                                        source.sendError(Text.literal(
+                                                "[Chunkis] Durability test failed: player was removed."));
+                                        return;
+                                    }
+
+                                    final ServerWorld world = player.getEntityWorld();
+                                    // Alternate between pos1 (even remaining) and pos2 (odd remaining).
+                                    final Vec3d target = (left % 2 == 0) ? pos1 : pos2;
                                     trace(
-                                            ChunkTraceEventType.DURABILITY_TEST_STOPPED,
+                                            ChunkTraceEventType.DURABILITY_TELEPORT_EXECUTED,
                                             ChunkTraceSeverity.INFO,
                                             ChunkTraceReason.NONE,
-                                            "durability test completed",
-                                            worldId(source),
-                                            null,
+                                            "queued durability teleport remaining=" + left,
+                                            world.getRegistryKey()
+                                                    .getValue()
+                                                    .toString(),
+                                            toChunkKey(target),
                                             runId
-                                         );
+                                    );
+                                    player.teleport(
+                                            world,
+                                            target.x,
+                                            target.y,
+                                            target.z,
+                                            Set.of(),   // no relative movement flags absolute teleport
+                                            player.getYaw(),
+                                            player.getPitch(),
+                                            false
+                                    );
+                                } catch (final Exception exception) {
+                                    if (shutdownAndClear(executor, runId)) {
+                                        traceFailed(exception.getMessage(), worldId(source), runId);
+                                    }
+                                    source.sendError(
+                                            Text.literal("[Chunkis] Durability test failed: " + exception.getMessage())
+                                    );
+                                } finally {
+                                    // Reset the guard so the next executor tick can dispatch again.
+                                    teleportQueued.set(false);
                                 }
-                                source.sendFeedback(
-                                        () -> Text.literal("[Chunkis] Durability test complete."),
-                                        true
-                                                   );
-                                return;
-                            }
-
-                            if (player.isRemoved()) {
-                                if (shutdownAndClear(executor, runId)) {
-                                    traceFailed("player was removed during durability test", worldId(source), runId);
-                                }
-                                source.sendError(Text.literal("[Chunkis] Durability test failed: player was removed."));
-                                return;
-                            }
-
-                            final ServerWorld world = player.getEntityWorld();
-                            // Alternate between pos1 (even remaining) and pos2 (odd remaining).
-                            final Vec3d target = (left % 2 == 0) ? pos1 : pos2;
-                            trace(
-                                    ChunkTraceEventType.DURABILITY_TELEPORT_EXECUTED,
-                                    ChunkTraceSeverity.INFO,
-                                    ChunkTraceReason.NONE,
-                                    "queued durability teleport remaining=" + left,
-                                    world.getRegistryKey().getValue().toString(),
-                                    toChunkKey(target),
-                                    runId
-                                 );
-                            player.teleport(
-                                    world,
-                                    target.x,
-                                    target.y,
-                                    target.z,
-                                    Set.of(),   // no relative movement flags absolute teleport
-                                    player.getYaw(),
-                                    player.getPitch(),
-                                    false
-                                           );
-                        } catch (final Exception exception) {
-                            if (shutdownAndClear(executor, runId)) {
-                                traceFailed(exception.getMessage(), worldId(source), runId);
-                            }
-                            source.sendError(
-                                    Text.literal("[Chunkis] Durability test failed: " + exception.getMessage())
-                                            );
-                        } finally {
-                            // Reset the guard so the next executor tick can dispatch again.
-                            teleportQueued.set(false);
-                        }
-                    });
+                            });
                 },
                 0,
                 delayMs,
                 TimeUnit.MILLISECONDS
-                                    );
+        );
 
         return 1;
     }
@@ -248,9 +259,11 @@ public final class DurabilityTestCommand {
      */
     private static int stopTest(final CommandContext<ServerCommandSource> context) {
         if (stopInternal("stopped manually")) {
-            context.getSource().sendFeedback(() -> Text.literal("[Chunkis] Durability test stopped."), true);
+            context.getSource()
+                    .sendFeedback(() -> Text.literal("[Chunkis] Durability test stopped."), true);
         } else {
-            context.getSource().sendError(Text.literal("No durability test is currently running."));
+            context.getSource()
+                    .sendError(Text.literal("No durability test is currently running."));
         }
         return 1;
     }
@@ -294,7 +307,7 @@ public final class DurabilityTestCommand {
                 null,
                 null,
                 runId
-             );
+        );
         return true;
     }
 
@@ -345,7 +358,10 @@ public final class DurabilityTestCommand {
      * @return e.g. {@code "minecraft:overworld"}
      */
     private static String worldId(final ServerCommandSource source) {
-        return source.getWorld().getRegistryKey().getValue().toString();
+        return source.getWorld()
+                .getRegistryKey()
+                .getValue()
+                .toString();
     }
 
     /**
@@ -358,7 +374,7 @@ public final class DurabilityTestCommand {
      * @param operationId the run ID for this test
      */
     static void traceStarted(final int count, final int delayMs,
-                             final String worldId, final String operationId) {
+            final String worldId, final String operationId) {
         trace(
                 ChunkTraceEventType.DURABILITY_TEST_STARTED,
                 ChunkTraceSeverity.INFO,
@@ -367,7 +383,7 @@ public final class DurabilityTestCommand {
                 worldId,
                 null,
                 operationId
-             );
+        );
     }
 
     /**
@@ -387,7 +403,7 @@ public final class DurabilityTestCommand {
                 worldId,
                 null,
                 operationId
-             );
+        );
     }
 
     /**
@@ -410,7 +426,7 @@ public final class DurabilityTestCommand {
             final String worldId,
             final DebugChunkKey chunkKey,
             final String operationId
-                             ) {
+    ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 eventType,
@@ -424,6 +440,6 @@ public final class DurabilityTestCommand {
                 operationId,
                 null,
                 null
-                             );
+        );
     }
 }

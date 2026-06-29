@@ -13,12 +13,38 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
+/**
+ * Diagnostic payload tracer tracking block mutations, state changes, and in-memory captures.
+ */
 public final class BlockPayloadTracer {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private BlockPayloadTracer() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Logs trace information when a block state change begins processing.
+     *
+     * @param chunk              target world chunk
+     * @param pos                block coordinate pos
+     * @param previous           previous block state
+     * @param next               next target block state
+     * @param flags              block update flags
+     * @param caller             class/method identifier of the caller
+     * @param passiveCause       associated scope cause classification
+     * @param mutationSuppressed true if tracking/saving is suppressed
+     * @param mutationAccepted   true if tracking logic registers the change
+     * @param deltaCreated       true if a new delta state change is created
+     * @param blockChangesBefore delta block changes count prior to set state
+     * @param blockChangesAfter  delta block changes count post set state
+     * @param mutationGeneration internal modification tracking sequence generation number
+     * @param message            optional diagnostic detail override message, may be null
+     */
     public static void traceBlockSetStateEntered(
             final WorldChunk chunk,
             final BlockPos pos,
@@ -34,7 +60,7 @@ public final class BlockPayloadTracer {
             final int blockChangesAfter,
             final long mutationGeneration,
             @Nullable final String message
-                                                ) {
+    ) {
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final PayloadWatchTarget target = PayloadWatchTracer.watchedBlockTarget(worldId, pos);
         if (target == null) {
@@ -55,9 +81,11 @@ public final class BlockPayloadTracer {
                         + " newState=" + next
                         + " flags=" + flags
                         + " caller=" + caller
-                        + " thread=" + Thread.currentThread().getName()
+                        + " thread=" + Thread.currentThread()
+                        .getName()
                         + " classification=" + PayloadWatchTracer.classifySetBlockStateEvent(chunk)
-                        + " authoritative=" + !chunk.getWorld().isClient()
+                        + " authoritative=" + !chunk.getWorld()
+                        .isClient()
                         + " passiveContext=" + passiveCause
                         + " mutationSuppressed=" + mutationSuppressed
                         + " mutationAccepted=" + mutationAccepted
@@ -66,9 +94,14 @@ public final class BlockPayloadTracer {
                         + " blockChangesAfter=" + blockChangesAfter
                         + " mutationGeneration=" + mutationGeneration,
                 null
-                                     );
+        );
     }
 
+    /**
+     * Iterates over watchpoints matching blocks in the chunk and traces their capture state.
+     *
+     * @param chunk target world chunk
+     */
     public static void traceCapturedBlocks(final WorldChunk chunk) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
@@ -80,7 +113,7 @@ public final class BlockPayloadTracer {
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
                 new DebugChunkKey(chunkPos.x, chunkPos.z)
-                                                                                            )) {
+        )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
@@ -99,7 +132,7 @@ public final class BlockPayloadTracer {
                         target,
                         PayloadWatchSummaries.summarizeBlock(target, state),
                         null
-                                             );
+                );
                 continue;
             }
 
@@ -114,7 +147,7 @@ public final class BlockPayloadTracer {
                     target,
                     PayloadWatchSummaries.summarizeBlock(target, state),
                     null
-                                         );
+            );
         }
     }
 }

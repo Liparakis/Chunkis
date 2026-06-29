@@ -36,9 +36,6 @@ import org.jspecify.annotations.NonNull;
  *
  * <p><b>Thread safety:</b> buffers are stored in {@link ThreadLocal}. No world,
  * chunk, registry, or mutable NBT references are retained by this adapter.</p>
- *
- * @author Liparakis
- * @version 1.3
  */
 public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
 
@@ -83,7 +80,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     private static void writeLengthPrefixedPayload(
             final DataOutput output,
             final ReusableByteArrayOutputStream buffer
-                                                  ) throws IOException {
+    ) throws IOException {
         final int size = buffer.size();
 
         validatePayloadSize(size);
@@ -120,14 +117,14 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     private static NbtCompound readCompressedStreaming(
             final DataInputStream input,
             final int length
-                                                      ) throws IOException {
+    ) throws IOException {
         final BufferHolder holder = BUFFER_POOL.get();
 
         try (BoundedInputStream bounded = new BoundedInputStream(input, length)) {
             final NbtCompound nbt = NbtIo.readCompressed(
                     bounded,
                     NbtSizeTracker.of(MAX_NBT_SIZE)
-                                                        );
+            );
 
             drainRemaining(bounded, holder);
             return nbt;
@@ -145,7 +142,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     private static NbtCompound readCompressedBuffered(
             final DataInput input,
             final int length
-                                                     ) throws IOException {
+    ) throws IOException {
         final BufferHolder holder = BUFFER_POOL.get();
         final byte[] buffer = holder.getReadBuffer(length);
 
@@ -171,15 +168,15 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     private static NbtCompound readRawStreaming(
             final DataInputStream input,
             final int length
-                                               ) throws IOException {
+    ) throws IOException {
         final BufferHolder holder = BUFFER_POOL.get();
 
         try (BoundedInputStream bounded = new BoundedInputStream(input, length);
-             DataInputStream nbtInput = new DataInputStream(bounded)) {
+                DataInputStream nbtInput = new DataInputStream(bounded)) {
             final NbtCompound nbt = NbtIo.readCompound(
                     nbtInput,
                     NbtSizeTracker.of(MAX_NBT_SIZE)
-                                                      );
+            );
 
             drainRemaining(bounded, holder);
             return nbt;
@@ -197,7 +194,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     private static NbtCompound readRawBuffered(
             final DataInput input,
             final int length
-                                              ) throws IOException {
+    ) throws IOException {
         final BufferHolder holder = BUFFER_POOL.get();
         final byte[] buffer = holder.getReadBuffer(length);
 
@@ -205,7 +202,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
             input.readFully(buffer, 0, length);
 
             try (ByteArrayInputStream byteInput = new ByteArrayInputStream(buffer, 0, length);
-                 DataInputStream nbtInput = new DataInputStream(byteInput)) {
+                    DataInputStream nbtInput = new DataInputStream(byteInput)) {
                 return NbtIo.readCompound(nbtInput, NbtSizeTracker.of(MAX_NBT_SIZE));
             }
         } finally {
@@ -223,7 +220,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     private static void drainRemaining(
             final BoundedInputStream input,
             final BufferHolder holder
-                                      ) throws IOException {
+    ) throws IOException {
         final byte[] scratch = holder.drainBuffer;
 
         while (input.read(scratch, 0, scratch.length) != -1) {
@@ -290,7 +287,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     public void writeCompressed(
             final NbtCompound nbt,
             final DataOutput output
-                               ) throws IOException {
+    ) throws IOException {
         Objects.requireNonNull(nbt, "nbt");
         Objects.requireNonNull(output, "output");
 
@@ -346,7 +343,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     public void writeRaw(
             final NbtCompound nbt,
             final DataOutput output
-                        ) throws IOException {
+    ) throws IOException {
         Objects.requireNonNull(nbt, "nbt");
         Objects.requireNonNull(output, "output");
 
@@ -522,7 +519,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
                 final byte @NonNull [] bytes,
                 final int offset,
                 final int length
-                       ) throws IOException {
+        ) throws IOException {
             if (length == 0) {
                 return 0;
             }

@@ -23,9 +23,6 @@ import net.minecraft.util.Identifier;
  * <p><b>Thread safety:</b> cache access uses {@link ConcurrentHashMap}. The
  * adapter stores only registry constants and ID strings, not world or chunk
  * references.</p>
- *
- * @author Liparakis
- * @version 1.2
  */
 public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Block> {
 
@@ -77,7 +74,9 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
      * @return interned registry ID string
      */
     private static String resolveBlockId(final Block block) {
-        return Registries.BLOCK.getId(block).toString().intern();
+        return Registries.BLOCK.getId(block)
+                .toString()
+                .intern();
     }
 
     /**
@@ -130,8 +129,11 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
     /**
      * Returns the registry ID string for a block.
      *
-     * @param block block to identify
+     * <p>Fast-path check is performed for {@link Blocks#AIR}.</p>
+     *
+     * @param block block to identify, must not be null
      * @return registry ID, for example {@code minecraft:stone}
+     * @throws NullPointerException if the block is null
      */
     @Override
     public String getId(final Block block) {
@@ -200,7 +202,8 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
      */
     @Override
     public Collection<Block> getRegisteredBlocks() {
-        return Registries.BLOCK.stream().toList();
+        return Registries.BLOCK.stream()
+                .toList();
     }
 
     /**

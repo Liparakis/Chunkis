@@ -25,14 +25,19 @@ import org.slf4j.Logger;
  *
  * <p><b>Threading:</b> {@link #migrateWorld} is called during world load. No
  * world state is mutated; only CIS storage files on disk are read and rewritten.
- *
- * @author Liparakis
- * @version 1.2
  */
 public final class CisWorldMigrator {
 
+    /**
+     * Logger instance for writing migration logs.
+     */
     private static final Logger LOGGER = Chunkis.LOGGER;
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private CisWorldMigrator() {
         throw new AssertionError("Utility class");
     }
@@ -41,10 +46,10 @@ public final class CisWorldMigrator {
      * Upgrades the world's existing CIS storage to the latest supported format.
      *
      * <p>Returns immediately with an empty report if the CIS region directory
-     * does not exist, avoiding unnecessary I/O.
+     * does not exist, avoiding unnecessary I/O.</p>
      *
      * <p><b>Threading:</b> Must only be called before normal gameplay touches
-     * the world's CIS storage.
+     * the world's CIS storage.</p>
      *
      * @param world the dimension whose Chunkis storage should be upgraded
      * @return a {@link CisMigrationReport} describing the outcome for this dimension
@@ -55,7 +60,8 @@ public final class CisWorldMigrator {
             return CisMigrationReport.empty();
         }
 
-        final Identifier dimId = world.getRegistryKey().getValue();
+        final Identifier dimId = world.getRegistryKey()
+                .getValue();
         LOGGER.info("Checking CIS region directory for world {}: {}", dimId, storageDir);
 
         final CisStorage<?, ?, ?, ?> storage = FabricCisStorageHelper.getStorage(world);
@@ -70,7 +76,7 @@ public final class CisWorldMigrator {
                     report.migratedChunks(),
                     report.skippedChunks(),
                     report.failedChunks()
-                       );
+            );
         }
 
         return report;
@@ -81,16 +87,14 @@ public final class CisWorldMigrator {
      *
      * <p>The overworld uses {@code <save>/chunkis/regions}. All other dimensions
      * use {@code <save>/dimensions/<namespace>/<path>/chunkis/regions}, mirroring
-     * Minecraft's own layout for non-overworld level data.
+     * Minecraft's own layout for non-overworld level data.</p>
      *
      * @param world the dimension whose storage directory should be resolved
      * @return absolute path to the dimension's Chunkis region directory
      */
     public static Path resolveStorageDir(final ServerWorld world) {
-        final Path root = Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT);
+        final Path root = Objects.requireNonNull(world.getServer())
+                .getSavePath(WorldSavePath.ROOT);
         return ChunkisStoragePaths.computeRegionsDirectory(root, world.getRegistryKey());
     }
 }
-
-
-

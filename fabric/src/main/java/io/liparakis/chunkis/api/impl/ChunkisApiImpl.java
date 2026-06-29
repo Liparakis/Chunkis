@@ -23,9 +23,6 @@ import net.minecraft.world.chunk.Chunk;
  * <p>
  * Chunk references passed into this class are never retained beyond the
  * scope of each method call.
- *
- * @author Liparakis
- * @version 1.1
  */
 public final class ChunkisApiImpl implements ChunkisApi {
 

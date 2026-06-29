@@ -48,35 +48,90 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
 import net.minecraft.util.WorldSavePath;
 
+/**
+ * Analyzer that scans and collects storage metrics for both Vanilla region MCA files and Chunkis CIS files.
+ *
+ * <p>It compiles information about storage savings, chunk encoding kinds (uniform, sparse, dense, mixed),
+ * free space allocations, and block entity density in a Minecraft server world.</p>
+ */
 public final class StorageMetricsAnalyzer {
 
+    /**
+     * Byte size of allocation headers inside CIS region files.
+     */
     private static final int HEADER_BYTES = 8192;
+
+    /**
+     * Number of chunks per region file (32 x 32 = 1024 slots).
+     */
     private static final int HEADER_SLOTS = 1024;
+
+    /**
+     * Number of block positions inside a single Minecraft chunk section.
+     */
     private static final int SECTION_BLOCKS = 4096;
+
+    /**
+     * Number of bits representing individual sparse block positions.
+     */
     private static final int SPARSE_ENTRY_POSITION_BITS = 12;
 
+    /**
+     * Number of top chunks to include in report detail lists.
+     */
     private static final int TOP_CHUNKS = 10;
+
+    /**
+     * Number of top dense sections to analyze.
+     */
     private static final int TOP_DENSE_SECTIONS = 20;
 
+    /**
+     * Comparator sorting region reports descending/ascending by live bytes size.
+     */
     private static final Comparator<RegionReport> REGION_BY_LIVE_BYTES =
             Comparator.comparingLong(RegionReport::liveBytes)
-                      .thenComparing(RegionReport::name);
+                    .thenComparing(RegionReport::name);
 
+    /**
+     * Comparator sorting chunk reports by live byte sizes.
+     */
     private static final Comparator<ChunkReport> CHUNK_BY_LIVE_BYTES =
             Comparator.comparingLong(ChunkReport::liveBytes)
-                      .thenComparing(report -> report.pos().toString());
+                    .thenComparing(report -> report.pos()
+                            .toString());
 
+    /**
+     * Comparator sorting dense section reports by encoded byte sizes.
+     */
     private static final Comparator<DenseSectionReport> DENSE_SECTION_BY_ENCODED_BYTES =
             Comparator.comparingLong(DenseSectionReport::encodedBytes)
-                      .thenComparing(report -> report.pos().toString())
-                      .thenComparingInt(DenseSectionReport::sectionY);
+                    .thenComparing(report -> report.pos()
+                            .toString())
+                    .thenComparingInt(DenseSectionReport::sectionY);
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always, as instantiation is not allowed
+     */
     private StorageMetricsAnalyzer() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Scans the directories of the given ServerWorld to compile a complete StorageReport.
+     *
+     * <p>Inspects all custom Chunkis region files (.cis) and summarizes vanilla region directory (.mca) file sizes.</p>
+     *
+     * @param world      the server world to inspect, must not be null
+     * @param topRegions the number of top-sized regions to list in the final report details
+     * @return a compiled StorageReport populated with sizing and layout metrics
+     * @throws IOException if directory or file reads fail
+     */
     public static StorageReport inspectWorld(final ServerWorld world, final int topRegions) throws IOException {
-        final Path saveRoot = Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT);
+        final Path saveRoot = Objects.requireNonNull(world.getServer())
+                .getSavePath(WorldSavePath.ROOT);
         final Path chunkisDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, world.getRegistryKey());
         final Path vanillaDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, world.getRegistryKey());
 
@@ -102,17 +157,24 @@ public final class StorageMetricsAnalyzer {
                 accumulator.addRegion(inspectRegion(
                         storage,
                         regionPath,
-                        regionSpaceByName.get(regionPath.getFileName().toString())
-                                                   ));
+                        regionSpaceByName.get(regionPath.getFileName()
+                                .toString())
+                ));
             }
         }
 
         return accumulator.toReport();
     }
 
+    /**
+     * Maps region space usages by their filename to allow O(1) lookups during traversal.
+     *
+     * @param usages collection of space usage indicators
+     * @return a map indexed by region filename strings
+     */
     private static Map<String, CisRegionInspector.RegionSpaceUsage> indexRegionSpace(
             final Iterable<CisRegionInspector.RegionSpaceUsage> usages
-                                                                                    ) {
+    ) {
         final Map<String, CisRegionInspector.RegionSpaceUsage> byName = new HashMap<>();
         for (final CisRegionInspector.RegionSpaceUsage usage : usages) {
             byName.put(usage.name(), usage);
@@ -120,15 +182,25 @@ public final class StorageMetricsAnalyzer {
         return byName;
     }
 
+    /**
+     * Inspects the contents of a specific CIS region file, compiling metrics for all contained chunks.
+     *
+     * @param storage     the storage provider adapter
+     * @param regionPath  file path of the region file
+     * @param regionSpace precalculated space metrics, may be null
+     * @return region inspection findings
+     * @throws IOException if reading the file channel or payload fails
+     */
     private static RegionInspection inspectRegion(
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final Path regionPath,
             final CisRegionInspector.RegionSpaceUsage regionSpace
-                                                 ) throws IOException {
+    ) throws IOException {
         final RegionCoordinates coordinates = CisPayloadDiagnosticsReader.RegionFileReader.parseCoordinates(regionPath);
         final long physicalBytes = regionSpace == null ? Files.size(regionPath) : regionSpace.physicalBytes();
         final RegionScanAccumulator accumulator = new RegionScanAccumulator(
-                regionPath.getFileName().toString(),
+                regionPath.getFileName()
+                        .toString(),
                 physicalBytes,
                 regionSpace
         );
@@ -148,11 +220,11 @@ public final class StorageMetricsAnalyzer {
                 }
 
                 CisPayloadDiagnosticsReader.RegionFileReader.validateChunkRange(regionPath, offset, length,
-                                                                                channelBytes);
+                        channelBytes);
                 final var pos = FabricCisStorageHelper.toStoragePos(
                         (coordinates.x() << 5) + (slot & 31),
                         (coordinates.z() << 5) + (slot >>> 5)
-                                                                   );
+                );
 
                 final byte[] compressed = CisPayloadDiagnosticsReader.RegionFileReader.readChunkBytes(channel, offset
                         , length);
@@ -171,13 +243,19 @@ public final class StorageMetricsAnalyzer {
                         denseAnalysis,
                         encoderInput,
                         CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata())
-                                    );
+                );
             }
         }
 
         return accumulator.toInspection();
     }
 
+    /**
+     * Gathers diagnostic metrics about section uniform candidates prior to encoding.
+     *
+     * @param chunk the chunk to evaluate
+     * @return uniform-state diagnostic details
+     */
     private static EncoderInputDiagnostics inspectEncoderInput(final CisChunk<BlockState> chunk) {
         int uniformCandidateSections = 0;
         int fullUniformCandidateSections = 0;
@@ -186,7 +264,8 @@ public final class StorageMetricsAnalyzer {
 
         for (int i = 0; i < chunk.getSectionCount(); i++) {
             final int sectionY = chunk.getSortedSectionIndex(i);
-            final CisSection<BlockState> section = chunk.getSections().get(sectionY);
+            final CisSection<BlockState> section = chunk.getSections()
+                    .get(sectionY);
             if (section == null || section.mode == CisSection.MODE_EMPTY) {
                 continue;
             }
@@ -216,6 +295,12 @@ public final class StorageMetricsAnalyzer {
         );
     }
 
+    /**
+     * Converts a ChunkDelta into a mock encoder chunk representation to perform serialization evaluations.
+     *
+     * @param delta the chunk delta to parse
+     * @return a temporary CisChunk representation
+     */
     private static CisChunk<BlockState> buildEncoderChunk(final ChunkDelta<BlockState, NbtCompound> delta) {
         final CisChunk<BlockState> chunk = new CisChunk<>();
         delta.forEachBlock((x, y, z, state) -> {
@@ -226,11 +311,19 @@ public final class StorageMetricsAnalyzer {
         return chunk;
     }
 
+    /**
+     * Inspects dense sections to estimate space efficiency savings compared to sparse formatting.
+     *
+     * @param pos     chunk coordinates
+     * @param payload the chunk's diagnostics payload
+     * @param chunk   the mock encoder chunk
+     * @return dense section analysis details
+     */
     private static DenseSectionAnalysis inspectDenseSections(
             final CisChunkPos pos,
             final ChunkPayloadDiagnostics payload,
             final CisChunk<BlockState> chunk
-                                                            ) {
+    ) {
         final Map<Integer, Integer> paletteSizes = new TreeMap<>();
         final Map<Integer, Integer> bitsPerBlock = new TreeMap<>();
         final BoundedTopList<DenseSectionReport> largestSections =
@@ -242,7 +335,8 @@ public final class StorageMetricsAnalyzer {
                 continue;
             }
 
-            final CisSection<BlockState> section = chunk.getSections().get(sectionPayload.sectionY());
+            final CisSection<BlockState> section = chunk.getSections()
+                    .get(sectionPayload.sectionY());
             if (section == null) {
                 continue;
             }
@@ -293,6 +387,12 @@ public final class StorageMetricsAnalyzer {
         );
     }
 
+    /**
+     * Determines if a section contains a single uniform block state.
+     *
+     * @param section the section to examine
+     * @return uniform-state diagnostic details
+     */
     private static SectionUniformDiagnostics inspectSectionUniform(final CisSection<BlockState> section) {
         if (section.mode == CisSection.MODE_SPARSE) {
             return inspectSparseUniform(section);
@@ -301,6 +401,12 @@ public final class StorageMetricsAnalyzer {
         return inspectDenseUniform(section);
     }
 
+    /**
+     * Evaluates a sparse-mode section for uniform block state consistency.
+     *
+     * @param section the sparse section
+     * @return uniform-state diagnostics
+     */
     private static SectionUniformDiagnostics inspectSparseUniform(final CisSection<BlockState> section) {
         if (section.sparseSize <= 0) {
             return new SectionUniformDiagnostics(0, false);
@@ -315,6 +421,12 @@ public final class StorageMetricsAnalyzer {
         return new SectionUniformDiagnostics(section.sparseSize, true);
     }
 
+    /**
+     * Evaluates a dense-mode section for uniform block state consistency.
+     *
+     * @param section the dense section
+     * @return uniform-state diagnostics
+     */
     private static SectionUniformDiagnostics inspectDenseUniform(final CisSection<BlockState> section) {
         int explicitBlockCount = 0;
         BlockState first = null;
@@ -335,6 +447,12 @@ public final class StorageMetricsAnalyzer {
         return new SectionUniformDiagnostics(explicitBlockCount, explicitBlockCount > 0);
     }
 
+    /**
+     * Computes the number of sparse entries needed to represent the section blocks.
+     *
+     * @param section the target section
+     * @return sparse entry count
+     */
     private static int sparseEntryCount(final CisSection<BlockState> section) {
         if (section.mode == CisSection.MODE_SPARSE) {
             return section.sparseSize;
@@ -349,6 +467,12 @@ public final class StorageMetricsAnalyzer {
         return count;
     }
 
+    /**
+     * Creates a simulated default-sparse report to calculate its comparative bit size.
+     *
+     * @param section target section to evaluate
+     * @return default-sparse report summary, or null if no exceptions exist
+     */
     private static DefaultSparseReport defaultSparseReport(final CisSection<BlockState> section) {
         final Map<BlockState, Integer> counts = new HashMap<>();
         int defaultCount = 0;
@@ -380,6 +504,14 @@ public final class StorageMetricsAnalyzer {
         return new DefaultSparseReport(exceptionCount);
     }
 
+    /**
+     * Returns a string describing the most frequent block states in the section.
+     *
+     * @param section target section
+     * @param limit   maximum states count to list
+     * @return description of top logical states
+     */
+    @SuppressWarnings("SameParameterValue")
     private static String topLogicalStates(final CisSection<BlockState> section, final int limit) {
         if (limit <= 0) {
             return "n/a";
@@ -398,29 +530,56 @@ public final class StorageMetricsAnalyzer {
             }
         }
 
-        return counts.entrySet().stream()
-                     .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
-                                      .thenComparing(Map.Entry::getKey))
-                     .limit(limit)
-                     .map(entry -> entry.getKey() + " x" + entry.getValue())
-                     .reduce((left, right) -> left + ", " + right)
-                     .orElse("n/a");
+        return counts.entrySet()
+                .stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue()
+                        .reversed()
+                        .thenComparing(Map.Entry::getKey))
+                .limit(limit)
+                .map(entry -> entry.getKey() + " x" + entry.getValue())
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("n/a");
     }
 
+    /**
+     * Merges a source count map into a target count map.
+     *
+     * @param target map receiving the counts
+     * @param source map containing counts to add
+     */
     private static void mergeCounts(final Map<Integer, Integer> target, final Map<Integer, Integer> source) {
         for (final Map.Entry<Integer, Integer> entry : source.entrySet()) {
             target.merge(entry.getKey(), entry.getValue(), Integer::sum);
         }
     }
 
+    /**
+     * Increments the count map key value by 1.
+     *
+     * @param counts map to update
+     * @param key    the key to increment
+     */
     private static void incrementCount(final Map<Integer, Integer> counts, final int key) {
         counts.merge(key, 1, Integer::sum);
     }
 
+    /**
+     * Increments the count map string key value by 1.
+     *
+     * @param counts map to update
+     * @param key    the string key to increment
+     */
     private static void incrementStringCount(final Map<String, Integer> counts, final String key) {
         counts.merge(key, 1, Integer::sum);
     }
 
+    /**
+     * Computes the combined size of all MCA files inside a directory.
+     *
+     * @param dir the directory path to scan
+     * @return combined byte size of all files matching *.mca
+     * @throws IOException if directory scanning fails
+     */
     private static long sumFiles(final Path dir) throws IOException {
         if (!Files.isDirectory(dir)) {
             return 0L;
@@ -435,50 +594,168 @@ public final class StorageMetricsAnalyzer {
         return total;
     }
 
+    /**
+     * Accumulator compiling world scan statistics during directory traversal.
+     */
     private static final class WorldScanAccumulator {
 
+        /**
+         * Directory path of Chunkis storage.
+         */
         private final Path chunkisDir;
+
+        /**
+         * Directory path of Vanilla storage.
+         */
         private final Path vanillaDir;
+
+        /**
+         * Size of Vanilla MCA files in bytes.
+         */
         private final long vanillaBytes;
+
+        /**
+         * Bounded list of largest scanned regions.
+         */
         private final BoundedTopList<RegionReport> largestRegions;
+
+        /**
+         * Bounded list of largest scanned chunks.
+         */
         private final BoundedTopList<ChunkReport> largestChunks =
                 new BoundedTopList<>(TOP_CHUNKS, CHUNK_BY_LIVE_BYTES);
+
+        /**
+         * Bounded list of largest dense sections.
+         */
         private final BoundedTopList<DenseSectionReport> largestDenseSections =
                 new BoundedTopList<>(TOP_DENSE_SECTIONS, DENSE_SECTION_BY_ENCODED_BYTES);
+
+        /**
+         * Aggregated encoding totals.
+         */
         private final SectionEncodingTotals sectionTotals = new SectionEncodingTotals();
+
+        /**
+         * Chunks mixture metrics.
+         */
         private final ChunkMixCounters chunkMix = new ChunkMixCounters();
+
+        /**
+         * Dense vs sparse comparison accumulator.
+         */
         private final DenseComparisonAccumulator denseComparison = new DenseComparisonAccumulator();
+
+        /**
+         * Distribution of local dense palette sizes.
+         */
         private final Map<Integer, Integer> densePaletteSizes = new TreeMap<>();
+
+        /**
+         * Distribution of dense bits-per-block configurations.
+         */
         private final Map<Integer, Integer> denseBitsPerBlock = new TreeMap<>();
 
+        /**
+         * Accumulated Chunkis file size in bytes.
+         */
         private long chunkisBytes;
+
+        /**
+         * Accumulated live chunk bytes size.
+         */
         private long liveBytes;
+
+        /**
+         * Accumulated header slack bytes size.
+         */
         private long slackBytes;
+
+        /**
+         * Accumulated reusable fragmented byte size.
+         */
         private long reusableBytes;
+
+        /**
+         * Accumulated allocation hits from free lists.
+         */
         private long reuseHits;
+
+        /**
+         * Accumulated allocation misses requiring file grows.
+         */
         private long reuseMisses;
+
+        /**
+         * Count of stored chunks.
+         */
         private int storedChunks;
+
+        /**
+         * Count of stored base NBT chunks.
+         */
         private int baseChunks;
+
+        /**
+         * Count of free header blocks.
+         */
         private int freeBlocks;
+
+        /**
+         * Largest free block size.
+         */
         private int largestFreeBlock;
+
+        /**
+         * Total block entities count.
+         */
         private int blockEntities;
+
+        /**
+         * Uniform candidate sections count.
+         */
         private int uniformCandidateSections;
+
+        /**
+         * Uniform candidates containing single non-air state.
+         */
         private int fullUniformCandidateSections;
+
+        /**
+         * Candidates rejected due to implicit air blocks.
+         */
         private int implicitAirRejectedUniformSections;
+
+        /**
+         * Candidates rejected due to sanity block checks.
+         */
         private int sanityRejectedUniformSections;
 
+        /**
+         * Constructor.
+         *
+         * @param chunkisDir   Chunkis path
+         * @param vanillaDir   Vanilla path
+         * @param vanillaBytes Vanilla bytes size
+         * @param topRegions   maximum top regions to report
+         */
         private WorldScanAccumulator(
                 final Path chunkisDir,
                 final Path vanillaDir,
                 final long vanillaBytes,
                 final int topRegions
-                                    ) {
+        ) {
             this.chunkisDir = chunkisDir;
             this.vanillaDir = vanillaDir;
             this.vanillaBytes = vanillaBytes;
             this.largestRegions = new BoundedTopList<>(topRegions, REGION_BY_LIVE_BYTES);
         }
 
+        /**
+         * Merges the statistics of a region inspection into the world totals.
+         *
+         * @param inspection the region inspection report to add
+         */
         private void addRegion(final RegionInspection inspection) {
             final RegionReport report = inspection.regionReport();
 
@@ -511,6 +788,11 @@ public final class StorageMetricsAnalyzer {
             sanityRejectedUniformSections += uniform.sanityRejectedUniformSections();
         }
 
+        /**
+         * Compiles the accumulated data into a final StorageReport container.
+         *
+         * @return StorageReport report summary
+         */
         private StorageReport toReport() {
             final int totalChunkSections = storedChunks
                     * (CisConstants.MAX_SECTION_Y - CisConstants.MIN_SECTION_Y + 1);
@@ -563,40 +845,130 @@ public final class StorageMetricsAnalyzer {
         }
     }
 
+    /**
+     * Accumulator compiling region statistics.
+     */
     private static final class RegionScanAccumulator {
 
+        /**
+         * Name of the region.
+         */
         private final String regionName;
+
+        /**
+         * Byte size of the file on disk.
+         */
         private final long fileBytes;
+
+        /**
+         * Metadata structure of the region space.
+         */
         private final CisRegionInspector.RegionSpaceUsage regionSpace;
+
+        /**
+         * Bounded top list tracking largest chunks in this region.
+         */
         private final BoundedTopList<ChunkReport> largestChunks =
                 new BoundedTopList<>(TOP_CHUNKS, CHUNK_BY_LIVE_BYTES);
+
+        /**
+         * Bounded top list tracking largest dense sections in this region.
+         */
         private final BoundedTopList<DenseSectionReport> largestDenseSections =
                 new BoundedTopList<>(TOP_DENSE_SECTIONS, DENSE_SECTION_BY_ENCODED_BYTES);
+
+        /**
+         * Total section encodings.
+         */
         private final SectionEncodingTotals sectionTotals = new SectionEncodingTotals();
+
+        /**
+         * Chunks mixture metrics.
+         */
         private final ChunkMixCounters chunkMix = new ChunkMixCounters();
+
+        /**
+         * Dense section performance comparison metrics.
+         */
         private final DenseComparisonAccumulator denseComparison = new DenseComparisonAccumulator();
+
+        /**
+         * Local palette sizes distribution map.
+         */
         private final Map<Integer, Integer> densePaletteSizes = new TreeMap<>();
+
+        /**
+         * Local bits-per-block configurations map.
+         */
         private final Map<Integer, Integer> denseBitsPerBlock = new TreeMap<>();
 
+        /**
+         * Accumulated live chunk bytes count.
+         */
         private long liveBytes;
+
+        /**
+         * Stored chunks count.
+         */
         private int storedChunks;
+
+        /**
+         * Stored base NBT chunks count.
+         */
         private int baseChunks;
+
+        /**
+         * Total block entities count.
+         */
         private int totalBlockEntities;
+
+        /**
+         * Uniform candidate sections count.
+         */
         private int uniformCandidateSections;
+
+        /**
+         * Uniform candidate sections filled with single non-air state.
+         */
         private int fullUniformCandidateSections;
+
+        /**
+         * Candidates rejected due to implicit air blocks.
+         */
         private int implicitAirRejectedUniformSections;
+
+        /**
+         * Candidates rejected due to sanity block checks.
+         */
         private int sanityRejectedUniformSections;
 
+        /**
+         * Constructor.
+         *
+         * @param regionName  region filename
+         * @param fileBytes   region size on disk
+         * @param regionSpace precomputed space metadata, may be null
+         */
         private RegionScanAccumulator(
                 final String regionName,
                 final long fileBytes,
                 final CisRegionInspector.RegionSpaceUsage regionSpace
-                                     ) {
+        ) {
             this.regionName = regionName;
             this.fileBytes = fileBytes;
             this.regionSpace = regionSpace;
         }
 
+        /**
+         * Appends chunk diagnostics statistics to the region accumulator.
+         *
+         * @param pos                chunk position coordinates
+         * @param liveBytes          payload size in bytes
+         * @param payload            chunk payload diagnostics report
+         * @param denseAnalysis      dense section analysis details
+         * @param uniformDiagnostics uniform candidate diagnostics
+         * @param hasBaseNbt         whether chunk contains base NBT data
+         */
         private void addChunk(
                 final CisChunkPos pos,
                 final int liveBytes,
@@ -604,7 +976,7 @@ public final class StorageMetricsAnalyzer {
                 final DenseSectionAnalysis denseAnalysis,
                 final EncoderInputDiagnostics uniformDiagnostics,
                 final boolean hasBaseNbt
-                             ) {
+        ) {
             storedChunks++;
             this.liveBytes += liveBytes;
             if (hasBaseNbt) {
@@ -638,6 +1010,11 @@ public final class StorageMetricsAnalyzer {
             sanityRejectedUniformSections += uniformDiagnostics.sanityRejectedUniformSections();
         }
 
+        /**
+         * Compiles the region metrics into a RegionInspection record.
+         *
+         * @return RegionInspection report container
+         */
         private RegionInspection toInspection() {
             final long slackBytes = regionSpace == null
                     ? Math.max(0L, fileBytes - (8192 + liveBytes))
@@ -677,18 +1054,45 @@ public final class StorageMetricsAnalyzer {
         }
     }
 
+    /**
+     * Bounded priority-queue helper that retains only the top-N largest elements.
+     *
+     * @param <T> list elements type
+     */
     private static final class BoundedTopList<T> {
 
+        /**
+         * Maximum size of the list.
+         */
         private final int capacity;
+
+        /**
+         * Ordering sorting comparator.
+         */
         private final Comparator<T> ascendingComparator;
+
+        /**
+         * Underlying priority queue.
+         */
         private final PriorityQueue<T> heap;
 
+        /**
+         * Constructor.
+         *
+         * @param capacity            maximum elements to retain
+         * @param ascendingComparator heap sorting comparator
+         */
         private BoundedTopList(final int capacity, final Comparator<T> ascendingComparator) {
             this.capacity = Math.max(0, capacity);
             this.ascendingComparator = ascendingComparator;
             this.heap = new PriorityQueue<>(Math.max(1, this.capacity), ascendingComparator);
         }
 
+        /**
+         * Inserts a value into the top list if it is larger than the smallest element currently retained.
+         *
+         * @param value elements to add
+         */
         private void add(final T value) {
             if (capacity == 0) {
                 return;
@@ -706,12 +1110,22 @@ public final class StorageMetricsAnalyzer {
             }
         }
 
+        /**
+         * Adds a list of values to the bounded top list.
+         *
+         * @param values list of elements to add
+         */
         private void addAll(final List<T> values) {
             for (final T value : values) {
                 add(value);
             }
         }
 
+        /**
+         * Returns an immutable copy of the retained elements sorted in descending order.
+         *
+         * @return descending elements list
+         */
         private List<T> snapshotDescending() {
             final List<T> values = new ArrayList<>(heap);
             values.sort(ascendingComparator.reversed());

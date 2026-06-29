@@ -37,22 +37,49 @@ import net.minecraft.world.storage.RegionFile;
 import net.minecraft.world.storage.StorageKey;
 import org.slf4j.Logger;
 
+/**
+ * Migration engine converting legacy vanilla Minecraft region MCA files into Chunkis CIS files.
+ */
 public final class McaMigrator {
 
+    /**
+     * Logger instance for writing migration logs.
+     */
     private static final Logger LOGGER = Chunkis.LOGGER;
+
+    /**
+     * Pattern regex matching vanilla region file names.
+     */
     private static final Pattern REGION_FILE_PATTERN = Pattern.compile("r\\.(-?\\d+)\\.(-?\\d+)\\.mca");
+
+    /**
+     * Side sizing dimensions of single region files.
+     */
     private static final int REGION_SIZE = 32;
 
-    // Leave one logical core free for the server thread.
-    private static final int MIGRATION_THREADS = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+    /**
+     * Total worker threads dedicated to parallel migration.
+     */
+    private static final int MIGRATION_THREADS = Math.max(1,
+            Runtime.getRuntime()
+                    .availableProcessors() - 1);
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     */
     private McaMigrator() {
     }
 
-    public static void migrateWorld(ServerWorld world) {
-        Path regionDir = resolveMcaRegionDir(world);
+    /**
+     * Migrates vanilla region files (*.mca) in the world's region directory to Chunkis CIS region files.
+     *
+     * @param world server world dimension to migrate
+     */
+    public static void migrateWorld(final ServerWorld world) {
+        final Path regionDir = resolveMcaRegionDir(world);
         LOGGER.info("Checking MCA region directory for world {}: {}",
-                    world.getRegistryKey().getValue(), regionDir);
+                world.getRegistryKey()
+                        .getValue(), regionDir);
 
         if (!Files.exists(regionDir)) {
             LOGGER.info("No MCA region directory found at {}; skipping migration.", regionDir);
@@ -61,10 +88,11 @@ public final class McaMigrator {
 
         // Collect all matching region file paths up-front so we can submit them
         // to a thread pool without holding a DirectoryStream open across I/O.
-        List<int[]> regions = new ArrayList<>();
+        final List<int[]> regions = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(regionDir, "r.*.*.mca")) {
-            for (Path path : stream) {
-                Matcher matcher = REGION_FILE_PATTERN.matcher(path.getFileName().toString());
+            for (final Path path : stream) {
+                final Matcher matcher = REGION_FILE_PATTERN.matcher(path.getFileName()
+                        .toString());
                 if (matcher.matches()) {
                     regions.add(new int[]{
                             Integer.parseInt(matcher.group(1)),
@@ -72,9 +100,10 @@ public final class McaMigrator {
                     });
                 }
             }
-        } catch (IOException e) {
+        } catch (final IOException e) {
             LOGGER.error("Failed to iterate region directory for dimension {}",
-                         world.getRegistryKey().getValue(), e);
+                    world.getRegistryKey()
+                            .getValue(), e);
             return;
         }
 
@@ -85,26 +114,26 @@ public final class McaMigrator {
         // Parallel migration is safe: RegionFile.read/write are synchronized,
         // the region-file cache is guarded by a ReadWriteLock, CisMapping uses
         // RW-locking internally, and compression state is ThreadLocal.
-        CisStorage<?, ?, ?, ?> storage = FabricCisStorageHelper.getStorage(world);
-        AtomicInteger totalMigrated = new AtomicInteger();
-        ExecutorService executor = Executors.newFixedThreadPool(MIGRATION_THREADS);
+        final CisStorage<?, ?, ?, ?> storage = FabricCisStorageHelper.getStorage(world);
+        final AtomicInteger totalMigrated = new AtomicInteger();
+        final ExecutorService executor = Executors.newFixedThreadPool(MIGRATION_THREADS);
 
         try {
-            List<Future<?>> futures = new ArrayList<>(regions.size());
-            for (int[] coords : regions) {
-                int rx = coords[0], rz = coords[1];
-                Path mcaPath = regionDir.resolve(
-                        "r." + rx + "." + rz + ".mca");
+            final List<Future<?>> futures = new ArrayList<>(regions.size());
+            for (final int[] coords : regions) {
+                final int rx = coords[0];
+                final int rz = coords[1];
+                final Path mcaPath = regionDir.resolve("r." + rx + "." + rz + ".mca");
                 futures.add(executor.submit(() -> {
-                    int count = migrateRegionFile(world, storage, mcaPath, rx, rz);
+                    final int count = migrateRegionFile(world, storage, mcaPath, rx, rz);
                     totalMigrated.addAndGet(count);
                 }));
             }
             // Wait for all migrations to finish and surface any exceptions.
-            for (Future<?> f : futures) {
+            for (final Future<?> f : futures) {
                 try {
                     f.get();
-                } catch (Exception e) {
+                } catch (final Exception e) {
                     LOGGER.error("A region migration task failed", e);
                 }
             }
@@ -112,28 +141,43 @@ public final class McaMigrator {
             executor.shutdown();
         }
 
-        int migrated = totalMigrated.get();
+        final int migrated = totalMigrated.get();
         LOGGER.info("Chunkis MCA Migration complete for world {}. Converted {} chunks total.",
-                    world.getRegistryKey().getValue(), migrated);
+                world.getRegistryKey()
+                        .getValue(), migrated);
     }
 
     /**
      * Resolves the {@code region/} directory for the given world dimension.
+     *
+     * @param world the world dimension to inspect
+     * @return absolute path to the dimension's vanilla region directory
      */
-    private static Path resolveMcaRegionDir(ServerWorld world) {
-        Path root = Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT);
+    private static Path resolveMcaRegionDir(final ServerWorld world) {
+        final Path root = Objects.requireNonNull(world.getServer())
+                .getSavePath(WorldSavePath.ROOT);
         return ChunkisStoragePaths.computeVanillaRegionDirectory(root, world.getRegistryKey());
     }
 
+    /**
+     * Migrates a single MCA region file into CIS format.
+     *
+     * @param world   server world dimension
+     * @param storage Chunkis storage manager instance
+     * @param mcaPath path to vanilla MCA file
+     * @param rx      region X coordinate
+     * @param rz      region Z coordinate
+     * @return count of migrated chunks
+     */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static int migrateRegionFile(
-            ServerWorld world,
-            CisStorage storage, // raw type contained to this method
-            Path mcaPath,
-            int rx, int rz) {
+            final ServerWorld world,
+            final CisStorage storage, // raw type contained to this method
+            final Path mcaPath,
+            final int rx, final int rz) {
 
         int migrated = 0;
-        StorageKey storageKey = new StorageKey("chunk", world.getRegistryKey(), "chunk");
+        final StorageKey storageKey = new StorageKey("chunk", world.getRegistryKey(), "chunk");
         LOGGER.info("Chunkis migrator: converting {} to CIS...", mcaPath.getFileName());
 
         try (RegionFile regionFile = new RegionFile(
@@ -142,20 +186,20 @@ public final class McaMigrator {
             // Single mutable BlockPos reused across every block in every chunk
             // to avoid allocating up to 16*16*384 = ~98 000 short-lived objects
             // per region file.
-            BlockPos.Mutable mutablePos = new BlockPos.Mutable();
-            PalettesFactory palettesFactory = PalettesFactory.fromRegistryManager(world.getRegistryManager());
+            final BlockPos.Mutable mutablePos = new BlockPos.Mutable();
+            final PalettesFactory palettesFactory = PalettesFactory.fromRegistryManager(world.getRegistryManager());
 
             for (int x = 0; x < REGION_SIZE; x++) {
                 for (int z = 0; z < REGION_SIZE; z++) {
 
-                    ChunkPos globalPos = new ChunkPos((rx << 5) + x, (rz << 5) + z);
+                    final ChunkPos globalPos = new ChunkPos((rx << 5) + x, (rz << 5) + z);
 
                     try (DataInputStream in = regionFile.getChunkInputStream(globalPos)) {
                         if (in == null) {
                             continue;
                         }
 
-                        NbtCompound nbt = NbtIo.readCompound(in, NbtSizeTracker.ofUnlimitedBytes());
+                        final NbtCompound nbt = NbtIo.readCompound(in, NbtSizeTracker.ofUnlimitedBytes());
                         if (nbt == null) {
                             continue;
                         }
@@ -163,35 +207,38 @@ public final class McaMigrator {
                         // PointOfInterestStorage is not thread-safe: synchronize
                         // only this call so its internal Long2ObjectOpenHashMap
                         // is never mutated by two threads at once.
-                        ProtoChunk proto;
+                        final ProtoChunk proto;
                         synchronized (world.getPointOfInterestStorage()) {
                             proto = Objects.requireNonNull(SerializedChunk.fromNbt(
-                                                                   world,
-                                                                   palettesFactory,
-                                                                   nbt)
-                                                          )
-                                           .convert(
-                                                   world,
-                                                   world.getPointOfInterestStorage(),
-                                                   storageKey,
-                                                   globalPos
-                                                   );
+                                            world,
+                                            palettesFactory,
+                                            nbt)
+                                    )
+                                    .convert(
+                                            world,
+                                            world.getPointOfInterestStorage(),
+                                            storageKey,
+                                            globalPos
+                                    );
                         }
 
-                        ChunkDelta<BlockState, NbtCompound> delta = buildChunkDelta(proto, nbt, globalPos, mutablePos);
+                        final ChunkDelta<BlockState, NbtCompound> delta = buildChunkDelta(proto,
+                                nbt,
+                                globalPos,
+                                mutablePos);
 
                         if (!delta.isEmpty()) {
                             storage.save(FabricCisStorageHelper.toStoragePos(globalPos), delta);
                             migrated++;
                         }
-                    } catch (Exception e) {
+                    } catch (final Exception e) {
                         LOGGER.error("Failed to migrate chunk {} in {}",
-                                     globalPos, mcaPath.getFileName(), e);
+                                globalPos, mcaPath.getFileName(), e);
                     }
                 }
             }
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             LOGGER.error("Failed to read region file {}", mcaPath.getFileName(), e);
         }
 
@@ -204,36 +251,38 @@ public final class McaMigrator {
     /**
      * Builds a {@link ChunkDelta} from a deserialized {@link ProtoChunk}.
      *
-     * <p>
-     * Extracted so the hot path (block iteration) is clearly isolated and
-     * the
-     * mutable {@link BlockPos} lifetime is obvious.
+     * <p>Extracted so the hot path (block iteration) is clearly isolated and the
+     * mutable {@link BlockPos} lifetime is obvious.</p>
+     *
+     * @param proto      the deserialized proto chunk
+     * @param sourceNbt  raw source chunk NBT compound
+     * @param globalPos  coordinates of the chunk
+     * @param mutablePos mutable block pos reused to avoid allocations
+     * @return constructed ChunkDelta container
      */
     private static ChunkDelta<BlockState, NbtCompound> buildChunkDelta(
-            ProtoChunk proto,
-            NbtCompound sourceNbt,
-            ChunkPos globalPos,
-            BlockPos.Mutable mutablePos) {
+            final ProtoChunk proto,
+            final NbtCompound sourceNbt,
+            final ChunkPos globalPos,
+            final BlockPos.Mutable mutablePos) {
 
-        ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();
-        NbtCompound structureData = CisNbtUtil.extractStructureData(sourceNbt);
+        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();
+        final NbtCompound structureData = CisNbtUtil.extractStructureData(sourceNbt);
         delta.setSuppressInitialRepopulation(true);
         delta.setChunkMetadata(CisNbtUtil.createChunkMetadata(structureData, true), false);
 
-        int startX = globalPos.getStartX();
-        int startZ = globalPos.getStartZ();
-        int bottomY = proto.getBottomY();
-        int topY = bottomY + proto.getHeight();
+        final int startX = globalPos.getStartX();
+        final int startZ = globalPos.getStartZ();
+        final int bottomY = proto.getBottomY();
+        final int topY = bottomY + proto.getHeight();
 
         // --- Block states ---
-        // Reuse mutablePos to avoid allocating ~98 000 BlockPos objects per chunk
-        // column.
+        // Reuse mutablePos to avoid allocating ~98 000 BlockPos objects per chunk column.
         for (int by = bottomY; by < topY; by++) {
-            //
             for (int bx = 0; bx < 16; bx++) {
                 for (int bz = 0; bz < 16; bz++) {
                     mutablePos.set(startX + bx, by, startZ + bz);
-                    BlockState state = proto.getBlockState(mutablePos);
+                    final BlockState state = proto.getBlockState(mutablePos);
                     if (state != null && !state.isAir()) {
                         delta.addBlockChange(bx, by, bz, state);
                     }
@@ -243,33 +292,35 @@ public final class McaMigrator {
 
         // --- Block entities ---
         // Use entrySet() to avoid a second map lookup per key.
-        Map<BlockPos, NbtCompound> beNbts = proto.getBlockEntityNbts();
-        for (Map.Entry<BlockPos, NbtCompound> entry : beNbts.entrySet()) {
-            NbtCompound beNbt = entry.getValue();
+        final Map<BlockPos, NbtCompound> beNbts = proto.getBlockEntityNbts();
+        for (final Map.Entry<BlockPos, NbtCompound> entry : beNbts.entrySet()) {
+            final NbtCompound beNbt = entry.getValue();
             if (beNbt != null) {
-                BlockPos bePos = entry.getKey();
+                final BlockPos bePos = entry.getKey();
                 delta.addBlockEntityData(bePos.getX(), bePos.getY(), bePos.getZ(), beNbt);
             }
         }
 
         // --- Entities ---
-        for (NbtCompound entityNbt : proto.getEntities()) {
+        for (final NbtCompound entityNbt : proto.getEntities()) {
             delta.addPendingEntity(entityNbt);
         }
 
         return delta;
     }
 
-    private static void backupRegionFile(Path mcaPath) {
-        Path backupPath = mcaPath.resolveSibling(mcaPath.getFileName() + ".backup");
+    /**
+     * Renames the original MCA file to indicate it was backed up after migration.
+     *
+     * @param mcaPath path to vanilla MCA file
+     */
+    private static void backupRegionFile(final Path mcaPath) {
+        final Path backupPath = mcaPath.resolveSibling(mcaPath.getFileName() + ".backup");
         try {
             Files.move(mcaPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
             LOGGER.info("Backed up {} → {}", mcaPath.getFileName(), backupPath.getFileName());
-        } catch (IOException e) {
+        } catch (final IOException e) {
             LOGGER.error("Failed to back up {}", mcaPath.getFileName(), e);
         }
     }
 }
-
-
-

@@ -26,33 +26,81 @@ import net.minecraft.text.Text;
 import net.minecraft.util.WorldSavePath;
 import net.minecraft.util.math.ChunkPos;
 
+/**
+ * Execution actions backing the Chunkis debug and trace commands.
+ */
 public final class ChunkDebugActions {
 
+    /**
+     * Maximum allowed byte size for a single chat message before truncation.
+     */
     private static final int MAX_CHAT_MESSAGE_BYTES = 12_000;
+
+    /**
+     * Suffix text appended to truncated chat messages.
+     */
     private static final String CHAT_TRUNCATION_SUFFIX = "[truncated; full trace written to log/file]";
+
+    /**
+     * Padded truncation suffix.
+     */
     private static final String CHAT_TRUNCATION_SUFFIX_PADDED = " " + CHAT_TRUNCATION_SUFFIX;
+
+    /**
+     * Byte length of the padded truncation suffix.
+     */
     private static final int CHAT_TRUNCATION_SUFFIX_BYTES =
             CHAT_TRUNCATION_SUFFIX_PADDED.getBytes(StandardCharsets.UTF_8).length;
 
+    /**
+     * Date/time formatter for generating trace export filenames.
+     */
     private static final DateTimeFormatter FILE_TIME_FORMAT =
-            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").withZone(ZoneOffset.UTC);
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
+                    .withZone(ZoneOffset.UTC);
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkDebugActions() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Sets the active debug trace level.
+     *
+     * @param source  command execution source
+     * @param level   target debug level
+     * @param message success feedback message
+     * @return 1 on success
+     */
     public static int setLevel(final ServerCommandSource source, final ChunkisDebugLevel level, final String message) {
         ChunkisDebugConfig.setLevel(level);
         sendFeedback(source, "[Chunkis] " + message, true);
         return 1;
     }
 
+    /**
+     * Clears all stored in-memory trace events.
+     *
+     * @param source command execution source
+     * @return 1 on success
+     */
     public static int clear(final ServerCommandSource source) {
         ChunkTraceStore.clear();
         sendFeedback(source, "[Chunkis] Cleared in-memory trace events.", true);
         return 1;
     }
 
+    /**
+     * Prints the latest trace events.
+     *
+     * @param source command execution source
+     * @param count  maximum trace count to fetch
+     * @return number of events printed
+     */
     public static int latest(final ServerCommandSource source, final int count) {
         final List<ChunkTraceEvent> newestFirst = ChunkTraceStore.latest(count);
         if (newestFirst.isEmpty()) {
@@ -62,6 +110,12 @@ public final class ChunkDebugActions {
         return sendEventsOldestFirst(source, newestFirst);
     }
 
+    /**
+     * Lists all recorded chunk suspect markers.
+     *
+     * @param source command execution source
+     * @return number of suspects printed
+     */
     public static int listSuspects(final ServerCommandSource source) {
         final List<ChunkTraceSuspect> suspects = ChunkTraceStore.suspects();
         if (suspects.isEmpty()) {
@@ -74,12 +128,25 @@ public final class ChunkDebugActions {
         return suspects.size();
     }
 
+    /**
+     * Clears all chunk suspect snapshots.
+     *
+     * @param source command execution source
+     * @return 1 on success
+     */
     public static int clearSuspects(final ServerCommandSource source) {
         ChunkTraceStore.clearSuspects();
         sendFeedback(source, "[Chunkis] Cleared retained suspect snapshots.", true);
         return 1;
     }
 
+    /**
+     * Displays a detailed dump of a suspect snapshot.
+     *
+     * @param source    command execution source
+     * @param suspectId identifier of the suspect
+     * @return 1 if found, 0 if not found
+     */
     public static int showSuspect(final ServerCommandSource source, final long suspectId) {
         final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(suspectId);
         if (suspect == null) {
@@ -90,6 +157,14 @@ public final class ChunkDebugActions {
         return 1;
     }
 
+    /**
+     * Displays a detailed dump of a suspect snapshot by coordinates.
+     *
+     * @param source command execution source
+     * @param chunkX chunk X position
+     * @param chunkZ chunk Z position
+     * @return 1 if found, 0 if not found
+     */
     public static int showSuspectChunk(final ServerCommandSource source, final int chunkX, final int chunkZ) {
         final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(new DebugChunkKey(chunkX, chunkZ));
         if (suspect == null) {
@@ -100,6 +175,13 @@ public final class ChunkDebugActions {
         return 1;
     }
 
+    /**
+     * Lists the trace history timeline of a specific suspect snapshot.
+     *
+     * @param source    command execution source
+     * @param suspectId identifier of the suspect
+     * @return number of timeline events printed
+     */
     public static int showSuspectTimeline(final ServerCommandSource source, final long suspectId) {
         final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(suspectId);
         if (suspect == null) {
@@ -114,13 +196,20 @@ public final class ChunkDebugActions {
         sendFeedback(
                 source, "[Chunkis] Retained suspect timeline for " + suspectId + " (" + timeline.size() + " " +
                         "events)", false
-                    );
+        );
         for (final ChunkTraceEvent event : timeline) {
             sendFeedback(source, ChunkDebugCommand.formatEvent(event), false);
         }
         return timeline.size();
     }
 
+    /**
+     * Lists recent trace failure events.
+     *
+     * @param source command execution source
+     * @param count  maximum entries limit
+     * @return number of failures printed
+     */
     public static int listFailures(final ServerCommandSource source, final int count) {
         final List<ChunkTraceEvent> newestFirst = ChunkTraceStore.latestFailures(count);
         if (newestFirst.isEmpty()) {
@@ -130,6 +219,13 @@ public final class ChunkDebugActions {
         return sendEventsOldestFirst(source, newestFirst);
     }
 
+    /**
+     * Displays a trace event details page.
+     *
+     * @param source  command execution source
+     * @param eventId identifier of the trace event
+     * @return 1 if found, 0 if not found
+     */
     public static int showFailure(final ServerCommandSource source, final long eventId) {
         final ChunkTraceEvent event = ChunkTraceStore.findEvent(eventId);
         if (event == null) {
@@ -140,18 +236,43 @@ public final class ChunkDebugActions {
         return 1;
     }
 
+    /**
+     * Registers a watchpoint for a specific chunk.
+     *
+     * @param source command execution source
+     * @param chunkX chunk X position
+     * @param chunkZ chunk Z position
+     * @return 1 on success
+     */
     public static int watchChunk(final ServerCommandSource source, final int chunkX, final int chunkZ) {
         ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(chunkX, chunkZ));
         sendFeedback(source, "[Chunkis] Watching chunk " + chunkX + "," + chunkZ, true);
         return 1;
     }
 
+    /**
+     * Registers a watchpoint for a region.
+     *
+     * @param source  command execution source
+     * @param regionX region X position
+     * @param regionZ region Z position
+     * @return 1 on success
+     */
     public static int watchRegion(final ServerCommandSource source, final int regionX, final int regionZ) {
         ChunkTraceWatchpoints.watchRegion(new DebugRegionKey(regionX, regionZ));
         sendFeedback(source, "[Chunkis] Watching region " + regionX + "," + regionZ, true);
         return 1;
     }
 
+    /**
+     * Registers a watchpoint for a block coordinate.
+     *
+     * @param source command execution source
+     * @param x      block X
+     * @param y      block Y
+     * @param z      block Z
+     * @return 1 on success
+     */
     public static int watchBlock(final ServerCommandSource source, final int x, final int y, final int z) {
         final String worldId = worldIdOf(source);
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block(worldId, x, y, z));
@@ -159,6 +280,15 @@ public final class ChunkDebugActions {
         return 1;
     }
 
+    /**
+     * Registers a watchpoint for a block entity coordinate.
+     *
+     * @param source command execution source
+     * @param x      block entity X
+     * @param y      block entity Y
+     * @param z      block entity Z
+     * @return 1 on success
+     */
     public static int watchBlockEntity(final ServerCommandSource source, final int x, final int y, final int z) {
         final String worldId = worldIdOf(source);
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.blockEntity(worldId, x, y, z));
@@ -166,6 +296,13 @@ public final class ChunkDebugActions {
         return 1;
     }
 
+    /**
+     * Registers a watchpoint for an entity by UUID string.
+     *
+     * @param source command execution source
+     * @param uuid   entity UUID
+     * @return 1 on success
+     */
     public static int watchEntity(final ServerCommandSource source, final String uuid) {
         final String worldId = worldIdOf(source);
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.entity(worldId, uuid));
@@ -173,17 +310,36 @@ public final class ChunkDebugActions {
         return 1;
     }
 
+    /**
+     * Clears all configured watchpoints.
+     *
+     * @param source command execution source
+     * @return 1 on success
+     */
     public static int clearWatchpoints(final ServerCommandSource source) {
         ChunkTraceWatchpoints.clear();
         sendFeedback(source, "[Chunkis] Cleared trace watchpoints.", true);
         return 1;
     }
 
+    /**
+     * Prints a summary list of all active watchpoints.
+     *
+     * @param source command execution source
+     * @return 1 on success
+     */
     public static int listWatchpoints(final ServerCommandSource source) {
         sendFeedback(source, "[Chunkis] " + ChunkDebugCommand.formatWatchpointSummary(), false);
         return 1;
     }
 
+    /**
+     * Lists the latest events matching active watchpoints.
+     *
+     * @param source command execution source
+     * @param count  maximum count limit
+     * @return number of events printed, 0 if no watchpoints configured
+     */
     public static int latestWatched(final ServerCommandSource source, final int count) {
         if (ChunkTraceWatchpoints.isEmpty()) {
             source.sendError(Text.literal("[Chunkis] No watchpoints configured."));
@@ -197,6 +353,12 @@ public final class ChunkDebugActions {
         return sendEventsOldestFirst(source, newestFirst);
     }
 
+    /**
+     * Prints status of pending saves or changes on watched chunks.
+     *
+     * @param source command execution source
+     * @return number of watched chunks analyzed
+     */
     public static int pendingWatched(final ServerCommandSource source) {
         final List<DebugChunkKey> watchedChunks = ChunkTraceWatchpoints.watchedChunks();
         if (watchedChunks.isEmpty()) {
@@ -216,10 +378,24 @@ public final class ChunkDebugActions {
         return watchedChunks.size();
     }
 
+    /**
+     * Exports latest trace events to a JSONL log file.
+     *
+     * @param source command execution source
+     * @param count  maximum count limit
+     * @return number of exported events
+     */
     public static int exportLatest(final ServerCommandSource source, final int count) {
         return exportEvents(source, ChunkTraceStore.snapshotMatching(event -> true), "latest-" + count, count, false);
     }
 
+    /**
+     * Exports watched trace events to a JSONL log file.
+     *
+     * @param source command execution source
+     * @param count  maximum count limit
+     * @return number of exported events
+     */
     public static int exportWatched(final ServerCommandSource source, final int count) {
         if (ChunkTraceWatchpoints.isEmpty()) {
             source.sendError(Text.literal("[Chunkis] No watchpoints configured."));
@@ -228,9 +404,19 @@ public final class ChunkDebugActions {
         return exportEvents(
                 source, ChunkTraceStore.snapshotMatching(ChunkTraceWatchpoints::matches),
                 "watched-" + count, count, true
-                           );
+        );
     }
 
+    /**
+     * Helper to slice and write events list to a JSONL destination.
+     *
+     * @param source      command execution source
+     * @param oldestFirst snapshot list of events
+     * @param scope       filename identifier scope tag
+     * @param count       maximum elements to export
+     * @param watched     true if filter applied
+     * @return count of exported events
+     */
     private static int exportEvents(
             final ServerCommandSource source, final List<ChunkTraceEvent> oldestFirst,
             final String scope, final int count, final boolean watched) {
@@ -238,7 +424,7 @@ public final class ChunkDebugActions {
             sendFeedback(
                     source, watched ? ChunkDebugCommand.formatNoWatchedTraceMessage() : "[Chunkis] No trace " +
                                                                                         "events stored.", false
-                        );
+            );
             return 1;
         }
         final int fromIndex = Math.max(0, oldestFirst.size() - count);
@@ -254,6 +440,12 @@ public final class ChunkDebugActions {
         return exportSlice.size();
     }
 
+    /**
+     * Truncates message text to fit within chat feedback length guidelines.
+     *
+     * @param message raw input message
+     * @return ChatMessage record container
+     */
     public static ChunkDebugCommand.ChatMessage truncateForChat(final String message) {
         final String safeMessage = message == null ? "" : message;
         final byte[] encoded = safeMessage.getBytes(StandardCharsets.UTF_8);
@@ -270,6 +462,13 @@ public final class ChunkDebugActions {
                 new String(encoded, 0, end, StandardCharsets.UTF_8) + CHAT_TRUNCATION_SUFFIX_PADDED, true);
     }
 
+    /**
+     * Truncates and transmits command feed feedback.
+     *
+     * @param source         command execution source
+     * @param message        feedback text
+     * @param broadcastToOps true to notify ops
+     */
     private static void sendFeedback(
             final ServerCommandSource source, final String message,
             final boolean broadcastToOps) {
@@ -281,6 +480,13 @@ public final class ChunkDebugActions {
         source.sendFeedback(() -> Text.literal(chatMessage.text()), broadcastToOps);
     }
 
+    /**
+     * Dumps oversized chat messages to a temporary debug file.
+     *
+     * @param source  command execution source
+     * @param message complete original message text
+     * @return path to the generated dump file
+     */
     private static Path writeOversizedChatDump(final ServerCommandSource source, final String message) {
         final Path path =
                 resolveExportPath(source, "chat-dump").resolveSibling(
@@ -294,12 +500,28 @@ public final class ChunkDebugActions {
         return path;
     }
 
+    /**
+     * Generates a file path destination for trace logs exports.
+     *
+     * @param source command execution source
+     * @param scope  filename tag label
+     * @return target export Path
+     */
     static Path resolveExportPath(final ServerCommandSource source, final String scope) {
-        final Path saveRoot = source.getServer().getSavePath(WorldSavePath.ROOT);
-        return saveRoot.resolve("chunkis/debug").resolve(
-                "trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
+        final Path saveRoot = source.getServer()
+                .getSavePath(WorldSavePath.ROOT);
+        return saveRoot.resolve("chunkis/debug")
+                .resolve(
+                        "trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
     }
 
+    /**
+     * Transmits a list of events to feedback console sorted from oldest to newest.
+     *
+     * @param source      command execution source
+     * @param newestFirst list of events sorted with newest at index 0
+     * @return events count printed
+     */
     private static int sendEventsOldestFirst(
             final ServerCommandSource source,
             final List<ChunkTraceEvent> newestFirst) {
@@ -309,7 +531,16 @@ public final class ChunkDebugActions {
         return newestFirst.size();
     }
 
+    /**
+     * Helper to resolve the string identifier of the world dimension.
+     *
+     * @param source command execution source
+     * @return registry path identifier string
+     */
     private static String worldIdOf(final ServerCommandSource source) {
-        return source.getWorld().getRegistryKey().getValue().toString();
+        return source.getWorld()
+                .getRegistryKey()
+                .getValue()
+                .toString();
     }
 }
