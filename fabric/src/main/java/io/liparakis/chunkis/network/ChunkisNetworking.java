@@ -8,7 +8,7 @@ import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
-import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkEncoder;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -103,7 +103,7 @@ public final class ChunkisNetworking {
                 SEND_SOURCE,
                 "starting delta send to player " + player.getName().getString(),
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 delta.isDirty(),
@@ -157,7 +157,7 @@ public final class ChunkisNetworking {
                     SEND_SOURCE,
                     describePayloadOutcome(player.getName().getString(), rawData.length, payload),
                     worldId,
-                    new DebugChunkKey(pos.x, pos.z),
+                    DebugChunkKeys.of(pos),
                     null,
                     operationId,
                     delta.isDirty(),
@@ -203,7 +203,7 @@ public final class ChunkisNetworking {
                 SEND_SOURCE,
                 message,
                 worldId,
-                new DebugChunkKey(pos.x, pos.z),
+                DebugChunkKeys.of(pos),
                 null,
                 operationId,
                 null,

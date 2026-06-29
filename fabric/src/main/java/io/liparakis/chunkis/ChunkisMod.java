@@ -4,7 +4,6 @@ import io.liparakis.chunkis.command.DurabilityTestCommand;
 import io.liparakis.chunkis.command.ChunkDebugCommand;
 import io.liparakis.chunkis.command.StorageReportCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
@@ -14,7 +13,6 @@ import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.portal.PortalChunkIndexManager;
 import io.liparakis.chunkis.portal.PortalLinkManager;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
-import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureScheduler;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
@@ -69,37 +67,23 @@ public final class ChunkisMod implements ModInitializer {
         registerPayloads();
         registerCommands();
         registerEvents();
-        ChunkTraceWatchpoints.watchPayload(
-                PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8)
-        );
+        ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8));
     }
 
     /**
      * Registers Chunkis network payloads.
      */
     private static void registerPayloads() {
-        PayloadTypeRegistry.playS2C().register(
-                ChunkDeltaPayload.ID,
-                ChunkDeltaPayload.CODEC
-        );
+        PayloadTypeRegistry.playS2C().register(ChunkDeltaPayload.ID, ChunkDeltaPayload.CODEC);
     }
 
     /**
      * Registers Chunkis server commands.
      */
     private static void registerCommands() {
-        CommandRegistrationCallback.EVENT.register(
-                (dispatcher, registryAccess, environment) ->
-                        DurabilityTestCommand.register(dispatcher)
-        );
-        CommandRegistrationCallback.EVENT.register(
-                (dispatcher, registryAccess, environment) ->
-                        ChunkDebugCommand.register(dispatcher)
-        );
-        CommandRegistrationCallback.EVENT.register(
-                (dispatcher, registryAccess, environment) ->
-                        StorageReportCommand.register(dispatcher)
-        );
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> DurabilityTestCommand.register(dispatcher));
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> ChunkDebugCommand.register(dispatcher));
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> StorageReportCommand.register(dispatcher));
     }
 
     /**
@@ -109,29 +93,17 @@ public final class ChunkisMod implements ModInitializer {
      * storage are still available. Server stopped clears static managers.</p>
      */
     private static void registerEvents() {
-        ServerWorldEvents.LOAD.register(
-                (server, world) -> migrateWorld(world)
-        );
+        ServerWorldEvents.LOAD.register((server, world) -> migrateWorld(world));
 
-        ServerChunkEvents.CHUNK_UNLOAD.register(
-                (world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk)
-        );
+        ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk));
 
-        ServerTickEvents.END_WORLD_TICK.register(
-                ScheduledEntityReplayQueue::tick
-        );
+        ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
 
-        ServerTickEvents.END_SERVER_TICK.register(
-                server -> PayloadWatchTracer.tickEntityReloadAssertions()
-        );
+        ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
 
-        ServerLifecycleEvents.SERVER_STOPPING.register(
-                ChunkisMod::flushBeforeServerStop
-        );
+        ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
 
-        ServerLifecycleEvents.SERVER_STOPPED.register(
-                server -> clearRuntimeState()
-        );
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> clearRuntimeState());
     }
 
     /**
@@ -152,7 +124,6 @@ public final class ChunkisMod implements ModInitializer {
      *
      * <p>The per-world order is preserved exactly:</p>
      * <ol>
-     *   <li>flush and close base chunk capture</li>
      *   <li>force-save currently pending tracked deltas</li>
      *   <li>flush and close async CIS saves</li>
      *   <li>close portal chunk index state</li>
@@ -175,7 +146,6 @@ public final class ChunkisMod implements ModInitializer {
      * @param world world being stopped
      */
     private static void flushWorldBeforeStop(final ServerWorld world) {
-        BaseChunkCaptureScheduler.flushAndClose(world);
         flushPendingDeltas(world);
         AsyncCisSaveManager.flushAndClose(world);
         PortalChunkIndexManager.close(world);
@@ -194,24 +164,19 @@ public final class ChunkisMod implements ModInitializer {
      * @param world world whose pending deltas should be flushed
      */
     private static void flushPendingDeltas(final ServerWorld world) {
-        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending =
-                GlobalChunkTracker.getPendingDeltas(world);
+        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending = GlobalChunkTracker.getPendingDeltas(world);
 
         if (pending.isEmpty()) {
             return;
         }
 
-        Chunkis.LOGGER.warn(
-                "Chunkis [STOPPING]: Force-saving {} dirty delta(s) for {}",
-                pending.size(),
-                world.getRegistryKey().getValue()
-        );
+        Chunkis.LOGGER.warn("Chunkis [STOPPING]: Force-saving {} dirty delta(s) for {}", pending.size(),
+                world.getRegistryKey().getValue());
 
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
                 FabricCisStorageHelper.getStorage(world);
 
-        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry
-                : pending.entrySet()) {
+        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
             savePendingDelta(world, storage, entry.getKey(), entry.getValue());
         }
     }
@@ -228,30 +193,19 @@ public final class ChunkisMod implements ModInitializer {
      * @param delta   delta to save, may be {@code null}
      */
     @SuppressWarnings("All")
-    private static void savePendingDelta(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
-            final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+    private static void savePendingDelta(final ServerWorld world, final CisStorage<Block, BlockState, Property<?>,
+            NbtCompound> storage, final ChunkPos pos, final ChunkDelta<BlockState, NbtCompound> delta) {
         if (delta == null || !delta.isDirty()) {
             return;
         }
 
         if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true)) {
-            DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(
-                    world,
-                    pos,
-                    delta,
-                    "server-stopping",
-                    "ChunkisMod#savePendingDelta"
-            );
+            DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(world, pos, delta, "server-stopping", "ChunkisMod"
+                    + "#savePendingDelta");
             return;
         }
 
-        if (storage.save(new CisChunkPos(pos.x, pos.z), delta)) {
-            GlobalChunkTracker.markSaved(world, pos);
-        }
+        FabricCisStorageHelper.saveTrackedDelta(world, storage, pos, delta);
     }
 
     /**
@@ -264,7 +218,6 @@ public final class ChunkisMod implements ModInitializer {
     private static void clearRuntimeState() {
         GlobalChunkTracker.clear();
         AsyncCisSaveManager.clear();
-        BaseChunkCaptureScheduler.clear();
         PortalChunkIndexManager.clear();
         PortalLinkManager.clear();
         ScheduledEntityReplayQueue.clear();

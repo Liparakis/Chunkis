@@ -10,7 +10,6 @@ import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
-import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureScheduler;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
@@ -124,7 +123,6 @@ public final class AsyncSaveDataLossGameTest {
                     );
 
                     world.getChunkManager().save(false);
-                    BaseChunkCaptureScheduler.flushAndClose(world);
                     AsyncCisSaveManager.flushAndClose(world);
 
                     assertPersistedBaseChunkPresent(context, world, targets.nearChunk(), "near");

@@ -135,7 +135,7 @@ public final class StorageMetricsAnalyzer {
 
                 CisPayloadDiagnosticsReader.RegionFileReader.validateChunkRange(regionPath, offset, length,
                         channelBytes);
-                final CisChunkPos pos = new CisChunkPos(
+                final var pos = FabricCisStorageHelper.toStoragePos(
                         (coordinates.x() << 5) + (slot & 31),
                         (coordinates.z() << 5) + (slot >>> 5)
                 );

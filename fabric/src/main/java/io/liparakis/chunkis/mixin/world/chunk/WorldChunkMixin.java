@@ -12,6 +12,7 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityNbtCapture;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
@@ -443,10 +444,8 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     ChunkisDebugDomain.ASSERTIONS, ChunkTraceEventType.ASSERTION_FAILED,
                     ChunkTraceSeverity.ERROR, ChunkTraceReason.OFF_THREAD_MUTATION_REJECTED, SOURCE +
                             "#chunkis$shouldNotTrackChunkMutation", "rejected mutation outside server thread",
-                    world.getRegistryKey().getValue().toString(), new DebugChunkKey(
-                            chunk.getPos().x,
-                            chunk.getPos().z
-                    ), null, null, null, null
+                    world.getRegistryKey().getValue().toString(), DebugChunkKeys.of(chunk.getPos()),
+                    null, null, null, null
             );
             Chunkis.LOGGER.warn(
                     "Chunkis: Block change rejected outside server thread for chunk {} on thread {}",
@@ -500,7 +499,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                         + cause.name().toLowerCase().replace('_', '-')
                         + (pos != null ? " at " + pos.toShortString() : ""),
                 chunk.getWorld().getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                DebugChunkKeys.of(chunk.getPos()),
                 null,
                 null,
                 false,
@@ -522,7 +521,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     SET_BLOCK_STATE_SOURCE,
                     "passive context produced first dirty mutation at " + pos.toShortString(),
                     chunk.getWorld().getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                    DebugChunkKeys.of(chunk.getPos()),
                     null,
                     null,
                     true,
@@ -537,7 +536,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 SET_BLOCK_STATE_SOURCE,
                 "accepted real chunk edit at " + pos.toShortString(),
                 chunk.getWorld().getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                DebugChunkKeys.of(chunk.getPos()),
                 null,
                 null,
                 true,
@@ -619,7 +618,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     RESTORE_SOURCE,
                     "world chunk before sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                    DebugChunkKeys.of(chunk.getPos()),
                     null,
                     operationId,
                     protoDelta.isDirty(),
@@ -660,7 +659,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
             if (coreRestoreCompleted) {
                 chunkis$tracePostRestoreFailure(
                         world.getRegistryKey().getValue().toString(),
-                        new DebugChunkKey(chunk.getPos().x, chunk.getPos().z), operationId, failedStage
+                        DebugChunkKeys.of(chunk.getPos()), operationId, failedStage
                 );
             }
             Chunkis.LOGGER.error("Chunkis: Failed to restore chunk {}", proto.getPos(), e);
@@ -678,7 +677,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     RESTORE_SOURCE,
                     "world chunk after sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                    DebugChunkKeys.of(chunk.getPos()),
                     null,
                     operationId,
                     protoDelta.isDirty(),
@@ -693,7 +692,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                         RESTORE_SOURCE,
                         "persisted base NBT existed but final server chunk had zero non-empty sections",
                         world.getRegistryKey().getValue().toString(),
-                        new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                        DebugChunkKeys.of(chunk.getPos()),
                         null,
                         operationId,
                         protoDelta.isDirty(),
@@ -738,7 +737,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                         + ", protoHasBase=" + protoHasBase
                         + ", liveHasBase=" + liveHasBase,
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                DebugChunkKeys.of(chunk.getPos()),
                 null,
                 operationId,
                 liveDelta.isDirty(),
@@ -860,7 +859,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
             );
         }
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
-            ChunkOwnershipTraceHelper.claimOwnership(delta, ownershipReason, source);
+            delta.claimOwnership(ownershipReason.name(), source);
             ChunkOwnershipTraceHelper.traceDecision(
                     chunk.getWorld().getRegistryKey(),
                     chunk.getPos(),

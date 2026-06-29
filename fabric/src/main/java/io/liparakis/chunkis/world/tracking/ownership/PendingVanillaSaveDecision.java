@@ -22,10 +22,9 @@ public final class PendingVanillaSaveDecision {
     public static void put(
             final ChunkPos pos,
             final ChunkDelta<?, ?> delta,
-            final ChunkTraceReason reason,
-            final String source
+            final ChunkTraceReason reason
     ) {
-        PENDING.get().put(pos.toLong(), new Snapshot(delta, reason, source));
+        PENDING.get().put(pos.toLong(), new Snapshot(delta, reason));
     }
 
     public static Snapshot take(final ChunkPos pos) {
@@ -34,8 +33,7 @@ public final class PendingVanillaSaveDecision {
 
     public record Snapshot(
             ChunkDelta<?, ?> delta,
-            ChunkTraceReason reason,
-            String source
+            ChunkTraceReason reason
     ) {
     }
 }

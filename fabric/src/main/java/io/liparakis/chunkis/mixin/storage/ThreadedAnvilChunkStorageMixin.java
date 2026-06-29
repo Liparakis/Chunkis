@@ -2,45 +2,40 @@ package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
-import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
-import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
-import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
-import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureScheduler;
+import io.liparakis.chunkis.storage.io.CisStorage;
+import io.liparakis.chunkis.world.entity.capture.LiveEntitySnapshotCapture;
+import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
+import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.restoration.nbt.StructureMetadataExtractor;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
-import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
-import io.liparakis.chunkis.world.entity.capture.LiveEntitySnapshotCapture;
-import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
 import io.liparakis.chunkis.world.tracking.ownership.PendingVanillaSaveDecision;
-import io.liparakis.chunkis.world.restoration.nbt.StructureMetadataExtractor;
-import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
+import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
-import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
-import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import net.minecraft.SharedConstants;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ChunkHolder;
 import net.minecraft.server.world.ServerChunkLoadingManager;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
-import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkStatus;
@@ -92,9 +87,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     private static final String SAVE_SOURCE = "ThreadedAnvilChunkStorageMixin#chunkis$onSave";
     @Unique
     private static final String REJECT_SOURCE = "ThreadedAnvilChunkStorageMixin#chunkis$rejectSparse";
-    @Unique
-    private static final String ENTITY_REPLAY_SOURCE =
-            "ThreadedAnvilChunkStorageMixin#chunkis$scheduleEntityReplay";
 
     /**
      * The server world that owns this chunk loading manager.
@@ -177,8 +169,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      */
     @Inject(method = "close", at = @At("TAIL"))
     private void chunkis$onClose(final CallbackInfo ci) {
-        BaseChunkCaptureScheduler.flushAndClose(world);
-
         final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending =
                 GlobalChunkTracker.getPendingDeltas(world);
 
@@ -293,9 +283,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             );
             return;
         }
-        ChunkOwnershipTraceHelper.claimOwnership(
-                delta,
-                ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+        delta.claimOwnership(
+                ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE.name(),
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt"
         );
         ChunkOwnershipTraceHelper.traceDecision(
@@ -326,7 +315,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      * @param storage  CIS storage backing the world
      * @param chunkPos chunk position being loaded
      * @return resolved load delta, or {@code null} when both tracker and storage
-     *         have no useful state
+     * have no useful state
      */
     @Unique
     private ChunkDelta<BlockState, NbtCompound> chunkis$resolveDeltaForLoad(
@@ -339,7 +328,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             return trackedDelta;
         }
 
-        final CisChunkPos cisPos = new CisChunkPos(chunkPos.x, chunkPos.z);
+        final var cisPos = FabricCisStorageHelper.toStoragePos(chunkPos);
         return storage.contains(cisPos) ? storage.load(cisPos) : null;
     }
 
@@ -427,11 +416,11 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     ChunkTraceReason.NONE,
                     "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                     "base NBT decode started: loadSource="
-                            + (delta != null ? "delta-present" : "none")
+                            + "delta-present"
                             + ", storageEntryExists="
-                            + (delta != null && !delta.isEmpty())
+                            + !delta.isEmpty()
                             + ", metadataKeys="
-                            + (delta != null && delta.getChunkMetadata() != null
+                            + (delta.getChunkMetadata() != null
                             ? delta.getChunkMetadata().getKeys()
                             : List.of())
                             + ", baseNbtKeys="
@@ -442,7 +431,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     chunkis$debugChunkKey(chunkPos),
                     null,
                     null,
-                    delta != null && delta.isDirty(),
+                    delta.isDirty(),
                     null
             );
         }
@@ -479,7 +468,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     chunkis$debugChunkKey(chunkPos),
                     null,
                     null,
-                    delta != null && delta.isDirty(),
+                    delta.isDirty(),
                     null
             );
         }
@@ -507,7 +496,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                     ChunkTraceReason.NONE,
                     "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
                     authoritativeFullBaseline
-                            ? "persisted base chunk NBT was present but skipped because authoritative v11 payload owns blocks"
+                            ? "persisted base chunk NBT was present but skipped because authoritative v11 payload " +
+                              "owns blocks"
                             : "persisted base chunk NBT was present but skipped for load root",
                     chunkis$worldId(),
                     chunkis$debugChunkKey(chunkPos),
@@ -668,9 +658,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         }
 
         delta = chunkis$captureLiveEntities(chunk, delta, null);
-        ChunkOwnershipTraceHelper.claimOwnership(
-                delta,
-                ChunkTraceReason.EXPLICIT_CHUNKIS_MUTATION,
+        delta.claimOwnership(
+                ChunkTraceReason.EXPLICIT_CHUNKIS_MUTATION.name(),
                 SAVE_SOURCE + "#entityCapture"
         );
         return delta;
@@ -741,7 +730,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 delta,
                 null
         );
-        PendingVanillaSaveDecision.put(pos, delta, ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED, SAVE_SOURCE);
+        PendingVanillaSaveDecision.put(pos, delta, ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED);
         cir.setReturnValue(Boolean.TRUE);
     }
 
@@ -857,7 +846,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 CisNbtUtil.hasFullBlockBaseline(existingMetadata),
                 CisNbtUtil.extractPersistedBaseChunkNbt(existingMetadata),
                 chunk instanceof WorldChunk worldChunk
-                        ? io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
+                        ?
+                        io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
                         : CisNbtUtil.hasPersistedPortalChunk(existingMetadata)
         );
 
@@ -957,9 +947,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             return;
         }
 
-        if (storage.save(new CisChunkPos(pos.x, pos.z), deltaToSave, operationId)) {
-            GlobalChunkTracker.markSaved(world, pos);
-        }
+        FabricCisStorageHelper.saveTrackedDelta(world, storage, pos, deltaToSave, operationId);
     }
 
     /**
@@ -1019,7 +1007,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      * @param delta       candidate delta
      * @param operationId trace correlation ID
      * @return delta ready for persistence preparation, or {@code null} if queueing
-     *         should stop
+     * should stop
      */
     @Unique
     private ChunkDelta<BlockState, NbtCompound> chunkis$prepareDeltaForQueueing(
@@ -1133,7 +1121,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         final ChunkDelta<BlockState, NbtCompound> recoveredDelta = chunkis$recoverSparseDeltaOnSaveGuard(
                 pos,
                 delta,
-                path,
                 caller,
                 operationId
         );
@@ -1146,7 +1133,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     private ChunkDelta<BlockState, NbtCompound> chunkis$recoverSparseDeltaOnSaveGuard(
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta,
-            final String path,
             final String caller,
             final String operationId
     ) {
@@ -1317,26 +1303,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         }
     }
 
-    /**
-     * Builds the minimal NBT compound used to ferry Chunkis data through vanilla
-     * chunk deserialization.
-     *
-     * <p>Delegates to {@link CisNbtUtil#buildLoadChunkNbt} so persisted base chunk
-     * NBT can become the vanilla deserialization baseline when present. Without
-     * that baseline, Chunkis falls back to the synthetic empty-shell NBT that
-     * triggers regeneration before sparse replay.</p>
-     *
-     * @param pos   the chunk position
-     * @param delta the delta to embed; may be {@code null}
-     * @return a populated chunk NBT compound
-     */
-    @Unique
-    private static NbtCompound chunkis$buildChunkNbt(
-            final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
-        return CisNbtUtil.buildLoadChunkNbt(pos, chunkis$getGameDataVersion(), delta).root();
-    }
-
     @Unique
     private static int chunkis$getGameDataVersion() {
         return SharedConstants.getGameVersion().dataVersion().id();
@@ -1393,15 +1359,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     }
 
     /**
-     * Serializes a live entity through Minecraft's write-view path.
-     *
-     * <p>Failures are logged at DEBUG and return {@code null} so the save path
-     * silently skips unserializable entities without aborting the whole capture.</p>
-     *
-     * @param entity the entity to serialize
-     * @return the serialized NBT, or {@code null} if serialization failed
-     */
-    /**
      * Returns the CIS storage instance for {@link #world}.
      *
      * @return the CIS storage for the owning world
@@ -1428,5 +1385,3 @@ public abstract class ThreadedAnvilChunkStorageMixin {
         return delta == null || (!delta.isDirty() && delta.isEmpty());
     }
 }
-
-

@@ -117,9 +117,8 @@ public abstract class BlockEntityMixin {
             deltaDuck.chunkis$setDelta(delta);
         }
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
-            ChunkOwnershipTraceHelper.claimOwnership(
-                    delta,
-                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+            delta.claimOwnership(
+                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT.name(),
                     "BlockEntityMixin#handleChunkDelta"
             );
             ChunkOwnershipTraceHelper.traceDecision(

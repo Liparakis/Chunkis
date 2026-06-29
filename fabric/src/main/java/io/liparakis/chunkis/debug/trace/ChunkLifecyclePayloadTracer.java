@@ -8,6 +8,7 @@ import io.liparakis.chunkis.debug.model.watch.PayloadWatchType;
 import io.liparakis.chunkis.debug.watch.BlockWatchTraceTracker;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.util.math.BlockPos;
@@ -36,7 +37,7 @@ public final class ChunkLifecyclePayloadTracer {
         final ChunkPos chunkPos = chunk.getPos();
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
@@ -86,7 +87,7 @@ public final class ChunkLifecyclePayloadTracer {
         final ChunkPos chunkPos = chunk.getPos();
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
@@ -135,7 +136,7 @@ public final class ChunkLifecyclePayloadTracer {
         final ChunkPos chunkPos = chunk.getPos();
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
@@ -184,7 +185,7 @@ public final class ChunkLifecyclePayloadTracer {
         final ChunkPos chunkPos = chunk.getPos();
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
@@ -232,7 +233,7 @@ public final class ChunkLifecyclePayloadTracer {
         final ChunkPos chunkPos = chunk.getPos();
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
@@ -277,7 +278,7 @@ public final class ChunkLifecyclePayloadTracer {
         final ChunkPos chunkPos = chunk.getPos();
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
@@ -339,7 +340,7 @@ public final class ChunkLifecyclePayloadTracer {
 
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;

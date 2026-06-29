@@ -7,6 +7,7 @@ import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchType;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
@@ -36,7 +37,7 @@ public final class RestorePayloadTracer {
         final String worldId = PayloadWatchSummaries.worldId(world);
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
@@ -178,7 +179,7 @@ public final class RestorePayloadTracer {
                 source,
                 "restore write did not produce expected immediate live block state",
                 worldId,
-                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                DebugChunkKeys.of(chunk.getPos()),
                 null,
                 operationId,
                 null,
@@ -221,7 +222,7 @@ public final class RestorePayloadTracer {
         final ChunkPos chunkPos = chunk.getPos();
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;

@@ -127,16 +127,12 @@ final class ChunkDebugOutput {
         final StringBuilder sb = new StringBuilder(128);
         sb.append("chunk=").append(snapshot.chunkKey().x()).append(',').append(snapshot.chunkKey().z())
                 .append(" trackerDirty=").append(snapshot.trackerDirty())
-                .append(" asyncQueued=").append(snapshot.asyncPending() != null)
-                .append(" baseCaptureQueued=").append(snapshot.baseCapturePending() != null);
+                .append(" asyncQueued=").append(snapshot.asyncPending() != null);
 
         if (snapshot.asyncPending() != null) {
             sb.append(" asyncOp=").append(snapshot.asyncPending().operationId())
                     .append(" asyncGeneration=").append(snapshot.asyncPending().generation())
                     .append(" asyncDirty=").append(snapshot.asyncPending().dirtyState());
-        }
-        if (snapshot.baseCapturePending() != null) {
-            sb.append(" baseCaptureDirty=").append(snapshot.baseCapturePending().dirtyState());
         }
         return sb.toString();
     }

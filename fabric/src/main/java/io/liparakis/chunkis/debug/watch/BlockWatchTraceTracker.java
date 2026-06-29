@@ -7,6 +7,7 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import net.minecraft.block.BlockState;
 import net.minecraft.util.math.ChunkPos;
 import org.jetbrains.annotations.Nullable;
@@ -39,7 +40,7 @@ public final class BlockWatchTraceTracker {
                         "PayloadWatchTracer#checkUnrestoredAssertions",
                         "watched payload was attached to proto chunk but never reached restore (no restore decision)",
                         entry.getKey().worldId,
-                        new DebugChunkKey(entry.getKey().chunkX, entry.getKey().chunkZ),
+                        DebugChunkKeys.of(entry.getKey().chunkX, entry.getKey().chunkZ),
                         null,
                         state.operationId,
                         null,
@@ -87,7 +88,7 @@ public final class BlockWatchTraceTracker {
                     "PayloadWatchTracer#registerDecodedWatchTargets",
                     "decoded watched payload was attached to proto chunk but never consumed by world chunk constructor",
                     worldId,
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    DebugChunkKeys.of(chunkPos),
                     null,
                     previous.operationId,
                     null,
@@ -174,7 +175,7 @@ public final class BlockWatchTraceTracker {
                 source,
                 "decoded watched payload reached later chunk lifecycle without restore-applied or restore-skipped",
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 null,
@@ -278,7 +279,7 @@ public final class BlockWatchTraceTracker {
                 "PayloadWatchTracer#registerDecodedWatchTargets",
                 "decoded watched payload had no later restore/client visibility event for same load operation",
                 key.worldId,
-                new DebugChunkKey(key.chunkX, key.chunkZ),
+                DebugChunkKeys.of(key.chunkX, key.chunkZ),
                 null,
                 operationId,
                 null,
@@ -295,7 +296,7 @@ public final class BlockWatchTraceTracker {
                 "PayloadWatchTracer#registerDecodedWatchTargets",
                 "decoded watched payload had no later restore/client visibility event for same load operation",
                 key.worldId,
-                new DebugChunkKey(key.chunkX, key.chunkZ),
+                DebugChunkKeys.of(key.chunkX, key.chunkZ),
                 null,
                 operationId,
                 null,
@@ -309,7 +310,7 @@ public final class BlockWatchTraceTracker {
                 "PayloadWatchTracer#registerDecodedWatchTargets",
                 "decoded watched payload never emitted a restore visit/apply decision before trace completion",
                 key.worldId,
-                new DebugChunkKey(key.chunkX, key.chunkZ),
+                DebugChunkKeys.of(key.chunkX, key.chunkZ),
                 null,
                 operationId,
                 null,

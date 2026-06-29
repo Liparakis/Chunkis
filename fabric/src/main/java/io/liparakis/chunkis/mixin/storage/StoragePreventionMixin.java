@@ -90,18 +90,8 @@ public class StoragePreventionMixin {
      */
     @Inject(method = "sync()V", at = @At("HEAD"))
     private void chunkis$blockSync(final CallbackInfo ci) {
-        logTrace("Allowing vanilla storage sync", null);
-    }
-
-    @Unique
-    private static void logTrace(final String message, final Object arg) {
-        if (!LOGGER.isTraceEnabled()) return;
-        if (arg != null) {
-            LOGGER.trace(message, arg);
-        } else {
-            LOGGER.trace(message);
+        if (LOGGER.isTraceEnabled()) {
+            LOGGER.trace("Allowing vanilla storage sync");
         }
     }
 }
-
-

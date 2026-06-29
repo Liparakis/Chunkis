@@ -1,12 +1,12 @@
 package io.liparakis.chunkis.world.tracking.save;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.io.CisStorage;
@@ -60,7 +60,7 @@ public final class AsyncCisSaveManager {
             return;
         }
 
-        final CisChunkPos cisPos = new CisChunkPos(pos.x, pos.z);
+        final var cisPos = FabricCisStorageHelper.toStoragePos(pos);
         final long generation = liveDelta.getMutationGeneration();
         final ChunkDelta<BlockState, NbtCompound> snapshot = liveDelta.snapshot(NbtCompound::copy);
 
@@ -72,7 +72,7 @@ public final class AsyncCisSaveManager {
                 SUBMIT_SOURCE,
                 "queued async save generation " + generation,
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                DebugChunkKeys.of(pos),
                 null,
                 operationId,
                 liveDelta.isDirty(),

@@ -13,6 +13,7 @@ import io.liparakis.chunkis.debug.watch.EntityWatchTracker;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchType;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
@@ -81,7 +82,7 @@ public final class PayloadWatchTracer {
             final String stage,
             final String source, final String message, final Integer byteSize) {
         traceDeltaStageInternal(
-                worldId, new DebugChunkKey(chunkPos.x, chunkPos.z), chunkPos.getStartX(),
+                worldId, DebugChunkKeys.of(chunkPos), chunkPos.getStartX(),
                 chunkPos.getStartZ(), delta, operationId, eventType, stage, source, message, byteSize
         );
     }
@@ -196,7 +197,7 @@ public final class PayloadWatchTracer {
 
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() == PayloadWatchType.ENTITY || !target.hasBlockCoordinates()) {
                 continue;
@@ -514,7 +515,7 @@ public final class PayloadWatchTracer {
             final String operationId, final PayloadWatchTarget target, final String summary,
             final Integer byteSize) {
         traceWatch(
-                eventType, stage, source, message, worldId, new DebugChunkKey(chunkPos.x, chunkPos.z), operationId
+                eventType, stage, source, message, worldId, DebugChunkKeys.of(chunkPos), operationId
                 , target, summary, byteSize
         );
     }
@@ -540,7 +541,7 @@ public final class PayloadWatchTracer {
         }
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                DebugChunkKeys.of(chunkPos)
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;

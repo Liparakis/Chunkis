@@ -88,9 +88,8 @@ public abstract class ServerWorldMixin {
             deltaDuck.chunkis$setDelta(delta);
         }
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
-            ChunkOwnershipTraceHelper.claimOwnership(
-                    delta,
-                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+            delta.claimOwnership(
+                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT.name(),
                     SOURCE
             );
             ChunkOwnershipTraceHelper.traceDecision(

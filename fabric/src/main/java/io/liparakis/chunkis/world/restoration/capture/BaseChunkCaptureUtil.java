@@ -1,7 +1,6 @@
 package io.liparakis.chunkis.world.restoration.capture;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -9,6 +8,7 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
@@ -88,7 +88,7 @@ public final class BaseChunkCaptureUtil {
 
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
                 FabricCisStorageHelper.getStorage(world);
-        storage.save(new CisChunkPos(chunk.getPos().x, chunk.getPos().z), delta);
+        storage.save(FabricCisStorageHelper.toStoragePos(chunk.getPos()), delta);
     }
 
     /**
@@ -138,7 +138,7 @@ public final class BaseChunkCaptureUtil {
 
         final int beforeBlocks = delta.getBlockInstructions().size();
         final int beforeBlockEntities = delta.getBlockEntities().size();
-        final DebugChunkKey chunkKey = new DebugChunkKey(chunk.getPos().x, chunk.getPos().z);
+        final DebugChunkKey chunkKey = DebugChunkKeys.of(chunk.getPos());
         traceLifecycle(
                 world,
                 chunk,
@@ -301,7 +301,7 @@ public final class BaseChunkCaptureUtil {
                 "BaseChunkCaptureUtil#" + source,
                 "skipped base capture: " + DeltaPersistenceGuard.describeDeltaShape(delta),
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                DebugChunkKeys.of(chunk.getPos()),
                 null,
                 null,
                 delta.isDirty(),
@@ -328,7 +328,7 @@ public final class BaseChunkCaptureUtil {
                 source,
                 message + ": " + DeltaPersistenceGuard.describeLifecycleState(delta),
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                DebugChunkKeys.of(chunk.getPos()),
                 null,
                 null,
                 delta.isDirty(),

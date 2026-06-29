@@ -12,7 +12,6 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
-import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureScheduler;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
@@ -213,14 +212,11 @@ public final class ChunkDebugActions {
         final var world = source.getWorld();
         final var trackerPending = GlobalChunkTracker.getPendingDeltas(world);
         final var asyncPending = AsyncCisSaveManager.snapshot(world);
-        final var basePending = BaseChunkCaptureScheduler.snapshot(world);
-
         for (final DebugChunkKey chunkKey : watchedChunks) {
             final var snapshot = new ChunkDebugCommand.PendingChunkSnapshot(
                     chunkKey,
                     trackerPending.containsKey(new ChunkPos(chunkKey.x(), chunkKey.z())),
-                    asyncPending.get(chunkKey),
-                    basePending.get(chunkKey)
+                    asyncPending.get(chunkKey)
             );
             sendFeedback(source, ChunkDebugCommand.formatPendingSnapshot(snapshot), false);
         }

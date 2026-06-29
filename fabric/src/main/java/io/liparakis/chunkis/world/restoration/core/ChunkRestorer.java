@@ -10,6 +10,7 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.entity.replay.EntityReplayCoordinator;
 import net.minecraft.block.BlockState;
@@ -143,7 +144,7 @@ public final class ChunkRestorer {
                         ? "used"
                         : hasPersistedBaseChunk ? "metadata-only" : "missing"),
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 protoDelta.isDirty(),
@@ -159,7 +160,7 @@ public final class ChunkRestorer {
                     RESTORE_SOURCE,
                     "restoring chunk from persisted base snapshot plus sparse delta",
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     protoDelta.isDirty(),
@@ -175,7 +176,7 @@ public final class ChunkRestorer {
                     RESTORE_SOURCE,
                     "blockEntities without blockChanges require persisted base chunk NBT",
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     protoDelta.isDirty(),
@@ -189,7 +190,7 @@ public final class ChunkRestorer {
                     RESTORE_SOURCE,
                     "skipped restore because sparse block-entity payload had no base snapshot",
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     protoDelta.isDirty(),
@@ -220,7 +221,7 @@ public final class ChunkRestorer {
                     RESTORE_SOURCE,
                     "restore failed with exception",
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     null,
@@ -247,7 +248,7 @@ public final class ChunkRestorer {
                         + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
                         + ", entities=" + visitor.restoredEntitiesCount(),
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 runtimeDelta != null && runtimeDelta.isDirty(),
@@ -261,7 +262,7 @@ public final class ChunkRestorer {
                 RESTORE_SOURCE,
                 "server chunk after sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 runtimeDelta != null && runtimeDelta.isDirty(),
@@ -278,7 +279,7 @@ public final class ChunkRestorer {
                         + ", entities=" + visitor.restoredEntitiesCount()
                         + ", blockReplay=" + visitor.blockApplyFailureCounters().describe(),
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 runtimeDelta != null && runtimeDelta.isDirty(),
@@ -300,7 +301,7 @@ public final class ChunkRestorer {
                             + ", blockEntities="
                             + protoDelta.getBlockEntities().size(),
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     runtimeDelta != null && runtimeDelta.isDirty(),
@@ -315,7 +316,7 @@ public final class ChunkRestorer {
                     "restore zero-result diagnostics: payload=" + describeReplayPayload(protoDelta)
                             + ", blockReplay=" + visitor.blockApplyFailureCounters().describe(),
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(chunkPos.x, chunkPos.z),
+                    DebugChunkKeys.of(chunkPos),
                     null,
                     operationId,
                     runtimeDelta != null && runtimeDelta.isDirty(),

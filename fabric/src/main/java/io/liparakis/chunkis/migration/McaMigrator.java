@@ -2,7 +2,6 @@ package io.liparakis.chunkis.migration;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
@@ -181,7 +180,7 @@ public final class McaMigrator {
                         ChunkDelta<BlockState, NbtCompound> delta = buildChunkDelta(proto, nbt, globalPos, mutablePos);
 
                         if (!delta.isEmpty()) {
-                            storage.save(new CisChunkPos(globalPos.x, globalPos.z), delta);
+                            storage.save(FabricCisStorageHelper.toStoragePos(globalPos), delta);
                             migrated++;
                         }
                     } catch (Exception e) {

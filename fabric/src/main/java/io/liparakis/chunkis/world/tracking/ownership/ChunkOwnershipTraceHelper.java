@@ -63,14 +63,6 @@ public final class ChunkOwnershipTraceHelper {
         );
     }
 
-    public static boolean claimOwnership(
-            final ChunkDelta<?, ?> delta,
-            final ChunkTraceReason reason,
-            final String source
-    ) {
-        return delta != null && delta.claimOwnership(reason.name(), source);
-    }
-
     private static String describeDecision(
             final String decision,
             final ChunkDelta<?, ?> delta,

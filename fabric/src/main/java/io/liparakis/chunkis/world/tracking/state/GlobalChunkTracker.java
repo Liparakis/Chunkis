@@ -4,6 +4,7 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
@@ -104,7 +105,7 @@ public final class GlobalChunkTracker {
         if (delta == null) {
             return;
         }
-        if (shouldBypassUnownedDelta(dimension, new DebugChunkKey(chunkX, chunkZ), delta, source)) {
+        if (shouldBypassUnownedDelta(dimension, DebugChunkKeys.of(chunkX, chunkZ), delta, source)) {
             return;
         }
         delta.markDirty(source);
@@ -255,7 +256,7 @@ public final class GlobalChunkTracker {
         if (liveDelta == null) {
             return;
         }
-        final DebugChunkKey debugKey = new DebugChunkKey(chunkX, chunkZ);
+        final DebugChunkKey debugKey = DebugChunkKeys.of(chunkX, chunkZ);
         dirtyDeltas.computeIfPresent(
                 keyOf(dimension, chunkX, chunkZ), (key, active) -> {
                     if (active != liveDelta) {
@@ -327,7 +328,7 @@ public final class GlobalChunkTracker {
             final int chunkX,
             final int chunkZ
     ) {
-        final DebugChunkKey debugKey = new DebugChunkKey(chunkX, chunkZ);
+        final DebugChunkKey debugKey = DebugChunkKeys.of(chunkX, chunkZ);
         final DimensionChunkKey key = keyOf(dimension, chunkX, chunkZ);
         final ChunkDelta<?, ?> active = dirtyDeltas.get(key);
         if (active != null) {

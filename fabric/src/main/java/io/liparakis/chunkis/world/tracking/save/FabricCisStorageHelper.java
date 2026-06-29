@@ -3,12 +3,15 @@ package io.liparakis.chunkis.world.tracking.save;
 import io.liparakis.chunkis.adapter.FabricBlockRegistryAdapter;
 import io.liparakis.chunkis.adapter.FabricBlockStateAdapter;
 import io.liparakis.chunkis.adapter.FabricNbtAdapter;
+import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.mapping.PropertyPacker;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -17,6 +20,7 @@ import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
 import net.minecraft.util.WorldSavePath;
+import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -135,6 +139,64 @@ public final class FabricCisStorageHelper {
         } catch (final Exception e) {
             LOGGER.error("Error closing Chunkis storage for dimension: {}", key.getValue(), e);
         }
+    }
+
+    /**
+     * Saves a tracked delta synchronously and clears the tracker entry only when
+     * the write succeeds.
+     *
+     * <p>This is the shared synchronous path used by shutdown/load-path safety
+     * sweeps after higher-level callers have already decided the delta is valid
+     * to persist.</p>
+     *
+     * @param world   owning world
+     * @param storage target storage
+     * @param pos     chunk position
+     * @param delta   delta to save
+     * @return {@code true} when the payload was written and the tracker entry was cleared
+     */
+    public static boolean saveTrackedDelta(
+            final ServerWorld world,
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta) {
+        if (storage.save(toStoragePos(pos), delta)) {
+            GlobalChunkTracker.markSaved(world, pos);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Saves a tracked delta synchronously with an explicit operation id and clears
+     * the tracker entry only when the write succeeds.
+     *
+     * @param world       owning world
+     * @param storage     target storage
+     * @param pos         chunk position
+     * @param delta       delta to save
+     * @param operationId trace/storage operation id
+     * @return {@code true} when the payload was written and the tracker entry was cleared
+     */
+    public static boolean saveTrackedDelta(
+            final ServerWorld world,
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId) {
+        if (storage.save(toStoragePos(pos), delta, operationId)) {
+            GlobalChunkTracker.markSaved(world, pos);
+            return true;
+        }
+        return false;
+    }
+
+    public static CisChunkPos toStoragePos(final ChunkPos pos) {
+        return new CisChunkPos(pos.x, pos.z);
+    }
+
+    public static CisChunkPos toStoragePos(final int chunkX, final int chunkZ) {
+        return new CisChunkPos(chunkX, chunkZ);
     }
 
     /**

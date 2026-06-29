@@ -2,7 +2,6 @@ package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -11,6 +10,7 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
+import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
@@ -127,7 +127,7 @@ public class ChunkSerializerMixin {
                 SOURCE + "#chunkis$onConvert",
                 "starting proto chunk delta restore",
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                DebugChunkKeys.of(chunkPos),
                 null,
                 operationId,
                 null,
@@ -177,7 +177,7 @@ public class ChunkSerializerMixin {
                 SOURCE + "#chunkis$loadDelta",
                 "load source resolved",
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                DebugChunkKeys.of(pos),
                 null,
                 operationId,
                 resolved.delta() != null && resolved.delta().isDirty(),
@@ -203,7 +203,7 @@ public class ChunkSerializerMixin {
                     SOURCE + "#chunkis$restoreChunkDelta",
                     "no meaningful delta to attach",
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(pos.x, pos.z),
+                    DebugChunkKeys.of(pos),
                     null,
                     operationId,
                     null,
@@ -214,9 +214,8 @@ public class ChunkSerializerMixin {
 
         final ChunkDelta<BlockState, NbtCompound> delta = resolved.delta();
         chunkis$traceBaseMetadataAfterDecode(world, pos, delta, operationId);
-        ChunkOwnershipTraceHelper.claimOwnership(
-                delta,
-                ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+        delta.claimOwnership(
+                ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE.name(),
                 SOURCE + "#chunkis$restoreChunkDelta"
         );
         ChunkOwnershipTraceHelper.traceDecision(
@@ -250,7 +249,7 @@ public class ChunkSerializerMixin {
                 SOURCE + "#chunkis$restoreChunkDelta",
                 "proto sections before restore: " + ChunkSectionDebugUtil.summarize(chunk),
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                DebugChunkKeys.of(pos),
                 null,
                 operationId,
                 delta.isDirty(),
@@ -274,7 +273,7 @@ public class ChunkSerializerMixin {
                             + ": sections=" + protoSectionsBeforeRestore
                             + ", nonAirBlocks=" + protoNonAirBlocksAfterBase,
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(pos.x, pos.z),
+                    DebugChunkKeys.of(pos),
                     null,
                     operationId,
                     delta.isDirty(),
@@ -288,7 +287,7 @@ public class ChunkSerializerMixin {
                     SOURCE + "#chunkis$restoreChunkDelta",
                     "proto summary after base decode: " + ChunkSectionDebugUtil.summarize(chunk),
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(pos.x, pos.z),
+                    DebugChunkKeys.of(pos),
                     null,
                     operationId,
                     delta.isDirty(),
@@ -317,7 +316,7 @@ public class ChunkSerializerMixin {
                     SOURCE + "#chunkis$restoreChunkDelta",
                     "attached delta to wrapped live chunk and restored immediately",
                     world.getRegistryKey().getValue().toString(),
-                    new DebugChunkKey(pos.x, pos.z),
+                    DebugChunkKeys.of(pos),
                     null,
                     operationId,
                     delta.isDirty(),
@@ -335,7 +334,7 @@ public class ChunkSerializerMixin {
                         SOURCE + "#chunkis$restoreChunkDelta",
                         "attempted to reset proto chunk to EMPTY without ownership",
                         world.getRegistryKey().getValue().toString(),
-                        new DebugChunkKey(pos.x, pos.z),
+                        DebugChunkKeys.of(pos),
                         null,
                         operationId,
                         delta.isDirty(),
@@ -363,7 +362,7 @@ public class ChunkSerializerMixin {
                         ? "attached delta to proto chunk and kept persisted base baseline"
                         : "attached delta to proto chunk and reset status to EMPTY",
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                DebugChunkKeys.of(pos),
                 null,
                 operationId,
                 delta.isDirty(),
@@ -389,7 +388,7 @@ public class ChunkSerializerMixin {
                 SOURCE + "#chunkis$traceBaseMetadataAfterDecode",
                 "decoded delta metadata: " + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(delta),
                 world.getRegistryKey().getValue().toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                DebugChunkKeys.of(pos),
                 null,
                 operationId,
                 delta.isDirty(),
@@ -445,7 +444,7 @@ public class ChunkSerializerMixin {
             final ChunkPos pos,
             final String operationId) {
         final var storage = FabricCisStorageHelper.getStorage(world);
-        final CisChunkPos cisPos = new CisChunkPos(pos.x, pos.z);
+        final var cisPos = FabricCisStorageHelper.toStoragePos(pos);
         final boolean storageEntryPresent = storage.contains(cisPos);
         final ChunkDelta<BlockState, NbtCompound> delta = storage.load(cisPos, operationId);
         PayloadWatchTracer.traceDecodeOutcome(world, pos, delta, operationId, storageEntryPresent);
@@ -507,9 +506,8 @@ public class ChunkSerializerMixin {
         }
 
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(runtimeDelta)) {
-            ChunkOwnershipTraceHelper.claimOwnership(
-                    runtimeDelta,
-                    ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+            runtimeDelta.claimOwnership(
+                    ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE.name(),
                     SOURCE + "#chunkis$restoreWrappedFullChunk"
             );
         }
@@ -618,5 +616,3 @@ public class ChunkSerializerMixin {
     }
 
 }
-
-
