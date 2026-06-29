@@ -28,9 +28,8 @@ public final class BaseChunkCaptureScheduler {
     /**
      * No-op compatibility entry point for the removed deferred base-capture tick.
      *
-     * @param world the world whose scheduler should be ticked
      */
-    public static void tick(final ServerWorld world) {
+    public static void tick() {
     }
 
     /**
@@ -60,12 +59,8 @@ public final class BaseChunkCaptureScheduler {
     /**
      * Diagnostic snapshot for one queued base capture.
      *
-     * @param chunkKey queued chunk coordinate
+     * @param chunkKey   queued chunk coordinate
      * @param dirtyState whether the queued chunk's delta was dirty when sampled
      */
-    public record QueuedCaptureSnapshot(
-            DebugChunkKey chunkKey,
-            boolean dirtyState
-    ) {
-    }
+    public record QueuedCaptureSnapshot(DebugChunkKey chunkKey, boolean dirtyState) {}
 }

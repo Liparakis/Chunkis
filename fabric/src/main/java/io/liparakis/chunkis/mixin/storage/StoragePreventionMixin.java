@@ -33,53 +33,28 @@ public class StoragePreventionMixin {
     @Unique
     private static final String SOURCE = "StoragePreventionMixin";
 
-    @Inject(
-            method = "write(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/NbtCompound;)V",
-            at = @At("HEAD"),
+    @Inject(method = "write(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/NbtCompound;)V", at = @At("HEAD"),
             cancellable = true)
-    private void chunkis$blockWrite(
-            final ChunkPos pos,
-            final NbtCompound nbt,
-            final CallbackInfo ci) {
+    private void chunkis$blockWrite(final ChunkPos pos, final NbtCompound nbt, final CallbackInfo ci) {
         final PendingVanillaSaveDecision.Snapshot snapshot = PendingVanillaSaveDecision.take(pos);
-        final ChunkTraceReason reason = snapshot != null
-                ? snapshot.reason()
-                : ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
+        final ChunkTraceReason reason = snapshot != null ? snapshot.reason() :
+                ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
         if (snapshot == null) {
             ChunkOwnershipTraceHelper.traceDecision(
-                    null,
-                    pos,
-                    "BYPASSED",
-                    reason,
-                    SOURCE + "#chunkis$blockWrite",
-                    null,
-                    null
+                    null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
+                    null, null
             );
         } else {
             ChunkOwnershipTraceHelper.traceDecision(
-                    null,
-                    pos,
-                    "BYPASSED",
-                    reason,
-                    SOURCE + "#chunkis$blockWrite",
-                    snapshot.delta(),
-                    null
+                    null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
+                    snapshot.delta(), null
             );
         }
 
         ChunkTraceStore.trace(
-                ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.VANILLA_SAVE_CANCELLED,
-                ChunkTraceSeverity.INFO,
-                reason,
-                SOURCE + "#chunkis$blockWrite",
-                "blocked vanilla MCA write",
-                null,
-                new DebugChunkKey(pos.x, pos.z),
-                null,
-                null,
-                null,
-                null
+                ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.VANILLA_SAVE_CANCELLED,
+                ChunkTraceSeverity.INFO, reason, SOURCE + "#chunkis$blockWrite", "blocked vanilla MCA write", null,
+                new DebugChunkKey(pos.x, pos.z), null, null, null, null
         );
         ci.cancel();
     }
@@ -87,21 +62,12 @@ public class StoragePreventionMixin {
     /**
      * Records passive vanilla chunk read attempts without claiming ownership.
      */
-    @Inject(
-            method = "getTagAt(Lnet/minecraft/util/math/ChunkPos;)Lnet/minecraft/nbt/NbtCompound;",
-            at = @At("HEAD"),
+    @Inject(method = "getTagAt(Lnet/minecraft/util/math/ChunkPos;)Lnet/minecraft/nbt/NbtCompound;", at = @At("HEAD"),
             cancellable = true)
-    private void chunkis$blockGetTagAt(
-            final ChunkPos pos,
-            final CallbackInfoReturnable<NbtCompound> cir) {
+    private void chunkis$blockGetTagAt(final ChunkPos pos, final CallbackInfoReturnable<NbtCompound> cir) {
         ChunkOwnershipTraceHelper.traceDecision(
-                null,
-                pos,
-                "BYPASSED",
-                ChunkTraceReason.PASSIVE_VANILLA_LOAD,
-                SOURCE + "#chunkis$blockGetTagAt",
-                null,
-                null
+                null, pos, "BYPASSED", ChunkTraceReason.PASSIVE_VANILLA_LOAD,
+                SOURCE + "#chunkis$blockGetTagAt", null, null
         );
         cir.setReturnValue(null);
     }
@@ -109,22 +75,12 @@ public class StoragePreventionMixin {
     /**
      * Records passive vanilla chunk scans without claiming ownership.
      */
-    @Inject(
-            method = "scanChunk(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/scanner/NbtScanner;)V",
-            at = @At("HEAD"),
-            cancellable = true)
-    private void chunkis$blockScanChunk(
-            final ChunkPos chunkPos,
-            final NbtScanner scanner,
-            final CallbackInfo ci) {
+    @Inject(method = "scanChunk(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/scanner/NbtScanner;)V", at =
+    @At("HEAD"), cancellable = true)
+    private void chunkis$blockScanChunk(final ChunkPos chunkPos, final NbtScanner scanner, final CallbackInfo ci) {
         ChunkOwnershipTraceHelper.traceDecision(
-                null,
-                chunkPos,
-                "BYPASSED",
-                ChunkTraceReason.PASSIVE_VANILLA_LOAD,
-                SOURCE + "#chunkis$blockScanChunk",
-                null,
-                null
+                null, chunkPos, "BYPASSED", ChunkTraceReason.PASSIVE_VANILLA_LOAD,
+                SOURCE + "#chunkis$blockScanChunk", null, null
         );
         ci.cancel();
     }
@@ -132,10 +88,7 @@ public class StoragePreventionMixin {
     /**
      * Leaves vanilla region sync intact while documenting the boundary.
      */
-    @Inject(
-            method = "sync()V",
-            at = @At("HEAD"),
-            cancellable = true)
+    @Inject(method = "sync()V", at = @At("HEAD"))
     private void chunkis$blockSync(final CallbackInfo ci) {
         logTrace("Allowing vanilla storage sync", null);
     }

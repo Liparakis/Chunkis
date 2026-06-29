@@ -51,15 +51,6 @@ final class CompressionContext {
                 throw new IOException("Failed to decompress CIS legacy Zlib payload", e);
             }
         }
-
-        final long decompressedSize = Zstd.getFrameContentSize(data);
-        if (Zstd.isError(decompressedSize)) {
-            throw new IOException("Failed to read CIS Zstd size: " + Zstd.getErrorName(decompressedSize));
-        }
-        if (decompressedSize <= 0L || decompressedSize > Integer.MAX_VALUE) {
-            throw new IOException("Invalid CIS Zstd payload size: " + decompressedSize);
-        }
-
-        return Zstd.decompress(data, (int) decompressedSize);
+        return CisCompression.decompressZstd(data);
     }
 }
