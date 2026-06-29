@@ -28,40 +28,79 @@ import net.minecraft.util.math.ChunkPos;
  */
 final class AsyncCisSaveWorker implements Runnable {
 
+    /**
+     * Log source tag identifier mapping for background save execution.
+     */
     private static final String PROCESS_SOURCE = "AsyncCisSaveManager$SaveWorker#process";
 
+    /**
+     * ServerWorld instance context representing target dimension.
+     */
     private final ServerWorld world;
+
+    /**
+     * Queue tracking scheduled pending save actions.
+     */
     private final PendingSaveQueue queue = new PendingSaveQueue();
+
+    /**
+     * Active thread executing background worker tasks.
+     */
     private final Thread thread;
 
+    /**
+     * Constructor initializing the worker and starting the daemon thread.
+     *
+     * @param world target server world
+     */
     AsyncCisSaveWorker(final ServerWorld world) {
         this.world = world;
-        this.thread = new Thread(this, "Chunkis-AsyncSave-" + world.getRegistryKey().getValue());
+        this.thread = new Thread(this,
+                "Chunkis-AsyncSave-" + world.getRegistryKey()
+                        .getValue());
         this.thread.setDaemon(true);
         this.thread.start();
     }
 
+    /**
+     * Adds a pending save to the queue.
+     *
+     * @param save save task payload
+     */
     void submit(final PendingSave save) {
         queue.submit(save);
     }
 
+    /**
+     * Closes the queue and joins the worker thread.
+     */
     void close() {
         queue.close();
         try {
             thread.join();
         } catch (final InterruptedException e) {
-            Thread.currentThread().interrupt();
+            Thread.currentThread()
+                    .interrupt();
             Chunkis.LOGGER.warn(
                     "Chunkis: Interrupted while closing async save worker for {}",
-                    world.getRegistryKey().getValue()
-                               );
+                    world.getRegistryKey()
+                            .getValue()
+            );
         }
     }
 
+    /**
+     * Snapshots the queue status for diagnostic views.
+     *
+     * @return map of snapshots keyed by coordinates
+     */
     Map<DebugChunkKey, AsyncCisSaveManager.PendingSaveSnapshot> snapshot() {
         return queue.snapshot();
     }
 
+    /**
+     * Thread entry point draining and processing pending writes.
+     */
     @Override
     public void run() {
         while (true) {
@@ -73,6 +112,11 @@ final class AsyncCisSaveWorker implements Runnable {
         }
     }
 
+    /**
+     * Encodes and writes queued payloads to storage disk space.
+     *
+     * @param save target pending save task
+     */
     @SuppressWarnings("All")
     private void process(final PendingSave save) {
         try {
@@ -85,7 +129,7 @@ final class AsyncCisSaveWorker implements Runnable {
                         "[Chunkis/save:{}] Skipping stale async save before encode for {}",
                         save.operationId(),
                         save.cisPos()
-                                    );
+                );
                 return;
             }
 
@@ -98,13 +142,16 @@ final class AsyncCisSaveWorker implements Runnable {
                         PROCESS_SOURCE,
                         "attempted to persist sparse block-entity payload without persisted base chunk NBT: "
                                 + DeltaPersistenceGuard.describeDeltaShape(save.snapshot()),
-                        world.getRegistryKey().getValue().toString(),
+                        world.getRegistryKey()
+                                .getValue()
+                                .toString(),
                         new DebugChunkKey(save.pos().x, save.pos().z),
                         null,
                         save.operationId(),
-                        save.liveDelta().isDirty(),
+                        save.liveDelta()
+                                .isDirty(),
                         null
-                                     );
+                );
             }
             if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(save.snapshot(), true)) {
                 DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(
@@ -113,12 +160,13 @@ final class AsyncCisSaveWorker implements Runnable {
                         save.snapshot(),
                         "async-worker",
                         PROCESS_SOURCE
-                                                                       );
+                );
                 return;
             }
 
             final CisStorage.PreparedSave preparedSave =
-                    save.storage().prepareSave(save.cisPos(), save.snapshot());
+                    save.storage()
+                            .prepareSave(save.cisPos(), save.snapshot());
             if (!GlobalChunkTracker.isCurrentDirtyDelta(
                     world,
                     save.pos(),
@@ -128,11 +176,13 @@ final class AsyncCisSaveWorker implements Runnable {
                         "[Chunkis/save:{}] Skipping stale async save before write for {}",
                         save.operationId(),
                         save.cisPos()
-                                    );
+                );
                 return;
             }
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     save.pos(),
                     save.snapshot(),
                     save.operationId(),
@@ -141,9 +191,11 @@ final class AsyncCisSaveWorker implements Runnable {
                     PROCESS_SOURCE,
                     "payload encoded",
                     preparedSave.clearChunk() ? 0 : preparedSave.rawData().length
-                                              );
+            );
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     save.pos(),
                     save.snapshot(),
                     save.operationId(),
@@ -152,13 +204,16 @@ final class AsyncCisSaveWorker implements Runnable {
                     PROCESS_SOURCE,
                     "payload serialized",
                     preparedSave.clearChunk() ? 0 : preparedSave.rawData().length
-                                              );
+            );
 
-            if (!save.storage().writePrepared(save.cisPos(), preparedSave, save.operationId())) {
+            if (!save.storage()
+                    .writePrepared(save.cisPos(), preparedSave, save.operationId())) {
                 return;
             }
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     save.pos(),
                     save.snapshot(),
                     save.operationId(),
@@ -167,23 +222,28 @@ final class AsyncCisSaveWorker implements Runnable {
                     PROCESS_SOURCE,
                     "payload written to storage",
                     null
-                                              );
+            );
 
-            save.liveDelta().setSourceVersion(CisConstants.VERSION);
+            save.liveDelta()
+                    .setSourceVersion(CisConstants.VERSION);
             GlobalChunkTracker.markSavedIfUnchanged(world, save.pos(), save.liveDelta(), save.generation());
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey().getValue().toString(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
                     save.pos(),
                     save.liveDelta(),
                     save.operationId(),
                     ChunkTraceEventType.WATCH_CAPTURED,
-                    save.liveDelta().isDirty() ? "save-completion-ignored" : "save-completion-applied",
+                    save.liveDelta()
+                            .isDirty() ? "save-completion-ignored" : "save-completion-applied",
                     PROCESS_SOURCE,
-                    save.liveDelta().isDirty()
+                    save.liveDelta()
+                            .isDirty()
                             ? "async save completion did not win live delta race"
                             : "async save completion marked live delta saved",
                     null
-                                              );
+            );
 
         } catch (final IOException e) {
             traceAsyncFailure(save, "async save failed with I/O exception");
@@ -194,6 +254,12 @@ final class AsyncCisSaveWorker implements Runnable {
         }
     }
 
+    /**
+     * Trace logs async operation failures.
+     *
+     * @param save    active pending save context
+     * @param message failure detail string
+     */
     private void traceAsyncFailure(final PendingSave save, final String message) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE,
@@ -202,15 +268,30 @@ final class AsyncCisSaveWorker implements Runnable {
                 ChunkTraceReason.IO_EXCEPTION,
                 PROCESS_SOURCE,
                 message,
-                world.getRegistryKey().getValue().toString(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 new DebugChunkKey(save.pos().x, save.pos().z),
                 null,
                 save.operationId(),
-                save.liveDelta().isDirty(),
+                save.liveDelta()
+                        .isDirty(),
                 null
-                             );
+        );
     }
 
+    /**
+     * Record wrapper storing details representing one queued save operation.
+     *
+     * @param storage     active storage driver interface
+     * @param pos         coordinates pos metadata
+     * @param cisPos      storage key translation coordinates
+     * @param liveDelta   live delta tracking modifications
+     * @param snapshot    snapshot data copied at submit time
+     * @param generation  mutation sequence generation code
+     * @param operationId execution/operation ID tag
+     * @param posKey      coordinate long key mapping
+     */
     record PendingSave(
             CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             ChunkPos pos,
@@ -222,6 +303,17 @@ final class AsyncCisSaveWorker implements Runnable {
             long posKey
     ) {
 
+        /**
+         * Constructor resolving key mapping details.
+         *
+         * @param storage     active storage driver interface
+         * @param pos         coordinates pos metadata
+         * @param cisPos      storage key translation coordinates
+         * @param liveDelta   live delta tracking modifications
+         * @param snapshot    snapshot data copied at submit time
+         * @param generation  mutation sequence generation code
+         * @param operationId execution/operation ID tag
+         */
         PendingSave(
                 final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
                 final ChunkPos pos,
@@ -230,10 +322,8 @@ final class AsyncCisSaveWorker implements Runnable {
                 final ChunkDelta<BlockState, NbtCompound> snapshot,
                 final long generation,
                 final String operationId
-                   ) {
+        ) {
             this(storage, pos, cisPos, liveDelta, snapshot, generation, operationId, pos.toLong());
         }
     }
 }
-
-

@@ -54,12 +54,31 @@ import org.slf4j.LoggerFactory;
  */
 public final class FabricCisStorageHelper {
 
+    /**
+     * Logger instance reference.
+     */
     private static final Logger LOGGER = LoggerFactory.getLogger(FabricCisStorageHelper.class);
 
+    /**
+     * BlockRegistryAdapter instance mapping block types to mappings.
+     */
     private static final BlockRegistryAdapter<Block> REGISTRY_ADAPTER = new FabricBlockRegistryAdapter();
+
+    /**
+     * BlockStateAdapter instance mapping block states.
+     */
     private static final BlockStateAdapter<Block, BlockState, Property<?>> STATE_ADAPTER = new FabricBlockStateAdapter();
+
+    /**
+     * NbtAdapter instance formatting compounds.
+     */
     private static final NbtAdapter<NbtCompound> NBT_ADAPTER = new FabricNbtAdapter();
+
+    /**
+     * Default fallback block state (Air).
+     */
     private static final BlockState DEFAULT_BLOCK_STATE = Blocks.AIR.getDefaultState();
+
     /**
      * Active storage wrappers keyed by dimension registry key.
      * {@link ConcurrentHashMap#compute} is used for atomic create-or-replace,
@@ -75,6 +94,11 @@ public final class FabricCisStorageHelper {
     private static final ConcurrentHashMap<RegistryKey<World>, Path> pathCache =
             new ConcurrentHashMap<>();
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private FabricCisStorageHelper() {
         throw new AssertionError("Utility class");
     }
@@ -107,12 +131,13 @@ public final class FabricCisStorageHelper {
 
         // Slow path: atomic create-or-replace via compute
         return storageMap.compute(key, (k, current) -> {
-            if (current != null && current.isOpen()) {
-                return current;
-            }
-            closeQuietly(current);
-            return openStorageWrapper(world, k);
-        }).getStorage();
+                    if (current != null && current.isOpen()) {
+                        return current;
+                    }
+                    closeQuietly(current);
+                    return openStorageWrapper(world, k);
+                })
+                .getStorage();
     }
 
     /**
@@ -196,10 +221,23 @@ public final class FabricCisStorageHelper {
         return false;
     }
 
+    /**
+     * Helper mapping ChunkPos elements to storage coordinate wrappers.
+     *
+     * @param pos chunk coordinates
+     * @return storage coordinate wrapper
+     */
     public static CisChunkPos toStoragePos(final ChunkPos pos) {
         return new CisChunkPos(pos.x, pos.z);
     }
 
+    /**
+     * Helper mapping X and Z keys to storage coordinate wrappers.
+     *
+     * @param chunkX chunk X key coordinates
+     * @param chunkZ chunk Z key coordinates
+     * @return storage coordinate wrapper
+     */
     public static CisChunkPos toStoragePos(final int chunkX, final int chunkZ) {
         return new CisChunkPos(chunkX, chunkZ);
     }
@@ -243,7 +281,8 @@ public final class FabricCisStorageHelper {
 
         final Path storageDir = resolveAndCreateStorageDir(world);
         final Path mappingFile = ChunkisStoragePaths.computeMappingFile(
-                Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT),
+                Objects.requireNonNull(world.getServer())
+                        .getSavePath(WorldSavePath.ROOT),
                 world.getRegistryKey());
 
         // PropertyPacker is per-storage (holds dimension-specific packed property state)
@@ -273,7 +312,8 @@ public final class FabricCisStorageHelper {
         }
 
         final Path storageDir = ChunkisStoragePaths.computeRegionsDirectory(
-                Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT),
+                Objects.requireNonNull(world.getServer())
+                        .getSavePath(WorldSavePath.ROOT),
                 key);
         Files.createDirectories(storageDir);
         pathCache.put(key, storageDir);
@@ -312,7 +352,14 @@ public final class FabricCisStorageHelper {
      */
     private static final class StorageWrapper {
 
+        /**
+         * Backing driver storage interface.
+         */
         private final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage;
+
+        /**
+         * Synchronization lock coordinates wrappers.
+         */
         private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
         /**
@@ -321,6 +368,11 @@ public final class FabricCisStorageHelper {
          */
         private volatile boolean open = true;
 
+        /**
+         * Constructor initializing storage wrapper.
+         *
+         * @param storage underlying driver instance
+         */
         StorageWrapper(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage) {
             this.storage = Objects.requireNonNull(storage, "Storage cannot be null");
         }
@@ -333,14 +385,16 @@ public final class FabricCisStorageHelper {
          * @throws IllegalStateException if the storage has been closed
          */
         CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage() {
-            lock.readLock().lock();
+            lock.readLock()
+                    .lock();
             try {
                 if (!open) {
                     throw new IllegalStateException("Storage has been closed");
                 }
                 return storage;
             } finally {
-                lock.readLock().unlock();
+                lock.readLock()
+                        .unlock();
             }
         }
 
@@ -359,7 +413,8 @@ public final class FabricCisStorageHelper {
          * Idempotent — subsequent calls after the first are ignored.
          */
         void close() {
-            lock.writeLock().lock();
+            lock.writeLock()
+                    .lock();
             try {
                 if (!open) {
                     return;
@@ -367,7 +422,8 @@ public final class FabricCisStorageHelper {
                 storage.close();
                 open = false;
             } finally {
-                lock.writeLock().unlock();
+                lock.writeLock()
+                        .unlock();
             }
         }
     }
@@ -379,6 +435,8 @@ public final class FabricCisStorageHelper {
     public static final class StorageInitializationException extends RuntimeException {
 
         /**
+         * Constructor.
+         *
          * @param message a description identifying the dimension that failed
          * @param cause   the underlying exception
          */
@@ -387,4 +445,3 @@ public final class FabricCisStorageHelper {
         }
     }
 }
-

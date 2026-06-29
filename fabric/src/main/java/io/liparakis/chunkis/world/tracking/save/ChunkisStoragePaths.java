@@ -17,20 +17,59 @@ import net.minecraft.world.World;
  *
  * @author Liparakis
  * @version 1.2
- *
  */
 public final class ChunkisStoragePaths {
 
+    /**
+     * Subdirectory name storing multi-dimension world states.
+     */
     private static final String DIMENSIONS_DIR = "dimensions";
+
+    /**
+     * Folder label namespace containing Chunkis delta data.
+     */
     private static final String CHUNKIS_DIR = "chunkis";
+
+    /**
+     * Subdirectory containing region binary payload files.
+     */
     private static final String REGIONS_DIR = "regions";
+
+    /**
+     * Folder label namespace mapped for vanilla regional MCA blocks.
+     */
     private static final String VANILLA_REGION_DIR = "region";
+
+    /**
+     * Filename mapping global identifier registry values.
+     */
     private static final String MAPPING_FILE = "global_ids.json";
+
+    /**
+     * Filename storing portal locator indexes.
+     */
     private static final String PORTAL_INDEX_FILE = "portal_chunks.nbt";
+
+    /**
+     * Filename storing portal pair links.
+     */
     private static final String PORTAL_LINKS_FILE = "portal_links.nbt";
+
+    /**
+     * Base namespace identifying default vanilla structures.
+     */
     private static final String MINECRAFT_NAMESPACE = "minecraft";
+
+    /**
+     * Path label identifying overworld dimension levels.
+     */
     private static final String OVERWORLD_PATH = "overworld";
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkisStoragePaths() {
         throw new AssertionError("Utility class");
     }
@@ -82,7 +121,8 @@ public final class ChunkisStoragePaths {
      * @return the resolved portal links file path
      */
     public static Path computePortalLinksFile(final Path saveRoot) {
-        return saveRoot.resolve(CHUNKIS_DIR).resolve(PORTAL_LINKS_FILE);
+        return saveRoot.resolve(CHUNKIS_DIR)
+                .resolve(PORTAL_LINKS_FILE);
     }
 
     /**

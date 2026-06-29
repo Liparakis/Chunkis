@@ -27,6 +27,7 @@ public final class ChunkMutationTrackingScope {
      * A value greater than zero means passive-load suppression is currently active.</p>
      */
     private int passiveLoadDepth;
+
     /**
      * Re-entrant depth for base-apply suppression scopes.
      *
@@ -34,6 +35,7 @@ public final class ChunkMutationTrackingScope {
      * A value greater than zero means Chunkis base-apply suppression is active.</p>
      */
     private int baseApplyDepth;
+
     /**
      * Re-entrant depth for restore suppression scopes.
      *
@@ -41,6 +43,7 @@ public final class ChunkMutationTrackingScope {
      * A value greater than zero means restore suppression is currently active.</p>
      */
     private int restoreDepth;
+
     /**
      * Whether the passive-load suppression trace has already been emitted for the
      * current passive-load scope entry.
@@ -49,6 +52,7 @@ public final class ChunkMutationTrackingScope {
      * can emit a fresh trace event.</p>
      */
     private boolean passiveLoadTraced;
+
     /**
      * Whether the base-apply suppression trace has already been emitted for the
      * current base-apply scope entry.
@@ -57,6 +61,7 @@ public final class ChunkMutationTrackingScope {
      * can emit a fresh trace event.</p>
      */
     private boolean baseApplyTraced;
+
     /**
      * Whether the restore suppression trace has already been emitted for the
      * current restore scope entry.
@@ -65,6 +70,12 @@ public final class ChunkMutationTrackingScope {
      * can emit a fresh trace event.</p>
      */
     private boolean restoreTraced;
+
+    /**
+     * Default constructor.
+     */
+    public ChunkMutationTrackingScope() {
+    }
 
     /**
      * Determines the initial suppression cause to use when loading a chunk.
@@ -244,9 +255,16 @@ public final class ChunkMutationTrackingScope {
      * is not active.
      */
     public enum Cause {
+        /** No active mutation tracking suppression. */
         NONE,
+
+        /** Mutation tracking suppressed due to passive chunk loading. */
         PASSIVE_LOAD,
+
+        /** Mutation tracking suppressed due to baseline block applications. */
         BASE_APPLY,
+
+        /** Mutation tracking suppressed due to restoration operations. */
         RESTORE
     }
 
@@ -254,6 +272,14 @@ public final class ChunkMutationTrackingScope {
      * Internal flag selector used by {@link #markTracedOnce} to avoid
      * a boolean parameter whose meaning is implicit at the call site.
      */
-    private enum TracedFlag {PASSIVE_LOAD, BASE_APPLY, RESTORE}
-}
+    private enum TracedFlag {
+        /** Mapped traced flag selector for passive loads. */
+        PASSIVE_LOAD,
 
+        /** Mapped traced flag selector for base apply. */
+        BASE_APPLY,
+
+        /** Mapped traced flag selector for restore. */
+        RESTORE
+    }
+}

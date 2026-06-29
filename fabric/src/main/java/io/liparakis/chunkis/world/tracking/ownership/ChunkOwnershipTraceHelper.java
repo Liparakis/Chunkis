@@ -12,12 +12,31 @@ import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.World;
 
+/**
+ * Emits debug traces summarizing chunk ownership decisions.
+ */
 public final class ChunkOwnershipTraceHelper {
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private ChunkOwnershipTraceHelper() {
         throw new AssertionError("Utility class");
     }
 
+    /**
+     * Emits a trace log for an ownership decision mapping chunk position context.
+     *
+     * @param worldKey     registry key of target world
+     * @param pos          position of target chunk
+     * @param decision     description label of the decision made
+     * @param reason       structural reason code for trace output
+     * @param source       caller identifier tag
+     * @param delta        associated block delta payload
+     * @param passiveCause tracking suppression context cause
+     */
     public static void traceDecision(
             final RegistryKey<World> worldKey,
             final ChunkPos pos,
@@ -26,7 +45,7 @@ public final class ChunkOwnershipTraceHelper {
             final String source,
             final ChunkDelta<?, ?> delta,
             final ChunkMutationTrackingScope.Cause passiveCause
-                                    ) {
+    ) {
         traceDecision(
                 worldKey,
                 pos != null ? new DebugChunkKey(pos.x, pos.z) : null,
@@ -35,9 +54,20 @@ public final class ChunkOwnershipTraceHelper {
                 source,
                 delta,
                 passiveCause
-                     );
+        );
     }
 
+    /**
+     * Emits a trace log for an ownership decision mapping debug chunk keys.
+     *
+     * @param worldKey     registry key of target world
+     * @param chunkKey     debug key of target chunk
+     * @param decision     description label of the decision made
+     * @param reason       structural reason code for trace output
+     * @param source       caller identifier tag
+     * @param delta        associated block delta payload
+     * @param passiveCause tracking suppression context cause
+     */
     public static void traceDecision(
             final RegistryKey<World> worldKey,
             final DebugChunkKey chunkKey,
@@ -46,7 +76,7 @@ public final class ChunkOwnershipTraceHelper {
             final String source,
             final ChunkDelta<?, ?> delta,
             final ChunkMutationTrackingScope.Cause passiveCause
-                                    ) {
+    ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.CHUNKIS_OWNERSHIP_DECISION,
@@ -54,28 +84,39 @@ public final class ChunkOwnershipTraceHelper {
                 reason,
                 source,
                 describeDecision(decision, delta, passiveCause),
-                worldKey != null ? worldKey.getValue().toString() : null,
+                worldKey != null ? worldKey.getValue()
+                                   .toString() : null,
                 chunkKey,
                 null,
                 null,
                 delta != null && delta.isDirty(),
                 null
-                             );
+        );
     }
 
+    /**
+     * Serializes detailed statistics formatting decisions text strings.
+     *
+     * @param decision     decision code label
+     * @param delta        associated block delta payload
+     * @param passiveCause tracking suppression cause
+     * @return formatted descriptive text
+     */
     private static String describeDecision(
             final String decision,
             final ChunkDelta<?, ?> delta,
             final ChunkMutationTrackingScope.Cause passiveCause
-                                          ) {
+    ) {
         final Object metadata = delta != null ? delta.getChunkMetadata() : null;
         return "decision=" + decision
                 + ", hasDelta=" + (delta != null)
                 + ", dirty=" + (delta != null && delta.isDirty())
                 + ", hasBase=" + ChunkDeltaOwnership.hasChunkisPersistenceAnchorBaseOnly(metadata)
                 + ", fullBaseline=" + ChunkDeltaOwnership.hasChunkisFullBaselineOnly(metadata)
-                + ", blockChanges=" + (delta != null ? delta.getBlockInstructions().size() : 0)
-                + ", blockEntities=" + (delta != null ? delta.getBlockEntities().size() : 0)
+                + ", blockChanges=" + (delta != null ? delta.getBlockInstructions()
+                                                       .size() : 0)
+                + ", blockEntities=" + (delta != null ? delta.getBlockEntities()
+                                                        .size() : 0)
                 + ", mutationGeneration=" + (delta != null ? delta.getMutationGeneration() : 0)
                 + ", firstMutationSource=" + (delta != null ? delta.getFirstMutationSource() : null)
                 + ", ownershipReason=" + (delta != null ? delta.getOwnershipReason() : null)
@@ -84,4 +125,3 @@ public final class ChunkOwnershipTraceHelper {
                 : ChunkMutationTrackingScope.Cause.NONE.name());
     }
 }
-

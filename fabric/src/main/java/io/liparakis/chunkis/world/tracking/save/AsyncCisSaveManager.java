@@ -30,11 +30,22 @@ import net.minecraft.world.World;
  */
 public final class AsyncCisSaveManager {
 
+    /**
+     * Log source tag identifier mapping for submit save operations.
+     */
     private static final String SUBMIT_SOURCE = "AsyncCisSaveManager#submit";
 
+    /**
+     * Backing registry mapping active async workers per dimension world key.
+     */
     private static final ConcurrentHashMap<RegistryKey<World>, AsyncCisSaveWorker> WORKERS =
             new ConcurrentHashMap<>();
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private AsyncCisSaveManager() {
         throw new AssertionError("Utility class");
     }
@@ -54,7 +65,7 @@ public final class AsyncCisSaveManager {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> liveDelta,
             final String operationId
-                             ) {
+    ) {
         if (!liveDelta.isDirty()) {
             return;
         }
@@ -70,15 +81,19 @@ public final class AsyncCisSaveManager {
                 ChunkTraceReason.NONE,
                 SUBMIT_SOURCE,
                 "queued async save generation " + generation,
-                world.getRegistryKey().getValue().toString(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 DebugChunkKeys.of(pos),
                 null,
                 operationId,
                 liveDelta.isDirty(),
                 null
-                             );
+        );
         PayloadWatchTracer.traceDeltaStage(
-                world.getRegistryKey().getValue().toString(),
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
                 pos,
                 snapshot,
                 operationId,
@@ -87,7 +102,7 @@ public final class AsyncCisSaveManager {
                 SUBMIT_SOURCE,
                 "delta queued for async save",
                 null
-                                          );
+        );
 
         workerFor(world).submit(new AsyncCisSaveWorker.PendingSave(
                 storage,
@@ -119,7 +134,8 @@ public final class AsyncCisSaveManager {
      * Closes all active workers and clears the registry.
      */
     public static void clear() {
-        WORKERS.values().forEach(AsyncCisSaveWorker::close);
+        WORKERS.values()
+                .forEach(AsyncCisSaveWorker::close);
         WORKERS.clear();
     }
 
@@ -137,12 +153,23 @@ public final class AsyncCisSaveManager {
         return worker == null ? Map.of() : worker.snapshot();
     }
 
+    /**
+     * Resolves worker mapping matching target world registry.
+     *
+     * @param world target server world
+     * @return async worker instance mapping
+     */
     private static AsyncCisSaveWorker workerFor(final ServerWorld world) {
         return WORKERS.computeIfAbsent(world.getRegistryKey(), ignored -> new AsyncCisSaveWorker(world));
     }
 
     /**
      * Stable diagnostic view of one queued async save.
+     *
+     * @param chunkKey    chunk key mapping coordinates
+     * @param operationId execution/operation trace ID label
+     * @param generation  mutation sequence count value
+     * @param dirtyState  true if the delta state matches modifications
      */
     public record PendingSaveSnapshot(
             DebugChunkKey chunkKey,

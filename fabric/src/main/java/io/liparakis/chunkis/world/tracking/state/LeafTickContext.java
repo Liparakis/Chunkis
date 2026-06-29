@@ -22,12 +22,12 @@ import org.slf4j.LoggerFactory;
  * to zero. This matters for Minecraft/server thread pools, where stale
  * {@link ThreadLocal} values can otherwise survive much longer than the operation
  * that created them.</p>
- *
- * @author Liparakis
- * @version 1.2
  */
 public final class LeafTickContext {
 
+    /**
+     * Logger instance reference.
+     */
     private static final Logger LOGGER =
             LoggerFactory.getLogger(LeafTickContext.class);
 
@@ -40,6 +40,11 @@ public final class LeafTickContext {
      */
     private static final ThreadLocal<ContextHolder> CONTEXT = new ThreadLocal<>();
 
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
     private LeafTickContext() {
         throw new AssertionError("Utility class");
     }
@@ -174,8 +179,9 @@ public final class LeafTickContext {
     private static void logMismatchedExit() {
         LOGGER.error(
                 "Leaf tick context exit without matching enter. Resetting context. (thread: {})",
-                Thread.currentThread().getName()
-                    );
+                Thread.currentThread()
+                        .getName()
+        );
 
         CONTEXT.remove();
     }
@@ -192,6 +198,12 @@ public final class LeafTickContext {
          * Nesting depth for the current thread.
          */
         private int depth;
+
+        /**
+         * Default constructor.
+         */
+        ContextHolder() {
+        }
     }
 
     /**
@@ -215,6 +227,11 @@ public final class LeafTickContext {
          */
         private boolean closed;
 
+        /**
+         * Constructor.
+         *
+         * @param holder Captured context holder reference
+         */
         private ContextHandle(final ContextHolder holder) {
             this.holder = holder;
         }

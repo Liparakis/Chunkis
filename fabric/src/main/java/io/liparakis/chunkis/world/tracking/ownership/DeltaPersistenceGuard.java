@@ -15,12 +15,13 @@ import net.minecraft.util.math.ChunkPos;
  *
  * @author Liparakis
  * @version 1.0
- *
  */
 public final class DeltaPersistenceGuard {
 
     /**
-     * Utility class – not instantiable.
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
      */
     private DeltaPersistenceGuard() {
         throw new AssertionError("Utility class");
@@ -48,7 +49,15 @@ public final class DeltaPersistenceGuard {
                 && !CisNbtUtil.hasFullBlockBaseline(meta);
     }
 
-    public static boolean shouldRejectSparseDeltaWithoutBase(final ChunkDelta<?, ?> delta, final boolean trustV11SnapshotPayload) {
+    /**
+     * Returns {@code true} if {@code delta} should be rejected, with option to trust v11 snapshots.
+     *
+     * @param delta                   the candidate delta; {@code null} is treated as safe
+     * @param trustV11SnapshotPayload true if v11 snapshots are trusted baseline sources
+     * @return {@code true} if the delta should be rejected
+     */
+    public static boolean shouldRejectSparseDeltaWithoutBase(final ChunkDelta<?, ?> delta,
+            final boolean trustV11SnapshotPayload) {
         if (delta == null) {
             return false;
         }
@@ -58,13 +67,21 @@ public final class DeltaPersistenceGuard {
         return shouldRejectSparseDeltaWithoutBase(delta);
     }
 
+    /**
+     * Evaluates if delta represents block entities only without baseline data.
+     *
+     * @param delta candidate delta
+     * @return true if payload is invalid block-entity only
+     */
     public static boolean hasInvalidBlockEntityOnlyPayloadWithoutBase(final ChunkDelta<?, ?> delta) {
         if (delta == null) {
             return false;
         }
         final Object meta = delta.getChunkMetadata();
-        return delta.getBlockInstructions().isEmpty()
-                && !delta.getBlockEntities().isEmpty()
+        return delta.getBlockInstructions()
+                .isEmpty()
+                && !delta.getBlockEntities()
+                .isEmpty()
                 && !CisNbtUtil.hasPersistedBaseChunkNbt(meta)
                 && !CisNbtUtil.hasFullBlockBaseline(meta);
     }
@@ -90,22 +107,31 @@ public final class DeltaPersistenceGuard {
         Chunkis.LOGGER.error(
                 "Chunkis [INVALID_SAVE]: Rejected base-less sparse delta for {} in {} path={} caller={} shape={} suppressInitialRepopulation={}",
                 pos != null ? pos : "<unknown>",
-                world != null ? world.getRegistryKey().getValue() : "<unknown>",
+                world != null ? world.getRegistryKey()
+                                .getValue() : "<unknown>",
                 path,
                 caller,
                 describeDeltaShape(delta),
                 delta.shouldSuppressInitialRepopulation()
-                            );
+        );
     }
 
+    /**
+     * Generates a descriptive string for a chunk delta shape/metrics.
+     *
+     * @param delta candidate delta
+     * @return description summary text
+     */
     public static String describeDeltaShape(final ChunkDelta<?, ?> delta) {
         if (delta == null) {
             return "null";
         }
 
         final Object meta = delta.getChunkMetadata();
-        return "blocks=" + delta.getBlockInstructions().size()
-                + ", blockEntities=" + delta.getBlockEntities().size()
+        return "blocks=" + delta.getBlockInstructions()
+                .size()
+                + ", blockEntities=" + delta.getBlockEntities()
+                .size()
                 + ", entities=" + delta.countNonNullEntities()
                 + ", sections=" + countSections(delta)
                 + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(meta)
@@ -118,6 +144,12 @@ public final class DeltaPersistenceGuard {
                 + ", sparse=" + hasReplayPayload(delta);
     }
 
+    /**
+     * Generates a descriptive string for a delta lifecycle state.
+     *
+     * @param delta candidate delta
+     * @return description lifecycle text
+     */
     public static String describeLifecycleState(final ChunkDelta<?, ?> delta) {
         if (delta == null) {
             return "null";
@@ -130,14 +162,23 @@ public final class DeltaPersistenceGuard {
                 + ", authoritativeV11Snapshot=" + hasAuthoritativeV11SnapshotPayload(delta)
                 + ", metadataKeys=" + describeMetadataKeys(meta)
                 + ", suppressInitialRepopulation=" + delta.shouldSuppressInitialRepopulation()
-                + ", blockChanges=" + delta.getBlockInstructions().size()
-                + ", blockEntities=" + delta.getBlockEntities().size();
+                + ", blockChanges=" + delta.getBlockInstructions()
+                .size()
+                + ", blockEntities=" + delta.getBlockEntities()
+                .size();
     }
 
+    /**
+     * Checks if the delta contains an authoritative v11 snapshot payload.
+     *
+     * @param delta candidate delta
+     * @return true if snapshot payload is authoritative v11
+     */
     public static boolean hasAuthoritativeV11SnapshotPayload(final ChunkDelta<?, ?> delta) {
         return delta != null
                 && delta.getSourceVersion() >= io.liparakis.chunkis.storage.model.CisConstants.VERSION
-                && !delta.getBlockInstructions().isEmpty();
+                && !delta.getBlockInstructions()
+                .isEmpty();
     }
 
     /**
@@ -145,27 +186,41 @@ public final class DeltaPersistenceGuard {
      * fully authoritative snapshot baseline.
      */
     private static boolean hasReplayPayload(final ChunkDelta<?, ?> delta) {
-        return !delta.getBlockInstructions().isEmpty()
-                || !delta.getBlockEntities().isEmpty()
+        return !delta.getBlockInstructions()
+                .isEmpty()
+                || !delta.getBlockEntities()
+                .isEmpty()
                 || delta.countNonNullEntities() > 0;
     }
 
+    /**
+     * Helper counts unique block section offsets mapped inside the delta.
+     *
+     * @param delta candidate delta
+     * @return section count integer
+     */
     private static int countSections(final ChunkDelta<?, ?> delta) {
         final java.util.Set<Integer> sections = new java.util.HashSet<>();
         delta.forEachBlock((x, y, z, state) -> sections.add(y >> 4));
-        delta.getBlockEntities().forEach((packedPos, nbt) ->
-                                                 sections.add(
-                                                         io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos)
-                                                                 >> 4));
+        delta.getBlockEntities()
+                .forEach((packedPos, nbt) ->
+                        sections.add(
+                                io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos)
+                                        >> 4));
         return sections.size();
     }
 
+    /**
+     * Describes key listings found inside metadata compounds.
+     *
+     * @param metadata candidate metadata object
+     * @return descriptive keys text list
+     */
     private static String describeMetadataKeys(final Object metadata) {
         if (!(metadata instanceof net.minecraft.nbt.NbtCompound compound) || compound.isEmpty()) {
             return "[]";
         }
-        return compound.getKeys().toString();
+        return compound.getKeys()
+                .toString();
     }
 }
-
-
