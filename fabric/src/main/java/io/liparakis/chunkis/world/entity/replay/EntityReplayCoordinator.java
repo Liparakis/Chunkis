@@ -1,8 +1,8 @@
 package io.liparakis.chunkis.world.entity.replay;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;

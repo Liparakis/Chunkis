@@ -6,14 +6,13 @@ import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
-import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
-import io.liparakis.chunkis.debug.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityNbtCapture;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
@@ -179,8 +178,10 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         }
 
         final ChunkDelta<BlockState, NbtCompound> delta =
-                chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
-                        SET_BLOCK_STATE_SOURCE);
+                chunkis$getOrCreateOwnedBlockDelta(
+                        chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+                        SET_BLOCK_STATE_SOURCE
+                );
         final boolean becameDirty = !delta.isDirty();
         if (chunk.getWorld() instanceof ServerWorld serverWorld) {
             BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
@@ -272,8 +273,10 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         }
 
         final ChunkDelta<BlockState, NbtCompound> delta =
-                chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
-                        SET_BLOCK_ENTITY_SOURCE);
+                chunkis$getOrCreateOwnedBlockDelta(
+                        chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+                        SET_BLOCK_ENTITY_SOURCE
+                );
         try {
             BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
             delta.prepareForMutation(SET_BLOCK_ENTITY_SOURCE);
@@ -303,8 +306,10 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         }
 
         final ChunkDelta<BlockState, NbtCompound> delta =
-                chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
-                        REMOVE_BLOCK_ENTITY_SOURCE);
+                chunkis$getOrCreateOwnedBlockDelta(
+                        chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+                        REMOVE_BLOCK_ENTITY_SOURCE
+                );
         delta.prepareForMutation(REMOVE_BLOCK_ENTITY_SOURCE);
         delta.removeBlockEntityData(
                 pos.getX() & CisConstants.COORD_MASK, pos.getY(),
@@ -401,7 +406,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         try {
             chunkis$restoreChunkFromDelta(world, chunkis$self(), protoChunk, protoDelta);
         } finally {
-            if (protoDelta != null && protoOperationId != null) {
+            if (protoOperationId != null) {
                 PayloadWatchTracer.traceProtoDeltaPresentAfterConversion(
                         world.getRegistryKey().getValue().toString(),
                         protoChunk,
@@ -589,14 +594,12 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
             final ProtoChunk proto,
             final ChunkDelta<BlockState, NbtCompound> protoDelta) {
         final ChunkDelta<BlockState, NbtCompound> selfDelta =
-                chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
-                        RESTORE_SOURCE);
+                chunkis$getOrCreateOwnedBlockDelta(
+                        chunk, ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
+                        RESTORE_SOURCE
+                );
         final String operationId = chunkis$takeRestoreOperationId((ChunkisDeltaDuck) proto);
-        if (selfDelta != null) {
-            PayloadWatchTracer.traceWorldChunkDeltaAttached(chunk, selfDelta, operationId, RESTORE_SOURCE);
-        } else {
-            PayloadWatchTracer.traceWorldChunkDeltaMissing(chunk, operationId, RESTORE_SOURCE);
-        }
+        PayloadWatchTracer.traceWorldChunkDeltaAttached(chunk, selfDelta, operationId, RESTORE_SOURCE);
         boolean coreRestoreCompleted = false;
         String failedStage = "chunk-restore";
         selfDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());

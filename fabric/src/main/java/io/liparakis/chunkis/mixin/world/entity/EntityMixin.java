@@ -2,7 +2,7 @@ package io.liparakis.chunkis.mixin.world.entity;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import net.minecraft.entity.Entity;

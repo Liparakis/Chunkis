@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.world.restoration.core;
 
 import io.liparakis.chunkis.Chunkis;
-import io.liparakis.chunkis.debug.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;

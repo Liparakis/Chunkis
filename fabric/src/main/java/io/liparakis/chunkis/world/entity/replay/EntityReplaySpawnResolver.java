@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.world.entity.replay;
 
-import io.liparakis.chunkis.debug.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import net.minecraft.entity.Entity;

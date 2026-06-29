@@ -70,14 +70,11 @@ final class EntityReplayDiagnostics {
         final boolean visibleByQuery = uuid != null && ChunkEntityQueries.isVisibleFromWorldQuery(world, uuid,
                 searchBox);
 
-        Chunkis.LOGGER.info(
-                "Chunkis entity replay materialization: dimension={} chunk={},{} uuid={} nbtType={} nbtBlockPos={} " +
-                        "nbtPos={} liveExists={} liveType={} liveChunk={} chunkLoaded={} entityTicking={} " +
-                        "mutationSuppression={} chunkSuppression={} pendingBefore={} queueSize={} materialized={} " +
-                        "visibleByWorldQuery={} decision={} thread={}",
-                world.getRegistryKey().getValue(),
-                chunkPos.x,
-                chunkPos.z,
+        final String message = String.format(
+                "entity replay materialization: uuid=%s nbtType=%s nbtBlockPos=%s " +
+                        "nbtPos=%s liveExists=%b liveType=%s liveChunk=%s chunkLoaded=%b entityTicking=%b " +
+                        "mutationSuppression=%s chunkSuppression=%s pendingBefore=%d queueSize=%d materialized=%b " +
+                        "visibleByWorldQuery=%b decision=%s thread=%s",
                 entityUuid,
                 nbtType,
                 nbtBlockPos == null ? "<missing>" : nbtBlockPos.toShortString(),
@@ -96,5 +93,22 @@ final class EntityReplayDiagnostics {
                 decision,
                 Thread.currentThread().getName()
         );
+
+        io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
+                io.liparakis.chunkis.debug.model.ChunkisDebugDomain.ENTITY_REPLAY,
+                io.liparakis.chunkis.debug.model.ChunkTraceEventType.ENTITY_REPLAY_MATERIALIZATION,
+                io.liparakis.chunkis.debug.model.ChunkTraceSeverity.INFO,
+                io.liparakis.chunkis.debug.model.ChunkTraceReason.ENTITY_REPLAY,
+                "EntityReplayDiagnostics#traceReplayDecision",
+                message,
+                world.getRegistryKey().getValue().toString(),
+                new io.liparakis.chunkis.debug.model.key.DebugChunkKey(chunkPos.x, chunkPos.z),
+                null,
+                null,
+                null,
+                null
+        );
+
+        Chunkis.LOGGER.debug("Chunkis {}", message);
     }
 }

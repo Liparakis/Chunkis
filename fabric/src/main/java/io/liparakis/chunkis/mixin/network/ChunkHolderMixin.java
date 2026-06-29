@@ -2,14 +2,14 @@ package io.liparakis.chunkis.mixin.network;
 
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
-import io.liparakis.chunkis.debug.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.network.ChunkisNetworking;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import net.minecraft.block.BlockState;
@@ -83,8 +83,7 @@ public abstract class ChunkHolderMixin {
         if (chunk instanceof ChunkisDeltaDuck deltaDuck
                 && chunk.getWorld() instanceof ServerWorld serverWorld
                 && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
-            @SuppressWarnings("unchecked")
-            final ChunkDelta<BlockState, NbtCompound> delta =
+            @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> delta =
                     (ChunkDelta<BlockState, NbtCompound>) rawDelta;
             ChunkRestorer.replayPendingEntitiesIfNeeded(
                     serverWorld,
@@ -119,8 +118,7 @@ public abstract class ChunkHolderMixin {
         if (chunk.getWorld() instanceof ServerWorld serverWorld
                 && chunk instanceof ChunkisDeltaDuck deltaDuck
                 && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
-            @SuppressWarnings("unchecked")
-            final ChunkDelta<BlockState, NbtCompound> delta =
+            @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> delta =
                     (ChunkDelta<BlockState, NbtCompound>) rawDelta;
             PayloadWatchTracer.traceEntityPresenceAfterChunkFull(
                     serverWorld,

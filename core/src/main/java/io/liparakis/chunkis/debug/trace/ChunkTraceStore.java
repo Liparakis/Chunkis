@@ -7,11 +7,7 @@ import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
@@ -27,15 +23,13 @@ import java.util.function.Predicate;
  *
  * <h2>Suspects</h2>
  * <p>Certain event types automatically trigger "suspect" records that aggregate
- * anomaly information for a {@code (chunkKey, reason)} pair. Suspects are capped
- * at {@link #DEFAULT_SUSPECT_CAPACITY}; the least-recently-updated suspect is
- * evicted when the cap is exceeded. Each suspect carries a trimmed event
- * timeline capped at {@link #DEFAULT_SUSPECT_TIMELINE_CAPACITY} entries.</p>
+ * anomaly information for a {@code (chunkKey, reason)} pair. Suspects management
+ * is delegated to {@link ChunkTraceSuspectManager}.</p>
  *
  * <h2>Threading</h2>
- * <p>All mutable state is guarded by {@link #MONITOR}. The three
- * {@link AtomicLong} counters ({@link #EVENT_IDS}, {@link #OPERATION_IDS},
- * {@link #SUSPECT_IDS}) are incremented without the lock; their values are used
+ * <p>All mutable state is guarded by {@link #MONITOR}. The two
+ * {@link AtomicLong} counters ({@link #EVENT_IDS}, {@link #OPERATION_IDS})
+ * are incremented without the lock; their values are used
  * only as unique IDs, so minor reordering under concurrent access is
  * inconsequential.</p>
  */
@@ -45,10 +39,6 @@ public final class ChunkTraceStore {
      * Default number of events retained in the ring buffer.
      */
     static final int DEFAULT_CAPACITY = 50_000;
-    /**
-     * Default maximum number of active suspects.
-     */
-    static final int DEFAULT_SUSPECT_CAPACITY = 256;
     /**
      * Maximum number of events retained per suspect timeline. Older events are
      * trimmed when the timeline exceeds this limit during a merge.
@@ -63,10 +53,6 @@ public final class ChunkTraceStore {
      * Monotonic counter for operation IDs returned by {@link #nextOperationId}.
      */
     private static final AtomicLong OPERATION_IDS = new AtomicLong();
-    /**
-     * Monotonic counter for {@link ChunkTraceSuspect#suspectId()}.
-     */
-    private static final AtomicLong SUSPECT_IDS = new AtomicLong();
 
     private static final Object MONITOR = new Object();
 
@@ -86,22 +72,6 @@ public final class ChunkTraceStore {
      * Next write position in {@link #ring}. Wraps modulo {@link #capacity}.
      */
     private static int writeIndex = 0;
-
-    /**
-     * Current maximum number of tracked suspects.
-     */
-    private static int suspectCapacity = DEFAULT_SUSPECT_CAPACITY;
-    /**
-     * Suspects indexed by their monotonic ID. Bounded by {@link #suspectCapacity};
-     * eviction is LRU by {@link ChunkTraceSuspect#lastSeenTimestampMillis()}.
-     * Eviction is O(n) — acceptable given the small cap.
-     */
-    private static final Map<Long, ChunkTraceSuspect> SUSPECTS_BY_ID = new HashMap<>();
-    /**
-     * Maps {@code (chunkKey, reason)} to the suspect ID, allowing upsert
-     * without a full scan of {@link #SUSPECTS_BY_ID}.
-     */
-    private static final Map<SuspectKey, Long> SUSPECT_IDS_BY_KEY = new HashMap<>();
 
     private ChunkTraceStore() {
         throw new AssertionError("Utility class");
@@ -124,9 +94,9 @@ public final class ChunkTraceStore {
         final ChunkTraceEvent stored = append(event);
         final ChunkTraceEvent assertion = maybeRecordInvariantFailure(stored);
 
-        maybeCaptureSuspect(stored);
+        ChunkTraceSuspectManager.maybeCaptureSuspect(stored);
         if (assertion != null) {
-            maybeCaptureSuspect(assertion);
+            ChunkTraceSuspectManager.maybeCaptureSuspect(assertion);
         }
     }
 
@@ -367,20 +337,12 @@ public final class ChunkTraceStore {
     }
 
     /**
-     * Returns all active suspects sorted by {@link ChunkTraceSuspect#lastSeenTimestampMillis}
-     * descending (then by {@code suspectId} descending as a tiebreaker), so the
-     * most recently active anomaly is first.
+     * Returns all active suspects.
      *
      * @return sorted snapshot of all suspects; never {@code null}
      */
     public static List<ChunkTraceSuspect> suspects() {
-        synchronized (MONITOR) {
-            final List<ChunkTraceSuspect> result = new ArrayList<>(SUSPECTS_BY_ID.values());
-            result.sort(Comparator.comparingLong(ChunkTraceSuspect::lastSeenTimestampMillis)
-                    .thenComparingLong(ChunkTraceSuspect::suspectId)
-                    .reversed());
-            return result;
-        }
+        return ChunkTraceSuspectManager.suspects();
     }
 
     /**
@@ -391,33 +353,18 @@ public final class ChunkTraceStore {
      * @return the suspect, or {@code null}
      */
     public static ChunkTraceSuspect suspect(final long suspectId) {
-        synchronized (MONITOR) {
-            return SUSPECTS_BY_ID.get(suspectId);
-        }
+        return ChunkTraceSuspectManager.suspect(suspectId);
     }
 
     /**
      * Returns the most recently updated suspect for the given chunk, or
      * {@code null} if none exists.
      *
-     * <p>A chunk may have multiple suspects with different reasons; this returns
-     * the one with the highest {@code lastSeenTimestampMillis}.</p>
-     *
      * @param chunkKey the chunk to query; must not be {@code null}
      * @return the most recent suspect for that chunk, or {@code null}
      */
     public static ChunkTraceSuspect suspect(final DebugChunkKey chunkKey) {
-        Objects.requireNonNull(chunkKey, "chunkKey");
-        ChunkTraceSuspect newest = null;
-        synchronized (MONITOR) {
-            for (final ChunkTraceSuspect s : SUSPECTS_BY_ID.values()) {
-                if (chunkKey.equals(s.chunkKey())
-                        && (newest == null || s.lastSeenTimestampMillis() > newest.lastSeenTimestampMillis())) {
-                    newest = s;
-                }
-            }
-        }
-        return newest;
+        return ChunkTraceSuspectManager.suspect(chunkKey);
     }
 
     /**
@@ -428,18 +375,14 @@ public final class ChunkTraceStore {
      * @return the suspect's timeline; never {@code null}
      */
     public static List<ChunkTraceEvent> suspectTimeline(final long suspectId) {
-        final ChunkTraceSuspect s = suspect(suspectId);
-        return s == null ? List.of() : s.copiedTimeline();
+        return ChunkTraceSuspectManager.suspectTimeline(suspectId);
     }
 
     /**
      * Removes all tracked suspects.
      */
     public static void clearSuspects() {
-        synchronized (MONITOR) {
-            SUSPECTS_BY_ID.clear();
-            SUSPECT_IDS_BY_KEY.clear();
-        }
+        ChunkTraceSuspectManager.clearSuspects();
     }
 
     /**
@@ -471,10 +414,6 @@ public final class ChunkTraceStore {
      * it. Returns {@code null} if the event is structurally valid or is itself
      * an assertion event (preventing infinite recursion).
      *
-     * <p>The assertion event inherits context fields (world, chunk, region,
-     * operation, dirty, byte size, payload watch) from the triggering event so
-     * it surfaces in the same filtered views.</p>
-     *
      * @param event the event to validate
      * @return the synthetic assertion event, or {@code null}
      */
@@ -503,24 +442,6 @@ public final class ChunkTraceStore {
     }
 
     /**
-     * If {@code event} qualifies as a suspect trigger and has a chunk key,
-     * creates or updates the matching {@link ChunkTraceSuspect}.
-     *
-     * @param event the event to evaluate
-     */
-    private static void maybeCaptureSuspect(final ChunkTraceEvent event) {
-        if (event.chunkKey() == null) {
-            return;
-        }
-        final Suspicion suspicion = describeSuspicion(event);
-        if (suspicion == null) {
-            return;
-        }
-        final List<ChunkTraceEvent> timeline = copyRelevantTimeline(event);
-        upsertSuspect(event, suspicion, timeline);
-    }
-
-    /**
      * Returns {@code true} for event types that represent failures or anomalies,
      * used by {@link #latestFailures}.
      *
@@ -533,58 +454,6 @@ public final class ChunkTraceStore {
                  RESTORE_FAILED, CLIENT_SYNC_FAILED -> true;
             case RESTORE_COMPLETED -> event.reason() == ChunkTraceReason.RESTORE_EMPTY_RESULT;
             default -> false;
-        };
-    }
-
-    /**
-     * Returns the {@link Suspicion} descriptor for {@code event} if it should
-     * trigger suspect capture, or {@code null} otherwise.
-     *
-     * <p>Some event types are unconditional suspects (e.g. assertion failures).
-     * Others require additional ring-buffer history checks (e.g. detecting that
-     * a load resolved to "neither" despite prior stored payloads).</p>
-     *
-     * @param event the candidate event
-     * @return a {@link Suspicion} if the event warrants suspect capture, else {@code null}
-     */
-    private static Suspicion describeSuspicion(final ChunkTraceEvent event) {
-        return switch (event.eventType()) {
-            case ASSERTION_FAILED, SAVE_REJECTED, SAVE_FLUSH_FAILED,
-                 RESTORE_FAILED, CLIENT_SYNC_FAILED -> new Suspicion(event.reason(), event.severity(), event.message());
-
-            case RESTORE_COMPLETED -> event.reason() == ChunkTraceReason.RESTORE_EMPTY_RESULT
-                    ? new Suspicion(event.reason(), ChunkTraceSeverity.ERROR, event.message())
-                    : null;
-
-            case LOAD_SOURCE_RESOLVED -> event.reason() == ChunkTraceReason.NEITHER
-                    && hadPriorStoredPayload(event.chunkKey(), event.eventId())
-                    ? new Suspicion(
-                    ChunkTraceReason.NEITHER,
-                    ChunkTraceSeverity.WARN,
-                    "load resolved to neither after prior stored payload"
-            )
-                    : null;
-
-            case DELTA_MARKED_CLEAN -> event.operationId() != null
-                    && !hasConfirmedFlush(event.chunkKey(), event.operationId(), event.eventId())
-                    ? new Suspicion(
-                    ChunkTraceReason.DELTA_MARKED_SAVED,
-                    ChunkTraceSeverity.WARN,
-                    "delta marked clean before confirmed flush"
-            )
-                    : null;
-
-            case TRACKER_STATE_UPDATED -> event.reason() == ChunkTraceReason.TRACKER_CHUNK_UNLOADED
-                    && Boolean.TRUE.equals(event.dirtyState())
-                    && !hadQueuedOrFlushedSinceDirty(event.chunkKey(), event.eventId())
-                    ? new Suspicion(
-                    ChunkTraceReason.TRACKER_CHUNK_UNLOADED,
-                    ChunkTraceSeverity.ERROR,
-                    "dirty chunk unloaded without queued or flushed save evidence"
-            )
-                    : null;
-
-            default -> null;
         };
     }
 
@@ -608,14 +477,8 @@ public final class ChunkTraceStore {
      * Returns {@code true} if a {@link ChunkTraceEventType#REGION_WRITE_TX_END}
      * or {@link ChunkTraceEventType#SAVE_FLUSH_COMPLETED} event for {@code chunkKey}
      * exists in the ring buffer before {@code beforeEventId}.
-     *
-     * <p>Used to determine whether the "neither" load-source result is suspicious.</p>
-     *
-     * @param chunkKey      chunk key to match
-     * @param beforeEventId only consider events with IDs strictly less than this
-     * @return {@code true} if a prior stored-payload event exists
      */
-    private static boolean hadPriorStoredPayload(final DebugChunkKey chunkKey, final long beforeEventId) {
+    static boolean hadPriorStoredPayload(final DebugChunkKey chunkKey, final long beforeEventId) {
         synchronized (MONITOR) {
             for (int i = size - 1; i >= 0; i--) {
                 final ChunkTraceEvent event = ringAt(i);
@@ -634,19 +497,8 @@ public final class ChunkTraceStore {
     /**
      * Returns {@code true} if a save-queued or flush event for {@code chunkKey}
      * occurred after the most recent dirty event before {@code beforeEventId}.
-     *
-     * <p>The scan finds the most recent dirty window (a
-     * {@link ChunkTraceEventType#DELTA_MARKED_DIRTY} or
-     * {@link ChunkTraceEventType#TRACKER_STATE_UPDATED} +
-     * {@link ChunkTraceReason#TRACKER_DIRTY_MAP_PUT} event) and checks whether a
-     * save-queued or flush event followed it. Used to detect dirty chunks that
-     * unloaded without any save evidence.</p>
-     *
-     * @param chunkKey      chunk key to match
-     * @param beforeEventId only consider events with IDs strictly less than this
-     * @return {@code true} if a save was queued or flushed after the dirty event
      */
-    private static boolean hadQueuedOrFlushedSinceDirty(final DebugChunkKey chunkKey, final long beforeEventId) {
+    static boolean hadQueuedOrFlushedSinceDirty(final DebugChunkKey chunkKey, final long beforeEventId) {
         boolean dirtyWindowOpen = false;
         boolean queuedOrFlushed = false;
 
@@ -657,7 +509,6 @@ public final class ChunkTraceStore {
                     continue;
                 }
                 if (isDirtyMarkerEvent(event)) {
-                    // Each dirty marker resets the window; saves must follow it.
                     dirtyWindowOpen = true;
                     queuedOrFlushed = false;
                     continue;
@@ -674,15 +525,8 @@ public final class ChunkTraceStore {
     /**
      * Returns {@code true} if a confirmed-flush event for {@code chunkKey} and
      * {@code operationId} exists before {@code beforeEventId}.
-     *
-     * <p>Used to detect deltas marked clean before their save was confirmed.</p>
-     *
-     * @param chunkKey      chunk key to match
-     * @param operationId   operation ID to match
-     * @param beforeEventId only consider events with IDs strictly less than this
-     * @return {@code true} if a flush-completion event for the operation exists
      */
-    private static boolean hasConfirmedFlush(
+    static boolean hasConfirmedFlush(
             final DebugChunkKey chunkKey,
             final String operationId,
             final long beforeEventId
@@ -701,40 +545,18 @@ public final class ChunkTraceStore {
         return false;
     }
 
-    /**
-     * Returns {@code true} if {@code event} marks a chunk as dirty, opening a
-     * new save-expectation window in {@link #hadQueuedOrFlushedSinceDirty}.
-     *
-     * @param event event to classify
-     * @return {@code true} for dirty-marker events
-     */
     private static boolean isDirtyMarkerEvent(final ChunkTraceEvent event) {
         return event.eventType() == ChunkTraceEventType.DELTA_MARKED_DIRTY
                 || (event.eventType() == ChunkTraceEventType.TRACKER_STATE_UPDATED
                 && event.reason() == ChunkTraceReason.TRACKER_DIRTY_MAP_PUT);
     }
 
-    /**
-     * Returns {@code true} if {@code event} constitutes evidence that a save
-     * was queued or flushed, satisfying the dirty-window requirement in
-     * {@link #hadQueuedOrFlushedSinceDirty}.
-     *
-     * @param event event to classify
-     * @return {@code true} for save-progress events
-     */
     private static boolean isSaveProgressEvent(final ChunkTraceEvent event) {
         return event.eventType() == ChunkTraceEventType.SAVE_QUEUED
                 || event.eventType() == ChunkTraceEventType.REGION_WRITE_TX_END
                 || event.eventType() == ChunkTraceEventType.SAVE_FLUSH_COMPLETED;
     }
 
-    /**
-     * Returns {@code true} if {@code event} represents a confirmed flush
-     * completion, used by {@link #hasConfirmedFlush}.
-     *
-     * @param event event to classify
-     * @return {@code true} for flush-completion events
-     */
     private static boolean isSaveFlushCompletedEvent(final ChunkTraceEvent event) {
         return event.eventType() == ChunkTraceEventType.REGION_WRITE_TX_END
                 || event.eventType() == ChunkTraceEventType.SAVE_FLUSH_COMPLETED;
@@ -743,16 +565,8 @@ public final class ChunkTraceStore {
     /**
      * Builds a trimmed list of ring-buffer events relevant to {@code event} for
      * use as the initial or updated suspect timeline.
-     *
-     * <p>An event is included if it shares the same chunk key or operation ID as
-     * {@code event}. The result is trimmed to the most recent
-     * {@link #DEFAULT_SUSPECT_TIMELINE_CAPACITY} entries (chronological order is
-     * preserved by the ring traversal, oldest to newest).</p>
-     *
-     * @param event the triggering event
-     * @return trimmed list of related events, oldest first
      */
-    private static List<ChunkTraceEvent> copyRelevantTimeline(final ChunkTraceEvent event) {
+    static List<ChunkTraceEvent> copyRelevantTimeline(final ChunkTraceEvent event) {
         final DebugChunkKey chunkKey = event.chunkKey();
         final String operationId = event.operationId();
         final List<ChunkTraceEvent> matches = new ArrayList<>(DEFAULT_SUSPECT_TIMELINE_CAPACITY);
@@ -776,170 +590,7 @@ public final class ChunkTraceStore {
     }
 
     /**
-     * Creates or updates the suspect for the {@code (chunkKey, reason)} pair
-     * derived from {@code event}.
-     *
-     * <p>If no suspect exists for the key, a new one is created and eviction is
-     * triggered if the cap is exceeded. If one already exists, its occurrence
-     * count, severity, timeline, and latest-event fields are updated.</p>
-     *
-     * @param event            the event that triggered suspect capture
-     * @param suspicion        reason and severity descriptor
-     * @param capturedTimeline relevant event history for this suspect
-     */
-    private static void upsertSuspect(
-            final ChunkTraceEvent event,
-            final Suspicion suspicion,
-            final List<ChunkTraceEvent> capturedTimeline
-    ) {
-        synchronized (MONITOR) {
-            final SuspectKey key = new SuspectKey(event.chunkKey(), suspicion.reason());
-            final Long existingId = SUSPECT_IDS_BY_KEY.get(key);
-
-            if (existingId == null) {
-                final long newId = SUSPECT_IDS.incrementAndGet();
-                SUSPECT_IDS_BY_KEY.put(key, newId);
-                SUSPECTS_BY_ID.put(
-                        newId, new ChunkTraceSuspect(
-                                newId, event, event,
-                                event.chunkKey(), event.regionKey(), event.operationId(),
-                                suspicion.reason(), suspicion.severity(),
-                                event.timestampMillis(), event.timestampMillis(),
-                                1, capturedTimeline, suspicion.message()
-                        )
-                );
-                evictOldestSuspectIfNeeded();
-                return;
-            }
-
-            final ChunkTraceSuspect existing = SUSPECTS_BY_ID.get(existingId);
-            if (existing == null) {
-                // Should not happen: both maps are updated atomically under MONITOR.
-                // Defensive: clean up and insert fresh.
-                SUSPECT_IDS_BY_KEY.remove(key);
-                upsertSuspect(event, suspicion, capturedTimeline);
-                return;
-            }
-
-            SUSPECTS_BY_ID.put(
-                    existingId, new ChunkTraceSuspect(
-                            existing.suspectId(),
-                            existing.originalFailureEvent(),
-                            event,
-                            existing.chunkKey(),
-                            event.regionKey() != null ? event.regionKey() : existing.regionKey(),
-                            event.operationId() != null ? event.operationId() : existing.operationId(),
-                            existing.reason(),
-                            moreSevere(existing.severity(), suspicion.severity()),
-                            existing.firstSeenTimestampMillis(),
-                            event.timestampMillis(),
-                            existing.occurrenceCount() + 1,
-                            mergeTimeline(existing.copiedTimeline(), capturedTimeline),
-                            suspicion.message()
-                    )
-            );
-        }
-    }
-
-    /**
-     * Evicts the least-recently-updated suspect when the cap is exceeded.
-     *
-     * <p>Eviction is O(n) in the number of active suspects. With a cap of
-     * {@value #DEFAULT_SUSPECT_CAPACITY} this is acceptable. Both maps are
-     * updated atomically to keep them consistent.</p>
-     *
-     * <p>Must be called with {@link #MONITOR} held.</p>
-     */
-    private static void evictOldestSuspectIfNeeded() {
-        while (SUSPECTS_BY_ID.size() > suspectCapacity) {
-            long oldestId = -1L;
-            ChunkTraceSuspect oldest = null;
-            for (final ChunkTraceSuspect s : SUSPECTS_BY_ID.values()) {
-                if (oldest == null
-                        || s.lastSeenTimestampMillis() < oldest.lastSeenTimestampMillis()
-                        || (s.lastSeenTimestampMillis() == oldest.lastSeenTimestampMillis()
-                        && s.suspectId() < oldest.suspectId())) {
-                    oldest = s;
-                    oldestId = s.suspectId();
-                }
-            }
-            if (oldest == null) {
-                return;
-            }
-            SUSPECTS_BY_ID.remove(oldestId);
-            SUSPECT_IDS_BY_KEY.remove(new SuspectKey(oldest.chunkKey(), oldest.reason()));
-        }
-    }
-
-    /**
-     * Merges two event timelines by deduplicating on {@link ChunkTraceEvent#eventId}
-     * and trimming to the most recent {@link #DEFAULT_SUSPECT_TIMELINE_CAPACITY} entries.
-     *
-     * <p>Entries from {@code existing} take precedence in insertion order;
-     * {@code captured} entries are merged on top. The result is oldest-first.</p>
-     *
-     * @param existing the current suspect timeline
-     * @param captured the newly captured timeline
-     * @return merged, trimmed timeline oldest-first
-     */
-    private static List<ChunkTraceEvent> mergeTimeline(
-            final List<ChunkTraceEvent> existing,
-            final List<ChunkTraceEvent> captured
-    ) {
-        final Map<Long, ChunkTraceEvent> merged = new LinkedHashMap<>();
-        for (final ChunkTraceEvent e : existing) merged.put(e.eventId(), e);
-        for (final ChunkTraceEvent e : captured) merged.put(e.eventId(), e);
-
-        final List<ChunkTraceEvent> timeline = new ArrayList<>(merged.values());
-        final int fromIndex = Math.max(0, timeline.size() - DEFAULT_SUSPECT_TIMELINE_CAPACITY);
-        return new ArrayList<>(timeline.subList(fromIndex, timeline.size()));
-    }
-
-    /**
-     * Returns the more severe of two {@link ChunkTraceSeverity} values,
-     * using enum ordinal ordering (higher ordinal = more severe).
-     *
-     * @param left  first severity
-     * @param right second severity
-     * @return the higher-ordinal value
-     */
-    private static ChunkTraceSeverity moreSevere(
-            final ChunkTraceSeverity left,
-            final ChunkTraceSeverity right
-    ) {
-        return left.ordinal() >= right.ordinal() ? left : right;
-    }
-
-    /**
-     * Describes why an event qualifies as a suspect trigger.
-     *
-     * @param reason   machine-readable cause
-     * @param severity severity to assign or escalate to
-     * @param message  human-readable description of the anomaly
-     */
-    private record Suspicion(
-            ChunkTraceReason reason,
-            ChunkTraceSeverity severity,
-            String message
-    ) {}
-
-    /**
-     * Composite key used to deduplicate suspects within the same chunk and cause.
-     *
-     * @param chunkKey chunk coordinates
-     * @param reason   machine-readable cause category
-     */
-    private record SuspectKey(
-            DebugChunkKey chunkKey,
-            ChunkTraceReason reason
-    ) {}
-
-    /**
      * Resets the ring buffer to a given capacity and clears all state.
-     *
-     * <p>Package-private; intended for unit tests only.</p>
-     *
-     * @param newCapacity new buffer capacity; must be &gt; 0
      */
     static void setCapacityForTests(final int newCapacity) {
         if (newCapacity <= 0) {
@@ -952,21 +603,14 @@ public final class ChunkTraceStore {
             writeIndex = 0;
             EVENT_IDS.set(0L);
             OPERATION_IDS.set(0L);
-            SUSPECT_IDS.set(0L);
-            SUSPECTS_BY_ID.clear();
-            SUSPECT_IDS_BY_KEY.clear();
         }
     }
 
     /**
      * Resets all state to defaults.
-     *
-     * <p>Package-private; intended for unit tests only.</p>
      */
     public static void resetForTests() {
-        synchronized (MONITOR) {
-            suspectCapacity = DEFAULT_SUSPECT_CAPACITY;
-        }
+        ChunkTraceSuspectManager.resetForTests();
         setCapacityForTests(DEFAULT_CAPACITY);
     }
 }

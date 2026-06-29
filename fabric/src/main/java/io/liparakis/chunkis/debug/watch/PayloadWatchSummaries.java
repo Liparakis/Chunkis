@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.watch;
 
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import net.minecraft.block.BlockState;
@@ -6,7 +6,6 @@ import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
@@ -20,16 +19,16 @@ import java.util.UUID;
  * Formatting and tiny lookup helpers for payload watch trace summaries.
  *
  * <p>This keeps string assembly and small NBT/entity identity probes out of
- * {@link PayloadWatchTracer}, which should stay focused on deciding when to
+ * PayloadWatchTracer, which should stay focused on deciding when to
  * emit trace events.</p>
  */
-final class PayloadWatchSummaries {
+public final class PayloadWatchSummaries {
 
     private PayloadWatchSummaries() {
         throw new AssertionError("Utility class");
     }
 
-    static String summarizeBlock(final PayloadWatchTarget target, final BlockState state) {
+    public static String summarizeBlock(final PayloadWatchTarget target, final BlockState state) {
         if (!target.hasBlockCoordinates()) {
             return target.describe() + " state=" + state;
         }
@@ -38,7 +37,7 @@ final class PayloadWatchSummaries {
                 + " section=" + (target.blockY() >> 4);
     }
 
-    static String summarizeExpectedAndActual(
+    public static String summarizeExpectedAndActual(
             final PayloadWatchTarget target,
             @Nullable final BlockState expectedState,
             @Nullable final BlockState actualServerState,
@@ -69,7 +68,7 @@ final class PayloadWatchSummaries {
                 + " section=" + (target.blockY() >> 4);
     }
 
-    static String summarizeBlockEntity(
+    public static String summarizeBlockEntity(
             final PayloadWatchTarget target,
             @Nullable final BlockEntity blockEntity,
             @Nullable final NbtCompound nbt
@@ -82,7 +81,7 @@ final class PayloadWatchSummaries {
                 + " nbtBytes=" + nbtSize(nbt);
     }
 
-    static String summarizeEntity(
+    public static String summarizeEntity(
             final PayloadWatchTarget target,
             final NbtCompound nbt
     ) {
@@ -92,7 +91,7 @@ final class PayloadWatchSummaries {
                 + " nbtBytes=" + nbtSize(nbt);
     }
 
-    static String summarizeExpectedEntityAndPresence(
+    public static String summarizeExpectedEntityAndPresence(
             final PayloadWatchTarget target,
             @Nullable final NbtCompound expectedNbt,
             @Nullable final Entity liveEntity,
@@ -107,7 +106,7 @@ final class PayloadWatchSummaries {
                 + " thread=" + Thread.currentThread().getName();
     }
 
-    static String summarizeRemovedEntity(
+    public static String summarizeRemovedEntity(
             final PayloadWatchTarget target,
             final Entity entity,
             final Entity.RemovalReason reason,
@@ -126,7 +125,7 @@ final class PayloadWatchSummaries {
                 + " thread=" + Thread.currentThread().getName();
     }
 
-    static String summarizeLiveEntity(
+    public static String summarizeLiveEntity(
             final PayloadWatchTarget target,
             final Entity entity,
             final String source
@@ -143,7 +142,7 @@ final class PayloadWatchSummaries {
                 + " thread=" + Thread.currentThread().getName();
     }
 
-    static int nbtSize(@Nullable final NbtCompound nbt) {
+    public static int nbtSize(@Nullable final NbtCompound nbt) {
         if (nbt == null) {
             return 0;
         }
@@ -158,7 +157,7 @@ final class PayloadWatchSummaries {
         }
     }
 
-    static @Nullable String entityUuid(@Nullable final NbtCompound nbt) {
+    public static @Nullable String entityUuid(@Nullable final NbtCompound nbt) {
         if (nbt == null) {
             return null;
         }
@@ -168,15 +167,15 @@ final class PayloadWatchSummaries {
                 .orElse(null);
     }
 
-    static String worldId(final ServerWorld world) {
+    public static String worldId(final ServerWorld world) {
         return world.getRegistryKey().getValue().toString();
     }
 
-    static String worldId(final WorldChunk chunk) {
+    public static String worldId(final WorldChunk chunk) {
         return chunk.getWorld().getRegistryKey().getValue().toString();
     }
 
-    static String chunkInstanceId(@Nullable final Chunk chunk) {
+    public static String chunkInstanceId(@Nullable final Chunk chunk) {
         return chunk != null
                 ? chunk.getClass().getSimpleName() + '@' + Integer.toHexString(System.identityHashCode(chunk))
                 : "UNAVAILABLE";

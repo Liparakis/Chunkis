@@ -71,32 +71,14 @@ public final class ChunkDelta<S, N> {
     private static final Predicate<Object> NEVER_EMPTY_STATE = ignored -> false;
 
     /**
-     * Packed block instructions.
-     *
-     * <p>Each instruction is laid out as:</p>
-     * <pre>{@code
-     * high 32 bits: palette id
-     * low  32 bits: packed local block position
-     * }</pre>
+     * Storage for packed block instructions and position map.
      */
-    private long[] packedInstructions;
-
-    /**
-     * Number of valid entries in {@link #packedInstructions}.
-     */
-    private int instructionCount;
+    private final BlockInstructionStorage instructions;
 
     /**
      * Palette mapping block states to compact integer ids.
      */
     private final Palette<S> blockPalette;
-
-    /**
-     * Packed position to instruction index lookup.
-     *
-     * <p>The default return value is {@code -1}, meaning absent.</p>
-     */
-    private final Long2IntOpenHashMap positionMap;
 
     /**
      * Lazily allocated block entity payloads keyed by packed position.
@@ -137,14 +119,9 @@ public final class ChunkDelta<S, N> {
     private int encodedChunkMetadataHash;
 
     /**
-     * Monotonic generation incremented every time the delta mutates.
+     * Ownership and dirty state metadata tracking.
      */
-    private long mutationGeneration;
-
-    /**
-     * Most recent generation known to be durably saved.
-     */
-    private long savedGeneration;
+    private final DeltaOwnershipState ownershipState;
 
     /**
      * CIS format version this delta was decoded from or last saved as.
@@ -157,26 +134,6 @@ public final class ChunkDelta<S, N> {
     private boolean suppressInitialRepopulation;
 
     /**
-     * First valid reason that made this delta Chunkis-owned.
-     */
-    private String ownershipReason;
-
-    /**
-     * Caller that first claimed Chunkis ownership for this delta.
-     */
-    private String ownershipSource;
-
-    /**
-     * First caller that caused this delta to become dirty.
-     */
-    private String firstMutationSource;
-
-    /**
-     * Scratch source carried into the next mutation transition.
-     */
-    private String pendingMutationSource;
-
-    /**
      * Predicate used to identify states that should clear block entity payloads.
      */
     private final Predicate<S> isEmptyState;
@@ -187,27 +144,26 @@ public final class ChunkDelta<S, N> {
      * @param isEmptyState predicate used to identify empty states such as air
      */
     public ChunkDelta(final Predicate<S> isEmptyState) {
-        this.packedInstructions = new long[INITIAL_CAPACITY];
-        this.instructionCount = 0;
+        this.instructions = new BlockInstructionStorage();
         this.blockPalette = new Palette<>();
-        this.positionMap = new Long2IntOpenHashMap(INITIAL_CAPACITY);
-        this.positionMap.defaultReturnValue(-1);
         this.blockEntities = null;
         this.activeEntities = null;
         this.pendingEntities = Collections.emptyList();
         this.chunkMetadata = null;
         this.encodedChunkMetadata = null;
         this.encodedChunkMetadataHash = 0;
-        this.mutationGeneration = 0L;
-        this.savedGeneration = 0L;
+        this.ownershipState = new DeltaOwnershipState();
         this.sourceVersion = CisConstants.VERSION;
         this.suppressInitialRepopulation = false;
-        this.ownershipReason = null;
-        this.ownershipSource = null;
-        this.firstMutationSource = null;
-        this.pendingMutationSource = null;
         this.isEmptyState = Objects.requireNonNull(isEmptyState, "isEmptyState");
     }
+
+    /**
+     * Creates an empty delta with no empty-state predicate.
+     *
+     * <p>Used by decode paths where the block-state adapter is not available yet.
+     * In this mode, no state is treated as empty.</p>
+     */
 
     /**
      * Creates an empty delta with no empty-state predicate.
@@ -236,12 +192,13 @@ public final class ChunkDelta<S, N> {
 
         final ChunkDelta<S, N> snap = new ChunkDelta<>(
                 this.blockPalette.copy(),
-                this.positionMap.clone(),
                 this.isEmptyState
         );
 
-        snap.packedInstructions = Arrays.copyOf(this.packedInstructions, this.packedInstructions.length);
-        snap.instructionCount = this.instructionCount;
+        snap.instructions.packedInstructions = Arrays.copyOf(this.instructions.packedInstructions, this.instructions.packedInstructions.length);
+        snap.instructions.instructionCount = this.instructions.instructionCount;
+        snap.instructions.positionMap.clear();
+        snap.instructions.positionMap.putAll(this.instructions.positionMap);
 
         if (this.blockEntities != null) {
             snap.blockEntities = new Long2ObjectOpenHashMap<>(this.blockEntities.size());
@@ -274,13 +231,13 @@ public final class ChunkDelta<S, N> {
             snap.encodedChunkMetadataHash = this.encodedChunkMetadataHash;
         }
 
-        snap.mutationGeneration = this.mutationGeneration;
-        snap.savedGeneration = this.savedGeneration;
+        snap.ownershipState.mutationGeneration = this.ownershipState.mutationGeneration;
+        snap.ownershipState.savedGeneration = this.ownershipState.savedGeneration;
         snap.sourceVersion = this.sourceVersion;
         snap.suppressInitialRepopulation = this.suppressInitialRepopulation;
-        snap.ownershipReason = this.ownershipReason;
-        snap.ownershipSource = this.ownershipSource;
-        snap.firstMutationSource = this.firstMutationSource;
+        snap.ownershipState.ownershipReason = this.ownershipState.ownershipReason;
+        snap.ownershipState.ownershipSource = this.ownershipState.ownershipSource;
+        snap.ownershipState.firstMutationSource = this.ownershipState.firstMutationSource;
 
         return snap;
     }
@@ -290,14 +247,12 @@ public final class ChunkDelta<S, N> {
      */
     private ChunkDelta(
             final Palette<S> blockPalette,
-            final Long2IntOpenHashMap positionMap,
             final Predicate<S> isEmptyState
     ) {
         this.blockPalette = blockPalette;
-        this.positionMap = positionMap;
         this.isEmptyState = isEmptyState;
-        this.packedInstructions = new long[INITIAL_CAPACITY];
-        this.instructionCount = 0;
+        this.instructions = new BlockInstructionStorage();
+        this.ownershipState = new DeltaOwnershipState();
         this.pendingEntities = Collections.emptyList();
         this.sourceVersion = CisConstants.VERSION;
     }
@@ -307,10 +262,10 @@ public final class ChunkDelta<S, N> {
      */
     private void markDirtyInternal() {
         final boolean wasDirty = isDirty();
-        mutationGeneration++;
+        ownershipState.mutationGeneration++;
         if (!wasDirty) {
-            if (firstMutationSource == null) {
-                firstMutationSource = pendingMutationSource != null ? pendingMutationSource : SOURCE;
+            if (ownershipState.firstMutationSource == null) {
+                ownershipState.firstMutationSource = ownershipState.pendingMutationSource != null ? ownershipState.pendingMutationSource : SOURCE;
             }
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.DIRTY_TRACKING,
@@ -327,7 +282,7 @@ public final class ChunkDelta<S, N> {
                     null
             );
         }
-        pendingMutationSource = null;
+        ownershipState.pendingMutationSource = null;
     }
 
     /**
@@ -369,7 +324,7 @@ public final class ChunkDelta<S, N> {
 
         final int paletteId = blockPalette.getOrAdd(newState);
         final long posKey = BlockInstruction.packPos(x, y, z);
-        final int existingIndex = positionMap.get(posKey);
+        final int existingIndex = instructions.positionMap.get(posKey);
 
         if (existingIndex != -1) {
             updateExistingInstruction(paletteId, posKey, existingIndex, markDirty);
@@ -396,11 +351,11 @@ public final class ChunkDelta<S, N> {
     ) {
         final long newInstruction = packInstruction(paletteId, posKey);
 
-        if (packedInstructions[index] == newInstruction) {
+        if (instructions.packedInstructions[index] == newInstruction) {
             return;
         }
 
-        packedInstructions[index] = newInstruction;
+        instructions.packedInstructions[index] = newInstruction;
 
         if (markDirty) {
             markDirtyInternal();
@@ -419,11 +374,7 @@ public final class ChunkDelta<S, N> {
             final long posKey,
             final boolean markDirty
     ) {
-        ensureCapacity();
-
-        packedInstructions[instructionCount] = packInstruction(paletteId, posKey);
-        positionMap.put(posKey, instructionCount);
-        instructionCount++;
+        instructions.add(packInstruction(paletteId, posKey), posKey);
 
         if (markDirty) {
             markDirtyInternal();
@@ -519,12 +470,11 @@ public final class ChunkDelta<S, N> {
      * @param markDirty whether to mark dirty if payloads were cleared
      */
     public void clearBlockPayloads(final boolean markDirty) {
-        if (instructionCount == 0 && (blockEntities == null || blockEntities.isEmpty())) {
+        if (instructions.instructionCount == 0 && (blockEntities == null || blockEntities.isEmpty())) {
             return;
         }
 
-        instructionCount = 0;
-        positionMap.clear();
+        instructions.clear();
 
         if (blockEntities != null) {
             blockEntities.clear();
@@ -536,42 +486,12 @@ public final class ChunkDelta<S, N> {
     }
 
     /**
-     * Ensures there is room for one additional block instruction.
-     */
-    private void ensureCapacity() {
-        if (instructionCount < packedInstructions.length) {
-            return;
-        }
-
-        packedInstructions = Arrays.copyOf(
-                packedInstructions,
-                packedInstructions.length << 1
-        );
-    }
-
-    /**
      * Pre-sizes block instruction storage for bulk decode paths.
      *
      * @param additionalBlocks number of additional block instructions expected
      */
     public void ensureBlockCapacity(final int additionalBlocks) {
-        if (additionalBlocks <= 0) {
-            return;
-        }
-
-        final int requiredCapacity = instructionCount + additionalBlocks;
-
-        if (requiredCapacity > packedInstructions.length) {
-            int newCapacity = packedInstructions.length;
-
-            while (newCapacity < requiredCapacity) {
-                newCapacity <<= 1;
-            }
-
-            packedInstructions = Arrays.copyOf(packedInstructions, newCapacity);
-        }
-
-        positionMap.ensureCapacity(requiredCapacity);
+        instructions.ensureBlockCapacity(additionalBlocks);
     }
 
     /**
@@ -591,13 +511,8 @@ public final class ChunkDelta<S, N> {
             final int z,
             final int paletteId
     ) {
-        ensureCapacity();
-
         final long posKey = BlockInstruction.packPos(x, y, z);
-
-        packedInstructions[instructionCount] = packInstruction(paletteId, posKey);
-        positionMap.put(posKey, instructionCount);
-        instructionCount++;
+        instructions.add(packInstruction(paletteId, posKey), posKey);
     }
 
     /**
@@ -1070,10 +985,10 @@ public final class ChunkDelta<S, N> {
      * @return block instruction list
      */
     public List<BlockInstruction> getBlockInstructions() {
-        final List<BlockInstruction> list = new ArrayList<>(instructionCount);
+        final List<BlockInstruction> list = new ArrayList<>(instructions.instructionCount);
 
-        for (int i = 0; i < instructionCount; i++) {
-            list.add(BlockInstruction.fromPacked(packedInstructions[i]));
+        for (int i = 0; i < instructions.instructionCount; i++) {
+            list.add(BlockInstruction.fromPacked(instructions.packedInstructions[i]));
         }
 
         return list;
@@ -1094,7 +1009,7 @@ public final class ChunkDelta<S, N> {
      * @return {@code true} if empty
      */
     public boolean isEmpty() {
-        return instructionCount == 0
+        return instructions.instructionCount == 0
                 && (blockEntities == null || blockEntities.isEmpty())
                 && (activeEntities == null || activeEntities.isEmpty())
                 && pendingEntities.isEmpty()
@@ -1165,8 +1080,8 @@ public final class ChunkDelta<S, N> {
     public void forEachBlock(final BlockVisitor<S> visitor) {
         Objects.requireNonNull(visitor, "visitor");
 
-        for (int i = 0; i < instructionCount; i++) {
-            final long instruction = packedInstructions[i];
+        for (int i = 0; i < instructions.instructionCount; i++) {
+            final long instruction = instructions.packedInstructions[i];
             final int paletteIndex = instructionPaletteId(instruction);
             final S state = blockPalette.get(paletteIndex);
 
@@ -1191,7 +1106,7 @@ public final class ChunkDelta<S, N> {
      * @return {@code true} if dirty
      */
     public boolean isDirty() {
-        return mutationGeneration != savedGeneration;
+        return ownershipState.mutationGeneration != ownershipState.savedGeneration;
     }
 
     /**
@@ -1221,7 +1136,7 @@ public final class ChunkDelta<S, N> {
      */
     public void markSaved() {
         final boolean wasDirty = isDirty();
-        savedGeneration = mutationGeneration;
+        ownershipState.savedGeneration = ownershipState.mutationGeneration;
         if (wasDirty) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.DIRTY_TRACKING,
@@ -1248,12 +1163,12 @@ public final class ChunkDelta<S, N> {
      * @return {@code true} if the save state was updated
      */
     public boolean markSavedIfGeneration(final long generation) {
-        if (mutationGeneration != generation) {
+        if (ownershipState.mutationGeneration != generation) {
             return false;
         }
 
         final boolean wasDirty = isDirty();
-        savedGeneration = generation;
+        ownershipState.savedGeneration = generation;
         if (wasDirty) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.DIRTY_TRACKING,
@@ -1279,7 +1194,7 @@ public final class ChunkDelta<S, N> {
      * @return mutation generation
      */
     public long getMutationGeneration() {
-        return mutationGeneration;
+        return ownershipState.mutationGeneration;
     }
 
     /**
@@ -1322,31 +1237,31 @@ public final class ChunkDelta<S, N> {
         if (reason == null || reason.isBlank()) {
             return false;
         }
-        if (ownershipReason != null) {
+        if (ownershipState.ownershipReason != null) {
             return false;
         }
-        ownershipReason = reason;
-        ownershipSource = source;
+        ownershipState.ownershipReason = reason;
+        ownershipState.ownershipSource = source;
         return true;
     }
 
     public boolean hasOwnershipClaim() {
-        return ownershipReason != null && !ownershipReason.isBlank();
+        return ownershipState.ownershipReason != null && !ownershipState.ownershipReason.isBlank();
     }
 
     public String getOwnershipReason() {
-        return ownershipReason;
+        return ownershipState.ownershipReason;
     }
 
     public String getOwnershipSource() {
-        return ownershipSource;
+        return ownershipState.ownershipSource;
     }
 
     public String getFirstMutationSource() {
-        return firstMutationSource;
+        return ownershipState.firstMutationSource;
     }
 
     public void prepareForMutation(final String source) {
-        pendingMutationSource = source;
+        ownershipState.pendingMutationSource = source;
     }
 }

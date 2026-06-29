@@ -2,7 +2,7 @@ package io.liparakis.chunkis.world.restoration.capture;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;

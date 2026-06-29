@@ -1,5 +1,9 @@
 package io.liparakis.chunkis.command;
 
+import io.liparakis.chunkis.command.report.CisPayloadDiagnosticsReader;
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkPayloadDiagnostics;
+import io.liparakis.chunkis.command.report.StorageReportModels.ChunkEncodingKind;
+import io.liparakis.chunkis.command.report.StorageReportModels.SectionPayloadDiagnostics;
 import io.liparakis.chunkis.storage.bits.BitWriter;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import org.junit.jupiter.api.Test;
@@ -18,8 +22,8 @@ class StorageReportCommandTest {
     void inspectsSectionEncodingsAndBlockEntitiesFromRawChunkPayload() throws Exception {
         final byte[] payload = buildChunkPayload();
 
-        final StorageReportCommand.ChunkPayloadDiagnostics diagnostics =
-                StorageReportCommand.inspectChunkPayload(payload);
+        final ChunkPayloadDiagnostics diagnostics =
+                CisPayloadDiagnosticsReader.inspectChunkPayload(payload);
 
         assertEquals(4, diagnostics.totalSections());
         assertEquals(1, diagnostics.uniformSections());
@@ -27,14 +31,14 @@ class StorageReportCommandTest {
         assertEquals(1, diagnostics.denseSections());
         assertEquals(1, diagnostics.defaultSparseSections());
         assertEquals(2, diagnostics.blockEntities());
-        assertEquals(StorageReportCommand.ChunkEncodingKind.MIXED, diagnostics.chunkEncodingKind());
+        assertEquals(ChunkEncodingKind.MIXED, diagnostics.chunkEncodingKind());
         assertEquals(16, diagnostics.uniformSectionBits());
         assertEquals(42, diagnostics.sparseSectionBits());
         assertEquals(8209, diagnostics.denseSectionBits());
         assertEquals(57, diagnostics.defaultSparseSectionBits());
         assertEquals(2, diagnostics.globalBits());
         assertEquals(4, diagnostics.sections().size());
-        final StorageReportCommand.SectionPayloadDiagnostics denseSection = diagnostics.sections().get(3);
+        final SectionPayloadDiagnostics denseSection = diagnostics.sections().get(3);
         assertEquals(7, denseSection.sectionY());
         assertEquals(2, denseSection.localPaletteSize());
         assertEquals(2, denseSection.bitsPerBlock());

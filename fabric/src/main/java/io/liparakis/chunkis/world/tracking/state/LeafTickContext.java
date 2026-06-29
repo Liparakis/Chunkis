@@ -23,23 +23,6 @@ import org.slf4j.LoggerFactory;
  * {@link ThreadLocal} values can otherwise survive much longer than the operation
  * that created them.</p>
  *
- * <h2>Recommended usage</h2>
- * <pre>{@code
- * try (var ignored = LeafTickContext.enter()) {
- *     performLeafTickOperations();
- * }
- * }</pre>
- *
- * <h2>Mixin HEAD/TAIL usage</h2>
- * <pre>{@code
- * LeafTickContext.enterDirect();
- * try {
- *     ...
- * } finally {
- *     LeafTickContext.exitDirect();
- * }
- * }</pre>
- *
  * @author Liparakis
  * @version 1.2
  */

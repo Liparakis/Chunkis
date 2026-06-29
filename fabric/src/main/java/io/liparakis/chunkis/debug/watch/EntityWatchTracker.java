@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.watch;
 
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
@@ -18,10 +18,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * Tracks watched entity transfer and reload assertions across chunk unload/load boundaries.
  *
  * <p>This state is specific to payload watch diagnostics and intentionally lives
- * outside {@link PayloadWatchTracer} so the tracer can focus on trace entry
+ * outside PayloadWatchTracer so the tracer can focus on trace entry
  * points rather than long-lived entity watch bookkeeping.</p>
  */
-final class EntityWatchTracker {
+public final class EntityWatchTracker {
 
     private static final long ENTITY_RELOAD_TIMEOUT_TICKS = 40L;
     private static final ConcurrentHashMap<EntityWatchKey, EntityWatchState> ENTITY_WATCH_STATE =
@@ -32,7 +32,7 @@ final class EntityWatchTracker {
         throw new AssertionError("Utility class");
     }
 
-    static void tickAssertions() {
+    public static void tickAssertions() {
         currentServerTick++;
         for (final Map.Entry<EntityWatchKey, EntityWatchState> entry : ENTITY_WATCH_STATE.entrySet()) {
             final EntityWatchState state = entry.getValue();
@@ -64,7 +64,7 @@ final class EntityWatchTracker {
         }
     }
 
-    static void markTransfer(
+    public static void markTransfer(
             final PayloadWatchTarget target,
             final String stage,
             final ChunkPos chunkPos
@@ -87,7 +87,7 @@ final class EntityWatchTracker {
         }
     }
 
-    static void clearPendingReload(final PayloadWatchTarget target) {
+    public static void clearPendingReload(final PayloadWatchTarget target) {
         final EntityWatchState state = ENTITY_WATCH_STATE.get(
                 new EntityWatchKey(target.worldId(), target.entityUuid())
         );
@@ -97,7 +97,7 @@ final class EntityWatchTracker {
         }
     }
 
-    static void rememberChunk(final PayloadWatchTarget target, final ChunkPos chunkPos) {
+    public static void rememberChunk(final PayloadWatchTarget target, final ChunkPos chunkPos) {
         final EntityWatchState state = ENTITY_WATCH_STATE.computeIfAbsent(
                 new EntityWatchKey(target.worldId(), target.entityUuid()),
                 ignored -> new EntityWatchState()
@@ -107,7 +107,7 @@ final class EntityWatchTracker {
         state.hasKnownChunk = true;
     }
 
-    static boolean shouldTraceForChunk(
+    public static boolean shouldTraceForChunk(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target
@@ -120,7 +120,7 @@ final class EntityWatchTracker {
                 || (state.lastKnownChunkX == chunkPos.x && state.lastKnownChunkZ == chunkPos.z);
     }
 
-    static void assertReloadedAfterUnload(
+    public static void assertReloadedAfterUnload(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,

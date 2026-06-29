@@ -1,4 +1,4 @@
-package io.liparakis.chunkis.debug;
+package io.liparakis.chunkis.debug.watch;
 
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Tracks decoded watched block payloads across restore and later visibility stages.
  */
-final class BlockWatchTraceTracker {
+public final class BlockWatchTraceTracker {
 
     private static final ConcurrentHashMap<WatchTraceKey, WatchTraceState> WATCH_TRACE_STATE =
             new ConcurrentHashMap<>();
@@ -26,7 +26,7 @@ final class BlockWatchTraceTracker {
         throw new AssertionError("Utility class");
     }
 
-    static void checkUnrestoredAssertions() {
+    public static void checkUnrestoredAssertions() {
         for (final Map.Entry<WatchTraceKey, WatchTraceState> entry : WATCH_TRACE_STATE.entrySet()) {
             final WatchTraceState state = entry.getValue();
             if (state.protoAttachedSeen && !state.restoreDecisionSeen && !state.decodedPayloadNotAppliedAsserted) {
@@ -49,7 +49,7 @@ final class BlockWatchTraceTracker {
         }
     }
 
-    static void markProtoAttached(
+    public static void markProtoAttached(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
@@ -61,7 +61,7 @@ final class BlockWatchTraceTracker {
         }
     }
 
-    static void registerDecodedTarget(
+    public static void registerDecodedTarget(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
@@ -96,7 +96,7 @@ final class BlockWatchTraceTracker {
         }
     }
 
-    static @Nullable String resolveOperationId(
+    public static @Nullable String resolveOperationId(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target
@@ -105,7 +105,7 @@ final class BlockWatchTraceTracker {
         return state != null ? state.operationId : null;
     }
 
-    static void markVisibilitySeen(
+    public static void markVisibilitySeen(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
@@ -120,7 +120,7 @@ final class BlockWatchTraceTracker {
         }
     }
 
-    static void markRestoreDecisionSeen(
+    public static void markRestoreDecisionSeen(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
@@ -135,7 +135,7 @@ final class BlockWatchTraceTracker {
         }
     }
 
-    static boolean isRestoreDecisionSeen(
+    public static boolean isRestoreDecisionSeen(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
@@ -148,7 +148,7 @@ final class BlockWatchTraceTracker {
         return state != null && operationId.equals(state.operationId) && state.restoreDecisionSeen;
     }
 
-    static void assertRestoreDecisionSeen(
+    public static void assertRestoreDecisionSeen(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
@@ -182,7 +182,7 @@ final class BlockWatchTraceTracker {
         );
     }
 
-    static void recordAppliedChunkInstance(
+    public static void recordAppliedChunkInstance(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
@@ -198,7 +198,7 @@ final class BlockWatchTraceTracker {
         }
     }
 
-    static void assertSameAppliedChunkInstance(
+    public static void assertSameAppliedChunkInstance(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,
@@ -234,7 +234,7 @@ final class BlockWatchTraceTracker {
         );
     }
 
-    static void markWorldConstructorConsumed(
+    public static void markWorldConstructorConsumed(
             final String worldId,
             final ChunkPos chunkPos,
             final PayloadWatchTarget target,

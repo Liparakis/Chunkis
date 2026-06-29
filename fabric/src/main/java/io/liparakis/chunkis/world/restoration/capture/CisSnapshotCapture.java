@@ -3,9 +3,8 @@ package io.liparakis.chunkis.world.restoration.capture;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.ChunkSectionDebugUtil;
-import io.liparakis.chunkis.debug.PayloadWatchTracer;
-import io.liparakis.chunkis.world.restoration.capture.ChunkBlockEntityCapture;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import net.minecraft.block.BlockState;
@@ -18,9 +17,13 @@ import net.minecraft.world.chunk.WorldChunk;
  */
 public final class CisSnapshotCapture {
 
-    /** Width/height/depth of one vanilla chunk section in blocks. */
+    /**
+     * Width/height/depth of one vanilla chunk section in blocks.
+     */
     private static final int SECTION_SIZE = 16;
-    /** Bit shift used to convert a section index into its world-space Y offset. */
+    /**
+     * Bit shift used to convert a section index into its world-space Y offset.
+     */
     private static final int SECTION_SHIFT = 4;
 
     private CisSnapshotCapture() {
@@ -58,7 +61,8 @@ public final class CisSnapshotCapture {
                     : null;
             Chunkis.LOGGER.warn(
                     "Chunkis: Rejected suspicious full snapshot for {} in {}"
-                            + " previousNonAir={} liveNonAir={} suppressionCause={} restoreOperationId={} chunkStatus={} saveOperationId={}",
+                            + " previousNonAir={} liveNonAir={} suppressionCause={} restoreOperationId={} " +
+                            "chunkStatus={} saveOperationId={}",
                     chunk.getPos(),
                     chunk.getWorld().getRegistryKey().getValue(),
                     previousNonAirBlocks,
@@ -100,10 +104,10 @@ public final class CisSnapshotCapture {
                 target
         );
 
-        final Object existingMetadata = target.getChunkMetadata();
+        final NbtCompound existingMetadata = target.getChunkMetadata();
         target.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
-                        CisNbtUtil.extractPersistedStructureMetadata((NbtCompound) existingMetadata),
+                        CisNbtUtil.extractPersistedStructureMetadata(existingMetadata),
                         true,
                         true,
                         CisNbtUtil.extractPersistedBaseChunkNbt(existingMetadata),

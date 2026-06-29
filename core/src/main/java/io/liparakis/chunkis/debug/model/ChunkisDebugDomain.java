@@ -9,5 +9,6 @@ public enum ChunkisDebugDomain {
     NBT_SERIALIZATION, // TODO: wire NBT serialization trace boundaries before using this domain
     BASE_CHUNK_CAPTURE, // TODO: wire base-chunk capture trace boundaries before using this domain
     CLIENT_SYNC,
-    ASSERTIONS
+    ASSERTIONS,
+    ENTITY_REPLAY
 }

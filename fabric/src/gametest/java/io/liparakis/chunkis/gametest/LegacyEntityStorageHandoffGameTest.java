@@ -5,7 +5,7 @@ import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.ChunkRestorer;
+import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
