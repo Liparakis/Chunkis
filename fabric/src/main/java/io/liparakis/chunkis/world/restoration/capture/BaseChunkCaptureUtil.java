@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.world.restoration.capture;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -126,13 +127,15 @@ public final class BaseChunkCaptureUtil {
         final DebugChunkKey chunkKey = DebugChunkKeys.of(chunk.getPos());
         traceLifecycle(world, chunk, delta, ChunkTraceEventType.BASE_CAPTURE_STARTED,
                 "BaseChunkCaptureUtil#captureBaseChunk", "base capture started");
-        ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.BASE_NBT_CAPTURE_STARTED, ChunkTraceSeverity.INFO,
-                ChunkTraceReason.NONE, "BaseChunkCaptureUtil#captureBaseChunk",
-                "starting base capture: " + DeltaPersistenceGuard.describeDeltaShape(delta),
-                world.getRegistryKey()
-                        .getValue()
-                        .toString(), chunkKey, null, null, delta.isDirty(), null);
+        if (ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
+            ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_NBT_CAPTURE_STARTED, ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE, "BaseChunkCaptureUtil#captureBaseChunk",
+                    "starting base capture: " + DeltaPersistenceGuard.describeDeltaShape(delta),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(), chunkKey, null, null, delta.isDirty(), null);
+        }
         PayloadWatchTracer.traceLiveChunkState(chunk,
                 ChunkTraceEventType.WATCH_LIVE_CHUNK_STATE_BEFORE_BASE_CAPTURE, "before-base-capture",
                 "BaseChunkCaptureUtil#captureBaseChunk", null, delta);
@@ -231,7 +234,8 @@ public final class BaseChunkCaptureUtil {
      */
     private static void traceCaptureSkipped(final ServerWorld world, final WorldChunk chunk,
             final ChunkDelta<?, ?> delta, final String source) {
-        if (world == null || chunk == null || delta == null) {
+        if (world == null || chunk == null || delta == null
+                || !ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
             return;
         }
         ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -257,7 +261,8 @@ public final class BaseChunkCaptureUtil {
     private static void traceLifecycle(final ServerWorld world, final WorldChunk chunk,
             final ChunkDelta<?, ?> delta, final ChunkTraceEventType eventType, final String source,
             final String message) {
-        if (world == null || chunk == null || delta == null) {
+        if (world == null || chunk == null || delta == null
+                || !ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
             return;
         }
         ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE, eventType, ChunkTraceSeverity.INFO,

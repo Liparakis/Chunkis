@@ -48,6 +48,7 @@ import java.util.function.UnaryOperator;
 public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
     private static final String SOURCE = "ChunkDelta";
+    private static final int SECTION_COUNT = CisConstants.MAX_SECTION_Y - CisConstants.MIN_SECTION_Y + 1;
 
     /**
      * Mask for the low 32 bits containing the packed local block position.
@@ -118,6 +119,18 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * Whether restored loads should suppress one-time vanilla repopulation work.
      */
     private boolean suppressInitialRepopulation;
+    /**
+     * Bitset of sections containing sparse block changes.
+     */
+    private int blockSectionMask;
+    /**
+     * Bitset of sections containing block entity payloads.
+     */
+    private int blockEntitySectionMask;
+    /**
+     * Per-section block entity counts used to clear mask bits on removal.
+     */
+    private final short[] blockEntitySectionCounts;
 
     /**
      * Creates an empty delta with an explicit empty-state predicate.
@@ -136,6 +149,9 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         this.ownershipState = new DeltaOwnershipState();
         this.sourceVersion = CisConstants.VERSION;
         this.suppressInitialRepopulation = false;
+        this.blockSectionMask = 0;
+        this.blockEntitySectionMask = 0;
+        this.blockEntitySectionCounts = new short[SECTION_COUNT];
         this.isEmptyState = Objects.requireNonNull(isEmptyState, "isEmptyState");
     }
 
@@ -163,6 +179,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         this.ownershipState = new DeltaOwnershipState();
         this.pendingEntities = Collections.emptyList();
         this.sourceVersion = CisConstants.VERSION;
+        this.blockEntitySectionCounts = new short[SECTION_COUNT];
     }
 
     /**
@@ -246,6 +263,10 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         snap.ownershipState.savedGeneration = this.ownershipState.savedGeneration;
         snap.sourceVersion = this.sourceVersion;
         snap.suppressInitialRepopulation = this.suppressInitialRepopulation;
+        snap.blockSectionMask = this.blockSectionMask;
+        snap.blockEntitySectionMask = this.blockEntitySectionMask;
+        System.arraycopy(this.blockEntitySectionCounts, 0,
+                snap.blockEntitySectionCounts, 0, this.blockEntitySectionCounts.length);
         snap.ownershipState.ownershipReason = this.ownershipState.ownershipReason;
         snap.ownershipState.ownershipSource = this.ownershipState.ownershipSource;
         snap.ownershipState.firstMutationSource = this.ownershipState.firstMutationSource;
@@ -277,8 +298,98 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
                 this.ownershipState.mutationGeneration,
                 this.suppressInitialRepopulation,
                 isDirty(),
+                getTouchedSectionCount(),
                 payloadCopier
         );
+    }
+
+    /**
+     * Maps an absolute block Y coordinate to this delta's touched-section bitset.
+     *
+     * <p>Out-of-range coordinates return {@code 0} so corrupted or legacy payloads
+     * do not poison the cached section-count state.</p>
+     *
+     * @param y absolute block Y coordinate
+     * @return one-hot section bit, or {@code 0} when outside the legal chunk range
+     */
+    private static int sectionBit(final int y) {
+        final int sectionY = y >> 4;
+        if (sectionY < CisConstants.MIN_SECTION_Y || sectionY > CisConstants.MAX_SECTION_Y) {
+            return 0;
+        }
+        return 1 << (sectionY - CisConstants.MIN_SECTION_Y);
+    }
+
+    /**
+     * Resolves the touched-section bit for a packed block position key.
+     *
+     * @param posKey packed local block position
+     * @return one-hot section bit, or {@code 0} when outside the legal chunk range
+     */
+    private static int blockSectionBit(final long posKey) {
+        return sectionBit(BlockInstruction.unpackY(posKey));
+    }
+
+    /**
+     * Marks the section containing a sparse block instruction as touched.
+     *
+     * <p>Block instructions never decrement this mask because the current delta
+     * mutation model only appends or rewrites sparse entries until block payloads
+     * are cleared wholesale.</p>
+     *
+     * @param posKey packed local block position
+     */
+    private void trackBlockSection(final long posKey) {
+        blockSectionMask |= blockSectionBit(posKey);
+    }
+
+    /**
+     * Increments block-entity section occupancy for the section containing {@code posKey}.
+     *
+     * <p>Unlike block instructions, block entities can be removed individually, so
+     * this cache keeps per-section counts in addition to the one-hot mask.</p>
+     *
+     * @param posKey packed local block position
+     */
+    private void addBlockEntitySection(final long posKey) {
+        final int bit = blockSectionBit(posKey);
+        if (bit == 0) {
+            return;
+        }
+
+        final int index = Integer.numberOfTrailingZeros(bit);
+        if (blockEntitySectionCounts[index]++ == 0) {
+            blockEntitySectionMask |= bit;
+        }
+    }
+
+    /**
+     * Decrements block-entity section occupancy for the section containing {@code posKey}.
+     *
+     * @param posKey packed local block position
+     */
+    private void removeBlockEntitySection(final long posKey) {
+        final int bit = blockSectionBit(posKey);
+        if (bit == 0) {
+            return;
+        }
+
+        final int index = Integer.numberOfTrailingZeros(bit);
+        if (blockEntitySectionCounts[index] == 0) {
+            return;
+        }
+
+        if (--blockEntitySectionCounts[index] == 0) {
+            blockEntitySectionMask &= ~bit;
+        }
+    }
+
+    /**
+     * Resets the block-entity section occupancy cache after a wholesale payload clear.
+     */
+    private void clearBlockEntitySections() {
+        blockEntitySectionMask = 0;
+        Arrays.fill(blockEntitySectionCounts, (short) 0);
     }
 
     /**
@@ -400,6 +511,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
             final boolean markDirty
     ) {
         instructions.add(packInstruction(paletteId, posKey), posKey);
+        trackBlockSection(posKey);
 
         if (markDirty) {
             markDirtyInternal();
@@ -414,7 +526,9 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     private void cleanupBlockEntityIfEmpty(final S state, final long posKey) {
         if (blockEntities != null && isEmptyState.test(state)) {
-            blockEntities.remove(posKey);
+            if (blockEntities.remove(posKey) != null) {
+                removeBlockEntitySection(posKey);
+            }
         }
     }
 
@@ -449,8 +563,11 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
         final long posKey = BlockInstruction.packPos(x, y, z);
 
-        if (blockEntities.remove(posKey) != null && markDirty) {
-            markDirtyInternal();
+        if (blockEntities.remove(posKey) != null) {
+            removeBlockEntitySection(posKey);
+            if (markDirty) {
+                markDirtyInternal();
+            }
         }
     }
 
@@ -469,10 +586,12 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         }
 
         instructions.clear();
+        blockSectionMask = 0;
 
         if (blockEntities != null) {
             blockEntities.clear();
         }
+        clearBlockEntitySections();
 
         if (markDirty) {
             markDirtyInternal();
@@ -507,6 +626,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     ) {
         final long posKey = BlockInstruction.packPos(x, y, z);
         instructions.add(packInstruction(paletteId, posKey), posKey);
+        trackBlockSection(posKey);
     }
 
     /**
@@ -534,6 +654,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         final int paletteId = blockPalette.getOrAdd(state);
         final long posKey = BlockInstruction.packPos(x, y, z);
         instructions.add(packInstruction(paletteId, posKey), posKey);
+        trackBlockSection(posKey);
     }
 
     /**
@@ -582,6 +703,9 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
             return;
         }
 
+        if (existing == null) {
+            addBlockEntitySection(key);
+        }
         entities.put(key, nbt);
 
         if (markDirty) {
@@ -611,6 +735,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         }
 
         blockEntities.clear();
+        clearBlockEntitySections();
 
         if (markDirty) {
             markDirtyInternal();
@@ -983,6 +1108,15 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     public int getBlockChangesCount() {
         return instructions.instructionCount;
+    }
+
+    /**
+     * Returns the number of unique sections touched by block changes or block entities.
+     *
+     * @return touched section count
+     */
+    public int getTouchedSectionCount() {
+        return Integer.bitCount(blockSectionMask | blockEntitySectionMask);
     }
 
     /**

@@ -63,6 +63,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class ChunkSerializerMixin {
 
     /**
+     * Cached reflective access to ProtoChunk#getWrappedChunk when the method exists on this runtime.
+     */
+    @Unique
+    private static volatile Method chunkis$wrappedChunkGetter;
+
+    /**
+     * Guards one-time reflective lookup for {@link #chunkis$wrappedChunkGetter}.
+     */
+    @Unique
+    private static volatile boolean chunkis$wrappedChunkGetterResolved;
+
+    /**
      * Trace source identification tag label.
      */
     @Unique
@@ -609,9 +621,21 @@ public class ChunkSerializerMixin {
      */
     @Unique
     private static WorldChunk chunkis$resolveWrappedWorldChunk(final ProtoChunk chunk) {
+        Method method = chunkis$wrappedChunkGetter;
+        if (!chunkis$wrappedChunkGetterResolved) {
+            try {
+                method = chunk.getClass()
+                        .getMethod("getWrappedChunk");
+            } catch (final NoSuchMethodException ignored) {
+                method = null;
+            }
+            chunkis$wrappedChunkGetter = method;
+            chunkis$wrappedChunkGetterResolved = true;
+        }
+        if (method == null) {
+            return null;
+        }
         try {
-            final Method method = chunk.getClass()
-                    .getMethod("getWrappedChunk");
             final Object wrapped = method.invoke(chunk);
             return wrapped instanceof WorldChunk worldChunk ? worldChunk : null;
         } catch (final ReflectiveOperationException ignored) {

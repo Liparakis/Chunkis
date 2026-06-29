@@ -4,6 +4,7 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -135,24 +136,26 @@ final class AsyncCisSaveWorker implements Runnable {
             }
 
             if (DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(save.snapshot())) {
-                ChunkTraceStore.trace(
-                        ChunkisDebugDomain.ASSERTIONS,
-                        ChunkTraceEventType.ASSERTION_FAILED,
-                        ChunkTraceSeverity.ERROR,
-                        ChunkTraceReason.INVALID_PAYLOAD,
-                        PROCESS_SOURCE,
-                        "attempted to persist sparse block-entity payload without persisted base chunk NBT: "
-                                + DeltaPersistenceGuard.describeDeltaShape(save.snapshot()),
-                        world.getRegistryKey()
-                                .getValue()
-                                .toString(),
-                        new DebugChunkKey(save.pos().x, save.pos().z),
-                        null,
-                        save.operationId(),
-                        save.liveDelta()
-                                .isDirty(),
-                        null
-                );
+                if (ChunkisDebugConfig.allows(ChunkisDebugDomain.ASSERTIONS, ChunkTraceSeverity.ERROR)) {
+                    ChunkTraceStore.trace(
+                            ChunkisDebugDomain.ASSERTIONS,
+                            ChunkTraceEventType.ASSERTION_FAILED,
+                            ChunkTraceSeverity.ERROR,
+                            ChunkTraceReason.INVALID_PAYLOAD,
+                            PROCESS_SOURCE,
+                            "attempted to persist sparse block-entity payload without persisted base chunk NBT: "
+                                    + DeltaPersistenceGuard.describeDeltaShape(save.snapshot()),
+                            world.getRegistryKey()
+                                    .getValue()
+                                    .toString(),
+                            new DebugChunkKey(save.pos().x, save.pos().z),
+                            null,
+                            save.operationId(),
+                            save.liveDelta()
+                                    .isDirty(),
+                            null
+                    );
+                }
             }
             if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(save.snapshot(), true)) {
                 DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(

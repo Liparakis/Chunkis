@@ -64,6 +64,10 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
      */
     private final boolean dirty;
     /**
+     * Unique chunk sections touched by block changes or block entities.
+     */
+    private final int touchedSectionCount;
+    /**
      * Cached encoded metadata payload owned by this snapshot view.
      */
     private byte[] encodedChunkMetadata;
@@ -74,19 +78,20 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
      * <p>This copies only the payload needed by encode/save paths and intentionally
      * skips mutable indexing structures such as {@code positionMap}.</p>
      *
-     * @param packedInstructions sparse block instruction buffer from the source delta
-     * @param instructionCount number of valid entries in {@code packedInstructions}
-     * @param blockPalette source block palette
-     * @param blockEntities source block entity payloads
-     * @param activeEntities source active entity payloads
-     * @param pendingEntities source pending entity payloads
-     * @param chunkMetadata source chunk metadata payload
-     * @param encodedChunkMetadata cached encoded metadata payload
-     * @param sourceVersion source CIS version
-     * @param mutationGeneration source mutation generation
+     * @param packedInstructions          sparse block instruction buffer from the source delta
+     * @param instructionCount            number of valid entries in {@code packedInstructions}
+     * @param blockPalette                source block palette
+     * @param blockEntities               source block entity payloads
+     * @param activeEntities              source active entity payloads
+     * @param pendingEntities             source pending entity payloads
+     * @param chunkMetadata               source chunk metadata payload
+     * @param encodedChunkMetadata        cached encoded metadata payload
+     * @param sourceVersion               source CIS version
+     * @param mutationGeneration          source mutation generation
      * @param suppressInitialRepopulation source repopulation suppression flag
-     * @param dirty source dirty state
-     * @param payloadCopier payload copy strategy for mutable payload values
+     * @param dirty                       source dirty state
+     * @param touchedSectionCount         source touched section count
+     * @param payloadCopier               payload copy strategy for mutable payload values
      */
     ChunkDeltaSnapshotView(
             final long[] packedInstructions,
@@ -101,6 +106,7 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
             final long mutationGeneration,
             final boolean suppressInitialRepopulation,
             final boolean dirty,
+            final int touchedSectionCount,
             final UnaryOperator<N> payloadCopier
     ) {
         Objects.requireNonNull(payloadCopier, "payloadCopier");
@@ -145,60 +151,75 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
         this.mutationGeneration = mutationGeneration;
         this.suppressInitialRepopulation = suppressInitialRepopulation;
         this.dirty = dirty;
+        this.touchedSectionCount = touchedSectionCount;
     }
 
     /**
-     * Decodes and visits sparse block changes from the copied packed instruction buffer.
-     *
-     * @param visitor block visitor
+     * {@inheritDoc}
      */
     @Override
     public void forEachBlock(final ChunkDelta.BlockVisitor<S> visitor) {
         ChunkDeltaViews.forEachPackedBlock(packedInstructions, instructionCount, blockPalette, visitor);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public Long2ObjectMap<N> getBlockEntities() {
         return blockEntities;
     }
 
     /**
-     * Visits copied active entities first, then copied pending entities.
-     *
-     * @param consumer entity payload consumer
+     * {@inheritDoc}
      */
     @Override
     public void forEachEntity(final Consumer<? super N> consumer) {
         ChunkDeltaViews.forEachEntity(activeEntities, pendingEntities, consumer);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int countNonNullEntities() {
         return ChunkDeltaViews.countNonNullEntities(activeEntities, pendingEntities);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int getBlockChangesCount() {
         return instructionCount;
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int getTouchedSectionCount() {
+        return touchedSectionCount;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public N getChunkMetadata() {
         return chunkMetadata;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public byte[] getEncodedChunkMetadata() {
         return encodedChunkMetadata;
     }
 
     /**
-     * Replaces this snapshot's cached encoded metadata payload.
-     *
-     * <p>This is the only mutable slot in the snapshot so encoder/storage code can
-     * reuse encoded metadata without retaining a live {@link ChunkDelta}.</p>
-     *
-     * @param encodedPayload encoded metadata payload, or {@code null} to clear
+     * {@inheritDoc}
      */
     @Override
     public void cacheEncodedChunkMetadata(final byte[] encodedPayload) {
@@ -207,26 +228,41 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
                 : Arrays.copyOf(encodedPayload, encodedPayload.length);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int getSourceVersion() {
         return sourceVersion;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public long getMutationGeneration() {
         return mutationGeneration;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean shouldSuppressInitialRepopulation() {
         return suppressInitialRepopulation;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean isDirty() {
         return dirty;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean isEmpty() {
         return ChunkDeltaViews.isEmpty(

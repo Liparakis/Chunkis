@@ -4,6 +4,7 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -1423,21 +1424,23 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final String caller,
             final String operationId) {
         if (DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta)) {
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.ASSERTIONS,
-                    ChunkTraceEventType.ASSERTION_FAILED,
-                    ChunkTraceSeverity.ERROR,
-                    ChunkTraceReason.INVALID_PAYLOAD,
-                    caller,
-                    "attempted to persist sparse block-entity payload without persisted base chunk NBT on "
-                            + path + ": " + DeltaPersistenceGuard.describeDeltaShape(delta),
-                    chunkis$worldId(),
-                    chunkis$debugChunkKey(pos),
-                    null,
-                    operationId,
-                    delta.isDirty(),
-                    null
-            );
+            if (ChunkisDebugConfig.allows(ChunkisDebugDomain.ASSERTIONS, ChunkTraceSeverity.ERROR)) {
+                ChunkTraceStore.trace(
+                        ChunkisDebugDomain.ASSERTIONS,
+                        ChunkTraceEventType.ASSERTION_FAILED,
+                        ChunkTraceSeverity.ERROR,
+                        ChunkTraceReason.INVALID_PAYLOAD,
+                        caller,
+                        "attempted to persist sparse block-entity payload without persisted base chunk NBT on "
+                                + path + ": " + DeltaPersistenceGuard.describeDeltaShape(delta),
+                        chunkis$worldId(),
+                        chunkis$debugChunkKey(pos),
+                        null,
+                        operationId,
+                        delta.isDirty(),
+                        null
+                );
+            }
         }
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta)) {
             return false;

@@ -80,6 +80,11 @@ final class ChunkRestoreBlockOperations {
      * @param localZ        local chunk Z coordinate
      * @param state         state to write
      * @param worldPosition absolute world position, used for cleanup and logging
+     * @param previousState pre-read block state when payload watches are active, otherwise {@code null}
+     * @param sections      cached section array for the target chunk
+     * @param bottomY       cached chunk bottom Y
+     * @param topYInclusive cached chunk top Y inclusive
+     * @param tracePayloadWatches whether payload-watch tracing is active for this restore pass
      * @param counters      failure counters to update
      * @param operationId   trace correlation ID
      * @return {@code true} if the block was applied
@@ -91,40 +96,50 @@ final class ChunkRestoreBlockOperations {
             final int localZ,
             final BlockState state,
             final BlockPos worldPosition,
+            @Nullable final BlockState previousState,
+            final ChunkSection[] sections,
+            final int bottomY,
+            final int topYInclusive,
+            final boolean tracePayloadWatches,
             final FailureCounters counters,
             @Nullable final String operationId) {
-        final BlockState previousState = chunk.getBlockState(worldPosition);
-        PayloadWatchTracer.traceRestoreApplyAttempt(chunk,
-                worldPosition,
-                previousState,
-                state,
-                operationId,
-                "ChunkRestorer#applyBlockChange");
-        if (localY < chunk.getBottomY() || localY > chunk.getTopYInclusive()) {
-            counters.recordOutOfBoundsY();
-            PayloadWatchTracer.traceRestoreApplyFailed(chunk,
+        if (tracePayloadWatches) {
+            PayloadWatchTracer.traceRestoreApplyAttempt(chunk,
                     worldPosition,
                     previousState,
                     state,
                     operationId,
-                    "ChunkRestorer#applyBlockChange",
-                    "out-of-bounds-y");
-            LOGGER.warn("Skipping out-of-bounds restored block at {} in chunk {}", worldPosition, chunkPosition);
-            return false;
+                    "ChunkRestorer#applyBlockChange");
         }
-
-        try {
-            final int sectionIndex = chunk.getSectionIndex(localY);
-
-            if (sectionIndex < 0 || sectionIndex >= chunk.getSectionArray().length) {
-                counters.recordInvalidSectionIndex();
+        if (localY < bottomY || localY > topYInclusive) {
+            counters.recordOutOfBoundsY();
+            if (tracePayloadWatches) {
                 PayloadWatchTracer.traceRestoreApplyFailed(chunk,
                         worldPosition,
                         previousState,
                         state,
                         operationId,
                         "ChunkRestorer#applyBlockChange",
-                        "invalid-section-index");
+                        "out-of-bounds-y");
+            }
+            LOGGER.warn("Skipping out-of-bounds restored block at {} in chunk {}", worldPosition, chunkPosition);
+            return false;
+        }
+
+        try {
+            final int sectionIndex = (localY - bottomY) >> 4;
+
+            if (sectionIndex < 0 || sectionIndex >= sections.length) {
+                counters.recordInvalidSectionIndex();
+                if (tracePayloadWatches) {
+                    PayloadWatchTracer.traceRestoreApplyFailed(chunk,
+                            worldPosition,
+                            previousState,
+                            state,
+                            operationId,
+                            "ChunkRestorer#applyBlockChange",
+                            "invalid-section-index");
+                }
                 LOGGER.warn("Skipping restored block at {} in chunk {} with invalid section index {}",
                         worldPosition,
                         chunkPosition,
@@ -132,17 +147,19 @@ final class ChunkRestoreBlockOperations {
                 return false;
             }
 
-            final ChunkSection section = chunk.getSection(sectionIndex);
+            final ChunkSection section = sections[sectionIndex];
 
             if (section == null) {
                 counters.recordNullSection();
-                PayloadWatchTracer.traceRestoreApplyFailed(chunk,
-                        worldPosition,
-                        previousState,
-                        state,
-                        operationId,
-                        "ChunkRestorer#applyBlockChange",
-                        "null-section");
+                if (tracePayloadWatches) {
+                    PayloadWatchTracer.traceRestoreApplyFailed(chunk,
+                            worldPosition,
+                            previousState,
+                            state,
+                            operationId,
+                            "ChunkRestorer#applyBlockChange",
+                            "null-section");
+                }
                 LOGGER.warn("Skipping restored block at {} in chunk {} because section {} is null",
                         worldPosition,
                         chunkPosition,
@@ -151,18 +168,20 @@ final class ChunkRestoreBlockOperations {
             }
 
             section.setBlockState(localX, localY & SECTION_Y_MASK, localZ, state);
-            PayloadWatchTracer.traceRestoreSetBlockReturned(chunk,
-                    worldPosition,
-                    previousState,
-                    state,
-                    operationId,
-                    "ChunkRestorer#applyBlockChange");
-            PayloadWatchTracer.traceRestoreStateAfterSetBlock(chunk,
-                    worldPosition,
-                    previousState,
-                    state,
-                    operationId,
-                    "ChunkRestorer#applyBlockChange");
+            if (tracePayloadWatches) {
+                PayloadWatchTracer.traceRestoreSetBlockReturned(chunk,
+                        worldPosition,
+                        previousState,
+                        state,
+                        operationId,
+                        "ChunkRestorer#applyBlockChange");
+                PayloadWatchTracer.traceRestoreStateAfterSetBlock(chunk,
+                        worldPosition,
+                        previousState,
+                        state,
+                        operationId,
+                        "ChunkRestorer#applyBlockChange");
+            }
 
             if (!state.hasBlockEntity()) {
                 removeStaleBlockEntityData(chunk, worldPosition);
@@ -171,13 +190,15 @@ final class ChunkRestoreBlockOperations {
             return true;
         } catch (final Exception e) {
             counters.recordException();
-            PayloadWatchTracer.traceRestoreApplyFailed(chunk,
-                    worldPosition,
-                    previousState,
-                    state,
-                    operationId,
-                    "ChunkRestorer#applyBlockChange",
-                    "exception");
+            if (tracePayloadWatches) {
+                PayloadWatchTracer.traceRestoreApplyFailed(chunk,
+                        worldPosition,
+                        previousState,
+                        state,
+                        operationId,
+                        "ChunkRestorer#applyBlockChange",
+                        "exception");
+            }
             LOGGER.error("Failed to restore block at {} in chunk {}", worldPosition, chunkPosition, e);
             return false;
         }

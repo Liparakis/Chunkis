@@ -23,6 +23,7 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 
 /**
@@ -228,7 +229,18 @@ public final class ChunkRestorer {
                 ChunkRestoreBlockOperations.clearChunkToAir(chunk);
             }
             visitor.cleanupReplayedEntities(protoDelta);
-            protoDelta.accept(visitor);
+            // ponytail: keep restore traversal explicit so the hot block path skips generic delta dispatch.
+            protoDelta.forEachBlock(visitor::visitBlock);
+            protoDelta.getBlockEntities()
+                    .forEach((packedPos, nbt) -> visitor.visitBlockEntity(
+                            io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos),
+                            io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos),
+                            io.liparakis.chunkis.core.BlockInstruction.unpackZ(packedPos),
+                            nbt
+                    ));
+            if (visitor.replayLegacyEntities()) {
+                protoDelta.forEachEntity(visitor::visitEntity);
+            }
             visitor.finishRestoration();
             replayPendingEntitiesIfNeeded(world, chunk, runtimeDelta, operationId);
             if (runtimeDelta != null
@@ -438,6 +450,11 @@ public final class ChunkRestorer {
             final int localZ,
             final BlockState state,
             final BlockPos worldPosition,
+            @org.jetbrains.annotations.Nullable final BlockState previousState,
+            final ChunkSection[] sections,
+            final int bottomY,
+            final int topYInclusive,
+            final boolean tracePayloadWatches,
             final BlockApplyFailureCounters counters,
             @org.jetbrains.annotations.Nullable final String operationId
     ) {
@@ -449,6 +466,11 @@ public final class ChunkRestorer {
                 localZ,
                 state,
                 worldPosition,
+                previousState,
+                sections,
+                bottomY,
+                topYInclusive,
+                tracePayloadWatches,
                 counters,
                 operationId
         );

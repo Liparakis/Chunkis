@@ -47,6 +47,13 @@ public interface ChunkDeltaView<S, N> {
     int getBlockChangesCount();
 
     /**
+     * Returns the number of unique chunk sections touched by block changes or block entities.
+     *
+     * @return touched section count
+     */
+    int getTouchedSectionCount();
+
+    /**
      * Returns chunk-level metadata payload.
      *
      * @return metadata payload, or {@code null}

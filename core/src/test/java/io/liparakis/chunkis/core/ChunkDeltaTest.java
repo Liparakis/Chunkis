@@ -63,9 +63,27 @@ class ChunkDeltaTest {
         assertThat(snapshot.getBlockChangesCount()).isEqualTo(2);
         assertThat(snapshot.getBlockEntities()).hasSize(1);
         assertThat(snapshot.countNonNullEntities()).isEqualTo(1);
+        assertThat(snapshot.getTouchedSectionCount()).isEqualTo(1);
         assertThat(blocks).containsExactly(
                 org.assertj.core.data.MapEntry.entry(BlockInstruction.packPos(1, 64, 1), "stone"),
                 org.assertj.core.data.MapEntry.entry(BlockInstruction.packPos(2, 65, 3), "dirt")
         );
+    }
+
+    @Test
+    void touchedSectionCountTracksBlocksAndBlockEntitiesWithoutScanning() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.addBlockChange(1, 96, 1, "dirt");
+        delta.addBlockEntityData(1, 128, 1, "chest");
+
+        assertThat(delta.getTouchedSectionCount()).isEqualTo(3);
+
+        delta.removeBlockEntityData(1, 128, 1, false);
+        assertThat(delta.getTouchedSectionCount()).isEqualTo(2);
+
+        delta.clearBlockPayloads(false);
+        assertThat(delta.getTouchedSectionCount()).isZero();
     }
 }

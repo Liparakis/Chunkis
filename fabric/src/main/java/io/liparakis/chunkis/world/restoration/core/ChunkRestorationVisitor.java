@@ -2,6 +2,7 @@ package io.liparakis.chunkis.world.restoration.core;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
@@ -23,6 +24,7 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -69,6 +71,34 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Position bounds matching the target chunk.
      */
     private final ChunkPos chunkPosition;
+    /**
+     * Cached chunk start X used to avoid recreating absolute positions from {@link ChunkPos}.
+     */
+    private final int chunkStartX;
+    /**
+     * Cached chunk start Z used to avoid recreating absolute positions from {@link ChunkPos}.
+     */
+    private final int chunkStartZ;
+    /**
+     * Cached vertical bounds for fast restore-time range checks.
+     */
+    private final int bottomY;
+    /**
+     * Cached inclusive top Y for fast restore-time range checks.
+     */
+    private final int topYInclusive;
+    /**
+     * Cached section array so per-block replay does not repeatedly route through {@link WorldChunk}.
+     */
+    private final ChunkSection[] sections;
+    /**
+     * Reused mutable world position for block replay to avoid one {@link BlockPos} allocation per block.
+     */
+    private final BlockPos.Mutable mutableWorldPos = new BlockPos.Mutable();
+    /**
+     * Snapshot of whether payload-watch tracing is active for this restore pass.
+     */
+    private final boolean tracePayloadWatches;
 
     /**
      * Runtime block delta state being constructed/populated.
@@ -119,6 +149,12 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         this.world = world;
         this.chunk = chunk;
         this.chunkPosition = chunk.getPos();
+        this.chunkStartX = this.chunkPosition.getStartX();
+        this.chunkStartZ = this.chunkPosition.getStartZ();
+        this.bottomY = chunk.getBottomY();
+        this.topYInclusive = chunk.getTopYInclusive();
+        this.sections = chunk.getSectionArray();
+        this.tracePayloadWatches = ChunkTraceWatchpoints.hasPayloadWatches();
         this.runtimeDelta = runtimeDelta;
         this.replayLegacyEntities = shouldReplayLegacyEntities(sourceDelta);
         this.operationId = operationId;
@@ -238,6 +274,15 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     }
 
     /**
+     * Returns whether this restore still owns legacy entity replay work.
+     *
+     * @return {@code true} if persisted entities should be visited/replayed
+     */
+    boolean replayLegacyEntities() {
+        return replayLegacyEntities;
+    }
+
+    /**
      * Returns failure tracking accumulator statistics.
      *
      * @return reference to BlockApplyFailureCounters tracker
@@ -262,16 +307,18 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             return;
         }
 
-        final BlockPos worldPos = chunkPosition.getBlockPos(localX, localY, localZ);
-        final BlockState previousState = chunk.getBlockState(worldPos);
-        PayloadWatchTracer.traceRestoreInstructionVisited(
-                chunk,
-                worldPos,
-                previousState,
-                state,
-                operationId,
-                BLOCK_TRACE_SOURCE
-        );
+        mutableWorldPos.set(chunkStartX + localX, localY, chunkStartZ + localZ);
+        final BlockState previousState = tracePayloadWatches ? chunk.getBlockState(mutableWorldPos) : null;
+        if (tracePayloadWatches) {
+            PayloadWatchTracer.traceRestoreInstructionVisited(
+                    chunk,
+                    mutableWorldPos,
+                    previousState,
+                    state,
+                    operationId,
+                    BLOCK_TRACE_SOURCE
+            );
+        }
 
         if (!ChunkRestorer.applyBlockChange(
                 chunk,
@@ -280,24 +327,33 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 localY,
                 localZ,
                 state,
-                worldPos,
+                mutableWorldPos,
+                previousState,
+                sections,
+                bottomY,
+                topYInclusive,
+                tracePayloadWatches,
                 blockApplyFailureCounters,
                 operationId
         )) {
-            PayloadWatchTracer.traceRestoreBlockFailure(
-                    world,
-                    chunkPosition,
-                    worldPos,
-                    operationId,
-                    "restore failed before block reached live world"
-            );
+            if (tracePayloadWatches) {
+                PayloadWatchTracer.traceRestoreBlockFailure(
+                        world,
+                        chunkPosition,
+                        mutableWorldPos,
+                        operationId,
+                        "restore failed before block reached live world"
+                );
+            }
             return;
         }
 
         copyBlockToRuntimeDelta(localX, localY, localZ, state);
         blockApplyFailureCounters.recordAppliedBlock();
         appliedBlocksCount++;
-        PayloadWatchTracer.traceRestoredBlock(chunk, worldPos, state, operationId);
+        if (tracePayloadWatches) {
+            PayloadWatchTracer.traceRestoredBlock(chunk, mutableWorldPos, state, operationId);
+        }
     }
 
     /**
@@ -406,55 +462,64 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final int localZ,
             final NbtCompound nbt
     ) {
-        final BlockPos worldPos = chunkPosition.getBlockPos(localX, localY, localZ);
-        final BlockState currentState = chunk.getBlockState(worldPos);
+        mutableWorldPos.set(chunkStartX + localX, localY, chunkStartZ + localZ);
+        final BlockState currentState = chunk.getBlockState(mutableWorldPos);
 
         if (!currentState.hasBlockEntity()) {
-            PayloadWatchTracer.traceRestoreBlockEntitySkipped(
-                    world,
-                    chunkPosition,
-                    worldPos,
-                    operationId,
-                    "restore skipped: missing block state"
-            );
+            if (tracePayloadWatches) {
+                PayloadWatchTracer.traceRestoreBlockEntitySkipped(
+                        world,
+                        chunkPosition,
+                        mutableWorldPos,
+                        operationId,
+                        "restore skipped: missing block state"
+                );
+            }
             return;
         }
 
         if (!isBlockEntityNbtCompatibleWithState(nbt, currentState)) {
-            PayloadWatchTracer.traceRestoreBlockEntitySkipped(
-                    world,
-                    chunkPosition,
-                    worldPos,
-                    operationId,
-                    "restore skipped: block entity type incompatible with current block state"
-            );
+            if (tracePayloadWatches) {
+                PayloadWatchTracer.traceRestoreBlockEntitySkipped(
+                        world,
+                        chunkPosition,
+                        mutableWorldPos,
+                        operationId,
+                        "restore skipped: block entity type incompatible with current block state"
+                );
+            }
             return;
         }
 
         final BlockEntity blockEntity = BlockEntity.createFromNbt(
-                worldPos,
+                mutableWorldPos,
                 currentState,
                 nbt,
                 world.getRegistryManager()
         );
         if (blockEntity == null) {
-            LOGGER.warn("Failed to create block entity from NBT at {}", worldPos);
-            PayloadWatchTracer.traceRestoreBlockEntitySkipped(
-                    world,
-                    chunkPosition,
-                    worldPos,
-                    operationId,
-                    "restore skipped: block entity could not be created from NBT"
-            );
+            LOGGER.warn("Failed to create block entity from NBT at {}", mutableWorldPos);
+            if (tracePayloadWatches) {
+                PayloadWatchTracer.traceRestoreBlockEntitySkipped(
+                        world,
+                        chunkPosition,
+                        mutableWorldPos,
+                        operationId,
+                        "restore skipped: block entity could not be created from NBT"
+                );
+            }
             return;
         }
 
-        chunk.removeBlockEntity(worldPos);
+        chunk.removeBlockEntity(mutableWorldPos);
         chunk.addBlockEntity(blockEntity);
         if (runtimeDelta != null) {
             runtimeDelta.addBlockEntityData(localX, localY, localZ, nbt, false);
         }
         restoredBlockEntitiesCount++;
-        PayloadWatchTracer.traceRestoredBlockEntity(world, chunkPosition, worldPos, blockEntity, nbt, operationId);
+        if (tracePayloadWatches) {
+            PayloadWatchTracer.traceRestoredBlockEntity(world, chunkPosition, mutableWorldPos, blockEntity, nbt,
+                    operationId);
+        }
     }
 }

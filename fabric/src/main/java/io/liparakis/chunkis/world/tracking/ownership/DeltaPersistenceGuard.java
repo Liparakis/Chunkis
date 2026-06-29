@@ -131,7 +131,7 @@ public final class DeltaPersistenceGuard {
                 + ", blockEntities=" + delta.getBlockEntities()
                 .size()
                 + ", entities=" + delta.countNonNullEntities()
-                + ", sections=" + countSections(delta)
+                + ", sections=" + delta.getTouchedSectionCount()
                 + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(meta)
                 + ", fullBaseline=" + CisNbtUtil.hasFullBlockBaseline(meta)
                 + ", authoritativeV11Snapshot=" + hasAuthoritativeV11SnapshotPayload(delta)
@@ -186,23 +186,6 @@ public final class DeltaPersistenceGuard {
                 || !delta.getBlockEntities()
                 .isEmpty()
                 || delta.countNonNullEntities() > 0;
-    }
-
-    /**
-     * Helper counts unique block section offsets mapped inside the delta.
-     *
-     * @param delta candidate delta
-     * @return section count integer
-     */
-    private static int countSections(final ChunkDeltaView<?, ?> delta) {
-        final java.util.Set<Integer> sections = new java.util.HashSet<>();
-        delta.forEachBlock((x, y, z, state) -> sections.add(y >> 4));
-        delta.getBlockEntities()
-                .forEach((packedPos, nbt) ->
-                        sections.add(
-                                io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos)
-                                        >> 4));
-        return sections.size();
     }
 
     /**
