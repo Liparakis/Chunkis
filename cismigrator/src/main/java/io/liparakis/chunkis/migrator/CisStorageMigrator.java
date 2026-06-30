@@ -95,7 +95,7 @@ public final class CisStorageMigrator<S, N> {
             return CisMigrationReport.empty();
         }
 
-        if (isStorageAlreadyMarkedAtTargetVersion(storageDir)) {
+        if (isStorageMarkedAtVersion(storageDir, targetVersion)) {
             return CisMigrationReport.empty();
         }
 
@@ -125,7 +125,7 @@ public final class CisStorageMigrator<S, N> {
      * @param storageDir directory containing CIS region files
      * @return {@code true} when a clean migration marker matches {@link #targetVersion}
      */
-    private boolean isStorageAlreadyMarkedAtTargetVersion(final Path storageDir) {
+    public static boolean isStorageMarkedAtVersion(final Path storageDir, final int targetVersion) {
         final Path markerPath = storageDir.resolve(VERSION_MARKER_FILE);
         if (!Files.isRegularFile(markerPath)) {
             return false;
@@ -135,7 +135,6 @@ public final class CisStorageMigrator<S, N> {
             final int recordedVersion = Integer.parseInt(Files.readString(markerPath, StandardCharsets.UTF_8).trim());
             return recordedVersion == targetVersion;
         } catch (final IOException | NumberFormatException e) {
-            logger.warn("Ignoring unreadable CIS migration marker {}", markerPath, e);
             return false;
         }
     }

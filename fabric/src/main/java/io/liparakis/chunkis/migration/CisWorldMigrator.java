@@ -60,6 +60,10 @@ public final class CisWorldMigrator {
             return CisMigrationReport.empty();
         }
 
+        if (CisStorageMigrator.isStorageMarkedAtVersion(storageDir, CisVersionMap.latestVersion())) {
+            return CisMigrationReport.empty();
+        }
+
         final Identifier dimId = world.getRegistryKey()
                 .getValue();
         LOGGER.info("Checking CIS region directory for world {}: {}", dimId, storageDir);
