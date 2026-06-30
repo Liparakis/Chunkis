@@ -332,7 +332,8 @@ public class ChunkSerializerMixin {
             );
             return;
         }
-        if (!usePersistedBaseChunkForBlocks) {
+        final boolean resetProtoChunkToEmpty = chunkis$shouldResetProtoChunkToEmpty(delta.getChunkMetadata());
+        if (resetProtoChunkToEmpty) {
             if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
                 ChunkTraceStore.trace(
                         ChunkisDebugDomain.ASSERTIONS,
@@ -368,9 +369,11 @@ public class ChunkSerializerMixin {
                 ChunkTraceSeverity.INFO,
                 resolved.reason(),
                 SOURCE + "#chunkis$restoreChunkDelta",
-                usePersistedBaseChunkForBlocks
+                resetProtoChunkToEmpty
+                        ? "attached delta to proto chunk and reset status to EMPTY"
+                        : usePersistedBaseChunkForBlocks
                         ? "attached delta to proto chunk and kept persisted base baseline"
-                        : "attached delta to proto chunk and reset status to EMPTY",
+                        : "attached authoritative full CIS baseline to proto chunk",
                 world.getRegistryKey()
                         .getValue()
                         .toString(),
@@ -380,6 +383,12 @@ public class ChunkSerializerMixin {
                 delta.isDirty(),
                 null
         );
+    }
+
+    @Unique
+    private static boolean chunkis$shouldResetProtoChunkToEmpty(final Object chunkMetadata) {
+        return !CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(chunkMetadata)
+                && !CisNbtUtil.hasFullBlockBaseline(chunkMetadata);
     }
 
     /**

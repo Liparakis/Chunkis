@@ -9,8 +9,7 @@ import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.chunk.SerializedChunk;
+import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 
 /**
@@ -80,19 +79,11 @@ public final class CisSnapshotCapture {
         PayloadWatchTracer.traceCapturedBlocks(chunk);
         target.clearBlockPayloads(false);
         target.clearBlockEntityPayloads(false);
-        final NbtCompound fullChunkNbt = captureAuthoritativeBaseChunkNbt(chunk);
+        captureAuthoritativeBlockBaseline(chunk, target);
+        ChunkBlockEntityCapture.captureBlockEntities(chunk, chunk.getWorld().getRegistryManager(), target);
 
         final NbtCompound existingMetadata = target.getChunkMetadata();
-        target.setChunkMetadata(
-                CisNbtUtil.createChunkMetadataTakingOwnership(
-                        CisNbtUtil.extractPersistedStructureMetadata(existingMetadata),
-                        true,
-                        false,
-                        fullChunkNbt,
-                        BaseChunkCaptureUtil.hasPortalBlocks(chunk)
-                ),
-                false
-        );
+        target.setChunkMetadata(createAuthoritativeSnapshotMetadata(existingMetadata, BaseChunkCaptureUtil.hasPortalBlocks(chunk)), false);
         target.setSuppressInitialRepopulation(true);
         return target;
     }
@@ -126,18 +117,45 @@ public final class CisSnapshotCapture {
         return target.getBlockChangesCount();
     }
 
-    /**
-     * Serializes the live chunk into vanilla-compatible NBT that can be used directly as the
-     * authoritative future load baseline.
-     *
-     * @param chunk live chunk being snapshotted
-     * @return serialized full chunk NBT
-     */
-    private static NbtCompound captureAuthoritativeBaseChunkNbt(final WorldChunk chunk) {
-        if (!(chunk.getWorld() instanceof ServerWorld world)) {
-            throw new IllegalStateException("Full snapshot capture requires ServerWorld");
+    static NbtCompound createAuthoritativeSnapshotMetadata(
+            final NbtCompound existingMetadata,
+            final boolean portalChunk
+    ) {
+        return CisNbtUtil.createChunkMetadataTakingOwnership(
+                CisNbtUtil.extractPersistedStructureMetadata(existingMetadata),
+                true,
+                true,
+                null,
+                portalChunk
+        );
+    }
+
+    private static void captureAuthoritativeBlockBaseline(
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> target
+    ) {
+        final ChunkSection[] sections = chunk.getSectionArray();
+        final int chunkBottomY = chunk.getBottomY();
+
+        for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+            final ChunkSection section = sections[sectionIndex];
+            if (section == null || section.isEmpty()) {
+                continue;
+            }
+
+            for (int localY = 0; localY < SECTION_SIZE; localY++) {
+                final int worldY = toWorldY(chunkBottomY, sectionIndex, localY);
+                for (int localZ = 0; localZ < SECTION_SIZE; localZ++) {
+                    for (int localX = 0; localX < SECTION_SIZE; localX++) {
+                        final BlockState state = section.getBlockState(localX, localY, localZ);
+                        if (state.isAir()) {
+                            continue;
+                        }
+                        target.addBlockChange(localX, worldY, localZ, state, false);
+                    }
+                }
+            }
         }
-        return SerializedChunk.fromChunk(world, chunk).serialize();
     }
 
     /**
