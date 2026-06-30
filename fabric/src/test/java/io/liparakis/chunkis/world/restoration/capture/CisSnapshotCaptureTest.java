@@ -45,4 +45,10 @@ class CisSnapshotCaptureTest {
         assertEquals(structures, CisNbtUtil.extractPersistedStructureMetadata(metadata));
         assertFalse(CisNbtUtil.hasPersistedPortalChunk(metadata));
     }
+
+    @Test
+    void snapshotKeepsPersistedBaseForChunksWithBlockEntities() {
+        assertTrue(CisSnapshotCapture.shouldPersistBaseChunkForSnapshot(1));
+        assertFalse(CisSnapshotCapture.shouldPersistBaseChunkForSnapshot(0));
+    }
 }

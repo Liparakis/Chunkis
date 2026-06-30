@@ -77,6 +77,17 @@ public final class CisSnapshotCapture {
             return target;
         }
         PayloadWatchTracer.traceCapturedBlocks(chunk);
+        if (shouldPersistBaseChunkForSnapshot(chunk.getBlockEntities().size())) {
+            final NbtCompound fullChunkNbt = BaseChunkCaptureUtil.captureBaseChunk(
+                    (net.minecraft.server.world.ServerWorld) chunk.getWorld(),
+                    chunk,
+                    target,
+                    BaseChunkCaptureUtil.hasPortalBlocks(chunk)
+            ).getChunkMetadata();
+            target.setChunkMetadata(fullChunkNbt, false);
+            target.setSuppressInitialRepopulation(true);
+            return target;
+        }
         target.clearBlockPayloads(false);
         target.clearBlockEntityPayloads(false);
         captureAuthoritativeBlockBaseline(chunk, target);
@@ -86,6 +97,10 @@ public final class CisSnapshotCapture {
         target.setChunkMetadata(createAuthoritativeSnapshotMetadata(existingMetadata, BaseChunkCaptureUtil.hasPortalBlocks(chunk)), false);
         target.setSuppressInitialRepopulation(true);
         return target;
+    }
+
+    static boolean shouldPersistBaseChunkForSnapshot(final int blockEntityCount) {
+        return blockEntityCount > 0;
     }
 
     /**
