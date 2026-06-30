@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.migrator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
@@ -43,6 +44,7 @@ class CisStorageMigratorTest {
     private static final int REGION_SLOTS = 1024;
     private static final int CURRENT_VERSION = CisConstants.VERSION;
     private static final int LEGACY_VERSION = 8;
+    private static final String VERSION_MARKER_FILE = ".chunkis-cis-version";
     /**
      * Bytes per chunk header entry (offset int + length int).
      */
@@ -112,6 +114,53 @@ class CisStorageMigratorTest {
     }
 
     /**
+     * Verifies that a successful migration run marks the storage at the target
+     * version so later startups can skip the full region rescan.
+     */
+    @Test
+    void successfulMigrationMarksStorageAndSkipsLaterRescan() throws Exception {
+        final TestStorageHarness harness = createHarness();
+        final CisChunkPos legacyPos = new CisChunkPos(0, 0);
+
+        harness.saveChunk(legacyPos, "stone");
+        harness.rewriteChunkVersionToLegacy(legacyPos);
+
+        final CisStorageMigrator<String, String> migrator = migrator(harness);
+        final CisMigrationReport firstReport = migrator.migrateStorage(harness.regionsDir());
+        final CisMigrationReport secondReport = migrator.migrateStorage(harness.regionsDir());
+
+        assertReport(firstReport, REGION_SLOTS, 1, REGION_SLOTS - 1);
+        assertReport(secondReport, 0, 0, 0);
+        assertTrue(Files.exists(harness.regionsDir().resolve(VERSION_MARKER_FILE)));
+
+        harness.close();
+    }
+
+    /**
+     * Verifies that only a marker for the current target version suppresses the
+     * expensive migration scan.
+     */
+    @Test
+    void staleVersionMarkerDoesNotSuppressRequiredMigration() throws Exception {
+        final TestStorageHarness harness = createHarness();
+        final CisChunkPos legacyPos = new CisChunkPos(0, 0);
+
+        harness.saveChunk(legacyPos, "stone");
+        harness.rewriteChunkVersionToLegacy(legacyPos);
+        Files.writeString(
+                harness.regionsDir().resolve(VERSION_MARKER_FILE),
+                Integer.toString(LEGACY_VERSION)
+        );
+
+        final CisMigrationReport report = migrator(harness).migrateStorage(harness.regionsDir());
+
+        assertReport(report, REGION_SLOTS, 1, REGION_SLOTS - 1);
+        assertEquals(CURRENT_VERSION, harness.storage().load(legacyPos).getSourceVersion());
+
+        harness.close();
+    }
+
+    /**
      * Verifies that the migrator ignores files that do not follow the region
      * naming convention and correctly counts only valid region slots.
      */
@@ -158,6 +207,7 @@ class CisStorageMigratorTest {
                 harness.chunkEntryExists(legacyPos),
                 "Migration must preserve the original chunk bytes when decode fails."
                   );
+        assertFalse(Files.exists(harness.regionsDir().resolve(VERSION_MARKER_FILE)));
 
         harness.close();
     }

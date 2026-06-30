@@ -4,6 +4,7 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,6 +37,7 @@ public final class CisStorageMigrator<S, N> {
      * Compiled pattern for validating and parsing {@code r.<x>.<z>.cis} filenames.
      */
     private static final Pattern REGION_FILE_PATTERN = Pattern.compile("r\\.(-?\\d+)\\.(-?\\d+)\\.cis");
+    private static final String VERSION_MARKER_FILE = ".chunkis-cis-version";
 
     /**
      * Number of chunk slots along each axis in one region file.
@@ -93,17 +95,63 @@ public final class CisStorageMigrator<S, N> {
             return CisMigrationReport.empty();
         }
 
+        if (isStorageAlreadyMarkedAtTargetVersion(storageDir)) {
+            return CisMigrationReport.empty();
+        }
+
         CisMigrationReport report = CisMigrationReport.empty();
+        boolean completed = true;
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(storageDir, "r.*.*.cis")) {
             for (final Path path : stream) {
                 report = migrateRegionFileIfMatched(path, report);
             }
         } catch (final IOException e) {
+            completed = false;
             logger.error("Failed to iterate CIS storage directory {}", storageDir, e);
         }
 
+        if (completed && report.failedChunks() == 0) {
+            writeTargetVersionMarker(storageDir);
+        }
+
         return report;
+    }
+
+    /**
+     * Returns {@code true} when a prior successful migration already verified
+     * this storage directory at the current target version.
+     *
+     * @param storageDir directory containing CIS region files
+     * @return {@code true} when a clean migration marker matches {@link #targetVersion}
+     */
+    private boolean isStorageAlreadyMarkedAtTargetVersion(final Path storageDir) {
+        final Path markerPath = storageDir.resolve(VERSION_MARKER_FILE);
+        if (!Files.isRegularFile(markerPath)) {
+            return false;
+        }
+
+        try {
+            final int recordedVersion = Integer.parseInt(Files.readString(markerPath, StandardCharsets.UTF_8).trim());
+            return recordedVersion == targetVersion;
+        } catch (final IOException | NumberFormatException e) {
+            logger.warn("Ignoring unreadable CIS migration marker {}", markerPath, e);
+            return false;
+        }
+    }
+
+    /**
+     * Persists the target version marker after a clean full-directory scan.
+     *
+     * @param storageDir directory containing CIS region files
+     */
+    private void writeTargetVersionMarker(final Path storageDir) {
+        final Path markerPath = storageDir.resolve(VERSION_MARKER_FILE);
+        try {
+            Files.writeString(markerPath, Integer.toString(targetVersion), StandardCharsets.UTF_8);
+        } catch (final IOException e) {
+            logger.warn("Failed to write CIS migration marker {}", markerPath, e);
+        }
     }
 
     /**
