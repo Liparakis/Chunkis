@@ -14,7 +14,6 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.entity.capture.LiveEntitySnapshotCapture;
-import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
@@ -284,19 +283,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     }
 
     /**
-     * Acknowledges entity reloads tracking UUID sequences.
-     *
-     * @param entity target replayed entity
-     */
-    @Unique
-    private void chunkis$scheduleEntityReplay(final Entity entity) {
-        if (entity == null) {
-            return;
-        }
-        ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
-    }
-
-    /**
      * Ensures CIS storage is flushed and closed during server shutdown.
      *
      * <p>Injected at {@code TAIL} so Minecraft's own final save pass has already
@@ -345,7 +331,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 "ThreadedAnvilChunkStorageMixin#chunkis$traceWatchedEntityUnload",
                 "watched entity entered ServerChunkLoadingManager.unloadEntity"
         );
-        chunkis$scheduleEntityReplay(entity);
     }
 
     /**
