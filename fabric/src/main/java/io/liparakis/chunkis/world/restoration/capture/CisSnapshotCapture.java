@@ -50,6 +50,10 @@ public final class CisSnapshotCapture {
             final ChunkDelta<BlockState, NbtCompound> target,
             final String operationId
     ) {
+        if (CisNbtUtil.hasFullBlockBaseline(target.getChunkMetadata()) && !target.isDirty()) {
+            return target;
+        }
+
         final int previousNonAirBlocks = countPersistedNonAirBlocks(target);
         final int liveNonAirBlocks = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
         if (isSuspiciousBaselineShrink(previousNonAirBlocks, liveNonAirBlocks)) {

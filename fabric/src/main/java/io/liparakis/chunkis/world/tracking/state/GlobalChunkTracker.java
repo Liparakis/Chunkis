@@ -565,11 +565,12 @@ public final class GlobalChunkTracker {
             final String source,
             final WorldChunk chunk
     ) {
-        if (!dirtyDeltas.containsKey(key)) {
+        final ChunkDelta<?, ?> existing = dirtyDeltas.get(key);
+
+        if (existing == null) {
             GlobalChunkTrackerTrace.traceFirstDirtyMutation(key, delta, source);
         }
         GlobalChunkTrackerTrace.assertInvalidSparsePayloadWithoutBase(key, delta, source);
-        final ChunkDelta<?, ?> existing = dirtyDeltas.get(key);
 
         if (existing == delta) {
             putInUnloadCache(key, delta, false, null);

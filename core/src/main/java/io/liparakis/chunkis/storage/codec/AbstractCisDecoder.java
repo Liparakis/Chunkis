@@ -65,6 +65,10 @@ public abstract class AbstractCisDecoder<S, N> {
      */
     protected final int[] localPaletteBuffer;
     /**
+     * Reusable buffer for dense palette block indices.
+     */
+    protected final int[] denseIndicesBuffer;
+    /**
      * Adapter used to decode block entities, entities, and chunk metadata payloads.
      */
     protected final NbtAdapter<N> nbtAdapter;
@@ -87,6 +91,7 @@ public abstract class AbstractCisDecoder<S, N> {
         this.propertyReader = new BitReader(new byte[0]);
         this.sectionReader = new BitReader(new byte[0]);
         this.localPaletteBuffer = new int[SECTION_VOLUME];
+        this.denseIndicesBuffer = new int[SECTION_VOLUME];
     }
 
     /**
@@ -264,7 +269,7 @@ public abstract class AbstractCisDecoder<S, N> {
             int z = (packedPos >> BITS_PER_NIBBLE) & 0xF;
             int x = packedPos & 0xF;
 
-            delta.appendDecodedBlock(x, (sectionY << BITS_PER_NIBBLE) + y, z, sanitizeGlobalIndex(globalIdx));
+            delta.appendDecodedBlockFast(x, (sectionY << BITS_PER_NIBBLE) + y, z, sanitizeGlobalIndex(globalIdx));
         }
     }
 
@@ -331,7 +336,7 @@ public abstract class AbstractCisDecoder<S, N> {
             }
 
             if (defaultIsAir) {
-                delta.appendDecodedBlock(x, baseY + y, z, exceptionPaletteIndex);
+                delta.appendDecodedBlockFast(x, baseY + y, z, exceptionPaletteIndex);
             } else {
                 delta.upsertDecodedBlock(x, baseY + y, z, exceptionPaletteIndex);
             }
@@ -378,10 +383,14 @@ public abstract class AbstractCisDecoder<S, N> {
             int sectionY,
             int localSize,
             int bitsPerBlock) {
+        reader.readBatch(bitsPerBlock, denseIndicesBuffer);
+        int index = 0;
+        final int baseY = sectionY << BITS_PER_NIBBLE;
+
         for (int y = 0; y < SECTION_SIZE; y++) {
             for (int z = 0; z < SECTION_SIZE; z++) {
                 for (int x = 0; x < SECTION_SIZE; x++) {
-                    int localIndex = bitsPerBlock > 0 ? (int) reader.read(bitsPerBlock) : 0;
+                    int localIndex = denseIndicesBuffer[index++];
                     if (localIndex == 0) {
                         continue; // index 0 = no change
                     }
@@ -400,7 +409,7 @@ public abstract class AbstractCisDecoder<S, N> {
                         globalIndex = 0;
                     }
 
-                    delta.appendDecodedBlock(x, (sectionY << BITS_PER_NIBBLE) + y, z, globalIndex);
+                    delta.appendDecodedBlockFast(x, baseY + y, z, globalIndex);
                 }
             }
         }
@@ -519,7 +528,7 @@ public abstract class AbstractCisDecoder<S, N> {
         for (int y = 0; y < SECTION_SIZE; y++) {
             for (int z = 0; z < SECTION_SIZE; z++) {
                 for (int x = 0; x < SECTION_SIZE; x++) {
-                    delta.appendDecodedBlock(x, baseY + y, z, paletteIndex);
+                    delta.appendDecodedBlockFast(x, baseY + y, z, paletteIndex);
                 }
             }
         }

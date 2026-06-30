@@ -516,7 +516,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     ) {
         if (runtimeDelta != null) {
             if (paletteId >= 0) {
-                runtimeDelta.appendDecodedBlock(localX, localY, localZ, paletteId);
+                runtimeDelta.appendDecodedBlockFast(localX, localY, localZ, paletteId);
             } else {
                 runtimeDelta.appendSnapshotBlockChange(localX, localY, localZ, state);
             }

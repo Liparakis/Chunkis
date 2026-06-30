@@ -28,6 +28,8 @@ final class GlobalChunkTrackerTrace {
      */
     private static final String SOURCE = "GlobalChunkTracker";
 
+    private static final ChunkTraceSeverity INFO = ChunkTraceSeverity.INFO;
+
     /**
      * Private constructor to prevent utility class instantiation.
      *
@@ -70,10 +72,13 @@ final class GlobalChunkTrackerTrace {
             final String source,
             final Boolean dirtyState
     ) {
+        if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.DIRTY_TRACKING, INFO)) {
+            return;
+        }
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.DIRTY_TRACKING,
                 ChunkTraceEventType.TRACKER_STATE_UPDATED,
-                ChunkTraceSeverity.INFO,
+                INFO,
                 reason,
                 source,
                 message,
@@ -117,13 +122,14 @@ final class GlobalChunkTrackerTrace {
             final ChunkDelta<?, ?> delta,
             final String source
     ) {
-        if (delta == null || !delta.isDirty()) {
+        if (delta == null || !delta.isDirty()
+                || !ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, INFO)) {
             return;
         }
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.FIRST_DIRTY_MUTATION,
-                ChunkTraceSeverity.INFO,
+                INFO,
                 ChunkTraceReason.DELTA_BECAME_DIRTY,
                 source,
                 "first dirty mutation observed: " + DeltaPersistenceGuard.describeLifecycleState(delta),
@@ -190,6 +196,9 @@ final class GlobalChunkTrackerTrace {
             final String decision,
             final String source
     ) {
+        if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, INFO)) {
+            return;
+        }
         final ChunkTraceReason reason = ChunkDeltaOwnership.hasChunkisOwnedState(delta)
                 ? ChunkTraceReason.valueOf(delta.getOwnershipReason())
                 : ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;

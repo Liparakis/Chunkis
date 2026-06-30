@@ -117,7 +117,7 @@ class CisNbtUtilTest {
     }
 
     @Test
-    void buildLoadChunkNbtUsesPersistedBaseChunkBaselineWhenPresent() {
+    void buildLoadChunkNbtUsesPersistedBaseChunkBaselineWhenPresent() throws Exception {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
         final NbtCompound baseChunk = new NbtCompound();
         baseChunk.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
@@ -136,6 +136,13 @@ class CisNbtUtilTest {
                                                              ),
                 false
                               );
+
+        assertTrue(delta.getChunkMetadata().contains(CisNbtUtil.BASE_CHUNK_NBT_KEY));
+        assertFalse(delta.getChunkMetadata().contains(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY));
+
+        final NbtCompound packedMetadata = CisNbtUtil.packPersistedBaseChunkPayload(delta.getChunkMetadata());
+        assertTrue(packedMetadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY).orElseThrow().length > 0);
+        assertFalse(packedMetadata.contains(CisNbtUtil.BASE_CHUNK_NBT_KEY));
 
         final CisNbtUtil.LoadChunkNbtResult result =
                 CisNbtUtil.buildLoadChunkNbt(3, 7, 3953, delta);

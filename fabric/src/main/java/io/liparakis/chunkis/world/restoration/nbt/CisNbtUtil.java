@@ -101,6 +101,15 @@ public final class CisNbtUtil {
     public static final String BASE_CHUNK_NBT_KEY = "base_chunk_nbt";
 
     /**
+     * Chunkis metadata key for an opaque raw-serialized base chunk payload.
+     *
+     * <p>This stores the same logical base chunk as {@link #BASE_CHUNK_NBT_KEY}
+     * without forcing CIS metadata decode to recursively parse a second full chunk
+     * tree on every load. Legacy worlds may still carry the compound form.</p>
+     */
+    public static final String BASE_CHUNK_PAYLOAD_KEY = "base_chunk_payload";
+
+    /**
      * Synthetic NBT marker indicating that a chunk has CIS delta data stored
      * outside vanilla chunk NBT.
      */
@@ -395,6 +404,84 @@ public final class CisNbtUtil {
 
         buffer.patchLengthPrefix();
         return buffer.toSizedByteArray();
+    }
+
+    /**
+     * Serializes one raw NBT compound without CIS' outer length prefix.
+     *
+     * <p>Used for nested payloads that Chunkis wants to keep opaque inside larger
+     * metadata structures, such as persisted base chunks.</p>
+     *
+     * @param payload target compound
+     * @return raw serialized compound bytes
+     * @throws IOException if serialization fails
+     */
+    static byte[] serializeRawCompound(final NbtCompound payload) throws IOException {
+        Objects.requireNonNull(payload, "payload");
+
+        try (java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream(4096);
+                java.io.DataOutputStream output = new java.io.DataOutputStream(buffer)) {
+            NbtIo.writeCompound(payload, output);
+            output.flush();
+            return buffer.toByteArray();
+        }
+    }
+
+    /**
+     * Parses one raw serialized NBT compound without a length prefix.
+     *
+     * @param payload raw compound bytes
+     * @return parsed compound
+     * @throws IOException if parsing fails
+     */
+    static NbtCompound deserializeRawCompound(final byte[] payload) throws IOException {
+        Objects.requireNonNull(payload, "payload");
+
+        try (java.io.ByteArrayInputStream input = new java.io.ByteArrayInputStream(payload);
+                java.io.DataInputStream dataInput = new java.io.DataInputStream(input)) {
+            return NbtIo.readCompound(dataInput);
+        }
+    }
+
+    /**
+     * Serializes chunk metadata for CIS persistence, packing any embedded base
+     * chunk compound into the opaque byte-array form used by newer saves.
+     *
+     * <p>This keeps the server-thread mutation path on the simple in-memory
+     * compound shape while still writing the cheaper-to-load on-disk shape.</p>
+     *
+     * @param metadata in-memory metadata envelope
+     * @return encoded CIS metadata payload including length prefix
+     * @throws IOException if serialization fails
+     */
+    public static byte[] serializeChunkMetadataForStorage(final NbtCompound metadata) throws IOException {
+        return serializeRawPayload(packPersistedBaseChunkPayload(metadata));
+    }
+
+    /**
+     * Returns metadata ready for persistence, rewriting only the persisted base
+     * chunk child from compound form to opaque bytes when needed.
+     *
+     * @param metadata in-memory metadata envelope
+     * @return original metadata when no rewrite is needed, otherwise a packed copy
+     * @throws IOException if base chunk serialization fails
+     */
+    static NbtCompound packPersistedBaseChunkPayload(final NbtCompound metadata) throws IOException {
+        Objects.requireNonNull(metadata, "metadata");
+
+        if (metadata.getByteArray(BASE_CHUNK_PAYLOAD_KEY).isPresent()) {
+            return metadata;
+        }
+
+        final NbtCompound baseChunkNbt = getCompoundOrNull(metadata, BASE_CHUNK_NBT_KEY);
+        if (baseChunkNbt == null || baseChunkNbt.isEmpty()) {
+            return metadata;
+        }
+
+        final NbtCompound packed = metadata.copy();
+        packed.remove(BASE_CHUNK_NBT_KEY);
+        packed.putByteArray(BASE_CHUNK_PAYLOAD_KEY, serializeRawCompound(baseChunkNbt));
+        return packed;
     }
 
     /**

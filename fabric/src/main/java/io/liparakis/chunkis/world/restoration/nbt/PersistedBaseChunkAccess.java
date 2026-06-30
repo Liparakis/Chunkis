@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
+import io.liparakis.chunkis.Chunkis;
+import java.io.IOException;
 import net.minecraft.nbt.NbtCompound;
 
 /**
@@ -30,6 +32,17 @@ final class PersistedBaseChunkAccess {
             return null;
         }
 
+        final byte[] rawPayload = metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
+                .orElseGet(() -> new byte[0]);
+        if (rawPayload.length > 0) {
+            try {
+                return CisNbtUtil.deserializeRawCompound(rawPayload);
+            } catch (final IOException e) {
+                Chunkis.LOGGER.warn("Chunkis: Failed to decode persisted base chunk payload bytes", e);
+                return null;
+            }
+        }
+
         final NbtCompound baseChunkNbt = CisNbtUtil.getCompoundOrNull(metadata, CisNbtUtil.BASE_CHUNK_NBT_KEY);
 
         return baseChunkNbt != null && !baseChunkNbt.isEmpty() ? baseChunkNbt.copy() : null;
@@ -44,6 +57,12 @@ final class PersistedBaseChunkAccess {
     static boolean hasPersistedBaseChunkNbt(final Object chunkMetadata) {
         if (!(chunkMetadata instanceof NbtCompound metadata) || metadata.isEmpty()) {
             return false;
+        }
+
+        final byte[] rawPayload = metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
+                .orElseGet(() -> new byte[0]);
+        if (rawPayload.length > 0) {
+            return true;
         }
 
         final NbtCompound baseChunkNbt = CisNbtUtil.getCompoundOrNull(metadata, CisNbtUtil.BASE_CHUNK_NBT_KEY);

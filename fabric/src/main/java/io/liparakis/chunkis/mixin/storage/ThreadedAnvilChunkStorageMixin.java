@@ -1033,6 +1033,10 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                         : CisNbtUtil.hasPersistedPortalChunk(existingMetadata)
         );
 
+        if (java.util.Objects.equals(metadata, existingMetadata)) {
+            return delta;
+        }
+
         chunkis$updateDeltaMetadata(delta, metadata, chunk.getPos());
         return delta;
     }

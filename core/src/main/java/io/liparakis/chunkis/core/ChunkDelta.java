@@ -474,6 +474,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
         final int paletteId = blockPalette.getOrAdd(newState);
         final long posKey = BlockInstruction.packPos(x, y, z);
+        instructions.ensurePositionMap();
         final int existingIndex = instructions.positionMap.get(posKey);
 
         if (existingIndex != -1) {
@@ -622,32 +623,40 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
-     * Appends a decoded block instruction.
+     * Bulk-copies block instructions and section mask from another delta.
+     * <p>The source palette must already be aligned via {@link #copyBlockPaletteFrom}.</p>
      *
-     * <p>The caller is expected to have validated the palette id and position
-     * uniqueness. This method still guards capacity because it is public API.</p>
+     * @param source source delta whose block instructions should be copied
+     */
+    public void copyBlockInstructionsFrom(final ChunkDelta<S, ?> source) {
+        source.instructions.copyInto(this.instructions);
+        this.blockSectionMask = source.blockSectionMask;
+    }
+
+    /**
+     * Fast append path for decode operations where positions are guaranteed
+     * unique and no immediate position-map lookup is needed.
      *
      * @param x         local chunk X coordinate
      * @param y         block Y coordinate
      * @param z         local chunk Z coordinate
      * @param paletteId decoded palette id
      */
-    public void appendDecodedBlock(
+    public void appendDecodedBlockFast(
             final int x,
             final int y,
             final int z,
             final int paletteId
     ) {
         final long posKey = BlockInstruction.packPos(x, y, z);
-        instructions.add(packInstruction(paletteId, posKey), posKey);
+        instructions.addAppendOnly(packInstruction(paletteId, posKey));
         trackBlockSection(posKey);
     }
 
     /**
      * Upserts a decoded block instruction by palette id.
      *
-     * <p>This is the decode-path companion to {@link #appendDecodedBlock(int, int, int, int)}.
-     * Decoders sometimes materialize a section baseline and then overwrite a subset
+     * <p>Decoders sometimes materialize a section baseline and then overwrite a subset
      * of positions, such as default-sparse sections with a non-air default. In that
      * case position uniqueness is no longer guaranteed, but the caller still already
      * owns the decoded palette id and should not pay the higher-level
@@ -668,6 +677,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
             final int paletteId
     ) {
         final long posKey = BlockInstruction.packPos(x, y, z);
+        instructions.ensurePositionMap();
         final int existingIndex = instructions.positionMap.get(posKey);
         final long packedInstruction = packInstruction(paletteId, posKey);
 

@@ -103,6 +103,20 @@ class GlobalChunkTrackerTest {
     }
 
     @Test
+    void addDeltaDoesNotTraceWhenDebugIsOff() {
+        final RegistryKey<World> overworld = RegistryKey.of(
+                RegistryKeys.WORLD,
+                Identifier.of("minecraft", "overworld")
+        );
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+
+        GlobalChunkTracker.addDelta(overworld, 7, 9, delta, "WorldChunkMixin#setBlockState");
+
+        assertTrue(ChunkTraceStore.latest(10).isEmpty());
+    }
+
+    @Test
     void asyncSaveCompletionInvalidatesUnloadCacheForCleanDelta() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
         final RegistryKey<World> overworld = RegistryKey.of(
