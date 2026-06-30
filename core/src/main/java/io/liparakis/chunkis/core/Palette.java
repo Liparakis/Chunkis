@@ -121,4 +121,20 @@ public class Palette<T> {
         copy.entryToId.putAll(this.entryToId);
         return copy;
     }
+
+    /**
+     * Replaces this palette's contents with a shallow copy of {@code source}.
+     *
+     * @param source source palette to copy from
+     */
+    public void replaceWith(final Palette<T> source) {
+        if (source == null) {
+            throw new IllegalArgumentException("source palette cannot be null");
+        }
+
+        idToEntry.clear();
+        entryToId.clear();
+        idToEntry.addAll(source.idToEntry);
+        entryToId.putAll(source.entryToId);
+    }
 }

@@ -195,6 +195,9 @@ public final class ChunkDebugCommand {
                                         ctx.getSource(),
                                         LongArgumentType.getLong(ctx, "eventId")
                                 ))))
+                .then(CommandManager.literal("inspect")
+                        .then(CommandManager.literal("neighbors")
+                                .executes(ctx -> ChunkDebugActions.inspectNeighborChunks(ctx.getSource()))))
                 .then(watchCommand);
 
         dispatcher.register(CommandManager.literal("chunkis")
@@ -243,6 +246,16 @@ public final class ChunkDebugCommand {
     }
 
     /**
+     * Formats a one-line neighbor inspection row.
+     *
+     * @param snapshot inspected chunk details
+     * @return formatted inspection summary
+     */
+    static String formatChunkInspectSnapshot(final ChunkInspectSnapshot snapshot) {
+        return ChunkDebugOutput.formatChunkInspectSnapshot(snapshot);
+    }
+
+    /**
      * Formats a single suspect summary row.
      *
      * @param suspect chunk trace suspect snapshot
@@ -283,6 +296,28 @@ public final class ChunkDebugCommand {
             DebugChunkKey chunkKey,
             boolean trackerDirty,
             AsyncCisSaveManager.PendingSaveSnapshot asyncPending) {
+
+    }
+
+    /**
+     * Snapshot record describing live and persisted Chunkis state for one chunk.
+     *
+     * @param chunkKey          chunk coordinates
+     * @param loaded            true if a live WorldChunk is currently loaded
+     * @param liveState         summarized delta attached to the loaded chunk, or null
+     * @param trackedState      summarized tracker/unload-cache delta, or null
+     * @param persistedState    summarized disk delta, or null
+     * @param persistedPresent  true if a CIS entry exists on disk
+     * @param persistenceError  storage load error message, or null
+     */
+    public record ChunkInspectSnapshot(
+            DebugChunkKey chunkKey,
+            boolean loaded,
+            String liveState,
+            String trackedState,
+            String persistedState,
+            boolean persistedPresent,
+            String persistenceError) {
 
     }
 

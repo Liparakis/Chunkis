@@ -184,7 +184,7 @@ public abstract class AbstractCisDecoder<S, N> {
             throw new IOException(String.format(
                     "Invalid CIS magic number: 0x%08X (expected: 0x%08X)",
                     magic, CisConstants.MAGIC
-                                               ));
+            ));
         }
 
         this.decodedVersion = readIntBE(data, 4);
@@ -192,7 +192,7 @@ public abstract class AbstractCisDecoder<S, N> {
             throw new IOException(String.format(
                     "Unsupported CIS version: %d (supported range: 7–%d)",
                     decodedVersion, CisConstants.VERSION
-                                               ));
+            ));
         }
     }
 
@@ -264,10 +264,7 @@ public abstract class AbstractCisDecoder<S, N> {
             int z = (packedPos >> BITS_PER_NIBBLE) & 0xF;
             int x = packedPos & 0xF;
 
-            S state = getStateFromPalette(globalIdx);
-            if (state != null) {
-                delta.addBlockChange((byte) x, (sectionY << BITS_PER_NIBBLE) + y, (byte) z, state);
-            }
+            delta.appendDecodedBlock(x, (sectionY << BITS_PER_NIBBLE) + y, z, sanitizeGlobalIndex(globalIdx));
         }
     }
 
@@ -280,13 +277,13 @@ public abstract class AbstractCisDecoder<S, N> {
             final ChunkDelta<S, N> delta,
             final int sectionY,
             final int globalBits
-                                     ) {
+    ) {
         final int globalIdx = (int) reader.read(globalBits);
-        final S state = getStateFromPalette(globalIdx);
-        if (isAir(state)) {
+        final int paletteIndex = sanitizeGlobalIndex(globalIdx);
+        if (paletteIndex == 0) {
             return;
         }
-        fillSection(delta, sectionY, state);
+        fillSection(delta, sectionY, paletteIndex);
     }
 
     /**
@@ -302,15 +299,16 @@ public abstract class AbstractCisDecoder<S, N> {
             final ChunkDelta<S, N> delta,
             final int sectionY,
             final int globalBits
-                                           ) {
+    ) {
         final int defaultGlobalIdx = (int) reader.read(globalBits);
-        final S defaultState = getStateFromPalette(defaultGlobalIdx);
+        final int defaultPaletteIndex = sanitizeGlobalIndex(defaultGlobalIdx);
+        final S defaultState = getStateFromPalette(defaultPaletteIndex);
         final int exceptionCount = (int) reader.read(CisConstants.BLOCK_COUNT_BITS);
 
         final boolean defaultIsAir = isAir(defaultState);
 
         if (!defaultIsAir) {
-            fillSection(delta, sectionY, defaultState);
+            fillSection(delta, sectionY, defaultPaletteIndex);
         }
 
         final int baseY = sectionY << BITS_PER_NIBBLE;
@@ -323,7 +321,8 @@ public abstract class AbstractCisDecoder<S, N> {
             final int z = (packedPos >> BITS_PER_NIBBLE) & 0xF;
             final int x = packedPos & 0xF;
 
-            final S exceptionState = getStateFromPalette(globalIdx);
+            final int exceptionPaletteIndex = sanitizeGlobalIndex(globalIdx);
+            final S exceptionState = getStateFromPalette(exceptionPaletteIndex);
 
             // Skip air exceptions when the default is already air — the position
             // was never filled, so no overwrite is needed.
@@ -331,7 +330,11 @@ public abstract class AbstractCisDecoder<S, N> {
                 continue;
             }
 
-            delta.addBlockChange((byte) x, baseY + y, (byte) z, exceptionState);
+            if (defaultIsAir) {
+                delta.appendDecodedBlock(x, baseY + y, z, exceptionPaletteIndex);
+            } else {
+                delta.upsertDecodedBlock(x, baseY + y, z, exceptionPaletteIndex);
+            }
         }
     }
 
@@ -388,7 +391,7 @@ public abstract class AbstractCisDecoder<S, N> {
                         Chunkis.LOGGER.warn(
                                 "Dense section local palette index {} out of range (size {}); using air",
                                 paletteIndex, localSize
-                                           );
+                        );
                         paletteIndex = 0;
                     }
 
@@ -510,16 +513,30 @@ public abstract class AbstractCisDecoder<S, N> {
      * Materializes a full 16×16×16 section into the delta using a single state.
      * Callers are expected to guard against air before calling this method.
      */
-    private void fillSection(final ChunkDelta<S, N> delta, final int sectionY, final S state) {
+    private void fillSection(final ChunkDelta<S, N> delta, final int sectionY, final int paletteIndex) {
         final int baseY = sectionY << BITS_PER_NIBBLE;
 
         for (int y = 0; y < SECTION_SIZE; y++) {
             for (int z = 0; z < SECTION_SIZE; z++) {
                 for (int x = 0; x < SECTION_SIZE; x++) {
-                    delta.addBlockChange((byte) x, baseY + y, (byte) z, state);
+                    delta.appendDecodedBlock(x, baseY + y, z, paletteIndex);
                 }
             }
         }
+    }
+
+    /**
+     * Clamps a decoded global palette index into the current palette bounds.
+     *
+     * <p>Fast decode paths append packed instructions directly, so invalid indices
+     * must be normalized explicitly here instead of falling through the slower
+     * object lookup path. Global palette index {@code 0} is canonical air.</p>
+     *
+     * @param globalIndex decoded palette index from the stream
+     * @return in-range palette index, or {@code 0} when invalid
+     */
+    private int sanitizeGlobalIndex(final int globalIndex) {
+        return globalIndex >= 0 && globalIndex < globalPalette.size() ? globalIndex : 0;
     }
 
     /**

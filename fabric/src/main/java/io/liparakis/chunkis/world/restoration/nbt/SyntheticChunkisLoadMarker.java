@@ -20,16 +20,22 @@ final class SyntheticChunkisLoadMarker {
     }
 
     /**
-     * Evaluates if root chunk NBT has synthetic load-path delta markers.
+     * Evaluates if root chunk NBT came through Chunkis' synthetic load builder.
+     *
+     * <p>The load path marker must survive both payload-bearing deltas and
+     * metadata-only/base-backed sparse chunks. The latter may have no explicit
+     * {@code HasDelta} flag because they carry no sparse replay payload, but they
+     * still always record load-base usage.</p>
      *
      * @param root serialized chunk NBT root compound
-     * @return true if marker exists
+     * @return true if a Chunkis synthetic-load marker exists
      */
     static boolean hasDeltaMarker(final NbtCompound root) {
         final NbtCompound chunkisData = CisNbtUtil.getCompoundOrNull(root, CisNbtUtil.CHUNKIS_DATA_KEY);
         return chunkisData != null
-                && chunkisData.getBoolean(CisNbtUtil.HAS_DELTA_KEY)
-                .orElse(false);
+                && (chunkisData.getBoolean(CisNbtUtil.HAS_DELTA_KEY)
+                .orElse(false)
+                || chunkisData.contains(CisNbtUtil.LOAD_BASE_CHUNK_USAGE_KEY));
     }
 
     /**

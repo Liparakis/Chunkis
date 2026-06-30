@@ -143,7 +143,7 @@ public abstract class BlockEntityMixin {
             );
         }
 
-        BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
+        BaseChunkCaptureUtil.captureBaseChunkIfMissing(serverWorld, chunk, delta);
         delta.markDirty("BlockEntityMixin#handleChunkDelta");
         chunk.markNeedsSaving();
         captureBlockEntityNbt(serverWorld, delta);

@@ -87,6 +87,8 @@ For non-overworld dimensions, Chunkis stores data under `world/dimensions/<names
 - May increase storage usage in worlds where many modified chunks now store safer restoration data
 
 > **Known regression for `1.21.11`:** Versions `3.0.0+` currently have a known storage regression. Stability and correctness improved, but storage efficiency can be worse than older Chunkis releases in some worlds. Storage efficiency work is still planned, but the exact compression or baseline redesign path is not final yet.
+>
+> **Known unresolved restore bug for `1.21.11`:** Some cross-chunk natural structures, especially tree borders, can still restore with cut seams under unlucky load/generation timing. Current suspicion is missing neighboring chunk context during regeneration rather than plain leaf-tick replay. This is not fixed yet and is deferred while performance and storage work continue.
 
 ---
 

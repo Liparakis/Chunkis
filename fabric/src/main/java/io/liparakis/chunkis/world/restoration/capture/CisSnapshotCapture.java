@@ -9,7 +9,8 @@ import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.chunk.SerializedChunk;
 import net.minecraft.world.chunk.WorldChunk;
 
 /**
@@ -75,42 +76,15 @@ public final class CisSnapshotCapture {
         PayloadWatchTracer.traceCapturedBlocks(chunk);
         target.clearBlockPayloads(false);
         target.clearBlockEntityPayloads(false);
-        target.ensureBlockCapacity(liveNonAirBlocks);
-
-        final ChunkSection[] sections = chunk.getSectionArray();
-        for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-            final ChunkSection section = sections[sectionIndex];
-            if (section == null || section.isEmpty()) {
-                continue;
-            }
-
-            for (int localY = 0; localY < SECTION_SIZE; localY++) {
-                final int worldY = toWorldY(chunk.getBottomY(), sectionIndex, localY);
-                for (int localZ = 0; localZ < SECTION_SIZE; localZ++) {
-                    for (int localX = 0; localX < SECTION_SIZE; localX++) {
-                        final BlockState state = section.getBlockState(localX, localY, localZ);
-                        if (!state.isAir()) {
-                            target.appendSnapshotBlockChange(localX, worldY, localZ, state);
-                        }
-                    }
-                }
-            }
-        }
-
-        ChunkBlockEntityCapture.captureBlockEntities(
-                chunk,
-                chunk.getWorld()
-                        .getRegistryManager(),
-                target
-        );
+        final NbtCompound fullChunkNbt = captureAuthoritativeBaseChunkNbt(chunk);
 
         final NbtCompound existingMetadata = target.getChunkMetadata();
         target.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
                         CisNbtUtil.extractPersistedStructureMetadata(existingMetadata),
                         true,
-                        true,
-                        CisNbtUtil.extractPersistedBaseChunkNbt(existingMetadata),
+                        false,
+                        fullChunkNbt,
                         BaseChunkCaptureUtil.hasPortalBlocks(chunk)
                 ),
                 false
@@ -149,7 +123,24 @@ public final class CisSnapshotCapture {
     }
 
     /**
+     * Serializes the live chunk into vanilla-compatible NBT that can be used directly as the
+     * authoritative future load baseline.
+     *
+     * @param chunk live chunk being snapshotted
+     * @return serialized full chunk NBT
+     */
+    private static NbtCompound captureAuthoritativeBaseChunkNbt(final WorldChunk chunk) {
+        if (!(chunk.getWorld() instanceof ServerWorld world)) {
+            throw new IllegalStateException("Full snapshot capture requires ServerWorld");
+        }
+        return SerializedChunk.fromChunk(world, chunk).serialize();
+    }
+
+    /**
      * Converts a section-local Y coordinate into an absolute chunk-local world Y.
+     *
+     * <p>Retained as a package-visible helper for the existing unit test that locks down
+     * chunk-section coordinate translation.</p>
      *
      * @param chunkBottomY bottom Y coordinates of the chunk
      * @param sectionIndex chunk section index

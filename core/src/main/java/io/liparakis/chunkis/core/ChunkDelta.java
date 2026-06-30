@@ -304,6 +304,20 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
+     * Seeds this delta's block palette from another delta before bulk decoded appends.
+     *
+     * <p>This is used by restore-time runtime-delta reconstruction so copied block
+     * instructions can reuse already-decoded palette ids instead of hashing block
+     * states back through {@link Palette#getOrAdd(Object)}.</p>
+     *
+     * @param source source delta whose palette should be copied
+     */
+    public void copyBlockPaletteFrom(final ChunkDelta<S, ?> source) {
+        Objects.requireNonNull(source, "source");
+        blockPalette.replaceWith(source.blockPalette);
+    }
+
+    /**
      * Maps an absolute block Y coordinate to this delta's touched-section bitset.
      *
      * <p>Out-of-range coordinates return {@code 0} so corrupted or legacy payloads
@@ -626,6 +640,43 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     ) {
         final long posKey = BlockInstruction.packPos(x, y, z);
         instructions.add(packInstruction(paletteId, posKey), posKey);
+        trackBlockSection(posKey);
+    }
+
+    /**
+     * Upserts a decoded block instruction by palette id.
+     *
+     * <p>This is the decode-path companion to {@link #appendDecodedBlock(int, int, int, int)}.
+     * Decoders sometimes materialize a section baseline and then overwrite a subset
+     * of positions, such as default-sparse sections with a non-air default. In that
+     * case position uniqueness is no longer guaranteed, but the caller still already
+     * owns the decoded palette id and should not pay the higher-level
+     * {@link #addBlockChange(int, int, int, Object, boolean)} cost.</p>
+     *
+     * <p>No dirty bookkeeping or block-entity cleanup happens here because decode
+     * builds a fresh in-memory delta from persisted bytes.</p>
+     *
+     * @param x         local chunk X coordinate
+     * @param y         block Y coordinate
+     * @param z         local chunk Z coordinate
+     * @param paletteId decoded palette id
+     */
+    public void upsertDecodedBlock(
+            final int x,
+            final int y,
+            final int z,
+            final int paletteId
+    ) {
+        final long posKey = BlockInstruction.packPos(x, y, z);
+        final int existingIndex = instructions.positionMap.get(posKey);
+        final long packedInstruction = packInstruction(paletteId, posKey);
+
+        if (existingIndex != -1) {
+            instructions.update(existingIndex, packedInstruction);
+            return;
+        }
+
+        instructions.add(packedInstruction, posKey);
         trackBlockSection(posKey);
     }
 
@@ -1195,6 +1246,38 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
+     * Visits sparse block changes together with their palette ids.
+     *
+     * <p>This avoids a second palette lookup on hot paths that need to copy the
+     * encoded instruction shape elsewhere, such as restore-time runtime-delta
+     * reconstruction.</p>
+     *
+     * @param visitor block visitor receiving coordinates, palette id, and state
+     */
+    public void forEachBlockInstruction(final BlockInstructionVisitor<S> visitor) {
+        Objects.requireNonNull(visitor, "visitor");
+
+        for (int i = 0; i < instructions.instructionCount; i++) {
+            final long instruction = instructions.packedInstructions[i];
+            final int paletteIndex = (int) (instruction >>> Integer.SIZE);
+            final S state = blockPalette.get(paletteIndex);
+
+            if (state == null) {
+                continue;
+            }
+
+            final long posKey = instruction & POSITION_MASK;
+            visitor.visitBlock(
+                    BlockInstruction.unpackX(posKey),
+                    BlockInstruction.unpackY(posKey),
+                    BlockInstruction.unpackZ(posKey),
+                    paletteIndex,
+                    state
+            );
+        }
+    }
+
+    /**
      * Returns whether this delta has unsaved changes.
      *
      * @return {@code true} if dirty
@@ -1422,5 +1505,14 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     public interface BlockVisitor<S> {
 
         void visitBlock(int x, int y, int z, S state);
+    }
+
+    /**
+     * Visitor for sparse block scans that also need the encoded palette id.
+     */
+    @FunctionalInterface
+    public interface BlockInstructionVisitor<S> {
+
+        void visitBlock(int x, int y, int z, int paletteId, S state);
     }
 }

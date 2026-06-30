@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.gametest;
 
+import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
@@ -11,7 +12,9 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
+import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
@@ -22,6 +25,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.LeavesBlock;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.ChestBlockEntity;
 import net.minecraft.entity.EntityType;
@@ -328,6 +332,75 @@ public final class PersistedBaseChunkReloadGameTest {
                         == ChunkTraceEventType.MUTATION_ACCEPTED_REAL_EDIT
         );
         return !events.isEmpty();
+    }
+
+    /**
+     * Returns a natural jungle leaves state with a stable distance value.
+     *
+     * <p>Real generated jungle leaves are not persistent. Using natural leaves
+     * keeps this test on the same decay path as worldgen trees.</p>
+     *
+     * @param distance leaf distance to nearest log
+     * @return configured jungle leaves block state
+     */
+    private static BlockState naturalJungleLeaves(final int distance) {
+        return Blocks.JUNGLE_LEAVES.getDefaultState()
+                .with(LeavesBlock.PERSISTENT, false)
+                .with(LeavesBlock.DISTANCE, distance);
+    }
+
+    /**
+     * Returns whether the loaded chunk currently carries restorable Chunkis state.
+     *
+     * @param chunk loaded world chunk
+     * @return true if a live Chunkis delta is attached and restorable
+     */
+    private static boolean hasAttachedRestorableDelta(final WorldChunk chunk) {
+        if (!(chunk instanceof ChunkisDeltaDuck duck)
+                || !(duck.chunkis$getDelta() instanceof ChunkDelta<?, ?> delta)) {
+            return false;
+        }
+        return ChunkDeltaOwnership.hasRestorableChunkisState(delta);
+    }
+
+    /**
+     * Describes the live delta shape for reload assertions.
+     *
+     * @param chunk loaded world chunk, may be {@code null}
+     * @return compact live delta description
+     */
+    private static String describeAttachedDelta(final WorldChunk chunk) {
+        if (chunk == null) {
+            return "chunk=null";
+        }
+        if (!(chunk instanceof ChunkisDeltaDuck duck)) {
+            return "duck=false";
+        }
+        if (!(duck.chunkis$getDelta() instanceof ChunkDelta<?, ?> delta)) {
+            return "delta=null";
+        }
+        return "restorable=" + ChunkDeltaOwnership.hasRestorableChunkisState(delta)
+                + ", owned=" + ChunkDeltaOwnership.hasChunkisOwnedState(delta)
+                + ", blocks=" + delta.getBlockChangesCount()
+                + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata())
+                + ", full=" + CisNbtUtil.hasFullBlockBaseline(delta.getChunkMetadata());
+    }
+
+    /**
+     * Describes a standalone delta for storage round-trip assertions.
+     *
+     * @param delta chunk delta, may be {@code null}
+     * @return compact delta description
+     */
+    private static String describeDelta(final ChunkDelta<?, ?> delta) {
+        if (delta == null) {
+            return "delta=null";
+        }
+        return "restorable=" + ChunkDeltaOwnership.hasRestorableChunkisState(delta)
+                + ", owned=" + ChunkDeltaOwnership.hasChunkisOwnedState(delta)
+                + ", blocks=" + delta.getBlockChangesCount()
+                + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata())
+                + ", full=" + CisNbtUtil.hasFullBlockBaseline(delta.getChunkMetadata());
     }
 
     /**
@@ -903,6 +976,132 @@ public final class PersistedBaseChunkReloadGameTest {
                     Text.literal("Repeated full-baseline churn accepted post-restore real edits for the restored chunk.")
             );
 
+            context.complete();
+        });
+    }
+
+    /**
+     * Verifies that a cross-chunk border fixture survives reload when one chunk
+     * is stored as a full baseline snapshot and its neighbor is stored as a
+     * base-backed sparse chunk.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 160)
+    public void mixedBaselineNeighborReloadPreservesCrossChunkBorderFixture(final TestContext context) {
+        ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
+
+        final ServerWorld world = context.getWorld();
+        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
+        final ChunkPos leftChunkPos = getOffsetChunkPos(anchor, 760);
+        final ChunkPos rightChunkPos = new ChunkPos(leftChunkPos.x + 1, leftChunkPos.z);
+        final BlockPos leftArrival = leftChunkPos.getBlockPos(14, 100, 8);
+        final BlockPos farArrival = leftArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
+        final BlockPos leftLogBase = leftChunkPos.getBlockPos(15, 64, 8);
+        final BlockPos leftLogTop = leftChunkPos.getBlockPos(15, 65, 8);
+        final BlockPos leftLeaf = leftChunkPos.getBlockPos(15, 66, 8);
+        final BlockPos rightLeafNear = rightChunkPos.getBlockPos(0, 66, 8);
+        final BlockPos rightLeafFar = rightChunkPos.getBlockPos(1, 66, 8);
+
+        watchBlocks(leftLogBase, leftLogTop, leftLeaf, rightLeafNear, rightLeafFar);
+        forceAndLoad(world, leftChunkPos);
+        forceAndLoad(world, rightChunkPos);
+
+        world.setBlockState(leftLogBase, Blocks.JUNGLE_LOG.getDefaultState());
+        world.setBlockState(leftLogTop, Blocks.JUNGLE_LOG.getDefaultState());
+        world.setBlockState(leftLeaf, naturalJungleLeaves(1));
+        world.setBlockState(rightLeafNear, naturalJungleLeaves(2));
+        world.setBlockState(rightLeafFar, naturalJungleLeaves(2));
+
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+                FabricCisStorageHelper.getStorage(world);
+        final WorldChunk leftChunk = world.getChunk(leftChunkPos.x, leftChunkPos.z);
+        final WorldChunk rightChunk = world.getChunk(rightChunkPos.x, rightChunkPos.z);
+
+        final ChunkDelta<BlockState, NbtCompound> leftDelta = new ChunkDelta<>(BlockState::isAir);
+        BaseChunkCaptureUtil.captureBaseChunk(world, leftChunk, leftDelta);
+        CisSnapshotCapture.capture(leftChunk, leftDelta, "gametest-mixed-border-left");
+        storage.save(new CisChunkPos(leftChunkPos.x, leftChunkPos.z), leftDelta);
+
+        final ChunkDelta<BlockState, NbtCompound> rightDelta = new ChunkDelta<>(BlockState::isAir);
+        BaseChunkCaptureUtil.captureBaseChunk(world, rightChunk, rightDelta);
+        storage.save(new CisChunkPos(rightChunkPos.x, rightChunkPos.z), rightDelta);
+        final ChunkDelta<BlockState, NbtCompound> storedRightDelta =
+                storage.load(new CisChunkPos(rightChunkPos.x, rightChunkPos.z), "gametest-mixed-border-right-readback");
+
+        context.assertTrue(
+                CisNbtUtil.hasPersistedBaseChunkNbt(leftDelta.getChunkMetadata())
+                        && CisNbtUtil.hasFullBlockBaseline(leftDelta.getChunkMetadata()),
+                Text.literal("Expected left chunk to persist as full-baseline snapshot.")
+        );
+        context.assertTrue(
+                CisNbtUtil.hasPersistedBaseChunkNbt(rightDelta.getChunkMetadata())
+                        && !CisNbtUtil.hasFullBlockBaseline(rightDelta.getChunkMetadata()),
+                Text.literal("Expected right chunk to persist as base-backed sparse chunk.")
+        );
+        context.assertTrue(
+                ChunkDeltaOwnership.hasRestorableChunkisState(storedRightDelta)
+                        && CisNbtUtil.hasPersistedBaseChunkNbt(storedRightDelta.getChunkMetadata())
+                        && !CisNbtUtil.hasFullBlockBaseline(storedRightDelta.getChunkMetadata()),
+                Text.literal("Expected right base-backed sparse chunk to round-trip through storage: "
+                        + describeDelta(storedRightDelta))
+        );
+
+        GlobalChunkTracker.forgetChunk(world, leftChunkPos);
+        GlobalChunkTracker.forgetChunk(world, rightChunkPos);
+
+        final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
+        teleportPlayer(player, world, leftArrival);
+        world.setChunkForced(leftChunkPos.x, leftChunkPos.z, false);
+        world.setChunkForced(rightChunkPos.x, rightChunkPos.z, false);
+
+        context.runAtTick(20, () -> teleportPlayer(player, world, farArrival));
+        context.runAtTick(50, () -> context.assertTrue(
+                world.getChunkManager().getWorldChunk(leftChunkPos.x, leftChunkPos.z, false) == null
+                        && world.getChunkManager().getWorldChunk(rightChunkPos.x, rightChunkPos.z, false) == null,
+                Text.literal("Expected both border chunks to unload before reload.")
+        ));
+        context.runAtTick(70, () -> {
+            world.setChunkForced(rightChunkPos.x, rightChunkPos.z, true);
+            world.getChunk(rightChunkPos.x, rightChunkPos.z);
+            world.scheduleBlockTick(rightLeafNear, Blocks.JUNGLE_LEAVES, 1);
+        });
+        context.runAtTick(90, () -> {
+            final BlockState state = world.getBlockState(rightLeafNear);
+            context.assertTrue(
+                    state.isOf(Blocks.JUNGLE_LEAVES)
+                            && state.get(LeavesBlock.DISTANCE) < LeavesBlock.MAX_DISTANCE,
+                    Text.literal("Sparse-side natural leaf lost its log distance before neighbor reload: " + state)
+            );
+            teleportPlayer(player, world, leftArrival);
+            world.setChunkForced(leftChunkPos.x, leftChunkPos.z, true);
+            world.getChunk(leftChunkPos.x, leftChunkPos.z);
+        });
+        context.runAtTick(110, () -> {
+            context.assertTrue(
+                    world.getBlockState(leftLogBase).isOf(Blocks.JUNGLE_LOG)
+                            && world.getBlockState(leftLogTop).isOf(Blocks.JUNGLE_LOG)
+                            && world.getBlockState(leftLeaf).isOf(Blocks.JUNGLE_LEAVES)
+                            && world.getBlockState(rightLeafNear).isOf(Blocks.JUNGLE_LEAVES)
+                            && world.getBlockState(rightLeafFar).isOf(Blocks.JUNGLE_LEAVES),
+                    Text.literal("Cross-chunk border fixture was cut at reload.")
+            );
+
+            final WorldChunk reloadedLeft = world.getChunkManager().getWorldChunk(leftChunkPos.x, leftChunkPos.z, false);
+            final WorldChunk reloadedRight = world.getChunkManager().getWorldChunk(rightChunkPos.x, rightChunkPos.z, false);
+            context.assertTrue(
+                    reloadedLeft != null && hasAttachedRestorableDelta(reloadedLeft),
+                    Text.literal("Reloaded left full-baseline chunk did not keep a live Chunkis delta attached: "
+                            + describeAttachedDelta(reloadedLeft))
+            );
+            context.assertTrue(
+                    reloadedRight != null && hasAttachedRestorableDelta(reloadedRight),
+                    Text.literal("Reloaded right base-backed chunk did not keep a live Chunkis delta attached: "
+                            + describeAttachedDelta(reloadedRight))
+            );
+
+            world.setChunkForced(leftChunkPos.x, leftChunkPos.z, false);
+            world.setChunkForced(rightChunkPos.x, rightChunkPos.z, false);
             context.complete();
         });
     }

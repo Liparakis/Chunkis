@@ -11,8 +11,12 @@ import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceJsonl;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.storage.io.CisStorage;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,10 +25,15 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.state.property.Property;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import net.minecraft.util.WorldSavePath;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.WorldChunk;
 
 /**
  * Execution actions backing the Chunkis debug and trace commands.
@@ -379,6 +388,29 @@ public final class ChunkDebugActions {
     }
 
     /**
+     * Prints a 3x3 inspection grid centered on the caller's current chunk.
+     *
+     * @param source command execution source
+     * @return number of inspected chunks
+     */
+    public static int inspectNeighborChunks(final ServerCommandSource source) {
+        final var world = source.getWorld();
+        final ChunkPos center = new ChunkPos(net.minecraft.util.math.BlockPos.ofFloored(source.getPosition()));
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+                FabricCisStorageHelper.getStorage(world);
+
+        for (int dz = -1; dz <= 1; dz++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                final ChunkPos pos = new ChunkPos(center.x + dx, center.z + dz);
+                sendFeedback(source, ChunkDebugCommand.formatChunkInspectSnapshot(
+                        inspectChunk(world, storage, pos)
+                ), false);
+            }
+        }
+        return 9;
+    }
+
+    /**
      * Exports latest trace events to a JSONL log file.
      *
      * @param source command execution source
@@ -542,5 +574,73 @@ public final class ChunkDebugActions {
                 .getRegistryKey()
                 .getValue()
                 .toString();
+    }
+
+    /**
+     * Builds one inspection snapshot for {@code pos}.
+     *
+     * @param world   world to inspect
+     * @param storage world storage instance
+     * @param pos     chunk coordinates
+     * @return inspection snapshot
+     */
+    @SuppressWarnings("unchecked")
+    private static ChunkDebugCommand.ChunkInspectSnapshot inspectChunk(
+            final net.minecraft.server.world.ServerWorld world,
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos pos) {
+        final WorldChunk liveChunk = world.getChunkManager().getWorldChunk(pos.x, pos.z, false);
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> liveDelta =
+                liveChunk instanceof io.liparakis.chunkis.api.ChunkisDeltaDuck duck
+                        && duck.chunkis$getDelta() instanceof io.liparakis.chunkis.core.ChunkDelta<?, ?> delta
+                        ? (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) delta
+                        : null;
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> trackedDelta =
+                (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(world, pos);
+
+        final boolean persistedPresent = storage.contains(FabricCisStorageHelper.toStoragePos(pos));
+        io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> persistedDelta = null;
+        String persistenceError = null;
+        if (persistedPresent) {
+            try {
+                persistedDelta = storage.loadWithoutClearing(FabricCisStorageHelper.toStoragePos(pos));
+            } catch (final IOException e) {
+                persistenceError = e.getMessage();
+            }
+        }
+
+        return new ChunkDebugCommand.ChunkInspectSnapshot(
+                new DebugChunkKey(pos.x, pos.z),
+                liveChunk != null,
+                describeDelta(liveDelta),
+                describeDelta(trackedDelta),
+                describeDelta(persistedDelta),
+                persistedPresent,
+                persistenceError
+        );
+    }
+
+    /**
+     * Summarizes the restore-relevant shape of one delta.
+     *
+     * @param delta delta to summarize
+     * @return compact summary string, or null when absent
+     */
+    private static String describeDelta(final io.liparakis.chunkis.core.ChunkDelta<?, NbtCompound> delta) {
+        if (delta == null) {
+            return null;
+        }
+
+        final Object metadata = delta.getChunkMetadata();
+        return "restorable=" + ChunkDeltaOwnership.hasRestorableChunkisState(delta)
+                + ", owned=" + delta.hasOwnershipClaim()
+                + ", dirty=" + delta.isDirty()
+                + ", blocks=" + delta.getBlockChangesCount()
+                + ", sections=" + delta.getTouchedSectionCount()
+                + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(metadata)
+                + ", full=" + CisNbtUtil.hasFullBlockBaseline(metadata)
+                + ", useBase=" + CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata)
+                + ", suppress=" + delta.shouldSuppressInitialRepopulation()
+                + ", ver=" + delta.getSourceVersion();
     }
 }

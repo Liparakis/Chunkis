@@ -4,11 +4,14 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
 import java.util.Set;
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.PaletteProvider;
+import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -33,6 +36,15 @@ final class ChunkRestoreBlockOperations {
     private static final int SECTION_Y_MASK = 15;
 
     /**
+     * Shared block-state palette provider used to build fresh air-only section containers.
+     *
+     * <p>Restore always runs on the server thread, so we can safely construct a new
+     * mutable container per section while reusing the immutable provider definition.</p>
+     */
+    private static final PaletteProvider<BlockState> BLOCK_STATE_PALETTE_PROVIDER =
+            PaletteProvider.forBlockStates(Block.STATE_IDS);
+
+    /**
      * Private constructor to prevent utility class instantiation.
      *
      * @throws AssertionError always
@@ -48,18 +60,13 @@ final class ChunkRestoreBlockOperations {
      */
     static void clearChunkToAir(final WorldChunk chunk) {
         final ChunkSection[] sections = chunk.getSectionArray();
-        for (final ChunkSection section : sections) {
+        for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+            final ChunkSection section = sections[sectionIndex];
             if (section == null || section.isEmpty()) {
                 continue;
             }
-
-            for (int y = 0; y < 16; y++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int x = 0; x < 16; x++) {
-                        section.setBlockState(x, y, z, Blocks.AIR.getDefaultState());
-                    }
-                }
-            }
+            // Replacing the whole section is substantially cheaper than touching 4096 cells one by one.
+            sections[sectionIndex] = createAirSectionPreservingBiomes(section);
         }
 
         for (final BlockPos pos : Set.copyOf(chunk.getBlockEntities()
@@ -71,13 +78,27 @@ final class ChunkRestoreBlockOperations {
     }
 
     /**
+     * Creates a new air-only section while retaining the generated biome container.
+     *
+     * <p>Biome data must survive restore clears because sparse replay only resets block
+     * contents. Reusing the prior biome container avoids a full biome repopulation pass.</p>
+     *
+     * @param section section being replaced
+     * @return fresh air-backed section with original biome data
+     */
+    private static ChunkSection createAirSectionPreservingBiomes(final ChunkSection section) {
+        return new ChunkSection(
+                new PalettedContainer<>(Blocks.AIR.getDefaultState(), BLOCK_STATE_PALETTE_PROVIDER),
+                section.getBiomeContainer()
+        );
+    }
+
+    /**
      * Applies one block state directly to a chunk section.
      *
      * @param chunk         chunk to mutate
      * @param chunkPosition chunk position, used for logging
-     * @param localX        local chunk X coordinate
      * @param localY        absolute world Y coordinate
-     * @param localZ        local chunk Z coordinate
      * @param state         state to write
      * @param worldPosition absolute world position, used for cleanup and logging
      * @param previousState pre-read block state when payload watches are active, otherwise {@code null}
@@ -85,6 +106,7 @@ final class ChunkRestoreBlockOperations {
      * @param bottomY       cached chunk bottom Y
      * @param topYInclusive cached chunk top Y inclusive
      * @param tracePayloadWatches whether payload-watch tracing is active for this restore pass
+     * @param clearedToAir whether the chunk was pre-cleared to air before replay
      * @param counters      failure counters to update
      * @param operationId   trace correlation ID
      * @return {@code true} if the block was applied
@@ -101,6 +123,7 @@ final class ChunkRestoreBlockOperations {
             final int bottomY,
             final int topYInclusive,
             final boolean tracePayloadWatches,
+            final boolean clearedToAir,
             final FailureCounters counters,
             @Nullable final String operationId) {
         if (tracePayloadWatches) {
@@ -167,7 +190,8 @@ final class ChunkRestoreBlockOperations {
                 return false;
             }
 
-            section.setBlockState(localX, localY & SECTION_Y_MASK, localZ, state);
+            // ponytail: restore owns the whole section write pass, so rebuild counts once later instead of per block.
+            section.getBlockStateContainer().swapUnsafe(localX, localY & SECTION_Y_MASK, localZ, state);
             if (tracePayloadWatches) {
                 PayloadWatchTracer.traceRestoreSetBlockReturned(chunk,
                         worldPosition,
@@ -183,7 +207,7 @@ final class ChunkRestoreBlockOperations {
                         "ChunkRestorer#applyBlockChange");
             }
 
-            if (!state.hasBlockEntity()) {
+            if (!clearedToAir && !state.hasBlockEntity()) {
                 removeStaleBlockEntityData(chunk, worldPosition);
             }
 

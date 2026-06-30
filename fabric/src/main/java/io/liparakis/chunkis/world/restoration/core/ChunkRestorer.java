@@ -126,6 +126,7 @@ public final class ChunkRestorer {
             runtimeDelta.setSuppressInitialRepopulation(
                     protoDelta.shouldSuppressInitialRepopulation()
             );
+            runtimeDelta.copyBlockPaletteFrom(protoDelta);
             runtimeDelta.ensureBlockCapacity(protoDelta.getBlockChangesCount());
         }
 
@@ -230,7 +231,11 @@ public final class ChunkRestorer {
             }
             visitor.cleanupReplayedEntities(protoDelta);
             // ponytail: keep restore traversal explicit so the hot block path skips generic delta dispatch.
-            protoDelta.forEachBlock(visitor::visitBlock);
+            if (runtimeDelta != null) {
+                protoDelta.forEachBlockInstruction(visitor);
+            } else {
+                protoDelta.forEachBlock(visitor::visitBlock);
+            }
             protoDelta.getBlockEntities()
                     .forEach((packedPos, nbt) -> visitor.visitBlockEntity(
                             io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos),
@@ -438,6 +443,7 @@ public final class ChunkRestorer {
      * @param localZ        local chunk Z coordinate
      * @param state         state to write
      * @param worldPosition absolute world position, used for stale block entity cleanup/logging
+     * @param clearedToAir  whether restore pre-cleared the chunk to air before replay
      * @param counters      failure tracking counters
      * @param operationId   optional execution/operation trace ID label, may be null
      * @return {@code true} if the block was applied
@@ -455,6 +461,7 @@ public final class ChunkRestorer {
             final int bottomY,
             final int topYInclusive,
             final boolean tracePayloadWatches,
+            final boolean clearedToAir,
             final BlockApplyFailureCounters counters,
             @org.jetbrains.annotations.Nullable final String operationId
     ) {
@@ -471,6 +478,7 @@ public final class ChunkRestorer {
                 bottomY,
                 topYInclusive,
                 tracePayloadWatches,
+                clearedToAir,
                 counters,
                 operationId
         );

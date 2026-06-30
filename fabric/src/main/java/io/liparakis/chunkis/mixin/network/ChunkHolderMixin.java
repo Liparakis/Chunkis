@@ -102,7 +102,7 @@ public abstract class ChunkHolderMixin {
                     chunk,
                     delta,
                     deltaDuck.chunkis$getRestoreOperationId()
-                                                       );
+            );
         }
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CLIENT_SYNC,
@@ -112,13 +112,16 @@ public abstract class ChunkHolderMixin {
                 "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
                 "sending vanilla chunk packet summary: players=" + players.size()
                         + ", " + ChunkSectionDebugUtil.summarize(chunk),
-                chunk.getWorld().getRegistryKey().getValue().toString(),
+                chunk.getWorld()
+                        .getRegistryKey()
+                        .getValue()
+                        .toString(),
                 new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
                 null,
                 null,
                 null,
                 null
-                             );
+        );
         PayloadWatchTracer.traceLiveChunkState(
                 chunk,
                 ChunkTraceEventType.WATCH_PRESENT_AFTER_CHUNK_FULL,
@@ -126,7 +129,7 @@ public abstract class ChunkHolderMixin {
                 "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
                 null,
                 null
-                                              );
+        );
         if (chunk.getWorld() instanceof ServerWorld serverWorld
                 && chunk instanceof ChunkisDeltaDuck deltaDuck
                 && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
@@ -138,7 +141,7 @@ public abstract class ChunkHolderMixin {
                     delta,
                     deltaDuck.chunkis$getRestoreOperationId(),
                     "ChunkHolderMixin#chunkis$onSendPacketToPlayers"
-                                                                );
+            );
         }
         PayloadWatchTracer.traceLiveChunkState(
                 chunk,
@@ -147,7 +150,7 @@ public abstract class ChunkHolderMixin {
                 "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
                 null,
                 null
-                                              );
+        );
 
         for (final ServerPlayerEntity player : players) {
             ChunkisNetworking.sendDelta(player, chunk);
@@ -159,7 +162,7 @@ public abstract class ChunkHolderMixin {
                 "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
                 null,
                 null
-                                              );
+        );
     }
 }
 

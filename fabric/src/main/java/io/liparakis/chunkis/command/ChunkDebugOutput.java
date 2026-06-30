@@ -193,6 +193,35 @@ final class ChunkDebugOutput {
     }
 
     /**
+     * Formats one inspected chunk row showing live, tracked, and persisted state.
+     *
+     * @param snapshot inspected chunk details
+     * @return one-line inspection summary
+     */
+    static String formatChunkInspectSnapshot(final ChunkDebugCommand.ChunkInspectSnapshot snapshot) {
+        final StringBuilder sb = new StringBuilder(256);
+        sb.append("chunk=")
+                .append(snapshot.chunkKey().x())
+                .append(',')
+                .append(snapshot.chunkKey().z())
+                .append(" loaded=")
+                .append(snapshot.loaded())
+                .append(" diskPresent=")
+                .append(snapshot.persistedPresent())
+                .append(" live=")
+                .append(snapshot.liveState() != null ? snapshot.liveState() : "<none>")
+                .append(" tracked=")
+                .append(snapshot.trackedState() != null ? snapshot.trackedState() : "<none>")
+                .append(" disk=")
+                .append(snapshot.persistedState() != null ? snapshot.persistedState() : "<none>");
+        if (snapshot.persistenceError() != null) {
+            sb.append(" diskError=")
+                    .append(snapshot.persistenceError());
+        }
+        return sb.toString();
+    }
+
+    /**
      * Formats a one-line summary of a suspect for use in suspect listings.
      *
      * @param suspect chunk trace suspect snapshot

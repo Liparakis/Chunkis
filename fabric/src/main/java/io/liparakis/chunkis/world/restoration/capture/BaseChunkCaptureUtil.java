@@ -80,6 +80,37 @@ public final class BaseChunkCaptureUtil {
     }
 
     /**
+     * Captures the base chunk if missing without forcing an immediate synchronous storage write.
+     *
+     * <p>Use this on normal live-mutation hooks where blocking the server thread on first touch is
+     * worse than letting the existing dirty-delta save pipeline flush the captured base snapshot.</p>
+     *
+     * @param world the server world that owns the chunk
+     * @param chunk the live chunk being captured
+     * @param delta the delta attached to that chunk
+     */
+    public static void captureBaseChunkIfMissing(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> delta
+    ) {
+        if (shouldSkipCapture(chunk, delta)) {
+            traceCaptureSkipped(world, chunk, delta, "captureBaseChunkIfMissing");
+            return;
+        }
+
+        traceLifecycle(
+                world,
+                chunk,
+                delta,
+                ChunkTraceEventType.BASE_CAPTURE_REQUESTED,
+                "BaseChunkCaptureUtil#captureBaseChunkIfMissing",
+                "base capture requested"
+        );
+        captureBaseChunk(world, chunk, delta);
+    }
+
+    /**
      * Captures a serialized base chunk into {@code delta} if one has not already been recorded,
      * detecting portal presence automatically.
      *

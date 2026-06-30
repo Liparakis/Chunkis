@@ -110,7 +110,7 @@ public abstract class ServerWorldMixin {
                     null
             );
         }
-        BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(world, chunk, delta);
+        BaseChunkCaptureUtil.captureBaseChunkIfMissing(world, chunk, delta);
 
         final NbtCompound entityNbt = ChunkEntityNbtCapture.serializeEntityNbt(entity);
         if (entityNbt == null || entityNbt.isEmpty()) {

@@ -135,14 +135,43 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
      * Returns whether a block transition should be ignored because it came from
      * vanilla's natural leaf-decay tick path rather than an intentional saved edit.
      *
+     * <p>Only actual decay-to-air transitions are ignored. Scheduled leaf ticks
+     * also rewrite the {@link LeavesBlock#DISTANCE} property, and those updates
+     * must be tracked or restored leaves will keep stale decay distances.</p>
+     *
      * @param previous preceding block state
      * @param next     succeeding block state
      * @return true if tick represents natural leaf decay
      */
     @Unique
     private static boolean chunkis$isNaturalLeafDecay(final BlockState previous, final BlockState next) {
-        return LeafTickContext.isActive() && (previous.getBlock() instanceof LeavesBlock
-                || next.getBlock() instanceof LeavesBlock);
+        return chunkis$isNaturalLeafDecayTransition(
+                LeafTickContext.isActive(),
+                previous.getBlock() instanceof LeavesBlock,
+                next.getBlock() instanceof LeavesBlock,
+                next.isAir()
+        );
+    }
+
+    /**
+     * Resolves whether a leaf-tick transition represents true vanilla decay.
+     *
+     * <p>This helper keeps the classification rule testable without requiring a
+     * bootstrapped Minecraft block registry inside plain unit tests.</p>
+     *
+     * @param leafTickActive   whether execution is inside a leaf tick context
+     * @param previousIsLeaves whether the previous state was a leaf block
+     * @param nextIsLeaves     whether the next state is a leaf block
+     * @param nextIsAir        whether the next state is air
+     * @return {@code true} when the transition is natural leaf decay
+     */
+    @Unique
+    private static boolean chunkis$isNaturalLeafDecayTransition(
+            final boolean leafTickActive,
+            final boolean previousIsLeaves,
+            final boolean nextIsLeaves,
+            final boolean nextIsAir) {
+        return leafTickActive && previousIsLeaves && !nextIsLeaves && nextIsAir;
     }
 
     /**
@@ -298,7 +327,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 );
         final boolean becameDirty = !delta.isDirty();
         if (chunk.getWorld() instanceof ServerWorld serverWorld) {
-            BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
+            BaseChunkCaptureUtil.captureBaseChunkIfMissing(serverWorld, chunk, delta);
         }
         delta.prepareForMutation(SET_BLOCK_STATE_SOURCE);
         delta.addBlockChange(
@@ -401,7 +430,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                         SET_BLOCK_ENTITY_SOURCE
                 );
         try {
-            BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
+            BaseChunkCaptureUtil.captureBaseChunkIfMissing(serverWorld, chunk, delta);
             delta.prepareForMutation(SET_BLOCK_ENTITY_SOURCE);
             ChunkBlockEntityCapture.captureBlockEntity(
                     blockEntity, serverWorld.getRegistryManager(),
@@ -471,7 +500,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
         final ChunkDelta<BlockState, NbtCompound> delta =
                 chunkis$getOrCreateOwnedBlockDelta(chunk, ChunkTraceReason.PLAYER_OR_COMMAND_EDIT, ADD_ENTITY_SOURCE);
         if (chunk.getWorld() instanceof ServerWorld serverWorld) {
-            BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(serverWorld, chunk, delta);
+            BaseChunkCaptureUtil.captureBaseChunkIfMissing(serverWorld, chunk, delta);
         }
         delta.prepareForMutation(ADD_ENTITY_SOURCE);
         delta.removeEntitiesMatching(nbt -> nbt != null
@@ -518,7 +547,7 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     SOURCE + "#chunkis$onConstructFromProto"
             );
         }
-        if (protoDelta == null || protoDelta.isEmpty()) {
+        if (protoDelta == null || !ChunkDeltaOwnership.hasRestorableChunkisState(protoDelta)) {
             if (protoOperationId != null) {
                 PayloadWatchTracer.traceWorldChunkDeltaMissing(
                         chunkis$self(),

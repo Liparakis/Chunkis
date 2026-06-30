@@ -7,6 +7,7 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -35,7 +36,8 @@ import org.slf4j.Logger;
  * <p>This class owns the low-level restore walk so {@link ChunkRestorer} can stay
  * focused on the higher-level restore transaction and tracing lifecycle.</p>
  */
-final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockState, NbtCompound> {
+final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockState, NbtCompound>,
+        ChunkDelta.BlockInstructionVisitor<BlockState> {
 
     /**
      * Logger instance reference.
@@ -99,6 +101,10 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Snapshot of whether payload-watch tracing is active for this restore pass.
      */
     private final boolean tracePayloadWatches;
+    /**
+     * Whether restore cleared the target chunk to air before replay.
+     */
+    private final boolean clearedToAir;
 
     /**
      * Runtime block delta state being constructed/populated.
@@ -119,6 +125,11 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Tracker instance maintaining failure occurrences during block application loops.
      */
     private final ChunkRestorer.BlockApplyFailureCounters blockApplyFailureCounters;
+
+    /**
+     * Tracks which chunk sections were mutated so counts can be recomputed once per section.
+     */
+    private final boolean[] touchedSections;
 
     /**
      * Cumulative count of successfully restored block coordinates.
@@ -155,10 +166,12 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         this.topYInclusive = chunk.getTopYInclusive();
         this.sections = chunk.getSectionArray();
         this.tracePayloadWatches = ChunkTraceWatchpoints.hasPayloadWatches();
+        this.clearedToAir = !CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(sourceDelta.getChunkMetadata());
         this.runtimeDelta = runtimeDelta;
         this.replayLegacyEntities = shouldReplayLegacyEntities(sourceDelta);
         this.operationId = operationId;
         this.blockApplyFailureCounters = new ChunkRestorer.BlockApplyFailureCounters();
+        this.touchedSections = new boolean[this.sections.length];
         if (this.replayLegacyEntities && this.runtimeDelta != null) {
             this.runtimeDelta.setEntities(sourceDelta.getEntitiesList(), false);
         }
@@ -250,8 +263,24 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Performs final runtime-delta cleanup after restoration.
      */
     void finishRestoration() {
+        recalculateTouchedSectionCounts();
         if (runtimeDelta != null) {
             runtimeDelta.markSaved();
+        }
+    }
+
+    /**
+     * Rebuilds section counts after restore-time raw container writes.
+     */
+    private void recalculateTouchedSectionCounts() {
+        for (int sectionIndex = 0; sectionIndex < touchedSections.length; sectionIndex++) {
+            if (!touchedSections[sectionIndex]) {
+                continue;
+            }
+            final ChunkSection section = sections[sectionIndex];
+            if (section != null) {
+                section.calculateCounts();
+            }
         }
     }
 
@@ -301,6 +330,45 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final int localZ,
             final BlockState state
     ) {
+        visitBlockInternal(localX, localY, localZ, -1, state);
+    }
+
+    /**
+     * Restores one block while preserving the already-decoded palette id for runtime-delta copy.
+     *
+     * @param localX local chunk X coordinate
+     * @param localY absolute world Y coordinate
+     * @param localZ local chunk Z coordinate
+     * @param paletteId decoded palette id from the source delta
+     * @param state restored block state
+     */
+    @Override
+    public void visitBlock(
+            final int localX,
+            final int localY,
+            final int localZ,
+            final int paletteId,
+            final BlockState state
+    ) {
+        visitBlockInternal(localX, localY, localZ, paletteId, state);
+    }
+
+    /**
+     * Shared implementation for restore-time block replay.
+     *
+     * @param localX local chunk X coordinate
+     * @param localY absolute world Y coordinate
+     * @param localZ local chunk Z coordinate
+     * @param paletteId decoded palette id, or {@code -1} when unavailable
+     * @param state restored block state
+     */
+    private void visitBlockInternal(
+            final int localX,
+            final int localY,
+            final int localZ,
+            final int paletteId,
+            final BlockState state
+    ) {
         blockApplyFailureCounters.recordVisitedInstruction();
         if (state == null) {
             blockApplyFailureCounters.recordNullState();
@@ -333,6 +401,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 bottomY,
                 topYInclusive,
                 tracePayloadWatches,
+                clearedToAir,
                 blockApplyFailureCounters,
                 operationId
         )) {
@@ -348,7 +417,8 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             return;
         }
 
-        copyBlockToRuntimeDelta(localX, localY, localZ, state);
+        touchedSections[(localY - bottomY) >> 4] = true;
+        copyBlockToRuntimeDelta(localX, localY, localZ, paletteId, state);
         blockApplyFailureCounters.recordAppliedBlock();
         appliedBlocksCount++;
         if (tracePayloadWatches) {
@@ -441,10 +511,15 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final int localX,
             final int localY,
             final int localZ,
+            final int paletteId,
             final BlockState state
     ) {
         if (runtimeDelta != null) {
-            runtimeDelta.appendSnapshotBlockChange(localX, localY, localZ, state);
+            if (paletteId >= 0) {
+                runtimeDelta.appendDecodedBlock(localX, localY, localZ, paletteId);
+            } else {
+                runtimeDelta.appendSnapshotBlockChange(localX, localY, localZ, state);
+            }
         }
     }
 
