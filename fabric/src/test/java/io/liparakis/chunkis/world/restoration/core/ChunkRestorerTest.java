@@ -7,6 +7,8 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 class ChunkRestorerTest {
 
     @Test
@@ -51,4 +53,42 @@ class ChunkRestorerTest {
         assertTrue(description.contains("nullSection=1"));
         assertTrue(description.contains("exception=1"));
     }
+
+    @Test
+    void collectTouchedSectionYCoordinatesUseChunkBottomSectionY() {
+        final boolean[] touchedSections = {true, false, true, false, false, true};
+
+        final List<Integer> sectionYs = ChunkRestorer.collectTouchedSectionYCoordinates(
+                -64,
+                touchedSections
+        );
+
+        assertEquals(
+                List.of(
+                        -4,
+                        -2,
+                        1
+                ),
+                sectionYs
+        );
+    }
+
+    @Test
+    void collectSectionYCoordinatesNeedingRefreshReturnsWholeChunkWhenBaseSnapshotWasUsed() {
+        final List<Integer> sectionYs = ChunkRestorer.collectSectionYCoordinatesNeedingRefresh(
+                -64,
+                new boolean[]{false, true, false},
+                true
+        );
+
+        assertEquals(List.of(-4, -3, -2), sectionYs);
+    }
+
+    @Test
+    void shouldUseBulkRefreshWhenExplicitDeltaIsDense() {
+        assertTrue(ChunkRestorer.shouldUseBulkRefresh(1024, 2, false));
+        assertTrue(!ChunkRestorer.shouldUseBulkRefresh(1023, 2, false));
+        assertTrue(ChunkRestorer.shouldUseBulkRefresh(1, 1, true));
+    }
+
 }

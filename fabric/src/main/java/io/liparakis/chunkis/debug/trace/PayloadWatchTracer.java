@@ -41,6 +41,16 @@ import org.jetbrains.annotations.Nullable;
 public final class PayloadWatchTracer {
 
     /**
+     * Returns whether payload watch tracing is currently enabled.
+     *
+     * @return true when at least one payload watch is active
+     */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    private static boolean hasPayloadWatches() {
+        return ChunkTraceWatchpoints.hasPayloadWatches();
+    }
+
+    /**
      * Private constructor to prevent utility class instantiation.
      *
      * @throws AssertionError always
@@ -424,6 +434,9 @@ public final class PayloadWatchTracer {
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
             final String operationId, final String source) {
+        if (!hasPayloadWatches()) {
+            return;
+        }
         RestorePayloadTracer.traceRestoreInstructionVisited(chunk, pos, previousState, expectedState, operationId,
                 source);
     }
@@ -442,6 +455,9 @@ public final class PayloadWatchTracer {
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState, final String operationId,
             final String source) {
+        if (!hasPayloadWatches()) {
+            return;
+        }
         RestorePayloadTracer.traceRestoreApplyAttempt(chunk, pos, previousState, expectedState, operationId, source);
     }
 
@@ -459,6 +475,9 @@ public final class PayloadWatchTracer {
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
             final String operationId, final String source) {
+        if (!hasPayloadWatches()) {
+            return;
+        }
         RestorePayloadTracer.traceRestoreSetBlockReturned(chunk, pos, previousState, expectedState, operationId,
                 source);
     }
@@ -477,6 +496,9 @@ public final class PayloadWatchTracer {
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
             final String operationId, final String source) {
+        if (!hasPayloadWatches()) {
+            return;
+        }
         RestorePayloadTracer.traceRestoreStateAfterSetBlock(chunk, pos, previousState, expectedState, operationId,
                 source);
     }
@@ -524,6 +546,9 @@ public final class PayloadWatchTracer {
      */
     public static void traceRestoredBlock(final WorldChunk chunk, final BlockPos pos, final BlockState state,
             final String operationId) {
+        if (!hasPayloadWatches()) {
+            return;
+        }
         RestorePayloadTracer.traceRestoredBlock(chunk, pos, state, operationId);
     }
 

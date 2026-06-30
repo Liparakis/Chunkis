@@ -11,6 +11,7 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
+import io.liparakis.chunkis.network.ChunkisNetworking;
 import io.liparakis.chunkis.world.entity.replay.EntityReplayCoordinator;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.ArrayList;
@@ -18,12 +19,18 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
+import net.minecraft.server.world.ServerLightingProvider;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.ChunkSectionPos;
+import net.minecraft.world.Heightmap;
 import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.WorldChunk;
 
 /**
@@ -46,6 +53,11 @@ import net.minecraft.world.chunk.WorldChunk;
  * block entity mutation, and chunk section writes are not thread-safe.</p>
  */
 public final class ChunkRestorer {
+
+    /**
+     * Minimum average restored blocks per touched section before refresh switches to bulk mode.
+     */
+    private static final int BULK_REFRESH_BLOCKS_PER_SECTION_THRESHOLD = 512;
 
     /**
      * Log source tag identifier mapping for restoration operations.
@@ -522,6 +534,182 @@ public final class ChunkRestorer {
         return "sections=" + joinIntegers(sections)
                 + ", blockChanges=" + blockChanges
                 + ", blockEntities=" + blockEntities;
+    }
+
+    /**
+     * Maps touched section flags to concrete section Y coordinates.
+     *
+     * @param bottomY         chunk bottom Y coordinate
+     * @param touchedSections touched-section flags indexed from bottom to top
+     * @return ordered section Y coordinates for touched sections only
+     */
+    static List<Integer> collectTouchedSectionYCoordinates(
+            final int bottomY,
+            final boolean[] touchedSections
+    ) {
+        final List<Integer> sectionYs = new ArrayList<>();
+        final int bottomSectionY = ChunkSectionPos.getSectionCoord(bottomY);
+        for (int sectionIndex = 0; sectionIndex < touchedSections.length; sectionIndex++) {
+            if (!touchedSections[sectionIndex]) {
+                continue;
+            }
+            sectionYs.add(bottomSectionY + sectionIndex);
+        }
+        return sectionYs;
+    }
+
+    /**
+     * Collects section Y coordinates that need derived-state refresh.
+     *
+     * @param bottomY chunk bottom Y coordinate
+     * @param touchedSections touched-section flags indexed from bottom to top
+     * @param refreshWholeChunk whether the restore replaced the chunk baseline
+     * @return ordered section Y coordinates to refresh
+     */
+    static List<Integer> collectSectionYCoordinatesNeedingRefresh(
+            final int bottomY,
+            final boolean[] touchedSections,
+            final boolean refreshWholeChunk
+    ) {
+        if (!refreshWholeChunk) {
+            return collectTouchedSectionYCoordinates(bottomY, touchedSections);
+        }
+
+        final List<Integer> sectionYs = new ArrayList<>(touchedSections.length);
+        final int bottomSectionY = ChunkSectionPos.getSectionCoord(bottomY);
+        for (int sectionIndex = 0; sectionIndex < touchedSections.length; sectionIndex++) {
+            sectionYs.add(bottomSectionY + sectionIndex);
+        }
+        return sectionYs;
+    }
+
+    /**
+     * Returns whether restore-time derived-state refresh should use the bulk path.
+     *
+     * <p>Large explicit deltas behave like full chunk replacement for lighting purposes.
+     * Feeding every restored block through {@code checkBlock()} is too expensive in that case.</p>
+     *
+     * @param blockChangesCount explicit block changes in the restored delta
+     * @param touchedSectionCount number of touched sections
+     * @param refreshWholeChunk whether the restore already requires whole-chunk refresh
+     * @return true when bulk refresh is cheaper and appropriate
+     */
+    static boolean shouldUseBulkRefresh(
+            final int blockChangesCount,
+            final int touchedSectionCount,
+            final boolean refreshWholeChunk
+    ) {
+        return refreshWholeChunk
+                || (touchedSectionCount > 0
+                && blockChangesCount >= touchedSectionCount * BULK_REFRESH_BLOCKS_PER_SECTION_THRESHOLD);
+    }
+
+    /**
+     * Rebuilds server-side derived chunk data after raw restore writes.
+     *
+     * <p>Restore bypasses normal block update hooks, so heightmaps and the light engine
+     * must be nudged manually to converge on the restored block grid.</p>
+     *
+     * @param world           target server world
+     * @param chunk           restored chunk
+     * @param sourceDelta     restored payload containing explicit block edits
+     * @param sections        live chunk sections
+     * @param bottomY         chunk bottom Y
+     * @param touchedSections touched-section flags
+     * @param refreshWholeChunk whether the restore replaced the chunk baseline
+     */
+    static void refreshDerivedChunkState(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> sourceDelta,
+            final ChunkSection[] sections,
+            final int bottomY,
+            final boolean[] touchedSections,
+            final boolean refreshWholeChunk
+    ) {
+        final List<Integer> sectionYs =
+                collectSectionYCoordinatesNeedingRefresh(bottomY, touchedSections, refreshWholeChunk);
+        if (sectionYs.isEmpty()) {
+            return;
+        }
+        final boolean useBulkRefresh = shouldUseBulkRefresh(
+                sourceDelta.getBlockChangesCount(),
+                sectionYs.size(),
+                refreshWholeChunk
+        );
+
+        Heightmap.populateHeightmaps(chunk, ChunkStatus.NORMAL_HEIGHTMAP_TYPES);
+        chunk.refreshSurfaceY();
+
+        final ServerLightingProvider lightingProvider = world.getChunkManager()
+                .getLightingProvider();
+        lightingProvider.setColumnEnabled(chunk.getPos(), true);
+
+        final int bottomSectionY = ChunkSectionPos.getSectionCoord(bottomY);
+        for (final int sectionY : sectionYs) {
+            final ChunkSectionPos sectionPos = ChunkSectionPos.from(chunk.getPos(), sectionY);
+            final int sectionIndex = sectionY - bottomSectionY;
+            final ChunkSection section = sectionIndex >= 0 && sectionIndex < sections.length
+                    ? sections[sectionIndex]
+                    : null;
+            lightingProvider.setSectionStatus(sectionPos, section == null || section.isEmpty());
+        }
+
+        final BlockPos.Mutable mutablePos = new BlockPos.Mutable();
+        final int chunkStartX = chunk.getPos()
+                .getStartX();
+        final int chunkStartZ = chunk.getPos()
+                .getStartZ();
+        if (!useBulkRefresh) {
+            sourceDelta.forEachBlock((x, y, z, state) -> {
+                mutablePos.set(chunkStartX + x, y, chunkStartZ + z);
+                lightingProvider.checkBlock(mutablePos);
+                world.getChunkManager()
+                        .markForUpdate(mutablePos);
+            });
+        }
+        lightingProvider.propagateLight(chunk.getPos());
+        for (final int sectionY : sectionYs) {
+            final ChunkSectionPos sectionPos = ChunkSectionPos.from(chunk.getPos(), sectionY);
+            world.getChunkManager()
+                    .onLightUpdate(net.minecraft.world.LightType.BLOCK, sectionPos);
+            world.getChunkManager()
+                    .onLightUpdate(net.minecraft.world.LightType.SKY, sectionPos);
+        }
+        if (useBulkRefresh) {
+            resendFullChunkToWatchingPlayers(world, chunk, lightingProvider);
+        }
+    }
+
+    /**
+     * Resends one full chunk packet to players already watching the chunk.
+     *
+     * <p>Base-backed restore rewrites the effective chunk baseline. A full resend is
+     * cheaper than thousands of per-block update packets.</p>
+     *
+     * @param world target server world
+     * @param chunk restored chunk
+     * @param lightingProvider active lighting provider
+     */
+    private static void resendFullChunkToWatchingPlayers(
+            final ServerWorld world,
+            final WorldChunk chunk,
+            final ServerLightingProvider lightingProvider
+    ) {
+        final List<ServerPlayerEntity> players = world.getChunkManager().chunkLoadingManager
+                .getPlayersWatchingChunk(chunk.getPos(), false);
+        if (players.isEmpty()) {
+            return;
+        }
+
+        final ChunkDataS2CPacket chunkPacket = new ChunkDataS2CPacket(chunk, lightingProvider, null, null);
+        for (final ServerPlayerEntity player : players) {
+            if (player.isRemoved() || player.isDisconnected()) {
+                continue;
+            }
+            player.networkHandler.sendPacket(chunkPacket);
+            ChunkisNetworking.sendDelta(player, chunk);
+        }
     }
 
     /**

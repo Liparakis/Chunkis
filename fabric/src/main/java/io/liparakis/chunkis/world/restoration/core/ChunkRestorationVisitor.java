@@ -112,6 +112,11 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     private final ChunkDelta<BlockState, NbtCompound> runtimeDelta;
 
     /**
+     * Source delta being replayed into the live chunk.
+     */
+    private final ChunkDelta<BlockState, NbtCompound> sourceDelta;
+
+    /**
      * True if legacy entities should be replayed.
      */
     private final boolean replayLegacyEntities;
@@ -167,6 +172,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         this.sections = chunk.getSectionArray();
         this.tracePayloadWatches = ChunkTraceWatchpoints.hasPayloadWatches();
         this.clearedToAir = !CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(sourceDelta.getChunkMetadata());
+        this.sourceDelta = sourceDelta;
         this.runtimeDelta = runtimeDelta;
         this.replayLegacyEntities = shouldReplayLegacyEntities(sourceDelta);
         this.operationId = operationId;
@@ -264,6 +270,15 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      */
     void finishRestoration() {
         recalculateTouchedSectionCounts();
+        ChunkRestorer.refreshDerivedChunkState(
+                world,
+                chunk,
+                sourceDelta,
+                sections,
+                bottomY,
+                touchedSections,
+                !clearedToAir
+        );
         if (runtimeDelta != null) {
             runtimeDelta.markSaved();
         }
@@ -336,11 +351,11 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     /**
      * Restores one block while preserving the already-decoded palette id for runtime-delta copy.
      *
-     * @param localX local chunk X coordinate
-     * @param localY absolute world Y coordinate
-     * @param localZ local chunk Z coordinate
+     * @param localX    local chunk X coordinate
+     * @param localY    absolute world Y coordinate
+     * @param localZ    local chunk Z coordinate
      * @param paletteId decoded palette id from the source delta
-     * @param state restored block state
+     * @param state     restored block state
      */
     @Override
     public void visitBlock(
@@ -356,11 +371,11 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     /**
      * Shared implementation for restore-time block replay.
      *
-     * @param localX local chunk X coordinate
-     * @param localY absolute world Y coordinate
-     * @param localZ local chunk Z coordinate
+     * @param localX    local chunk X coordinate
+     * @param localY    absolute world Y coordinate
+     * @param localZ    local chunk Z coordinate
      * @param paletteId decoded palette id, or {@code -1} when unavailable
-     * @param state restored block state
+     * @param state     restored block state
      */
     private void visitBlockInternal(
             final int localX,
