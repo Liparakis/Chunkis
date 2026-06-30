@@ -184,6 +184,33 @@ class CisUniformSectionCodecTest {
     }
 
     @Test
+    void preservesExplicitAirOverrideInSparseBaseBackedDelta() throws Exception {
+        final CodecHarness harness = newHarness();
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+
+        delta.addBlockChange(4, 85, 7, "air");
+
+        final ChunkDelta<String, String> decoded = harness.decoder.decode(harness.encoder.encode(delta));
+
+        assertThat(snapshot(decoded)).containsEntry((((long) 85) << 8) | (7L << 4) | 4L, "air");
+    }
+
+    @Test
+    void preservesExplicitAirWhenDefaultSparseWouldOtherwiseCollapseIt() throws Exception {
+        final CodecHarness harness = newHarness();
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+
+        for (int i = 0; i < 17; i++) {
+            delta.addBlockChange(i & 15, 85, (i >> 4) & 15, "stone");
+        }
+        delta.addBlockChange(12, 85, 12, "air");
+
+        final ChunkDelta<String, String> decoded = harness.decoder.decode(harness.encoder.encode(delta));
+
+        assertThat(snapshot(decoded)).containsEntry((((long) 85) << 8) | (12L << 4) | 12L, "air");
+    }
+
+    @Test
     void stillPrefersUniformForFullSingleStateSection() throws Exception {
         final CodecHarness harness = newHarness();
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);

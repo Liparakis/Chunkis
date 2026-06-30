@@ -10,17 +10,13 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
-import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
-import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import java.util.concurrent.atomic.AtomicBoolean;
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
 import net.minecraft.world.chunk.SerializedChunk;
 import net.minecraft.world.chunk.WorldChunk;
 
@@ -45,38 +41,6 @@ public final class BaseChunkCaptureUtil {
      */
     private BaseChunkCaptureUtil() {
         throw new AssertionError("Utility class");
-    }
-
-    /**
-     * Captures the base chunk if missing and immediately persists the delta synchronously on the
-     * calling thread.
-     *
-     * <p>Use this on paths where deferring to the async queue is unsafe for
-     * example, when a restored or newly-edited chunk may unload before vanilla's next normal save
-     * pass.</p>
-     *
-     * <p>On success the storage marks the delta saved. On failure the captured
-     * metadata is left dirty so subsequent save paths can retry.</p>
-     *
-     * @param world the server world that owns the chunk
-     * @param chunk the live chunk being captured
-     * @param delta the delta attached to that chunk
-     */
-    public static void captureAndPersistBaseChunkIfMissing(final ServerWorld world,
-            final WorldChunk chunk, final ChunkDelta<BlockState, NbtCompound> delta) {
-        if (shouldSkipCapture(chunk, delta)) {
-            traceCaptureSkipped(world, chunk, delta, "captureAndPersistBaseChunkIfMissing");
-            return;
-        }
-
-        traceLifecycle(world, chunk, delta, ChunkTraceEventType.BASE_CAPTURE_REQUESTED,
-                "BaseChunkCaptureUtil#captureAndPersistBaseChunkIfMissing", "base capture requested");
-
-        captureBaseChunk(world, chunk, delta);
-
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(
-                world);
-        storage.save(FabricCisStorageHelper.toStoragePos(chunk.getPos()), delta);
     }
 
     /**

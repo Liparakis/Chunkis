@@ -183,7 +183,7 @@ public abstract class AbstractCisEncoder<S, N> {
                     BlockInstruction.unpackX(p),
                     BlockInstruction.unpackY(p),
                     BlockInstruction.unpackZ(p)
-                                                          );
+            );
             dos.writeInt(packedPos);
             writeNbtPayload(blockEntityData, dos);
         }
@@ -256,10 +256,10 @@ public abstract class AbstractCisEncoder<S, N> {
      * Converts a ChunkDelta to a CisChunk and collects the global palette state
      * list in the same pass to avoid a second traversal.
      *
-     * <p>Air (or any state equal to {@link #airState}) is skipped during chunk
-     * population because absent positions decode as air implicitly. Air is still
-     * always added as index 0 in the palette so that local palette entries that
-     * map to "no explicit block" have a stable target.</p>
+     * <p>Air is still added as palette index 0, but explicit air edits are kept
+     * in the chunk payload. That matters for base-backed sparse deltas where
+     * "missing" means "leave the persisted base block alone", not "decode as
+     * air".</p>
      */
     private EncodedChunkInput<S> fromDelta(ChunkDeltaView<S, N> delta) {
         final CisChunk<S> chunk = new CisChunk<>();
@@ -273,12 +273,13 @@ public abstract class AbstractCisEncoder<S, N> {
         usedStates.add(airState);
 
         delta.forEachBlock((x, y, z, state) -> {
-            if (state != null && !isImplicitAirState(state)) {
-                chunk.addUniqueBlock(x, y, z, state);
-                if (seenStates.getInt(state) == -1) {
-                    seenStates.put(state, usedStates.size());
-                    usedStates.add(state);
-                }
+            if (state == null) {
+                return;
+            }
+            chunk.addUniqueBlock(x, y, z, state);
+            if (seenStates.getInt(state) == -1) {
+                seenStates.put(state, usedStates.size());
+                usedStates.add(state);
             }
         });
 
@@ -311,12 +312,14 @@ public abstract class AbstractCisEncoder<S, N> {
 
         // Pre-compute the one value that every cost function needs.
         final int globalBits = calculateBitsNeeded(ctx.globalIdMap.size());
+        final Object[] sectionStates = denseStatesForSection(ctx, section);
+        final boolean hasExplicitAir = hasExplicitAirState(sectionStates);
 
         // Uniform check: free because denseStatesForSection may be needed by
         // other candidates, but we avoid the full dense materialize if the
         // section is already in dense mode - just check the array directly.
-        final S uniformState = uniformSectionState(section);
-        final DefaultSparseCandidate<S> defaultSparse = defaultSparseCandidate(ctx, section);
+        final S uniformState = uniformSectionState(sectionStates, hasExplicitAir);
+        final DefaultSparseCandidate<S> defaultSparse = defaultSparseCandidate(ctx, sectionStates, hasExplicitAir);
         final int sparseBits = sparseEncodingBits(section, globalBits);
         final int uniformBits = uniformState != null ? uniformEncodingBits(globalBits) : Integer.MAX_VALUE;
         final int defaultSparseBits = defaultSparse != null
@@ -343,7 +346,7 @@ public abstract class AbstractCisEncoder<S, N> {
 
         switch (selected) {
             case UNIFORM -> encodeUniformSection(ctx, uniformState, globalBits);
-            case DEFAULT_SPARSE -> encodeDefaultSparseSection(ctx, section, defaultSparse, globalBits);
+            case DEFAULT_SPARSE -> encodeDefaultSparseSection(ctx, sectionStates, defaultSparse, globalBits);
             case SPARSE -> encodeSparseSectionAdaptive(ctx, section, globalBits);
             case DENSE -> encodeDenseSectionAdaptive(ctx, section);
         }
@@ -367,17 +370,17 @@ public abstract class AbstractCisEncoder<S, N> {
      */
     private void encodeDefaultSparseSection(
             final EncoderContext<S> ctx,
-            final CisSection<S> section,
+            final Object[] states,
             final DefaultSparseCandidate<S> candidate,
             final int globalBits
-                                           ) {
+    ) {
         ctx.bitWriter.write(CisConstants.SECTION_ENCODING_SPARSE, 1);
         ctx.bitWriter.write(CisConstants.DEFAULT_SPARSE_SECTION_SENTINEL, CisConstants.BLOCK_COUNT_BITS);
 
         final int defaultGlobalIdx = ctx.globalIdMap.getInt(candidate.defaultState());
         ctx.bitWriter.write(defaultGlobalIdx != -1 ? defaultGlobalIdx : 0, globalBits);
         ctx.bitWriter.write(candidate.exceptionCount(), CisConstants.BLOCK_COUNT_BITS);
-        writeDefaultSparseExceptions(ctx, denseStatesForSection(ctx, section), candidate.defaultState(), globalBits);
+        writeDefaultSparseExceptions(ctx, states, candidate.defaultState(), globalBits);
     }
 
     /**
@@ -389,7 +392,7 @@ public abstract class AbstractCisEncoder<S, N> {
             final EncoderContext<S> ctx,
             final CisSection<S> section,
             final int globalBits
-                                            ) {
+    ) {
         ctx.bitWriter.write(CisConstants.SECTION_ENCODING_SPARSE, 1);
 
         if (section.mode == CisSection.MODE_SPARSE) {
@@ -505,7 +508,7 @@ public abstract class AbstractCisEncoder<S, N> {
             final EncoderContext<S> ctx,
             final CisSection<S> section,
             final int globalBits
-                                             ) {
+    ) {
         for (int i = 0; i < section.sparseSize; i++) {
             ctx.bitWriter.write(section.sparseKeys[i] & 0xFFFF, 12);
             final S state = (S) section.sparseValues[i];
@@ -539,7 +542,7 @@ public abstract class AbstractCisEncoder<S, N> {
             final Object[] states,
             final S defaultState,
             final int globalBits
-                                             ) {
+    ) {
         for (int i = 0; i < SECTION_VOLUME; i++) {
             final S state = logicalState((S) states[i]);
             if (Objects.equals(state, defaultState)) {
@@ -583,20 +586,24 @@ public abstract class AbstractCisEncoder<S, N> {
      * identical, otherwise {@code null}.
      */
     @SuppressWarnings("unchecked")
-    private S uniformSectionState(final CisSection<S> section) {
-        if (section.mode != CisSection.MODE_DENSE || section.denseBlocks == null) {
+    private S uniformSectionState(final Object[] states, final boolean hasExplicitAir) {
+        if (states == null) {
             return null;
         }
 
-        final Object first = section.denseBlocks[0];
+        final Object first = states[0];
         if (first == null) {
             return null;
         }
 
         for (int i = 1; i < SECTION_VOLUME; i++) {
-            if (!Objects.equals(first, section.denseBlocks[i])) {
+            if (!Objects.equals(first, states[i])) {
                 return null;
             }
+        }
+
+        if (hasExplicitAir && Objects.equals(first, airState)) {
+            return null;
         }
 
         return (S) first;
@@ -608,8 +615,11 @@ public abstract class AbstractCisEncoder<S, N> {
      * (which is handled by a dedicated cheaper path).
      */
     @SuppressWarnings("unchecked")
-    private DefaultSparseCandidate<S> defaultSparseCandidate(final EncoderContext<S> ctx, final CisSection<S> section) {
-        final Object[] states = denseStatesForSection(ctx, section);
+    private DefaultSparseCandidate<S> defaultSparseCandidate(
+            final EncoderContext<S> ctx,
+            final Object[] states,
+            final boolean hasExplicitAir
+    ) {
         ctx.sectionStateCounts.clear();
 
         S defaultState = airState;
@@ -628,6 +638,10 @@ public abstract class AbstractCisEncoder<S, N> {
         // If every position matches the default the section is uniform; let the
         // uniform path handle it instead.
         if (exceptionCount <= 0) {
+            return null;
+        }
+
+        if (hasExplicitAir && Objects.equals(defaultState, airState)) {
             return null;
         }
 
@@ -677,11 +691,19 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
-     * Returns true when {@code state} is the canonical air state. Such states
-     * are omitted from chunk storage and decoded implicitly as air on read.
+     * Returns whether the section stores an explicit air state at any position.
+     *
+     * <p>Explicit air differs semantically from {@code null} for base-backed sparse
+     * deltas: air means "clear the base block", while null means "leave the base
+     * block unchanged". Encodings that collapse those two states are unsafe.</p>
      */
-    private boolean isImplicitAirState(final S state) {
-        return Objects.equals(state, airState);
+    private boolean hasExplicitAirState(final Object[] states) {
+        for (final Object state : states) {
+            if (state != null && Objects.equals(state, airState)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
