@@ -12,7 +12,7 @@
 
 ---
 
-`3.0.0` focuses on persistence safety, migration robustness, and overall runtime stability. It significantly reduces corruption-prone edge cases compared to older baseless-delta behavior. The tradeoff is that storage usage can increase in worlds where many modified chunks now persist safer restoration data.
+`4.0.0` focuses on persistence safety, migration robustness, and overall runtime stability. It significantly reduces corruption-prone edge cases compared to older baseless-delta behavior. The tradeoff is that storage usage can increase in worlds where many modified chunks now persist safer restoration data.
 
 ---
 
