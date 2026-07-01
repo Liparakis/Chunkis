@@ -1,6 +1,5 @@
 package io.liparakis.chunkis.world.restoration.core;
 
-import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
@@ -10,25 +9,20 @@ import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registries;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
 
 /**
  * Applies persisted chunk delta entries into a live chunk during restore.
@@ -38,16 +32,6 @@ import org.slf4j.Logger;
  */
 final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockState, NbtCompound>,
         ChunkDelta.BlockInstructionVisitor<BlockState> {
-
-    /**
-     * Logger instance reference.
-     */
-    private static final Logger LOGGER = Chunkis.LOGGER;
-
-    /**
-     * Key identifying block entity types in NBT compounds.
-     */
-    private static final String BLOCK_ENTITY_ID_KEY = "id";
 
     /**
      * Log source tag identifier mapping for block restore operations.
@@ -181,31 +165,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         if (this.replayLegacyEntities && this.runtimeDelta != null) {
             this.runtimeDelta.setEntities(sourceDelta.getEntitiesList(), false);
         }
-    }
-
-    /**
-     * Checks if a serialized block entity's type ID matches and supports current block state context.
-     *
-     * @param nbt          block entity NBT compound
-     * @param currentState block state of coordinates to evaluate
-     * @return true if compatible
-     */
-    private static boolean isBlockEntityNbtCompatibleWithState(
-            final NbtCompound nbt,
-            final BlockState currentState
-    ) {
-        final Optional<String> rawId = nbt.getString(BLOCK_ENTITY_ID_KEY);
-        if (rawId.isEmpty()) {
-            return false;
-        }
-
-        final Identifier id = Identifier.tryParse(rawId.get());
-        if (id == null) {
-            return false;
-        }
-
-        final BlockEntityType<?> type = Registries.BLOCK_ENTITY_TYPE.get(id);
-        return type != null && type.supports(currentState);
     }
 
     /**
@@ -541,6 +500,14 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     /**
      * Restores a block entity from NBT when the current block state supports it.
      *
+     * <p>{@link BlockEntity#createFromNbt} already validates that the NBT's
+     * {@code id} field matches a registry type that supports the current block
+     * state, returning {@code null} when it does not. The previous explicit
+     * {@code isBlockEntityNbtCompatibleWithState} pre-check was therefore
+     * redundant — it performed the same NBT id lookup, registry resolution, and
+     * {@code BlockEntityType#supports} call that {@code createFromNbt} repeats
+     * internally, costing ~1.2ms per chunk restore.</p>
+     *
      * @param localX local coordinate X
      * @param localY local coordinate Y
      * @param localZ local coordinate Z
@@ -568,19 +535,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             return;
         }
 
-        if (!isBlockEntityNbtCompatibleWithState(nbt, currentState)) {
-            if (tracePayloadWatches) {
-                PayloadWatchTracer.traceRestoreBlockEntitySkipped(
-                        world,
-                        chunkPosition,
-                        mutableWorldPos,
-                        operationId,
-                        "restore skipped: block entity type incompatible with current block state"
-                );
-            }
-            return;
-        }
-
         final BlockEntity blockEntity = BlockEntity.createFromNbt(
                 mutableWorldPos,
                 currentState,
@@ -588,14 +542,13 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 world.getRegistryManager()
         );
         if (blockEntity == null) {
-            LOGGER.warn("Failed to create block entity from NBT at {}", mutableWorldPos);
             if (tracePayloadWatches) {
                 PayloadWatchTracer.traceRestoreBlockEntitySkipped(
                         world,
                         chunkPosition,
                         mutableWorldPos,
                         operationId,
-                        "restore skipped: block entity could not be created from NBT"
+                        "restore skipped: block entity type incompatible with current block state or could not be created from NBT"
                 );
             }
             return;

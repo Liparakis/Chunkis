@@ -86,36 +86,48 @@ public final class ScheduledEntityReplayQueue {
                 )
         );
         final int after = QUEUE.size();
-        final String threadName = Thread.currentThread()
-                .getName();
-        final String message = String.format(
-                "entity replay scheduled: uuid=%s queueBefore=%d queueAfter=%d thread=%s",
-                entityUuid, before, after, threadName
-        );
 
-        io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
+        // Build the diagnostic message only when at least one consumer will use it.
+        // String.format + Thread.currentThread().getName() are non-trivial on hot paths.
+        final boolean traceEnabled = io.liparakis.chunkis.debug.config.ChunkisDebugConfig.allows(
                 io.liparakis.chunkis.debug.model.ChunkisDebugDomain.ENTITY_REPLAY,
-                io.liparakis.chunkis.debug.model.ChunkTraceEventType.ENTITY_REPLAY_SCHEDULED,
-                io.liparakis.chunkis.debug.model.ChunkTraceSeverity.INFO,
-                io.liparakis.chunkis.debug.model.ChunkTraceReason.ENTITY_REPLAY,
-                "ScheduledEntityReplayQueue#schedule",
-                message,
-                worldId,
-                new io.liparakis.chunkis.debug.model.key.DebugChunkKey(chunkPos.x, chunkPos.z),
-                null,
-                null,
-                null,
-                null
+                io.liparakis.chunkis.debug.model.ChunkTraceSeverity.INFO
         );
+        final boolean debugLogEnabled = Chunkis.LOGGER.isDebugEnabled();
+        if (traceEnabled || debugLogEnabled) {
+            final String threadName = Thread.currentThread()
+                    .getName();
+            final String message = "entity replay scheduled: uuid=" + entityUuid
+                    + " queueBefore=" + before
+                    + " queueAfter=" + after
+                    + " thread=" + threadName;
 
-        Chunkis.LOGGER.debug(
-                "Chunkis entity replay scheduled uuid={} queueBefore={} queueAfter={} thread={}",
-                entityUuid,
-                before,
-                after,
-                threadName
-        );
+            if (traceEnabled) {
+                io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
+                        io.liparakis.chunkis.debug.model.ChunkisDebugDomain.ENTITY_REPLAY,
+                        io.liparakis.chunkis.debug.model.ChunkTraceEventType.ENTITY_REPLAY_SCHEDULED,
+                        io.liparakis.chunkis.debug.model.ChunkTraceSeverity.INFO,
+                        io.liparakis.chunkis.debug.model.ChunkTraceReason.ENTITY_REPLAY,
+                        "ScheduledEntityReplayQueue#schedule",
+                        message,
+                        worldId,
+                        new io.liparakis.chunkis.debug.model.key.DebugChunkKey(chunkPos.x, chunkPos.z),
+                        null,
+                        null,
+                        null,
+                        null
+                );
+            }
+
+            if (debugLogEnabled) {
+                Chunkis.LOGGER.debug(
+                        "Chunkis entity replay scheduled uuid={} queueBefore={} queueAfter={} thread={}",
+                        entityUuid, before, after, threadName
+                );
+            }
+        }
     }
+
 
     /**
      * Drains the queue for {@code world}, attempting to replay each pending entity

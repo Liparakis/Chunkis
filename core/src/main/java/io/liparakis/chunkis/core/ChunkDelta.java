@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.core;
 
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -1428,11 +1429,15 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
     /**
      * Marks this delta saved.
+     *
+     * <p>The trace call is guarded by {@link ChunkisDebugConfig#allows} to avoid
+     * allocating a {@link io.liparakis.chunkis.debug.model.ChunkTraceEvent} on
+     * every save when debug tracing is disabled (the common production path).</p>
      */
     public void markSaved() {
         final boolean wasDirty = isDirty();
         ownershipState.savedGeneration = ownershipState.mutationGeneration;
-        if (wasDirty) {
+        if (wasDirty && ChunkisDebugConfig.allows(ChunkisDebugDomain.DIRTY_TRACKING, ChunkTraceSeverity.INFO)) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.DIRTY_TRACKING,
                     ChunkTraceEventType.DELTA_MARKED_CLEAN,
@@ -1454,6 +1459,10 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * Marks this delta saved only if no newer mutation has happened since the
      * given generation was captured.
      *
+     * <p>The trace call is guarded by {@link ChunkisDebugConfig#allows} to avoid
+     * allocating a {@link io.liparakis.chunkis.debug.model.ChunkTraceEvent} on
+     * every save when debug tracing is disabled (the common production path).</p>
+     *
      * @param generation generation that was persisted
      * @return {@code true} if the save state was updated
      */
@@ -1464,7 +1473,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
         final boolean wasDirty = isDirty();
         ownershipState.savedGeneration = generation;
-        if (wasDirty) {
+        if (wasDirty && ChunkisDebugConfig.allows(ChunkisDebugDomain.DIRTY_TRACKING, ChunkTraceSeverity.INFO)) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.DIRTY_TRACKING,
                     ChunkTraceEventType.DELTA_MARKED_CLEAN,

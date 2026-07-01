@@ -13,6 +13,11 @@ import net.minecraft.nbt.NbtCompound;
 final class PersistedBaseChunkAccess {
 
     /**
+     * Reusable empty byte array to avoid lambda allocation in orElseGet calls.
+     */
+    private static final byte[] EMPTY_BYTES = new byte[0];
+
+    /**
      * Private constructor to prevent utility class instantiation.
      *
      * @throws AssertionError always
@@ -33,7 +38,7 @@ final class PersistedBaseChunkAccess {
         }
 
         final byte[] rawPayload = metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
-                .orElseGet(() -> new byte[0]);
+                .orElse(EMPTY_BYTES);
         if (rawPayload.length > 0) {
             try {
                 return CisNbtUtil.deserializeRawCompound(rawPayload);
@@ -60,7 +65,7 @@ final class PersistedBaseChunkAccess {
         }
 
         final byte[] rawPayload = metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
-                .orElseGet(() -> new byte[0]);
+                .orElse(EMPTY_BYTES);
         if (rawPayload.length > 0) {
             return true;
         }

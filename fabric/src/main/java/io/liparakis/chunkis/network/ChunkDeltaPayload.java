@@ -88,8 +88,9 @@ public record ChunkDeltaPayload(
 
     /**
      * Scratch buffer size for deflate/inflate loops.
+     * 64 KB reduces loop iterations for large chunk payloads (200–400 KB).
      */
-    private static final int COMPRESSION_BUFFER_SIZE = 8192;
+    private static final int COMPRESSION_BUFFER_SIZE = 65536;
 
     /**
      * Per-thread {@link Deflater} pool.
@@ -102,6 +103,13 @@ public record ChunkDeltaPayload(
      */
     private static final ThreadLocal<Inflater> INFLATER_POOL =
             ThreadLocal.withInitial(Inflater::new);
+
+    /**
+     * Per-thread scratch buffer reused across deflate/inflate calls.
+     * Eliminates a 64 KB heap allocation per compress/decompress invocation.
+     */
+    private static final ThreadLocal<byte[]> COMPRESSION_BUFFER =
+            ThreadLocal.withInitial(() -> new byte[COMPRESSION_BUFFER_SIZE]);
 
     /**
      * Codec wiring the static {@link #read} and instance {@link #write} methods.
@@ -193,7 +201,8 @@ public record ChunkDeltaPayload(
 
         // Pre-size at half the input length as a heuristic for typical compression ratios.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream(data.length / 2);
-        final byte[] buf = new byte[COMPRESSION_BUFFER_SIZE];
+        // Reuse the thread-local scratch buffer; avoids a 64 KB allocation per call.
+        final byte[] buf = COMPRESSION_BUFFER.get();
 
         while (!deflater.finished()) {
             baos.write(buf, 0, deflater.deflate(buf));
@@ -223,7 +232,7 @@ public record ChunkDeltaPayload(
         inflater.setInput(compressed);
 
         final ByteArrayOutputStream baos = new ByteArrayOutputStream(originalSize);
-        final byte[] buf = new byte[COMPRESSION_BUFFER_SIZE];
+        final byte[] buf = COMPRESSION_BUFFER.get();
 
         while (!inflater.finished() && !inflater.needsInput()) {
             baos.write(buf, 0, inflater.inflate(buf));
