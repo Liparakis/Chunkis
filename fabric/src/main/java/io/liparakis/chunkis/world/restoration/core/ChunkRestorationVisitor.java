@@ -4,20 +4,27 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
+import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.storage.NbtReadView;
+import net.minecraft.storage.ReadView;
+import net.minecraft.util.ErrorReporter;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
@@ -121,6 +128,30 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Tracks which chunk sections were mutated so counts can be recomputed once per section.
      */
     private final boolean[] touchedSections;
+    /**
+     * Exact final non-empty block counts for clear-to-air restore sections.
+     */
+    private final short[] sectionNonEmptyBlockCounts;
+    /**
+     * Exact final random-tickable block counts for clear-to-air restore sections.
+     */
+    private final short[] sectionRandomTickableBlockCounts;
+    /**
+     * Exact final non-empty fluid counts for clear-to-air restore sections.
+     */
+    private final short[] sectionNonEmptyFluidCounts;
+    /**
+     * Tracks touched chunk-local X/Z columns so derived-state refresh can avoid over-escalating.
+     */
+    private final boolean[] touchedColumns = new boolean[16 * 16];
+    /**
+     * Number of touched chunk-local columns.
+     */
+    private int touchedColumnCount;
+    /**
+     * Cached block-entity type ids for exact-type in-place refresh.
+     */
+    private final Map<BlockEntityType<?>, String> blockEntityTypeIds = new HashMap<>();
 
     /**
      * Cumulative count of successfully restored block coordinates.
@@ -165,6 +196,9 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         this.blockApplyFailureCounters = new ChunkRestorer.BlockApplyFailureCounters();
         this.sectionWriteCursor = new ChunkRestoreBlockOperations.SectionWriteCursor();
         this.touchedSections = new boolean[this.sections.length];
+        this.sectionNonEmptyBlockCounts = new short[this.sections.length];
+        this.sectionRandomTickableBlockCounts = new short[this.sections.length];
+        this.sectionNonEmptyFluidCounts = new short[this.sections.length];
         if (this.replayLegacyEntities && this.runtimeDelta != null) {
             this.runtimeDelta.setEntities(sourceDelta.getEntitiesList(), false);
         }
@@ -239,6 +273,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 sections,
                 bottomY,
                 touchedSections,
+                touchedColumnCount,
                 !clearedToAir
         );
         if (ServerHotpathMetrics.ENABLED) {
@@ -246,9 +281,13 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             ServerHotpathMetrics.recordRestoreCursor(
                     cursorStats.writes(),
                     cursorStats.rebinds(),
+                    cursorStats.lastStateHits(),
                     cursorStats.paletteHits(),
                     cursorStats.paletteMisses(),
-                    cursorStats.paletteInvalidations()
+                    cursorStats.paletteInvalidations(),
+                    cursorStats.arrayPaletteLookups(),
+                    cursorStats.biMapPaletteLookups(),
+                    cursorStats.singularPaletteLookups()
             );
         }
         if (runtimeDelta != null) {
@@ -265,10 +304,27 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 continue;
             }
             final ChunkSection section = sections[sectionIndex];
+            if (section != null && tryApplyExactClearToAirCounts(section, sectionIndex)) {
+                continue;
+            }
             if (section != null) {
                 section.calculateCounts();
             }
         }
+    }
+
+    /**
+     * Applies exact final counts for clear-to-air restore sections when they are cheaply known.
+     */
+    private boolean tryApplyExactClearToAirCounts(final ChunkSection section, final int sectionIndex) {
+        if (!clearedToAir) {
+            return false;
+        }
+        final ChunkSectionAccessor accessor = (ChunkSectionAccessor) section;
+        accessor.chunkis$setNonEmptyBlockCount(sectionNonEmptyBlockCounts[sectionIndex]);
+        accessor.chunkis$setRandomTickableBlockCount(sectionRandomTickableBlockCounts[sectionIndex]);
+        accessor.chunkis$setNonEmptyFluidCount(sectionNonEmptyFluidCounts[sectionIndex]);
+        return true;
     }
 
     /**
@@ -412,7 +468,10 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             return;
         }
 
-        touchedSections[(localY - bottomY) >> 4] = true;
+        final int sectionIndex = (localY - bottomY) >> 4;
+        touchedSections[sectionIndex] = true;
+        trackTouchedColumn(localX, localZ);
+        trackExactSectionCounts(sectionIndex, state);
         copyBlockToRuntimeDelta(localX, localY, localZ, paletteId, state);
         blockApplyFailureCounters.recordAppliedBlock();
         appliedBlocksCount++;
@@ -519,6 +578,34 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     }
 
     /**
+     * Tracks touched chunk-local columns for derived-state refresh heuristics.
+     */
+    private void trackTouchedColumn(final int localX, final int localZ) {
+        final int index = (localZ << 4) | localX;
+        if (!touchedColumns[index]) {
+            touchedColumns[index] = true;
+            touchedColumnCount++;
+        }
+    }
+
+    /**
+     * Tracks exact final section counters for clear-to-air restores only.
+     */
+    private void trackExactSectionCounts(final int sectionIndex, final BlockState state) {
+        if (!clearedToAir || state.isAir()) {
+            return;
+        }
+        sectionNonEmptyBlockCounts[sectionIndex]++;
+        if (state.hasRandomTicks()) {
+            sectionRandomTickableBlockCounts[sectionIndex]++;
+        }
+        if (!state.getFluidState()
+                .isEmpty()) {
+            sectionNonEmptyFluidCounts[sectionIndex]++;
+        }
+    }
+
+    /**
      * Restores a block entity from NBT when the current block state supports it.
      *
      * <p>{@link BlockEntity#createFromNbt} already validates that the NBT's
@@ -556,6 +643,25 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             return;
         }
 
+        final BlockEntity existingBlockEntity = chunk.getBlockEntity(mutableWorldPos);
+        if (tryRefreshExistingBlockEntity(existingBlockEntity, nbt)) {
+            if (runtimeDelta != null) {
+                runtimeDelta.addBlockEntityData(localX, localY, localZ, nbt, false);
+            }
+            restoredBlockEntitiesCount++;
+            if (tracePayloadWatches) {
+                PayloadWatchTracer.traceRestoredBlockEntity(
+                        world,
+                        chunkPosition,
+                        mutableWorldPos,
+                        existingBlockEntity,
+                        nbt,
+                        operationId
+                );
+            }
+            return;
+        }
+
         final BlockEntity blockEntity = BlockEntity.createFromNbt(
                 mutableWorldPos,
                 currentState,
@@ -585,5 +691,43 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             PayloadWatchTracer.traceRestoredBlockEntity(world, chunkPosition, mutableWorldPos, blockEntity, nbt,
                     operationId);
         }
+    }
+
+    /**
+     * Refreshes an existing block entity in place when its type already matches the payload.
+     */
+    private boolean tryRefreshExistingBlockEntity(
+            @Nullable final BlockEntity existingBlockEntity,
+            final NbtCompound nbt
+    ) {
+        if (existingBlockEntity == null) {
+            return false;
+        }
+        final String expectedTypeId = nbt.getString("id")
+                .orElse(null);
+        if (expectedTypeId == null || !expectedTypeId.equals(blockEntityTypeId(existingBlockEntity))) {
+            return false;
+        }
+        try (final ErrorReporter.Logging logging = new ErrorReporter.Logging(
+                existingBlockEntity.getReporterContext(),
+                io.liparakis.chunkis.Chunkis.LOGGER
+        )) {
+            final ReadView readView = NbtReadView.create(logging, world.getRegistryManager(), nbt);
+            existingBlockEntity.read(readView);
+            existingBlockEntity.markDirty();
+            return true;
+        } catch (final RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * Resolves and caches the registry id string for a live block entity type.
+     */
+    private String blockEntityTypeId(final BlockEntity blockEntity) {
+        return blockEntityTypeIds.computeIfAbsent(
+                blockEntity.getType(),
+                type -> String.valueOf(BlockEntityType.getId(type))
+        );
     }
 }

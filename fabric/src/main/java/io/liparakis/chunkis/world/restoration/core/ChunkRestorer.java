@@ -58,7 +58,11 @@ public final class ChunkRestorer {
     /**
      * Minimum average restored blocks per touched section before refresh switches to bulk mode.
      */
-    private static final int BULK_REFRESH_BLOCKS_PER_SECTION_THRESHOLD = 512;
+    private static final int BULK_REFRESH_BLOCKS_PER_SECTION_THRESHOLD = 768;
+    /**
+     * Minimum number of chunk-local columns that must be touched before full bulk rebuild is worthwhile.
+     */
+    private static final int BULK_REFRESH_TOUCHED_COLUMNS_THRESHOLD = 96;
 
     /**
      * Log source tag identifier mapping for restoration operations.
@@ -607,10 +611,12 @@ public final class ChunkRestorer {
     static boolean shouldUseBulkRefresh(
             final int blockChangesCount,
             final int touchedSectionCount,
+            final int touchedColumnCount,
             final boolean refreshWholeChunk
     ) {
         return refreshWholeChunk
                 || (touchedSectionCount > 0
+                && touchedColumnCount >= BULK_REFRESH_TOUCHED_COLUMNS_THRESHOLD
                 && blockChangesCount >= touchedSectionCount * BULK_REFRESH_BLOCKS_PER_SECTION_THRESHOLD);
     }
 
@@ -635,6 +641,7 @@ public final class ChunkRestorer {
             final ChunkSection[] sections,
             final int bottomY,
             final boolean[] touchedSections,
+            final int touchedColumnCount,
             final boolean refreshWholeChunk
     ) {
         final List<Integer> sectionYs =
@@ -645,6 +652,7 @@ public final class ChunkRestorer {
         final boolean useBulkRefresh = shouldUseBulkRefresh(
                 sourceDelta.getBlockChangesCount(),
                 sectionYs.size(),
+                touchedColumnCount,
                 refreshWholeChunk
         );
 
@@ -726,7 +734,7 @@ public final class ChunkRestorer {
             }
             player.networkHandler.sendPacket(chunkPacket);
         }
-        ChunkisNetworking.sendDelta(players, chunk);
+        ChunkisNetworking.sendDeltaAsync(world, players, chunk);
     }
 
     /**

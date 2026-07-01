@@ -26,9 +26,13 @@ public final class ServerHotpathMetrics {
     private static final LongAdder restoreCount = new LongAdder();
     private static final LongAdder totalCursorWrites = new LongAdder();
     private static final LongAdder totalCursorRebinds = new LongAdder();
+    private static final LongAdder totalLastStateHits = new LongAdder();
     private static final LongAdder totalPaletteHits = new LongAdder();
     private static final LongAdder totalPaletteMisses = new LongAdder();
     private static final LongAdder totalPaletteInvalidations = new LongAdder();
+    private static final LongAdder totalArrayPaletteLookups = new LongAdder();
+    private static final LongAdder totalBiMapPaletteLookups = new LongAdder();
+    private static final LongAdder totalSingularPaletteLookups = new LongAdder();
 
     private ServerHotpathMetrics() {
         throw new AssertionError("Utility class");
@@ -72,16 +76,24 @@ public final class ServerHotpathMetrics {
     public static void recordRestoreCursor(
             final long writes,
             final long rebinds,
+            final long lastStateHits,
             final long paletteHits,
             final long paletteMisses,
-            final long paletteInvalidations
+            final long paletteInvalidations,
+            final long arrayPaletteLookups,
+            final long biMapPaletteLookups,
+            final long singularPaletteLookups
     ) {
         restoreCount.increment();
         totalCursorWrites.add(writes);
         totalCursorRebinds.add(rebinds);
+        totalLastStateHits.add(lastStateHits);
         totalPaletteHits.add(paletteHits);
         totalPaletteMisses.add(paletteMisses);
         totalPaletteInvalidations.add(paletteInvalidations);
+        totalArrayPaletteLookups.add(arrayPaletteLookups);
+        totalBiMapPaletteLookups.add(biMapPaletteLookups);
+        totalSingularPaletteLookups.add(singularPaletteLookups);
     }
 
     /**
@@ -121,13 +133,17 @@ public final class ServerHotpathMetrics {
         }
 
         Chunkis.LOGGER.info(
-                "Chunkis restore cursor metrics: restores={}, avgWrites={}, avgRebinds={}, avgPaletteHits={}, avgPaletteMisses={}, avgPaletteInvalidations={}",
+                "Chunkis restore cursor metrics: restores={}, avgWrites={}, avgRebinds={}, avgLastStateHits={}, avgPaletteHits={}, avgPaletteMisses={}, avgPaletteInvalidations={}, avgArrayPaletteLookups={}, avgBiMapPaletteLookups={}, avgSingularPaletteLookups={}",
                 restores,
                 totalCursorWrites.sum() / restores,
                 totalCursorRebinds.sum() / restores,
+                totalLastStateHits.sum() / restores,
                 totalPaletteHits.sum() / restores,
                 totalPaletteMisses.sum() / restores,
-                totalPaletteInvalidations.sum() / restores
+                totalPaletteInvalidations.sum() / restores,
+                totalArrayPaletteLookups.sum() / restores,
+                totalBiMapPaletteLookups.sum() / restores,
+                totalSingularPaletteLookups.sum() / restores
         );
     }
 

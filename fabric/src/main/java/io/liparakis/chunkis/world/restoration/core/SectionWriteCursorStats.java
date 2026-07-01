@@ -6,9 +6,13 @@ package io.liparakis.chunkis.world.restoration.core;
 record SectionWriteCursorStats(
         long writes,
         long rebinds,
+        long lastStateHits,
         long paletteHits,
         long paletteMisses,
-        long paletteInvalidations
+        long paletteInvalidations,
+        long arrayPaletteLookups,
+        long biMapPaletteLookups,
+        long singularPaletteLookups
 ) {
 
     /**
@@ -17,8 +21,12 @@ record SectionWriteCursorStats(
     String describe() {
         return "writes=" + writes
                 + ", rebinds=" + rebinds
+                + ", lastStateHits=" + lastStateHits
                 + ", paletteHits=" + paletteHits
                 + ", paletteMisses=" + paletteMisses
-                + ", paletteInvalidations=" + paletteInvalidations;
+                + ", paletteInvalidations=" + paletteInvalidations
+                + ", arrayPaletteLookups=" + arrayPaletteLookups
+                + ", biMapPaletteLookups=" + biMapPaletteLookups
+                + ", singularPaletteLookups=" + singularPaletteLookups;
     }
 }

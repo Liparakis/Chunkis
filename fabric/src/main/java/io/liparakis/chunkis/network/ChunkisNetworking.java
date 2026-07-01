@@ -3,6 +3,8 @@ package io.liparakis.chunkis.network;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaSnapshotView;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -13,8 +15,14 @@ import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkEncoder;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.BooleanSupplier;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.block.BlockState;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 
@@ -58,6 +66,14 @@ public final class ChunkisNetworking {
     @SuppressWarnings("rawtypes")
     private static final ThreadLocal<CisNetworkEncoder> ENCODER_POOL = ThreadLocal
             .withInitial(FabricNetworkCodecFactory::createEncoder);
+    /**
+     * Shared background encoder thread for restore-triggered full-chunk resends.
+     */
+    private static final ExecutorService ASYNC_DELTA_ENCODER = Executors.newSingleThreadExecutor(r -> {
+        final Thread thread = new Thread(r, "Chunkis-DeltaEncode");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -169,27 +185,84 @@ public final class ChunkisNetworking {
             return;
         }
 
-        for (final ServerPlayerEntity player : players) {
-            if (isPlayerUnavailable(player)) {
-                continue;
-            }
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.CLIENT_SYNC,
-                    ChunkTraceEventType.CLIENT_SYNC_TX_START,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.NONE,
-                    SEND_SOURCE,
-                    "starting delta send to player " + player.getName()
-                            .getString(),
-                    worldId,
-                    DebugChunkKeys.of(chunkPos),
-                    null,
-                    operationId,
-                    delta.isDirty(),
-                    null
-            );
-            sendPreparedPayload(player, chunkPos, worldId, delta, operationId, preparedPayload);
+        fanOutPreparedPayload(
+                players,
+                chunkPos,
+                worldId,
+                delta,
+                operationId,
+                preparedPayload,
+                () -> true
+        );
+    }
+
+    /**
+     * Snapshots and encodes a chunk delta off-thread, then sends it back on the server thread.
+     *
+     * <p>Used by restore-time full chunk resends where payload preparation dominates the
+     * server-thread slice. Watcher lookup and packet send stay on the server thread.</p>
+     *
+     * @param world   source world owning the chunk
+     * @param players destination players captured on the server thread
+     * @param chunk   source world chunk
+     */
+    public static void sendDeltaAsync(
+            final ServerWorld world,
+            final List<ServerPlayerEntity> players,
+            final WorldChunk chunk
+    ) {
+        Objects.requireNonNull(world, "world must not be null");
+        Objects.requireNonNull(players, "players must not be null");
+        Objects.requireNonNull(chunk, "chunk must not be null");
+
+        if (players.isEmpty()) {
+            return;
         }
+        if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)) {
+            return;
+        }
+        if (!(deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta)) {
+            return;
+        }
+
+        @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> liveDelta =
+                (ChunkDelta<BlockState, NbtCompound>) rawDelta;
+        if (liveDelta.isEmpty()) {
+            return;
+        }
+
+        final ChunkPos chunkPos = chunk.getPos();
+        final String worldId = world.getRegistryKey()
+                .getValue()
+                .toString();
+        final String operationId = ChunkTraceStore.nextOperationId("sync");
+        final long generation = liveDelta.getMutationGeneration();
+        final ChunkDeltaSnapshotView<BlockState, NbtCompound> snapshot = liveDelta.snapshotView(NbtCompound::copy);
+        final List<ServerPlayerEntity> playerSnapshot = List.copyOf(players);
+
+        ASYNC_DELTA_ENCODER.execute(() -> {
+            final PreparedPayload preparedPayload = preparePayload(
+                    chunkPos,
+                    worldId,
+                    snapshot,
+                    operationId,
+                    playerSnapshot.size()
+            );
+            if (preparedPayload == null) {
+                return;
+            }
+
+            Objects.requireNonNull(world.getServer())
+                    .execute(() -> sendPreparedPayloadIfCurrent(
+                            playerSnapshot,
+                            chunkPos,
+                            worldId,
+                            liveDelta,
+                            generation,
+                            operationId,
+                            preparedPayload
+                    ));
+        });
     }
 
     /**
@@ -219,13 +292,14 @@ public final class ChunkisNetworking {
     private static PreparedPayload preparePayload(
             final ChunkPos pos,
             final String worldId,
-            final ChunkDelta<?, ?> delta,
+            final ChunkDeltaView<?, ?> delta,
             final String operationId,
             final int playerCount
     ) {
         try {
             final long encodeStartNanos = ServerHotpathMetrics.startTimer();
-            final byte[] rawData = ENCODER_POOL.get().encode(delta);
+            final byte[] rawData = ENCODER_POOL.get()
+                    .encode(delta);
             final long encodeNanos = ServerHotpathMetrics.ENABLED ? System.nanoTime() - encodeStartNanos : 0L;
 
             if (exceedsSizeLimit(rawData)) {
@@ -282,7 +356,7 @@ public final class ChunkisNetworking {
             final ServerPlayerEntity player,
             final ChunkPos pos,
             final String worldId,
-            final ChunkDelta<?, ?> delta,
+            final ChunkDeltaView<?, ?> delta,
             final String operationId,
             final PreparedPayload preparedPayload
     ) {
@@ -303,6 +377,68 @@ public final class ChunkisNetworking {
                 preparedPayload.payload()
                         .data().length
         );
+    }
+
+    /**
+     * Sends a prepared payload only if the captured live delta has not been superseded.
+     */
+    private static void sendPreparedPayloadIfCurrent(
+            final List<ServerPlayerEntity> players,
+            final ChunkPos pos,
+            final String worldId,
+            final ChunkDelta<BlockState, NbtCompound> liveDelta,
+            final long generation,
+            final String operationId,
+            final PreparedPayload preparedPayload
+    ) {
+        fanOutPreparedPayload(
+                players,
+                pos,
+                worldId,
+                liveDelta,
+                operationId,
+                preparedPayload,
+                () -> liveDelta.getMutationGeneration() == generation
+        );
+    }
+
+    /**
+     * Fans one prepared payload out to many players with an optional freshness guard.
+     */
+    private static void fanOutPreparedPayload(
+            final List<ServerPlayerEntity> players,
+            final ChunkPos pos,
+            final String worldId,
+            final ChunkDeltaView<?, ?> delta,
+            final String operationId,
+            final PreparedPayload preparedPayload,
+            final BooleanSupplier shouldSend
+    ) {
+        if (!shouldSend.getAsBoolean()) {
+            return;
+        }
+
+        for (final ServerPlayerEntity player : players) {
+            if (isPlayerUnavailable(player)) {
+                continue;
+            }
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_TX_START,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    SEND_SOURCE,
+                    "starting delta send to player " + player.getName()
+                            .getString(),
+                    worldId,
+                    DebugChunkKeys.of(pos),
+                    null,
+                    operationId,
+                    delta.isDirty(),
+                    null
+            );
+            sendPreparedPayload(player, pos, worldId, delta, operationId, preparedPayload);
+        }
     }
 
     /**
@@ -365,8 +501,6 @@ public final class ChunkisNetworking {
      * Creates human-readable diagnostic message summaries detailing sync transactions.
      *
      * @param playerName target player name
-     * @param rawBytes   raw uncompressed byte size
-     * @param payload    constructed payload wrapper
      * @return summary text string
      */
     static String describePayloadOutcome(
@@ -378,15 +512,32 @@ public final class ChunkisNetworking {
                 + " rawBytes="
                 + preparedPayload.rawBytes()
                 + " wireBytes="
-                + preparedPayload.payload().data().length
+                + preparedPayload.payload()
+                .data().length
                 + " compressed="
-                + preparedPayload.payload().compressed()
+                + preparedPayload.payload()
+                .compressed()
                 + " encodeMicros="
                 + ServerHotpathMetrics.nanosToMicros(preparedPayload.encodeNanos())
                 + " wrapMicros="
                 + ServerHotpathMetrics.nanosToMicros(preparedPayload.wrapNanos())
                 + " players="
                 + preparedPayload.playerCount();
+    }
+
+    /**
+     * Backward-compatible summary helper retained for lightweight unit tests.
+     */
+    @SuppressWarnings("SameParameterValue")
+    static String describePayloadOutcome(
+            final String playerName,
+            final int rawBytes,
+            final ChunkDeltaPayload payload
+    ) {
+        return describePayloadOutcome(
+                playerName,
+                new PreparedPayload(rawBytes, payload, 0L, 0L, 1)
+        );
     }
 
     /**

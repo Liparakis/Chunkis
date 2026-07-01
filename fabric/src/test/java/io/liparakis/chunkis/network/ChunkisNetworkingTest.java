@@ -11,8 +11,8 @@ class ChunkisNetworkingTest {
         final ChunkDeltaPayload payload = new ChunkDeltaPayload(new byte[128], 3, 4, true, 512);
 
         assertEquals(
-                "sent delta to player Alex rawBytes=512 wireBytes=128 compressed=true",
+                "sent delta to player Alex rawBytes=512 wireBytes=128 compressed=true encodeMicros=0 wrapMicros=0 players=1",
                 ChunkisNetworking.describePayloadOutcome("Alex", 512, payload)
-                    );
+        );
     }
 }

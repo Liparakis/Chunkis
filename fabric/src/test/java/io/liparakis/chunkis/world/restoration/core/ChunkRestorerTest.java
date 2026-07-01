@@ -87,8 +87,10 @@ class ChunkRestorerTest {
 
     @Test
     void shouldUseBulkRefreshWhenExplicitDeltaIsDense() {
-        assertTrue(ChunkRestorer.shouldUseBulkRefresh(1024, 2, false));
-        assertFalse(ChunkRestorer.shouldUseBulkRefresh(1023, 2, false));
+        assertTrue(ChunkRestorer.shouldUseBulkRefresh(1536, 2, 128, false));
+        assertFalse(ChunkRestorer.shouldUseBulkRefresh(1535, 2, 128, false));
+        assertFalse(ChunkRestorer.shouldUseBulkRefresh(1536, 2, 95, false));
+        assertTrue(ChunkRestorer.shouldUseBulkRefresh(1, 1, 1, true));
     }
 
     @Test

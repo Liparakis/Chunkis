@@ -9,4 +9,13 @@ public interface ChunkSectionAccessor {
 
     @Accessor("nonEmptyBlockCount")
     short chunkis$getNonEmptyBlockCount();
+
+    @Accessor("nonEmptyBlockCount")
+    void chunkis$setNonEmptyBlockCount(short count);
+
+    @Accessor("randomTickableBlockCount")
+    void chunkis$setRandomTickableBlockCount(short count);
+
+    @Accessor("nonEmptyFluidCount")
+    void chunkis$setNonEmptyFluidCount(short count);
 }

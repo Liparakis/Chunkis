@@ -404,6 +404,14 @@ final class ChunkRestoreBlockOperations {
          */
         private final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
         /**
+         * Last state written in the currently bound section.
+         */
+        private BlockState lastState;
+        /**
+         * Palette id for {@link #lastState}.
+         */
+        private int lastPaletteId = -1;
+        /**
          * Count of block writes executed by this cursor.
          */
         private long writes;
@@ -411,6 +419,10 @@ final class ChunkRestoreBlockOperations {
          * Count of times this cursor bound to a different section.
          */
         private long rebinds;
+        /**
+         * Count of repeated adjacent-state hits served by the last-state fast path.
+         */
+        private long lastStateHits;
         /**
          * Count of palette-id cache hits for the currently bound section.
          */
@@ -423,6 +435,18 @@ final class ChunkRestoreBlockOperations {
          * Count of palette cache clears caused by palette/storage replacement.
          */
         private long paletteInvalidations;
+        /**
+         * Count of raw palette lookups hitting ArrayPalette.
+         */
+        private long arrayPaletteLookups;
+        /**
+         * Count of raw palette lookups hitting BiMapPalette.
+         */
+        private long biMapPaletteLookups;
+        /**
+         * Count of raw palette lookups hitting SingularPalette.
+         */
+        private long singularPaletteLookups;
 
         /**
          * Writes one restored block into the target section.
@@ -454,22 +478,25 @@ final class ChunkRestoreBlockOperations {
                 return;
             }
 
-            Integer paletteId = paletteIds.get(state);
-            if (paletteId == null) {
-                paletteMisses++;
-                final Object before = dataRef;
-                final int resolvedId = palette.index(state, container);
-                refreshData();
-                if (dataRef != before) {
-                    paletteInvalidations++;
-                    paletteIds.clear();
-                }
-                paletteIds.put(state, resolvedId);
-                paletteId = resolvedId;
-            } else {
-                paletteHits++;
+            if (lastState == state) {
+                lastStateHits++;
+                storage.set(toSectionLocalIndex(localX, localY, localZ), lastPaletteId);
+                return;
             }
 
+            final Integer cachedPaletteId = paletteIds.get(state);
+            final int paletteId;
+            if (cachedPaletteId != null) {
+                paletteHits++;
+                paletteId = cachedPaletteId;
+            } else {
+                paletteMisses++;
+                paletteId = resolvePaletteId(state);
+                paletteIds.put(state, paletteId);
+            }
+
+            lastState = state;
+            lastPaletteId = paletteId;
             storage.set(toSectionLocalIndex(localX, localY, localZ), paletteId);
         }
 
@@ -484,6 +511,8 @@ final class ChunkRestoreBlockOperations {
             sectionIndex = targetSectionIndex;
             container = section.getBlockStateContainer();
             paletteIds.clear();
+            lastState = null;
+            lastPaletteId = -1;
             if (PALETTED_CONTAINER_REFLECTION.available()) {
                 refreshData();
             }
@@ -496,10 +525,51 @@ final class ChunkRestoreBlockOperations {
             return new SectionWriteCursorStats(
                     writes,
                     rebinds,
+                    lastStateHits,
                     paletteHits,
                     paletteMisses,
-                    paletteInvalidations
+                    paletteInvalidations,
+                    arrayPaletteLookups,
+                    biMapPaletteLookups,
+                    singularPaletteLookups
             );
+        }
+
+        /**
+         * Resolves one block state's raw palette id against the currently bound section palette.
+         *
+         * <p>Palette growth may replace the backing data object, which invalidates previously
+         * cached ids. When that happens, this cursor clears its cache and refreshes the
+         * reflective handles before continuing.</p>
+         *
+         * @param state block state being written
+         * @return resolved raw palette id for the bound section
+         */
+        private int resolvePaletteId(final BlockState state) {
+            recordPaletteLookupKind();
+            final Object previousDataRef = dataRef;
+            final int paletteId = palette.index(state, container);
+            refreshData();
+            if (dataRef != previousDataRef) {
+                paletteInvalidations++;
+                paletteIds.clear();
+            }
+            return paletteId;
+        }
+
+        /**
+         * Tracks which vanilla palette implementation handled the lookup.
+         */
+        private void recordPaletteLookupKind() {
+            final String paletteType = palette.getClass().getSimpleName();
+            switch (paletteType) {
+                case "ArrayPalette" -> arrayPaletteLookups++;
+                case "BiMapPalette" -> biMapPaletteLookups++;
+                case "SingularPalette" -> singularPaletteLookups++;
+                default -> {
+                    // Other palette types are valid, but not currently split out in metrics.
+                }
+            }
         }
 
         /**
