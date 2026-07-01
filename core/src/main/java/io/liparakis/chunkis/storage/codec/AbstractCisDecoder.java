@@ -312,6 +312,8 @@ public abstract class AbstractCisDecoder<S, N> {
 
         final boolean defaultIsAir = isAir(defaultState);
 
+        final int startOffset = delta.getInstructionCount();
+
         if (!defaultIsAir) {
             fillSection(delta, sectionY, defaultPaletteIndex);
         }
@@ -338,10 +340,15 @@ public abstract class AbstractCisDecoder<S, N> {
             if (defaultIsAir) {
                 delta.appendDecodedBlockFast(x, baseY + y, z, exceptionPaletteIndex);
             } else {
-                delta.upsertDecodedBlock(x, baseY + y, z, exceptionPaletteIndex);
+                // Critical Invariant:
+                // This index math relies on fillSection(...) inserting blocks in the exact order:
+                // y in 0..15, z in 0..15, x in 0..15.
+                final int index = startOffset + (y << 8) + (z << 4) + x;
+                delta.updateDecodedPaletteAtKnownIndex(index, exceptionPaletteIndex);
             }
         }
     }
+
 
     /**
      * Decodes a dense section (full 16×16×16 bit-array with local palette).

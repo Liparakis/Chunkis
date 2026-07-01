@@ -263,7 +263,12 @@ public final class ClientDeltaNetworking {
         final ChunkDelta<BlockState, NbtCompound> receivedDelta = DECODER.get()
                 .decode(payload.data());
 
-        @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> clientDelta = (ChunkDelta<BlockState, NbtCompound>) ((ChunkisDeltaDuck) chunk).chunkis$getDelta();
+        @SuppressWarnings("unchecked")
+        ChunkDelta<BlockState, NbtCompound> clientDelta =
+                (ChunkDelta<BlockState, NbtCompound>) ((ChunkisDeltaDuck) chunk).chunkis$getDelta();
+        if (clientDelta == null) {
+            ((ChunkisDeltaDuck) chunk).chunkis$setDelta(clientDelta = new ChunkDelta<>(BlockState::isAir));
+        }
 
         applyDelta(clientDelta, receivedDelta, world, chunkX, chunkZ);
 

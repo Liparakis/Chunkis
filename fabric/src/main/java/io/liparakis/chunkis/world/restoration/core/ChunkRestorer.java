@@ -638,7 +638,14 @@ public final class ChunkRestorer {
                 refreshWholeChunk
         );
 
-        Heightmap.populateHeightmaps(chunk, ChunkStatus.NORMAL_HEIGHTMAP_TYPES);
+        if (useBulkRefresh) {
+            Heightmap.populateHeightmaps(chunk, ChunkStatus.NORMAL_HEIGHTMAP_TYPES);
+        } else {
+            for (final Heightmap.Type type : ChunkStatus.NORMAL_HEIGHTMAP_TYPES) {
+                final Heightmap heightmap = chunk.getHeightmap(type);
+                sourceDelta.forEachBlock(heightmap::trackUpdate);
+            }
+        }
         chunk.refreshSurfaceY();
 
         final ServerLightingProvider lightingProvider = world.getChunkManager()

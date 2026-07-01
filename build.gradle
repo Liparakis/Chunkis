@@ -1,3 +1,12 @@
 tasks.register("build") {
     dependsOn(gradle.includedBuilds.collect { includedBuild -> includedBuild.task(":build") })
 }
+
+tasks.register("compileJava") {
+    dependsOn(gradle.includedBuilds.collect { includedBuild -> includedBuild.task(":compileJava") })
+}
+
+tasks.register("test") {
+    dependsOn(gradle.includedBuilds.collect { includedBuild -> includedBuild.task(":test") })
+}
+

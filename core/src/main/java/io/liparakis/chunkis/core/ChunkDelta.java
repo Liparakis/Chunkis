@@ -623,17 +623,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
-     * Bulk-copies block instructions and section mask from another delta.
-     * <p>The source palette must already be aligned via {@link #copyBlockPaletteFrom}.</p>
-     *
-     * @param source source delta whose block instructions should be copied
-     */
-    public void copyBlockInstructionsFrom(final ChunkDelta<S, ?> source) {
-        source.instructions.copyInto(this.instructions);
-        this.blockSectionMask = source.blockSectionMask;
-    }
-
-    /**
      * Fast append path for decode operations where positions are guaranteed
      * unique and no immediate position-map lookup is needed.
      *
@@ -654,40 +643,23 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
-     * Upserts a decoded block instruction by palette id.
+     * Updates only the palette/state of an already pre-filled decoded block instruction.
      *
-     * <p>Decoders sometimes materialize a section baseline and then overwrite a subset
-     * of positions, such as default-sparse sections with a non-air default. In that
-     * case position uniqueness is no longer guaranteed, but the caller still already
-     * owns the decoded palette id and should not pay the higher-level
-     * {@link #addBlockChange(int, int, int, Object, boolean)} cost.</p>
+     * <p>This is intended for default-sparse section decoding where the section baseline
+     * was filled in deterministic section order and exception blocks are patched in place
+     * by known storage index.</p>
      *
-     * <p>No dirty bookkeeping or block-entity cleanup happens here because decode
-     * builds a fresh in-memory delta from persisted bytes.</p>
+     * <p>This method must not rebuild or consult the position map.</p>
      *
-     * @param x         local chunk X coordinate
-     * @param y         block Y coordinate
-     * @param z         local chunk Z coordinate
-     * @param paletteId decoded palette id
+     * @param index     instruction index in storage
+     * @param paletteId new palette index/state id
      */
-    public void upsertDecodedBlock(
-            final int x,
-            final int y,
-            final int z,
+    public void updateDecodedPaletteAtKnownIndex(
+            final int index,
             final int paletteId
     ) {
-        final long posKey = BlockInstruction.packPos(x, y, z);
-        instructions.ensurePositionMap();
-        final int existingIndex = instructions.positionMap.get(posKey);
-        final long packedInstruction = packInstruction(paletteId, posKey);
-
-        if (existingIndex != -1) {
-            instructions.update(existingIndex, packedInstruction);
-            return;
-        }
-
-        instructions.add(packedInstruction, posKey);
-        trackBlockSection(posKey);
+        assert instructions.hasIndex(index) : "Index " + index + " out of bounds";
+        instructions.updatePalette(index, paletteId);
     }
 
     /**
@@ -1160,6 +1132,23 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         }
 
         return list;
+    }
+
+    /**
+     * Returns the raw instruction count from the underlying storage.
+     *
+     * <p>Unlike {@link #getBlockChangesCount()}, this method is intended for
+     * internal use by codec paths that need a pre-fill baseline offset.
+     * Specifically, the decoder optimisation in {@code decodeDefaultSparseSection}
+     * captures this value before calling {@code fillSection} so that exception
+     * blocks can be patched in-place at a known index without consulting or
+     * rebuilding the position map.</p>
+     *
+     * @return the number of packed instructions currently stored
+     * @see BlockInstructionStorage#updatePalette(int, int)
+     */
+    public int getInstructionCount() {
+        return instructions.instructionCount;
     }
 
     /**

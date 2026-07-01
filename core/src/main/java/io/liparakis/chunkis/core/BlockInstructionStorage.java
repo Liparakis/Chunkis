@@ -141,7 +141,45 @@ final class BlockInstructionStorage {
         positionMapDirty = false;
     }
 
-    void update(final int index, final long newInstruction) {
-        packedInstructions[index] = newInstruction;
+    /**
+     * Returns whether {@code index} refers to an existing instruction slot.
+     *
+     * <p>Used as a precondition check before any direct index-addressed
+     * read or write to avoid silent out-of-bounds corruption.</p>
+     *
+     * @param index the instruction slot to test
+     * @return {@code true} if {@code index} is in {@code [0, instructionCount)}
+     */
+    boolean hasIndex(final int index) {
+        return index >= 0 && index < instructionCount;
+    }
+
+    /**
+     * Overwrites the palette ID of the instruction at {@code index} while
+     * preserving its packed position bits unchanged.
+     *
+     * <p>Each packed instruction is a {@code long} with the following layout:</p>
+     * <pre>
+     *   bits 63–32  palette ID   (block state reference)
+     *   bits 31–0   position mask (packed x/y/z section coordinates)
+     * </pre>
+     *
+     * <p>This method replaces only the upper 32 bits, leaving the lower
+     * 32-bit position mask intact. It is the core primitive used by the
+     * decoder optimisation path to patch exception blocks in-place after a
+     * {@code fillSection} without consulting or rebuilding the position map.</p>
+     *
+     * <p><strong>Invariant:</strong> {@code index} must satisfy
+     * {@link #hasIndex(int)}. Violations are caught by the {@code assert}
+     * guard and will throw {@link AssertionError} when assertions are enabled.</p>
+     *
+     * @param index     the instruction slot to update; must be in
+     *                  {@code [0, instructionCount)}
+     * @param paletteId the new palette ID to store in the upper 32 bits
+     */
+    void updatePalette(final int index, final int paletteId) {
+        assert hasIndex(index) : "Index " + index + " out of bounds for instructionCount " + instructionCount;
+        packedInstructions[index] = ((long) paletteId << 32) | (packedInstructions[index] & POSITION_MASK);
     }
 }
+

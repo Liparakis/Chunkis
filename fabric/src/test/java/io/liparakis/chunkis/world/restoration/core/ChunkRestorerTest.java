@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.world.restoration.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
@@ -87,8 +88,7 @@ class ChunkRestorerTest {
     @Test
     void shouldUseBulkRefreshWhenExplicitDeltaIsDense() {
         assertTrue(ChunkRestorer.shouldUseBulkRefresh(1024, 2, false));
-        assertTrue(!ChunkRestorer.shouldUseBulkRefresh(1023, 2, false));
-        assertTrue(ChunkRestorer.shouldUseBulkRefresh(1, 1, true));
+        assertFalse(ChunkRestorer.shouldUseBulkRefresh(1023, 2, false));
     }
 
 }

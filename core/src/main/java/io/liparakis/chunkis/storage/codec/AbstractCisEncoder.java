@@ -624,14 +624,34 @@ public abstract class AbstractCisEncoder<S, N> {
 
         S defaultState = airState;
         int defaultCount = 0;
+
+        S currentState = null;
+        int runningCountForCurrentState = 0;
+
         for (int i = 0; i < SECTION_VOLUME; i++) {
             final S state = logicalState((S) states[i]);
-            final int count = ctx.sectionStateCounts.getInt(state) + 1;
-            ctx.sectionStateCounts.put(state, count);
+
+            final int count;
+            if (state == currentState) {
+                runningCountForCurrentState++;
+            } else {
+                if (currentState != null) {
+                    ctx.sectionStateCounts.put(currentState, runningCountForCurrentState);
+                }
+
+                currentState = state;
+                runningCountForCurrentState = ctx.sectionStateCounts.getInt(state) + 1;
+            }
+            count = runningCountForCurrentState;
+
             if (count > defaultCount) {
                 defaultCount = count;
                 defaultState = state;
             }
+        }
+
+        if (currentState != null) {
+            ctx.sectionStateCounts.put(currentState, runningCountForCurrentState);
         }
 
         final int exceptionCount = SECTION_VOLUME - defaultCount;
