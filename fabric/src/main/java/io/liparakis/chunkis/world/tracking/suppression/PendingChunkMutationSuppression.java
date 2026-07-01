@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.world.tracking.suppression;
 
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -62,10 +63,12 @@ public final class PendingChunkMutationSuppression {
             return;
         }
         PENDING.put(new Key(worldKey, chunkX, chunkZ), new Entry(cause));
-        traceLifecycle(
-                ChunkTraceEventType.SUPPRESSION_CONTEXT_STARTED, reasonForCause(cause), source, "began pending" +
-                        " suppression cause=" + cause.name().toLowerCase(), worldKey, chunkX, chunkZ
-                      );
+        if (ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
+            traceLifecycle(
+                    ChunkTraceEventType.SUPPRESSION_CONTEXT_STARTED, reasonForCause(cause), source, "began pending" +
+                            " suppression cause=" + cause.name().toLowerCase(), worldKey, chunkX, chunkZ
+                          );
+        }
     }
 
     /**
@@ -191,10 +194,12 @@ public final class PendingChunkMutationSuppression {
         if (removed == null) {
             return;
         }
-        traceLifecycle(
-                ChunkTraceEventType.SUPPRESSION_CONTEXT_ENDED, reasonForCause(removed.cause), source, "ended " +
-                        "pending suppression cause=" + removed.cause.name().toLowerCase(), worldKey, chunkX, chunkZ
-                      );
+        if (ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
+            traceLifecycle(
+                    ChunkTraceEventType.SUPPRESSION_CONTEXT_ENDED, reasonForCause(removed.cause), source, "ended " +
+                            "pending suppression cause=" + removed.cause.name().toLowerCase(), worldKey, chunkX, chunkZ
+                          );
+        }
     }
 
     /**

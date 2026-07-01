@@ -275,10 +275,10 @@ public final class PayloadWatchTracer {
     public static void traceDecodeOutcome(final ServerWorld world, final ChunkPos chunkPos,
             final ChunkDeltaView<BlockState, NbtCompound> delta, final String operationId,
             final boolean storageEntryPresent) {
-        final String worldId = PayloadWatchSummaries.worldId(world);
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
+        final String worldId = PayloadWatchSummaries.worldId(world);
 
         if (storageEntryPresent) {
             traceDeltaStage(worldId, chunkPos, delta, operationId, ChunkTraceEventType.WATCH_STORAGE_READ,

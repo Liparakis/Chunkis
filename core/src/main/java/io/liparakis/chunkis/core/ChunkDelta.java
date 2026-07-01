@@ -418,20 +418,22 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
                 ownershipState.firstMutationSource =
                         ownershipState.pendingMutationSource != null ? ownershipState.pendingMutationSource : SOURCE;
             }
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.DIRTY_TRACKING,
-                    ChunkTraceEventType.DELTA_MARKED_DIRTY,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.DELTA_BECAME_DIRTY,
-                    SOURCE,
-                    "delta became dirty",
-                    null,
-                    null,
-                    null,
-                    null,
-                    true,
-                    null
-            );
+            if (ChunkisDebugConfig.allows(ChunkisDebugDomain.DIRTY_TRACKING, ChunkTraceSeverity.INFO)) {
+                ChunkTraceStore.trace(
+                        ChunkisDebugDomain.DIRTY_TRACKING,
+                        ChunkTraceEventType.DELTA_MARKED_DIRTY,
+                        ChunkTraceSeverity.INFO,
+                        ChunkTraceReason.DELTA_BECAME_DIRTY,
+                        SOURCE,
+                        "delta became dirty",
+                        null,
+                        null,
+                        null,
+                        null,
+                        true,
+                        null
+                );
+            }
         }
         ownershipState.pendingMutationSource = null;
     }

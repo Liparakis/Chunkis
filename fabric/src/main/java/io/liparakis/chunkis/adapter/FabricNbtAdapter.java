@@ -7,14 +7,12 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtSizeTracker;
-import org.jspecify.annotations.NonNull;
 
 /**
  * NBT adapter for Chunkis' length-prefixed NBT payload format.
@@ -103,35 +101,6 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
     }
 
     /**
-     * Reads compressed NBT directly from a bounded stream view.
-     *
-     * <p>The bounded stream prevents the NBT parser from consuming bytes belonging
-     * to the next payload. Any unread bytes are drained before return so the outer
-     * stream stays aligned.</p>
-     *
-     * @param input  source stream
-     * @param length exact payload byte length
-     * @return parsed NBT compound
-     * @throws IOException if reading or parsing fails
-     */
-    private static NbtCompound readCompressedStreaming(
-            final DataInputStream input,
-            final int length
-    ) throws IOException {
-        final BufferHolder holder = BUFFER_POOL.get();
-
-        try (BoundedInputStream bounded = new BoundedInputStream(input, length)) {
-            final NbtCompound nbt = NbtIo.readCompressed(
-                    bounded,
-                    NbtSizeTracker.of(MAX_NBT_SIZE)
-            );
-
-            drainRemaining(bounded, holder);
-            return nbt;
-        }
-    }
-
-    /**
      * Reads compressed NBT from a generic {@link DataInput}.
      *
      * @param input  source input
@@ -154,32 +123,6 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
             }
         } finally {
             holder.releaseReadBufferIfOversized();
-        }
-    }
-
-    /**
-     * Reads raw NBT directly from a bounded stream view.
-     *
-     * @param input  source stream
-     * @param length exact payload byte length
-     * @return parsed NBT compound
-     * @throws IOException if reading or parsing fails
-     */
-    private static NbtCompound readRawStreaming(
-            final DataInputStream input,
-            final int length
-    ) throws IOException {
-        final BufferHolder holder = BUFFER_POOL.get();
-
-        try (BoundedInputStream bounded = new BoundedInputStream(input, length);
-                DataInputStream nbtInput = new DataInputStream(bounded)) {
-            final NbtCompound nbt = NbtIo.readCompound(
-                    nbtInput,
-                    NbtSizeTracker.of(MAX_NBT_SIZE)
-            );
-
-            drainRemaining(bounded, holder);
-            return nbt;
         }
     }
 
@@ -207,24 +150,6 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
             }
         } finally {
             holder.releaseReadBufferIfOversized();
-        }
-    }
-
-    /**
-     * Drains unread bytes from a bounded payload stream.
-     *
-     * @param input  bounded payload stream
-     * @param holder thread-local buffer holder
-     * @throws IOException if draining fails
-     */
-    private static void drainRemaining(
-            final BoundedInputStream input,
-            final BufferHolder holder
-    ) throws IOException {
-        final byte[] scratch = holder.drainBuffer;
-
-        while (input.read(scratch, 0, scratch.length) != -1) {
-            // Drain only. Bytes are intentionally discarded.
         }
     }
 
@@ -327,9 +252,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
 
         final int length = readAndValidateLength(input);
 
-        return input instanceof DataInputStream stream
-                ? readCompressedStreaming(stream, length)
-                : readCompressedBuffered(input, length);
+        return readCompressedBuffered(input, length);
     }
 
     /**
@@ -374,20 +297,15 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
 
         final int length = readAndValidateLength(input);
 
-        return input instanceof DataInputStream stream
-                ? readRawStreaming(stream, length)
-                : readRawBuffered(input, length);
+        return readRawBuffered(input, length);
     }
+
 
     /**
      * Per-thread reusable buffer holder.
      */
     private static final class BufferHolder {
 
-        /**
-         * Scratch buffer for draining bounded streams.
-         */
-        private final byte[] drainBuffer = new byte[BUFFER_SIZE];
         /**
          * Reusable serialized output buffer.
          */
@@ -477,87 +395,4 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
         }
     }
 
-    /**
-     * {@link InputStream} wrapper that exposes at most a fixed number of bytes.
-     *
-     * <p>{@link #close()} is intentionally a no-op because the caller owns the
-     * underlying stream lifecycle.</p>
-     */
-    private static final class BoundedInputStream extends FilterInputStream {
-
-        /**
-         * Remaining readable bytes.
-         */
-        private int remaining;
-
-        /**
-         * @param input    underlying input stream
-         * @param maxBytes maximum readable bytes
-         */
-        private BoundedInputStream(final InputStream input, final int maxBytes) {
-            super(input);
-            this.remaining = maxBytes;
-        }
-
-        @Override
-        public int read() throws IOException {
-            if (remaining <= 0) {
-                return -1;
-            }
-
-            final int result = super.read();
-
-            if (result != -1) {
-                remaining--;
-            }
-
-            return result;
-        }
-
-        @Override
-        public int read(
-                final byte @NonNull [] bytes,
-                final int offset,
-                final int length
-        ) throws IOException {
-            if (length == 0) {
-                return 0;
-            }
-
-            if (remaining <= 0) {
-                return -1;
-            }
-
-            final int allowedLength = Math.min(length, remaining);
-            final int read = super.read(bytes, offset, allowedLength);
-
-            if (read > 0) {
-                remaining -= read;
-            }
-
-            return read;
-        }
-
-        @Override
-        public long skip(final long bytes) throws IOException {
-            if (bytes <= 0 || remaining <= 0) {
-                return 0L;
-            }
-
-            final long skipped = super.skip(Math.min(bytes, remaining));
-            remaining -= (int) skipped;
-
-            return skipped;
-        }
-
-        @Override
-        public int available() throws IOException {
-            return Math.min(super.available(), remaining);
-        }
-
-        @Override
-        public void close() {
-            // Intentional no-op: caller owns the underlying stream.
-        }
-    }
 }
