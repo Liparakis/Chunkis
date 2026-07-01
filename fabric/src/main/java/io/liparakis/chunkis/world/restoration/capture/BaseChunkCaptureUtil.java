@@ -116,13 +116,15 @@ public final class BaseChunkCaptureUtil {
             return delta;
         }
 
-        final int beforeBlocks = delta.getBlockChangesCount();
-        final int beforeBlockEntities = delta.getBlockEntities()
-                .size();
-        final DebugChunkKey chunkKey = DebugChunkKeys.of(chunk.getPos());
         traceLifecycle(world, chunk, delta, ChunkTraceEventType.BASE_CAPTURE_STARTED,
                 "BaseChunkCaptureUtil#captureBaseChunk", "base capture started");
-        if (ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
+        final boolean debugEnabled =
+                ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO);
+        final int beforeBlocks = debugEnabled ? delta.getBlockChangesCount() : 0;
+        final int beforeBlockEntities = debugEnabled ? delta.getBlockEntities()
+                                                       .size() : 0;
+        final DebugChunkKey chunkKey = debugEnabled ? DebugChunkKeys.of(chunk.getPos()) : null;
+        if (debugEnabled) {
             ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     ChunkTraceEventType.BASE_NBT_CAPTURE_STARTED, ChunkTraceSeverity.INFO,
                     ChunkTraceReason.NONE, "BaseChunkCaptureUtil#captureBaseChunk",
@@ -159,26 +161,28 @@ public final class BaseChunkCaptureUtil {
         traceLifecycle(world, chunk, delta, ChunkTraceEventType.BASE_CAPTURE_COMPLETED,
                 "BaseChunkCaptureUtil#captureBaseChunk", "base capture completed");
 
-        ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.BASE_NBT_CAPTURED,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.NONE,
-                "BaseChunkCaptureUtil#captureBaseChunk",
-                "captured base NBT: metadataKeys=" + metadata.getKeys()
-                        + ", suppressInitialRepopulation=" + delta.shouldSuppressInitialRepopulation()
-                        + ", blocksBefore=" + beforeBlocks + ", blocksAfter="
-                        + delta.getBlockChangesCount() + ", blockEntitiesBefore=" + beforeBlockEntities
-                        + ", blockEntitiesAfter="
-                        + delta.getBlockEntities()
-                        .size(),
-                world.getRegistryKey()
-                        .getValue()
-                        .toString(),
-                chunkKey,
-                null,
-                null,
-                delta.isDirty(),
-                null);
+        if (debugEnabled) {
+            ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                    ChunkTraceEventType.BASE_NBT_CAPTURED,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    "BaseChunkCaptureUtil#captureBaseChunk",
+                    "captured base NBT: metadataKeys=" + metadata.getKeys()
+                            + ", suppressInitialRepopulation=" + delta.shouldSuppressInitialRepopulation()
+                            + ", blocksBefore=" + beforeBlocks + ", blocksAfter="
+                            + delta.getBlockChangesCount() + ", blockEntitiesBefore=" + beforeBlockEntities
+                            + ", blockEntitiesAfter="
+                            + delta.getBlockEntities()
+                            .size(),
+                    world.getRegistryKey()
+                            .getValue()
+                            .toString(),
+                    chunkKey,
+                    null,
+                    null,
+                    delta.isDirty(),
+                    null);
+        }
 
         return delta;
     }
