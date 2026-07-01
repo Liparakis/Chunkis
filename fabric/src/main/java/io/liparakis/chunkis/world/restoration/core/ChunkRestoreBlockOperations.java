@@ -38,26 +38,18 @@ final class ChunkRestoreBlockOperations {
      * Binary mask used to extract coordinate offsets within a chunk section.
      */
     private static final int SECTION_Y_MASK = 15;
+    /**
+     * Bit shift mapping section-local Y into the packed palette-storage index.
+     */
     private static final int SECTION_LOCAL_INDEX_Y_SHIFT = 8;
+    /**
+     * Bit shift mapping section-local Z into the packed palette-storage index.
+     */
     private static final int SECTION_LOCAL_INDEX_Z_SHIFT = 4;
-    private static final Field PALETTED_CONTAINER_DATA_FIELD = findField(
-            PalettedContainer.class,
-            "data",
-            "field_34560",
-            "b"
-    );
-    private static final Field PALETTED_CONTAINER_DATA_STORAGE_FIELD = findField(
-            loadPalettedContainerDataClass(),
-            "storage",
-            "comp_118",
-            "b"
-    );
-    private static final Field PALETTED_CONTAINER_DATA_PALETTE_FIELD = findField(
-            loadPalettedContainerDataClass(),
-            "palette",
-            "comp_119",
-            "c"
-    );
+    /**
+     * Optional reflective fast-path descriptor for direct PalettedContainer storage writes.
+     */
+    private static final ReflectionAccess PALETTED_CONTAINER_REFLECTION = resolveReflectionAccess();
 
     /**
      * Shared block-state palette provider used to build fresh air-only section containers.
@@ -117,15 +109,51 @@ final class ChunkRestoreBlockOperations {
         );
     }
 
-    private static Class<?> loadPalettedContainerDataClass() {
+    /**
+     * Loads the nested vanilla runtime class that holds a PalettedContainer's active palette/storage pair.
+     *
+     * @return the nested {@code PalettedContainer$Data} class
+     * @throws ClassNotFoundException if the current runtime layout no longer exposes that class
+     */
+    private static Class<?> loadPalettedContainerDataClass() throws ClassNotFoundException {
+        return Class.forName("net.minecraft.world.chunk.PalettedContainer$Data");
+    }
+
+    /**
+     * Resolves the direct-storage reflective fast path.
+     *
+     * <p>If any lookup fails, restore keeps working by falling back to the slower public
+     * {@link PalettedContainer#swapUnsafe(int, int, int, Object)} path.</p>
+     *
+     * @return reflection descriptor, enabled only when all required fields were found
+     */
+    private static ReflectionAccess resolveReflectionAccess() {
         try {
-            return Class.forName("net.minecraft.world.chunk.PalettedContainer$Data");
-        } catch (final ClassNotFoundException e) {
-            throw new IllegalStateException("Chunkis: could not load PalettedContainer$Data", e);
+            final Class<?> dataClass = loadPalettedContainerDataClass();
+            return new ReflectionAccess(
+                    true,
+                    findField(PalettedContainer.class, "data", "field_34560", "b"),
+                    findField(dataClass, "storage", "comp_118", "b"),
+                    findField(dataClass, "palette", "comp_119", "c")
+            );
+        } catch (final ReflectiveOperationException | RuntimeException e) {
+            LOGGER.warn(
+                    "Chunkis: PalettedContainer fast restore path disabled; falling back to swapUnsafe()",
+                    e
+            );
+            return ReflectionAccess.disabled();
         }
     }
 
-    private static Field findField(final Class<?> owner, final String... candidateNames) {
+    /**
+     * Finds one declared field using a list of candidate names across mapping namespaces.
+     *
+     * @param owner          class expected to declare the field
+     * @param candidateNames ordered field names to try
+     * @return the first matching field with accessibility forced on
+     * @throws NoSuchFieldException when none of the candidates are present
+     */
+    private static Field findField(final Class<?> owner, final String... candidateNames) throws NoSuchFieldException {
         for (final String candidateName : candidateNames) {
             try {
                 final Field field = owner.getDeclaredField(candidateName);
@@ -135,12 +163,19 @@ final class ChunkRestoreBlockOperations {
                 // Try the next namespace name.
             }
         }
-        throw new IllegalStateException(
-                "Chunkis: could not resolve field on " + owner.getName() + " from candidates " + String.join(", ",
-                        candidateNames)
+        throw new NoSuchFieldException(
+                owner.getName() + " [" + String.join(", ", candidateNames) + "]"
         );
     }
 
+    /**
+     * Reads a previously resolved reflective field from a target object.
+     *
+     * @param field  field descriptor to read
+     * @param target object holding that field
+     * @return raw reflected field value
+     * @throws IllegalStateException if reflective access unexpectedly fails
+     */
     private static Object readField(final Field field, final Object target) {
         try {
             return field.get(target);
@@ -163,6 +198,7 @@ final class ChunkRestoreBlockOperations {
      * @param topYInclusive       cached chunk top Y inclusive
      * @param tracePayloadWatches whether payload-watch tracing is active for this restore pass
      * @param clearedToAir        whether the chunk was pre-cleared to air before replay
+     * @param sectionWriteCursor  reusable per-section write cursor for palette/storage access
      * @param counters            failure counters to update
      * @param operationId         trace correlation ID
      * @return {@code true} if the block was applied
@@ -319,6 +355,16 @@ final class ChunkRestoreBlockOperations {
         chunk.removeBlockEntity(worldPosition);
     }
 
+    /**
+     * Packs section-local coordinates into the linear raw storage index used by vanilla block-state containers.
+     *
+     * <p>The layout matches vanilla's section traversal order: {@code y -> z -> x}.</p>
+     *
+     * @param localX section-local X coordinate in {@code [0, 15]}
+     * @param localY section-local Y coordinate in {@code [0, 15]}
+     * @param localZ section-local Z coordinate in {@code [0, 15]}
+     * @return packed palette-storage index in {@code [0, 4095]}
+     */
     static int toSectionLocalIndex(final int localX, final int localY, final int localZ) {
         return (localY << SECTION_LOCAL_INDEX_Y_SHIFT) | (localZ << SECTION_LOCAL_INDEX_Z_SHIFT) | localX;
     }
@@ -333,13 +379,44 @@ final class ChunkRestoreBlockOperations {
      */
     static final class SectionWriteCursor {
 
+        /**
+         * Currently bound section index, or {@link Integer#MIN_VALUE} before the first bind.
+         */
         private int sectionIndex = Integer.MIN_VALUE;
+        /**
+         * Currently bound block-state container receiving writes.
+         */
         private PalettedContainer<BlockState> container;
+        /**
+         * Active raw palette storage of the bound container.
+         */
         private PaletteStorage storage;
+        /**
+         * Active palette resolving block states to raw ids for the bound container.
+         */
         private Palette<BlockState> palette;
+        /**
+         * Identity of the currently bound nested data holder used to detect palette/storage replacement.
+         */
         private Object dataRef;
+        /**
+         * Per-section cache from block-state identity to resolved raw palette id.
+         */
         private final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
 
+        /**
+         * Writes one restored block into the target section.
+         *
+         * <p>Uses the reflective fast path when available; otherwise falls back to
+         * {@link PalettedContainer#swapUnsafe(int, int, int, Object)}.</p>
+         *
+         * @param section            target chunk section
+         * @param targetSectionIndex target section index inside the chunk section array
+         * @param localX             section-local X coordinate
+         * @param localY             section-local Y coordinate
+         * @param localZ             section-local Z coordinate
+         * @param state              restored block state
+         */
         void write(
                 final ChunkSection section,
                 final int targetSectionIndex,
@@ -350,6 +427,10 @@ final class ChunkRestoreBlockOperations {
         ) {
             if (targetSectionIndex != sectionIndex) {
                 bindSection(section, targetSectionIndex);
+            }
+            if (!PALETTED_CONTAINER_REFLECTION.available()) {
+                container.swapUnsafe(localX, localY, localZ, state);
+                return;
             }
 
             Integer paletteId = paletteIds.get(state);
@@ -367,18 +448,60 @@ final class ChunkRestoreBlockOperations {
             storage.set(toSectionLocalIndex(localX, localY, localZ), paletteId);
         }
 
+        /**
+         * Rebinds this cursor to a new section and refreshes cached container internals.
+         *
+         * @param section            target chunk section
+         * @param targetSectionIndex section index within the chunk section array
+         */
         private void bindSection(final ChunkSection section, final int targetSectionIndex) {
             sectionIndex = targetSectionIndex;
             container = section.getBlockStateContainer();
             paletteIds.clear();
-            refreshData();
+            if (PALETTED_CONTAINER_REFLECTION.available()) {
+                refreshData();
+            }
         }
 
+        /**
+         * Refreshes reflective handles to the currently bound container's live data, storage, and palette.
+         *
+         * <p>Vanilla may replace the nested data object when the palette resizes, so callers refresh
+         * after palette insertion to keep direct writes pointed at the current storage.</p>
+         */
         @SuppressWarnings("unchecked")
         private void refreshData() {
-            dataRef = readField(PALETTED_CONTAINER_DATA_FIELD, container);
-            storage = (PaletteStorage) readField(PALETTED_CONTAINER_DATA_STORAGE_FIELD, dataRef);
-            palette = (Palette<BlockState>) readField(PALETTED_CONTAINER_DATA_PALETTE_FIELD, dataRef);
+            assert PALETTED_CONTAINER_REFLECTION.dataField() != null;
+            dataRef = readField(PALETTED_CONTAINER_REFLECTION.dataField(), container);
+            assert PALETTED_CONTAINER_REFLECTION.storageField() != null;
+            storage = (PaletteStorage) readField(PALETTED_CONTAINER_REFLECTION.storageField(), dataRef);
+            assert PALETTED_CONTAINER_REFLECTION.paletteField() != null;
+            palette = (Palette<BlockState>) readField(PALETTED_CONTAINER_REFLECTION.paletteField(), dataRef);
+        }
+    }
+
+    /**
+     * Immutable descriptor for the optional reflective direct-write path.
+     *
+     * @param available    whether all reflective handles resolved successfully
+     * @param dataField    field exposing the outer container's current nested data object
+     * @param storageField field exposing the nested data object's raw storage
+     * @param paletteField field exposing the nested data object's active palette
+     */
+    private record ReflectionAccess(
+            boolean available,
+            @Nullable Field dataField,
+            @Nullable Field storageField,
+            @Nullable Field paletteField
+    ) {
+
+        /**
+         * Creates a disabled reflection descriptor used when the fast path is unavailable.
+         *
+         * @return disabled reflection descriptor
+         */
+        private static ReflectionAccess disabled() {
+            return new ReflectionAccess(false, null, null, null);
         }
     }
 
