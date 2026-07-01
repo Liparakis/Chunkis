@@ -47,6 +47,25 @@ class ChunkDeltaTest {
     }
 
     @Test
+    void snapshotAppendRebuildsLookupStateWhenLaterMutationNeedsUpsert() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        final Map<Long, String> blocks = new LinkedHashMap<>();
+
+        delta.appendSnapshotBlockChange(1, 64, 1, "stone");
+        delta.appendSnapshotBlockChange(2, 65, 3, "dirt");
+
+        delta.addBlockChange(1, 64, 1, "grass");
+
+        delta.forEachBlock((x, y, z, state) -> blocks.put(BlockInstruction.packPos(x, y, z), state));
+
+        assertThat(delta.getBlockChangesCount()).isEqualTo(2);
+        assertThat(blocks).containsExactly(
+                org.assertj.core.data.MapEntry.entry(BlockInstruction.packPos(1, 64, 1), "grass"),
+                org.assertj.core.data.MapEntry.entry(BlockInstruction.packPos(2, 65, 3), "dirt")
+        );
+    }
+
+    @Test
     void snapshotViewPreservesReadablePayloadWithoutMutableBlockIndexState() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
         final Map<Long, String> blocks = new LinkedHashMap<>();

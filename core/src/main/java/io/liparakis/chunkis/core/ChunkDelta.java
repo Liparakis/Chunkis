@@ -797,7 +797,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
         final int paletteId = blockPalette.getOrAdd(state);
         final long posKey = BlockInstruction.packPos(x, y, z);
-        instructions.add(packInstruction(paletteId, posKey), posKey);
+        instructions.addAppendOnly(packInstruction(paletteId, posKey));
         trackBlockSection(posKey);
     }
 

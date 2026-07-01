@@ -5,8 +5,10 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
+import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
+import java.util.IdentityHashMap;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.world.chunk.ChunkSection;
@@ -151,12 +153,14 @@ public final class CisSnapshotCapture {
     ) {
         final ChunkSection[] sections = chunk.getSectionArray();
         final int chunkBottomY = chunk.getBottomY();
+        target.ensureBlockCapacity(countNonAirBlocks(sections));
 
         for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
             final ChunkSection section = sections[sectionIndex];
             if (section == null || section.isEmpty()) {
                 continue;
             }
+            final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
 
             for (int localY = 0; localY < SECTION_SIZE; localY++) {
                 final int worldY = toWorldY(chunkBottomY, sectionIndex, localY);
@@ -166,11 +170,30 @@ public final class CisSnapshotCapture {
                         if (state.isAir()) {
                             continue;
                         }
-                        target.addBlockChange(localX, worldY, localZ, state, false);
+                        final Integer cachedPaletteId = paletteIds.get(state);
+                        final int paletteId;
+                        if (cachedPaletteId != null) {
+                            paletteId = cachedPaletteId;
+                        } else {
+                            paletteId = target.getBlockPalette().getOrAdd(state);
+                            paletteIds.put(state, paletteId);
+                        }
+                        target.appendDecodedBlockFast(localX, worldY, localZ, paletteId);
                     }
                 }
             }
         }
+    }
+
+    private static int countNonAirBlocks(final ChunkSection[] sections) {
+        int count = 0;
+        for (final ChunkSection section : sections) {
+            if (section == null || section.isEmpty()) {
+                continue;
+            }
+            count += ((ChunkSectionAccessor) section).chunkis$getNonEmptyBlockCount();
+        }
+        return count;
     }
 
     /**
