@@ -52,12 +52,14 @@ public abstract class AbstractCisDecoder<S, N> {
      */
     private static final int MAX_ENTITY_COUNT = 10_000;
 
-    protected final BitReader propertyReader;
-    protected final BitReader sectionReader;
     /**
-     * Secondary reader used to estimate decoded block capacity from section headers before full decode.
+     * Reusable reader over the packed block-state property payload in the global palette section.
      */
-    protected final BitReader sectionSizingReader;
+    protected final BitReader propertyReader;
+    /**
+     * Reusable reader over the encoded chunk-section payload during the main decode pass.
+     */
+    protected final BitReader sectionReader;
 
     /**
      * Reusable buffer for local palette indices in dense sections.
@@ -95,7 +97,6 @@ public abstract class AbstractCisDecoder<S, N> {
         this.airState = airState;
         this.propertyReader = new BitReader(new byte[0]);
         this.sectionReader = new BitReader(new byte[0]);
-        this.sectionSizingReader = new BitReader(new byte[0]);
         this.localPaletteBuffer = new int[SECTION_VOLUME];
         this.denseIndicesBuffer = new int[SECTION_VOLUME];
         this.globalIndicesBuffer = new int[SECTION_VOLUME];
@@ -224,8 +225,7 @@ public abstract class AbstractCisDecoder<S, N> {
 
         ensureAvailable(data, offset, sectionDataLength, "sections");
 
-        sectionSizingReader.setData(data, offset, sectionDataLength);
-        delta.ensureBlockCapacity(estimateDecodedBlockCapacity(sectionSizingReader, sectionCount));
+        delta.ensureBlockCapacity(coarseBlockCapacityReserve(sectionCount));
         sectionReader.setData(data, offset, sectionDataLength);
 
         for (int i = 0; i < sectionCount; i++) {
@@ -233,6 +233,19 @@ public abstract class AbstractCisDecoder<S, N> {
         }
 
         return offset + sectionDataLength;
+    }
+
+    /**
+     * Returns a cheap per-section reserve for decoded block instructions.
+     *
+     * <p>This intentionally over-allocates compared to exact sizing so decode does not have to
+     * parse the section payload twice.</p>
+     */
+    static int coarseBlockCapacityReserve(final int sectionCount) {
+        if (sectionCount <= 0) {
+            return 0;
+        }
+        return sectionCount * SECTION_VOLUME;
     }
 
     /**
@@ -251,74 +264,6 @@ public abstract class AbstractCisDecoder<S, N> {
         } else {
             decodeDenseSection(reader, delta, sectionY, globalBits);
         }
-    }
-
-    /**
-     * Estimates the number of decoded block instructions by scanning section headers only.
-     *
-     * <p>This is intentionally conservative for dense and non-air default-sparse sections, but it
-     * avoids the worst-case "all sections are 4096 writes" allocation when many payloads are sparse.</p>
-     */
-    private int estimateDecodedBlockCapacity(final BitReader reader, final int sectionCount) throws IOException {
-        int estimatedBlocks = 0;
-        final int globalBits = calculateBitsNeeded(globalPalette.size());
-
-        for (int i = 0; i < sectionCount; i++) {
-            reader.readZigZag(CisConstants.SECTION_Y_BITS);
-            final int mode = (int) reader.read(1);
-            if (mode == CisConstants.SECTION_ENCODING_SPARSE) {
-                estimatedBlocks += estimateSparseSectionCapacity(reader, globalBits);
-            } else {
-                estimatedBlocks += estimateDenseSectionCapacity(reader, globalBits);
-            }
-        }
-
-        return estimatedBlocks;
-    }
-
-    /**
-     * Estimates the decoded block count for one sparse section and advances the reader past it.
-     */
-    private int estimateSparseSectionCapacity(final BitReader reader, final int globalBits) {
-        final int blockCount = (int) reader.read(CisConstants.BLOCK_COUNT_BITS);
-        if (blockCount == CisConstants.UNIFORM_SECTION_SENTINEL) {
-            final int globalIdx = (int) reader.read(globalBits);
-            return sanitizeGlobalIndex(globalIdx) == 0 ? 0 : SECTION_VOLUME;
-        }
-        if (blockCount == CisConstants.DEFAULT_SPARSE_SECTION_SENTINEL) {
-            final int defaultGlobalIdx = (int) reader.read(globalBits);
-            final int exceptionCount = (int) reader.read(CisConstants.BLOCK_COUNT_BITS);
-            for (int i = 0; i < exceptionCount; i++) {
-                reader.read(12);
-                reader.read(globalBits);
-            }
-            return sanitizeGlobalIndex(defaultGlobalIdx) == 0 ? exceptionCount : SECTION_VOLUME;
-        }
-        for (int i = 0; i < blockCount; i++) {
-            reader.read(12);
-            reader.read(globalBits);
-        }
-        return blockCount;
-    }
-
-    /**
-     * Estimates the decoded block count for one dense section and advances the reader past it.
-     */
-    private int estimateDenseSectionCapacity(final BitReader reader, final int globalBits) throws IOException {
-        final int paletteBits = decodedVersion == 7 ? 8 : CisConstants.PALETTE_SIZE_BITS;
-        final int localSize = (int) reader.read(paletteBits);
-        validateLocalPaletteSize(localSize);
-        for (int i = 0; i < localSize; i++) {
-            reader.read(globalBits);
-        }
-        final int bitsPerBlock = calculateBitsNeeded(localSize + 1);
-        int nonAirOrChangedBlocks = 0;
-        for (int i = 0; i < SECTION_VOLUME; i++) {
-            if (reader.read(bitsPerBlock) != 0) {
-                nonAirOrChangedBlocks++;
-            }
-        }
-        return nonAirOrChangedBlocks;
     }
 
     /**

@@ -12,7 +12,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -48,9 +47,9 @@ class CisPerformanceOptimizationTest {
         final CodecHarness harness = newHarness();
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
         fillSectionUniform(delta, 4, "stone");
-        
+
         // Exceptions to air
-        delta.addBlockChange(0, 64 + 0, 0, "air");
+        delta.addBlockChange(0, 64, 0, "air");
         delta.addBlockChange(15, 64 + 15, 15, "air");
         delta.addBlockChange(5, 64 + 5, 5, "air");
 
@@ -61,9 +60,9 @@ class CisPerformanceOptimizationTest {
     void testMostlyAirWithStoneExceptions() throws Exception {
         final CodecHarness harness = newHarness();
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
-        
+
         // Default is air, some stone exceptions
-        delta.addBlockChange(0, 64 + 0, 0, "stone");
+        delta.addBlockChange(0, 64, 0, "stone");
         delta.addBlockChange(15, 64 + 15, 15, "stone");
         delta.addBlockChange(8, 64 + 8, 8, "stone");
 
@@ -74,7 +73,7 @@ class CisPerformanceOptimizationTest {
     void testCheckerboardSection() throws Exception {
         final CodecHarness harness = newHarness();
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
-        
+
         for (int y = 64; y < 80; y++) {
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++) {
@@ -92,7 +91,7 @@ class CisPerformanceOptimizationTest {
     void testLayeredTerrainSection() throws Exception {
         final CodecHarness harness = newHarness();
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
-        
+
         // 8 layers of stone, 8 layers of dirt
         for (int y = 64; y < 80; y++) {
             final String state = (y < 72) ? "stone" : "dirt";
@@ -110,18 +109,25 @@ class CisPerformanceOptimizationTest {
     void testNegativeSectionY() throws Exception {
         final CodecHarness harness = newHarness();
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
-        
+
         // sectionY = -4 -> block Y = -64 to -49
         final int sectionY = -4;
         final int baseY = sectionY << 4;
         fillSectionUniform(delta, sectionY, "stone");
-        
+
         // Add exceptions
-        delta.addBlockChange(0, baseY + 0, 0, "air");
+        delta.addBlockChange(0, baseY, 0, "air");
         delta.addBlockChange(15, baseY + 15, 15, "air");
         delta.addBlockChange(7, baseY + 7, 7, "dirt");
 
         verifyEquivalence(harness, delta);
+    }
+
+    @Test
+    void coarseBlockCapacityReserveScalesBySectionCount() {
+        assertThat(AbstractCisDecoder.coarseBlockCapacityReserve(0)).isZero();
+        assertThat(AbstractCisDecoder.coarseBlockCapacityReserve(1)).isEqualTo(4096);
+        assertThat(AbstractCisDecoder.coarseBlockCapacityReserve(4)).isEqualTo(16384);
     }
 
     private void fillSectionUniform(final ChunkDelta<String, String> delta, final int sectionY, final String state) {
@@ -155,7 +161,8 @@ class CisPerformanceOptimizationTest {
         decoded.forEachBlock((x, y, z, state) -> {
             final long pos = (x & 0xF) | ((z & 0xF) << 4) | (((long) y) << 8);
             final boolean added = seenPositions.add(pos);
-            assertThat(added).withFailMessage("Duplicate position detected: " + x + ", " + y + ", " + z).isTrue();
+            assertThat(added).withFailMessage("Duplicate position detected: " + x + ", " + y + ", " + z)
+                    .isTrue();
         });
     }
 
@@ -183,9 +190,12 @@ class CisPerformanceOptimizationTest {
         );
     }
 
-    private record CodecHarness(CisEncoder<String, String> encoder, CisDecoder<String, String> decoder) {}
+    private record CodecHarness(CisEncoder<String, String> encoder, CisDecoder<String, String> decoder) {
+
+    }
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
+
         private static final String AIR = "air";
         private static final Map<String, String> BLOCKS = canonicalBlocks();
 
@@ -219,6 +229,7 @@ class CisPerformanceOptimizationTest {
     }
 
     private static final class TestBlockStateAdapter implements BlockStateAdapter<String, String, String> {
+
         @Override
         public String getDefaultState(final String block) {
             return block;
@@ -256,6 +267,7 @@ class CisPerformanceOptimizationTest {
     }
 
     private static final class TestNbtAdapter implements NbtAdapter<String> {
+
         @Override
         public void writeCompressed(final String tag, final DataOutput output) throws IOException {
             output.writeUTF(tag);
