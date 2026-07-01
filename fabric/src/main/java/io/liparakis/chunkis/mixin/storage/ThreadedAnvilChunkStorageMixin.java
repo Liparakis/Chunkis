@@ -794,7 +794,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             if (chunk instanceof ChunkisDeltaDuck duck) {
                 duck.chunkis$setDelta(delta);
             }
-            chunkis$queueDirtyDelta(chunkis$getStorage(), pos, delta, operationId);
+            chunkis$queueDirtyDelta(chunkis$getStorage(), pos, delta, operationId, chunk);
         }
 
         if (chunk != null) {
@@ -1120,7 +1120,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 delta,
                 "load-path-sync",
                 "ThreadedAnvilChunkStorageMixin#chunkis$saveDirtyDelta",
-                operationId
+                operationId,
+                null
         );
         if (deltaToSave == null) {
             return;
@@ -1146,7 +1147,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta,
-            final String operationId) {
+            final String operationId,
+            final Chunk chunk) {
         ChunkDelta<BlockState, NbtCompound> deltaToQueue = chunkis$prepareDeltaForQueueing(pos, delta, operationId);
         if (deltaToQueue == null) {
             return;
@@ -1156,7 +1158,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 deltaToQueue,
                 "save-hook-async",
                 "ThreadedAnvilChunkStorageMixin#chunkis$queueDirtyDelta",
-                operationId
+                operationId,
+                chunk
         );
         if (deltaToQueue == null) {
             PayloadWatchTracer.traceDeltaStage(
@@ -1302,13 +1305,15 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String path,
             final String caller,
-            final String operationId
+            final String operationId,
+            final Chunk chunk
     ) {
         final ChunkDelta<BlockState, NbtCompound> recoveredDelta = chunkis$recoverSparseDeltaOnSaveGuard(
                 pos,
                 delta,
                 caller,
-                operationId
+                operationId,
+                chunk
         );
         return chunkis$rejectSparse(pos, recoveredDelta, path, caller, operationId)
                 ? null
@@ -1329,15 +1334,17 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String caller,
-            final String operationId
+            final String operationId,
+            final Chunk chunk
     ) {
         chunkis$traceBaseMetadataBeforeSaveGuard(pos, delta, caller, operationId);
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true)) {
             return delta;
         }
 
-        final WorldChunk liveChunk = world.getChunkManager()
+        final WorldChunk lookedUpChunk = world.getChunkManager()
                 .getWorldChunk(pos.x, pos.z, false);
+        final WorldChunk liveChunk = chunkis$chooseLiveChunkForBaseRecovery(chunk, lookedUpChunk);
         final ChunkDelta<BlockState, NbtCompound> liveDelta = liveChunk != null
                 ? chunkis$getChunkDelta(liveChunk)
                 : null;
@@ -1382,6 +1389,24 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 null
         );
         return recoveredDelta;
+    }
+
+    /**
+     * Returns the live {@link WorldChunk} instance to use for base recovery.
+     *
+     * <p>If the supplied {@link Chunk} is already a {@link WorldChunk}, it is preferred.
+     * Otherwise, the previously looked-up chunk is used as the fallback.</p>
+     *
+     * @param chunk         the chunk instance being recovered
+     * @param lookedUpChunk the fallback live world chunk
+     * @return the live world chunk to use for recovery
+     */
+    @Unique
+    private static WorldChunk chunkis$chooseLiveChunkForBaseRecovery(
+            final Chunk chunk,
+            final WorldChunk lookedUpChunk
+    ) {
+        return chunk instanceof WorldChunk ? (WorldChunk) chunk : lookedUpChunk;
     }
 
     /**
