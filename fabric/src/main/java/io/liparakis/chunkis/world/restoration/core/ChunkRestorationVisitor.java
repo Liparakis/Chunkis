@@ -114,6 +114,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Tracker instance maintaining failure occurrences during block application loops.
      */
     private final ChunkRestorer.BlockApplyFailureCounters blockApplyFailureCounters;
+    private final ChunkRestoreBlockOperations.SectionWriteCursor sectionWriteCursor;
 
     /**
      * Tracks which chunk sections were mutated so counts can be recomputed once per section.
@@ -161,6 +162,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         this.replayLegacyEntities = shouldReplayLegacyEntities(sourceDelta);
         this.operationId = operationId;
         this.blockApplyFailureCounters = new ChunkRestorer.BlockApplyFailureCounters();
+        this.sectionWriteCursor = new ChunkRestoreBlockOperations.SectionWriteCursor();
         this.touchedSections = new boolean[this.sections.length];
         if (this.replayLegacyEntities && this.runtimeDelta != null) {
             this.runtimeDelta.setEntities(sourceDelta.getEntitiesList(), false);
@@ -376,6 +378,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 topYInclusive,
                 tracePayloadWatches,
                 clearedToAir,
+                sectionWriteCursor,
                 blockApplyFailureCounters,
                 operationId
         )) {

@@ -474,6 +474,7 @@ public final class ChunkRestorer {
             final int topYInclusive,
             final boolean tracePayloadWatches,
             final boolean clearedToAir,
+            final ChunkRestoreBlockOperations.SectionWriteCursor sectionWriteCursor,
             final BlockApplyFailureCounters counters,
             @org.jetbrains.annotations.Nullable final String operationId
     ) {
@@ -491,6 +492,7 @@ public final class ChunkRestorer {
                 topYInclusive,
                 tracePayloadWatches,
                 clearedToAir,
+                sectionWriteCursor,
                 counters,
                 operationId
         );
@@ -561,8 +563,8 @@ public final class ChunkRestorer {
     /**
      * Collects section Y coordinates that need derived-state refresh.
      *
-     * @param bottomY chunk bottom Y coordinate
-     * @param touchedSections touched-section flags indexed from bottom to top
+     * @param bottomY           chunk bottom Y coordinate
+     * @param touchedSections   touched-section flags indexed from bottom to top
      * @param refreshWholeChunk whether the restore replaced the chunk baseline
      * @return ordered section Y coordinates to refresh
      */
@@ -589,9 +591,9 @@ public final class ChunkRestorer {
      * <p>Large explicit deltas behave like full chunk replacement for lighting purposes.
      * Feeding every restored block through {@code checkBlock()} is too expensive in that case.</p>
      *
-     * @param blockChangesCount explicit block changes in the restored delta
+     * @param blockChangesCount   explicit block changes in the restored delta
      * @param touchedSectionCount number of touched sections
-     * @param refreshWholeChunk whether the restore already requires whole-chunk refresh
+     * @param refreshWholeChunk   whether the restore already requires whole-chunk refresh
      * @return true when bulk refresh is cheaper and appropriate
      */
     static boolean shouldUseBulkRefresh(
@@ -610,12 +612,12 @@ public final class ChunkRestorer {
      * <p>Restore bypasses normal block update hooks, so heightmaps and the light engine
      * must be nudged manually to converge on the restored block grid.</p>
      *
-     * @param world           target server world
-     * @param chunk           restored chunk
-     * @param sourceDelta     restored payload containing explicit block edits
-     * @param sections        live chunk sections
-     * @param bottomY         chunk bottom Y
-     * @param touchedSections touched-section flags
+     * @param world             target server world
+     * @param chunk             restored chunk
+     * @param sourceDelta       restored payload containing explicit block edits
+     * @param sections          live chunk sections
+     * @param bottomY           chunk bottom Y
+     * @param touchedSections   touched-section flags
      * @param refreshWholeChunk whether the restore replaced the chunk baseline
      */
     static void refreshDerivedChunkState(
@@ -694,8 +696,8 @@ public final class ChunkRestorer {
      * <p>Base-backed restore rewrites the effective chunk baseline. A full resend is
      * cheaper than thousands of per-block update packets.</p>
      *
-     * @param world target server world
-     * @param chunk restored chunk
+     * @param world            target server world
+     * @param chunk            restored chunk
      * @param lightingProvider active lighting provider
      */
     private static void resendFullChunkToWatchingPlayers(
@@ -715,8 +717,8 @@ public final class ChunkRestorer {
                 continue;
             }
             player.networkHandler.sendPacket(chunkPacket);
-            ChunkisNetworking.sendDelta(player, chunk);
         }
+        ChunkisNetworking.sendDelta(players, chunk);
     }
 
     /**

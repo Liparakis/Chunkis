@@ -152,9 +152,7 @@ public abstract class ChunkHolderMixin {
                 null
         );
 
-        for (final ServerPlayerEntity player : players) {
-            ChunkisNetworking.sendDelta(player, chunk);
-        }
+        ChunkisNetworking.sendDelta(players, chunk);
         PayloadWatchTracer.traceLiveChunkState(
                 chunk,
                 ChunkTraceEventType.WATCH_PRESENT_AFTER_CLIENT_SEND,
@@ -165,4 +163,3 @@ public abstract class ChunkHolderMixin {
         );
     }
 }
-

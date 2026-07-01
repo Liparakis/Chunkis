@@ -3,12 +3,16 @@ package io.liparakis.chunkis.world.restoration.core;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
+import java.util.IdentityHashMap;
 import java.util.Set;
+import java.lang.reflect.Field;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.util.collection.PaletteStorage;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.PaletteProvider;
 import net.minecraft.world.chunk.PalettedContainer;
@@ -34,6 +38,26 @@ final class ChunkRestoreBlockOperations {
      * Binary mask used to extract coordinate offsets within a chunk section.
      */
     private static final int SECTION_Y_MASK = 15;
+    private static final int SECTION_LOCAL_INDEX_Y_SHIFT = 8;
+    private static final int SECTION_LOCAL_INDEX_Z_SHIFT = 4;
+    private static final Field PALETTED_CONTAINER_DATA_FIELD = findField(
+            PalettedContainer.class,
+            "data",
+            "field_34560",
+            "b"
+    );
+    private static final Field PALETTED_CONTAINER_DATA_STORAGE_FIELD = findField(
+            loadPalettedContainerDataClass(),
+            "storage",
+            "comp_118",
+            "b"
+    );
+    private static final Field PALETTED_CONTAINER_DATA_PALETTE_FIELD = findField(
+            loadPalettedContainerDataClass(),
+            "palette",
+            "comp_119",
+            "c"
+    );
 
     /**
      * Shared block-state palette provider used to build fresh air-only section containers.
@@ -93,22 +117,54 @@ final class ChunkRestoreBlockOperations {
         );
     }
 
+    private static Class<?> loadPalettedContainerDataClass() {
+        try {
+            return Class.forName("net.minecraft.world.chunk.PalettedContainer$Data");
+        } catch (final ClassNotFoundException e) {
+            throw new IllegalStateException("Chunkis: could not load PalettedContainer$Data", e);
+        }
+    }
+
+    private static Field findField(final Class<?> owner, final String... candidateNames) {
+        for (final String candidateName : candidateNames) {
+            try {
+                final Field field = owner.getDeclaredField(candidateName);
+                field.setAccessible(true);
+                return field;
+            } catch (final NoSuchFieldException ignored) {
+                // Try the next namespace name.
+            }
+        }
+        throw new IllegalStateException(
+                "Chunkis: could not resolve field on " + owner.getName() + " from candidates " + String.join(", ",
+                        candidateNames)
+        );
+    }
+
+    private static Object readField(final Field field, final Object target) {
+        try {
+            return field.get(target);
+        } catch (final IllegalAccessException e) {
+            throw new IllegalStateException("Chunkis: failed reading field " + field.getName(), e);
+        }
+    }
+
     /**
      * Applies one block state directly to a chunk section.
      *
-     * @param chunk         chunk to mutate
-     * @param chunkPosition chunk position, used for logging
-     * @param localY        absolute world Y coordinate
-     * @param state         state to write
-     * @param worldPosition absolute world position, used for cleanup and logging
-     * @param previousState pre-read block state when payload watches are active, otherwise {@code null}
-     * @param sections      cached section array for the target chunk
-     * @param bottomY       cached chunk bottom Y
-     * @param topYInclusive cached chunk top Y inclusive
+     * @param chunk               chunk to mutate
+     * @param chunkPosition       chunk position, used for logging
+     * @param localY              absolute world Y coordinate
+     * @param state               state to write
+     * @param worldPosition       absolute world position, used for cleanup and logging
+     * @param previousState       pre-read block state when payload watches are active, otherwise {@code null}
+     * @param sections            cached section array for the target chunk
+     * @param bottomY             cached chunk bottom Y
+     * @param topYInclusive       cached chunk top Y inclusive
      * @param tracePayloadWatches whether payload-watch tracing is active for this restore pass
-     * @param clearedToAir whether the chunk was pre-cleared to air before replay
-     * @param counters      failure counters to update
-     * @param operationId   trace correlation ID
+     * @param clearedToAir        whether the chunk was pre-cleared to air before replay
+     * @param counters            failure counters to update
+     * @param operationId         trace correlation ID
      * @return {@code true} if the block was applied
      */
     static boolean applyBlockChange(final WorldChunk chunk,
@@ -124,6 +180,7 @@ final class ChunkRestoreBlockOperations {
             final int topYInclusive,
             final boolean tracePayloadWatches,
             final boolean clearedToAir,
+            final SectionWriteCursor sectionWriteCursor,
             final FailureCounters counters,
             @Nullable final String operationId) {
         if (tracePayloadWatches) {
@@ -190,8 +247,8 @@ final class ChunkRestoreBlockOperations {
                 return false;
             }
 
-            // ponytail: restore owns the whole section write pass, so rebuild counts once later instead of per block.
-            section.getBlockStateContainer().swapUnsafe(localX, localY & SECTION_Y_MASK, localZ, state);
+            // ponytail: resolve section palette ids once per distinct state instead of once per block write.
+            sectionWriteCursor.write(section, sectionIndex, localX, localY & SECTION_Y_MASK, localZ, state);
             if (tracePayloadWatches) {
                 PayloadWatchTracer.traceRestoreSetBlockReturned(chunk,
                         worldPosition,
@@ -260,6 +317,69 @@ final class ChunkRestoreBlockOperations {
         chunk.getBlockEntities()
                 .remove(worldPosition);
         chunk.removeBlockEntity(worldPosition);
+    }
+
+    static int toSectionLocalIndex(final int localX, final int localY, final int localZ) {
+        return (localY << SECTION_LOCAL_INDEX_Y_SHIFT) | (localZ << SECTION_LOCAL_INDEX_Z_SHIFT) | localX;
+    }
+
+    /**
+     * Reuses per-section palette lookups during restore-time raw block writes.
+     *
+     * <p>{@link PalettedContainer#swapUnsafe(int, int, int, Object)} still asks the section
+     * palette to resolve the raw id for every single block. Restore replays many repeated
+     * states per section, so caching those raw ids once per distinct state cuts the hot
+     * path down to a storage write.</p>
+     */
+    static final class SectionWriteCursor {
+
+        private int sectionIndex = Integer.MIN_VALUE;
+        private PalettedContainer<BlockState> container;
+        private PaletteStorage storage;
+        private Palette<BlockState> palette;
+        private Object dataRef;
+        private final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
+
+        void write(
+                final ChunkSection section,
+                final int targetSectionIndex,
+                final int localX,
+                final int localY,
+                final int localZ,
+                final BlockState state
+        ) {
+            if (targetSectionIndex != sectionIndex) {
+                bindSection(section, targetSectionIndex);
+            }
+
+            Integer paletteId = paletteIds.get(state);
+            if (paletteId == null) {
+                final Object before = dataRef;
+                final int resolvedId = palette.index(state, container);
+                refreshData();
+                if (dataRef != before) {
+                    paletteIds.clear();
+                }
+                paletteIds.put(state, resolvedId);
+                paletteId = resolvedId;
+            }
+
+            storage.set(toSectionLocalIndex(localX, localY, localZ), paletteId);
+        }
+
+        private void bindSection(final ChunkSection section, final int targetSectionIndex) {
+            sectionIndex = targetSectionIndex;
+            container = section.getBlockStateContainer();
+            paletteIds.clear();
+            refreshData();
+        }
+
+        @SuppressWarnings("unchecked")
+        private void refreshData() {
+            dataRef = readField(PALETTED_CONTAINER_DATA_FIELD, container);
+            storage = (PaletteStorage) readField(PALETTED_CONTAINER_DATA_STORAGE_FIELD, dataRef);
+            palette = (Palette<BlockState>) readField(PALETTED_CONTAINER_DATA_PALETTE_FIELD, dataRef);
+        }
     }
 
     /**

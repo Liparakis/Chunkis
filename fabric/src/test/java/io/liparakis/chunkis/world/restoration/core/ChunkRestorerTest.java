@@ -91,4 +91,13 @@ class ChunkRestorerTest {
         assertFalse(ChunkRestorer.shouldUseBulkRefresh(1023, 2, false));
     }
 
+    @Test
+    void sectionLocalIndexMatchesRestoreIterationLayout() {
+        assertEquals(0, ChunkRestoreBlockOperations.toSectionLocalIndex(0, 0, 0));
+        assertEquals(1, ChunkRestoreBlockOperations.toSectionLocalIndex(1, 0, 0));
+        assertEquals(16, ChunkRestoreBlockOperations.toSectionLocalIndex(0, 0, 1));
+        assertEquals(256, ChunkRestoreBlockOperations.toSectionLocalIndex(0, 1, 0));
+        assertEquals(4095, ChunkRestoreBlockOperations.toSectionLocalIndex(15, 15, 15));
+    }
+
 }

@@ -10,6 +10,7 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkEncoder;
+import java.util.List;
 import java.util.Objects;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -76,6 +77,10 @@ public final class ChunkisNetworking {
         Objects.requireNonNull(player, "player must not be null");
         Objects.requireNonNull(chunk, "chunk must not be null");
 
+        if (isPlayerUnavailable(player)) {
+            return;
+        }
+
         final ChunkPos chunkPos = chunk.getPos();
         final String worldId = chunk.getWorld()
                 .getRegistryKey()
@@ -122,7 +127,68 @@ public final class ChunkisNetworking {
                 delta.isDirty(),
                 null
         );
-        encodeAndSend(player, chunkPos, worldId, delta, operationId);
+        final PreparedPayload preparedPayload = preparePayload(chunkPos, worldId, delta, operationId);
+        if (preparedPayload == null) {
+            return;
+        }
+        sendPreparedPayload(player, chunkPos, worldId, delta, operationId, preparedPayload);
+    }
+
+    /**
+     * Serializes one chunk delta once, then fans it out to many players.
+     *
+     * <p>Use this when the same chunk is being sent to multiple watchers. Re-encoding
+     * per player just burns server-thread time for identical bytes.</p>
+     *
+     * @param players destination players
+     * @param chunk   source world chunk
+     */
+    public static void sendDelta(final List<ServerPlayerEntity> players, final WorldChunk chunk) {
+        Objects.requireNonNull(players, "players must not be null");
+        Objects.requireNonNull(chunk, "chunk must not be null");
+
+        if (players.isEmpty()) {
+            return;
+        }
+
+        final ChunkPos chunkPos = chunk.getPos();
+        final String worldId = chunk.getWorld()
+                .getRegistryKey()
+                .getValue()
+                .toString();
+        final ChunkDelta<?, ?> delta = extractDelta(chunk);
+
+        if (delta == null) {
+            return;
+        }
+
+        final String operationId = ChunkTraceStore.nextOperationId("sync");
+        final PreparedPayload preparedPayload = preparePayload(chunkPos, worldId, delta, operationId);
+        if (preparedPayload == null) {
+            return;
+        }
+
+        for (final ServerPlayerEntity player : players) {
+            if (isPlayerUnavailable(player)) {
+                continue;
+            }
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CLIENT_SYNC,
+                    ChunkTraceEventType.CLIENT_SYNC_TX_START,
+                    ChunkTraceSeverity.INFO,
+                    ChunkTraceReason.NONE,
+                    SEND_SOURCE,
+                    "starting delta send to player " + player.getName()
+                            .getString(),
+                    worldId,
+                    DebugChunkKeys.of(chunkPos),
+                    null,
+                    operationId,
+                    delta.isDirty(),
+                    null
+            );
+            sendPreparedPayload(player, chunkPos, worldId, delta, operationId, preparedPayload);
+        }
     }
 
     /**
@@ -143,15 +209,13 @@ public final class ChunkisNetworking {
     /**
      * Serializes and writes the payload delta data over the network channel.
      *
-     * @param player      destination player entity
      * @param pos         chunk coordinates position
      * @param worldId     target world registry ID string
      * @param delta       target block delta
      * @param operationId active load/save operation ID
      */
     @SuppressWarnings("unchecked")
-    private static void encodeAndSend(
-            final ServerPlayerEntity player,
+    private static PreparedPayload preparePayload(
             final ChunkPos pos,
             final String worldId,
             final ChunkDelta<?, ?> delta,
@@ -173,26 +237,11 @@ public final class ChunkisNetworking {
                 Chunkis.LOGGER.error(
                         "Chunkis: Delta too large for chunk ({}, {}): {} bytes - skipping",
                         pos.x, pos.z, rawData.length);
-                return;
+                return null;
             }
 
             final ChunkDeltaPayload payload = ChunkDeltaPayload.create(rawData, pos.x, pos.z);
-            ServerPlayNetworking.send(player, payload);
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.CLIENT_SYNC,
-                    ChunkTraceEventType.CLIENT_SYNC_TX_END,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.NONE,
-                    SEND_SOURCE,
-                    describePayloadOutcome(player.getName()
-                            .getString(), rawData.length, payload),
-                    worldId,
-                    DebugChunkKeys.of(pos),
-                    null,
-                    operationId,
-                    delta.isDirty(),
-                    payload.data().length
-            );
+            return new PreparedPayload(rawData.length, payload);
 
         } catch (final Exception e) {
             traceSyncFailure(
@@ -204,7 +253,38 @@ public final class ChunkisNetworking {
                     null
             );
             Chunkis.LOGGER.error("Chunkis: Failed to send delta for chunk ({}, {})", pos.x, pos.z, e);
+            return null;
         }
+    }
+
+    /**
+     * Writes a prepared payload to one player and records the result trace.
+     */
+    private static void sendPreparedPayload(
+            final ServerPlayerEntity player,
+            final ChunkPos pos,
+            final String worldId,
+            final ChunkDelta<?, ?> delta,
+            final String operationId,
+            final PreparedPayload preparedPayload
+    ) {
+        ServerPlayNetworking.send(player, preparedPayload.payload());
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CLIENT_SYNC,
+                ChunkTraceEventType.CLIENT_SYNC_TX_END,
+                ChunkTraceSeverity.INFO,
+                ChunkTraceReason.NONE,
+                SEND_SOURCE,
+                describePayloadOutcome(player.getName()
+                        .getString(), preparedPayload.rawBytes(), preparedPayload.payload()),
+                worldId,
+                DebugChunkKeys.of(pos),
+                null,
+                operationId,
+                delta.isDirty(),
+                preparedPayload.payload()
+                        .data().length
+        );
     }
 
     /**
@@ -284,5 +364,12 @@ public final class ChunkisNetworking {
                 + payload.data().length
                 + " compressed="
                 + payload.compressed();
+    }
+
+    /**
+     * Immutable prepared send state shared across watcher fan-out.
+     */
+    private record PreparedPayload(int rawBytes, ChunkDeltaPayload payload) {
+
     }
 }
