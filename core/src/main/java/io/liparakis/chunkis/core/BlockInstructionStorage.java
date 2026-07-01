@@ -84,10 +84,13 @@ final class BlockInstructionStorage {
             }
             packedInstructions = Arrays.copyOf(packedInstructions, newCapacity);
         }
-        if (!positionMapDirty) {
-            positionMap.ensureCapacity(requiredCapacity);
-        }
+        // Always pre-size the position map regardless of dirty state.
+        // When dirty, ensurePositionMap() will do a bulk rebuild; without a
+        // capacity hint here, that rebuild triggers a rehash mid-fill on large
+        // decode batches (e.g. sectionCount * 4096 instructions).
+        positionMap.ensureCapacity(requiredCapacity);
     }
+
 
     /**
      * Inserts a packed instruction and eagerly updates the position map.
