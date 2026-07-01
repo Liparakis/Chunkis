@@ -43,3 +43,6 @@ latest.log
 # OS
 .DS_Store
 Thumbs.db
+
+#Other
+graphify-out
