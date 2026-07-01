@@ -380,7 +380,7 @@ public final class PortalLinkManager {
      * in the world.
      *
      * <p>Forces the containing chunk to load before checking, then verifies a
-     * {@value #MIN_PORTAL_WIDTH}×{@value #MIN_PORTAL_HEIGHT} block region starting
+     * {@value #MIN_PORTAL_WIDTH}x{@value #MIN_PORTAL_HEIGHT} block region starting
      * from the lower-left corner of the portal frame.</p>
      *
      * @param world  the world to check

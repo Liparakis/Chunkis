@@ -96,7 +96,7 @@ public final class CisConstants {
 
     /**
      * Number of bits used to encode a block count within a section.
-     * A full section holds exactly 4096 blocks (16³), which requires
+     * A full section holds exactly 4096 blocks (16^3), which requires
      * 13 bits to represent the inclusive range [0, 4096].
      */
     public static final int BLOCK_COUNT_BITS = 13;

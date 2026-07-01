@@ -36,7 +36,7 @@ public abstract class PortalForcerMixin {
 
     /**
      * Cached predicate for nether portal POI lookups.
-     * Allocated once — the lambda captures nothing and is safe to share.
+     * Allocated once - the lambda captures nothing and is safe to share.
      */
     @Unique
     private static final Predicate<RegistryEntry<PointOfInterestType>> PORTAL_POI_PREDICATE = type -> type.matchesKey(

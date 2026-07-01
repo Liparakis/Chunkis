@@ -164,7 +164,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
             throw new IOException(
                     "Invalid NBT payload size: "
                             + size
-                            + " bytes (expected 1–"
+                            + " bytes (expected 1-"
                             + MAX_NBT_SIZE
                             + ")"
             );
@@ -182,7 +182,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
             throw new IOException(
                     "Invalid NBT payload size: "
                             + length
-                            + " bytes (expected 1–"
+                            + " bytes (expected 1-"
                             + MAX_NBT_SIZE
                             + ")"
             );

@@ -110,16 +110,6 @@ final class ChunkRestoreBlockOperations {
     }
 
     /**
-     * Loads the nested vanilla runtime class that holds a PalettedContainer's active palette/storage pair.
-     *
-     * @return the nested {@code PalettedContainer$Data} class
-     * @throws ClassNotFoundException if the current runtime layout no longer exposes that class
-     */
-    private static Class<?> loadPalettedContainerDataClass() throws ClassNotFoundException {
-        return Class.forName("net.minecraft.world.chunk.PalettedContainer$Data");
-    }
-
-    /**
      * Resolves the direct-storage reflective fast path.
      *
      * <p>If any lookup fails, restore keeps working by falling back to the slower public
@@ -129,10 +119,11 @@ final class ChunkRestoreBlockOperations {
      */
     private static ReflectionAccess resolveReflectionAccess() {
         try {
-            final Class<?> dataClass = loadPalettedContainerDataClass();
+            final Field dataField = findField(PalettedContainer.class, "data", "field_34560", "b");
+            final Class<?> dataClass = dataField.getType();
             return new ReflectionAccess(
                     true,
-                    findField(PalettedContainer.class, "data", "field_34560", "b"),
+                    dataField,
                     findField(dataClass, "storage", "comp_118", "b"),
                     findField(dataClass, "palette", "comp_119", "c")
             );

@@ -8,6 +8,7 @@ import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.migration.CisWorldMigrator;
 import io.liparakis.chunkis.migration.McaMigrator;
+import io.liparakis.chunkis.migration.MigrationProgressTracker;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.portal.PortalChunkIndexManager;
 import io.liparakis.chunkis.portal.PortalLinkManager;
@@ -208,6 +209,7 @@ public final class ChunkisMod implements ModInitializer {
         PortalChunkIndexManager.clear();
         PortalLinkManager.clear();
         ScheduledEntityReplayQueue.clear();
+        MigrationProgressTracker.clear();
     }
 
     /**

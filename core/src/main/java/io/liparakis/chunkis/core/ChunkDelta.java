@@ -657,13 +657,13 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      *
      * <p>Packed position layout (matches {@link BlockInstruction#packPos}):</p>
      * <pre>
-     *   bits 31–12  Y coordinate (20-bit, sign-extended)
-     *   bits 11–8   X coordinate (4-bit)
-     *   bits  7–4   Z coordinate (4-bit)
-     *   bits  3–0   Reserved (0)
+     *   bits 31-12  Y coordinate (20-bit, sign-extended)
+     *   bits 11-8   X coordinate (4-bit)
+     *   bits  7-4   Z coordinate (4-bit)
+     *   bits  3-0   Reserved (0)
      * </pre>
      *
-     * <p><strong>Order invariant:</strong> blocks are written in y→z→x order,
+     * <p><strong>Order invariant:</strong> blocks are written in y->z->x order,
      * matching the index formula used by the default-sparse exception path:
      * {@code startOffset + (y << 8) + (z << 4) + x}.</p>
      *
@@ -713,7 +713,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * into the backing array in a single tight loop. {@link #trackBlockSection}
      * is called once for the whole section.</p>
      *
-     * <p>The {@code globalIndices} array must be indexed in y→z→x order
+     * <p>The {@code globalIndices} array must be indexed in y->z->x order
      * (same as the dense section storage format), length exactly 4096.</p>
      *
      * @param baseY         absolute block Y of this section's bottom (sectionY << 4)

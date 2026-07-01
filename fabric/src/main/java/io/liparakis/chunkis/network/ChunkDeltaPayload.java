@@ -33,7 +33,7 @@ import net.minecraft.util.Identifier;
  * Compression is attempted only when the raw payload is at least
  * {@value #COMPRESSION_THRESHOLD} bytes. The compressed form is used only when
  * it is at least 10% smaller than the
- * original — below that, the decompression overhead is not worthwhile.
+ * original - below that, the decompression overhead is not worthwhile.
  * </p>
  *
  * <h2>Thread safety</h2>
@@ -88,7 +88,7 @@ public record ChunkDeltaPayload(
 
     /**
      * Scratch buffer size for deflate/inflate loops.
-     * 64 KB reduces loop iterations for large chunk payloads (200–400 KB).
+     * 64 KB reduces loop iterations for large chunk payloads (200-400 KB).
      */
     private static final int COMPRESSION_BUFFER_SIZE = 65536;
 

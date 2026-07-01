@@ -32,7 +32,7 @@ public final class ClientChunkisMod implements ClientModInitializer {
      */
     private static void logInitializationComplete() {
         if (ClientDeltaMetrics.ENABLED) {
-            Chunkis.LOGGER.info("Chunkis Client initialized — metrics enabled.");
+            Chunkis.LOGGER.info("Chunkis Client initialized - metrics enabled.");
             return;
         }
 

@@ -16,10 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.minecraft.block.BlockState;
@@ -56,13 +52,6 @@ public final class McaMigrator {
      * Side sizing dimensions of single region files.
      */
     private static final int REGION_SIZE = 32;
-
-    /**
-     * Total worker threads dedicated to parallel migration.
-     */
-    private static final int MIGRATION_THREADS = Math.max(1,
-            Runtime.getRuntime()
-                    .availableProcessors() - 1);
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -111,40 +100,25 @@ public final class McaMigrator {
             return;
         }
 
-        // Parallel migration is safe: RegionFile.read/write are synchronized,
-        // the region-file cache is guarded by a ReadWriteLock, CisMapping uses
-        // RW-locking internally, and compression state is ThreadLocal.
         final CisStorage<?, ?, ?, ?> storage = FabricCisStorageHelper.getStorage(world);
-        final AtomicInteger totalMigrated = new AtomicInteger();
-        final ExecutorService executor = Executors.newFixedThreadPool(MIGRATION_THREADS);
-
+        int totalMigrated = 0;
+        MigrationProgressTracker.begin(world, regions.size());
         try {
-            final List<Future<?>> futures = new ArrayList<>(regions.size());
-            for (final int[] coords : regions) {
+            for (int i = 0; i < regions.size(); i++) {
+                final int[] coords = regions.get(i);
                 final int rx = coords[0];
                 final int rz = coords[1];
                 final Path mcaPath = regionDir.resolve("r." + rx + "." + rz + ".mca");
-                futures.add(executor.submit(() -> {
-                    final int count = migrateRegionFile(world, storage, mcaPath, rx, rz);
-                    totalMigrated.addAndGet(count);
-                }));
-            }
-            // Wait for all migrations to finish and surface any exceptions.
-            for (final Future<?> f : futures) {
-                try {
-                    f.get();
-                } catch (final Exception e) {
-                    LOGGER.error("A region migration task failed", e);
-                }
+                MigrationProgressTracker.region(world, mcaPath.getFileName().toString(), i + 1, regions.size());
+                totalMigrated += migrateRegionFile(world, storage, mcaPath, rx, rz);
             }
         } finally {
-            executor.shutdown();
+            MigrationProgressTracker.finish(world);
         }
 
-        final int migrated = totalMigrated.get();
         LOGGER.info("Chunkis MCA Migration complete for world {}. Converted {} chunks total.",
                 world.getRegistryKey()
-                        .getValue(), migrated);
+                        .getValue(), totalMigrated);
     }
 
     /**
@@ -177,6 +151,7 @@ public final class McaMigrator {
             final int rx, final int rz) {
 
         int migrated = 0;
+        int failed = 0;
         final StorageKey storageKey = new StorageKey("chunk", world.getRegistryKey(), "chunk");
         LOGGER.info("Chunkis migrator: converting {} to CIS...", mcaPath.getFileName());
 
@@ -228,10 +203,16 @@ public final class McaMigrator {
                                 mutablePos);
 
                         if (!delta.isEmpty()) {
-                            storage.save(FabricCisStorageHelper.toStoragePos(globalPos), delta);
-                            migrated++;
+                            if (storage.save(FabricCisStorageHelper.toStoragePos(globalPos), delta)) {
+                                migrated++;
+                            } else {
+                                failed++;
+                                LOGGER.error("Failed to save migrated chunk {} from {}",
+                                        globalPos, mcaPath.getFileName());
+                            }
                         }
                     } catch (final Exception e) {
+                        failed++;
                         LOGGER.error("Failed to migrate chunk {} in {}",
                                 globalPos, mcaPath.getFileName(), e);
                     }
@@ -240,11 +221,21 @@ public final class McaMigrator {
 
         } catch (final Exception e) {
             LOGGER.error("Failed to read region file {}", mcaPath.getFileName(), e);
+            failed++;
         }
 
-        backupRegionFile(mcaPath);
+        if (failed == 0) {
+            backupRegionFile(mcaPath);
+        } else {
+            LOGGER.warn(
+                    "Chunkis migrator: keeping {} in place because {} chunk(s) failed migration. "
+                            + "This region is not safe to retire yet.",
+                    mcaPath.getFileName(),
+                    failed
+            );
+        }
 
-        LOGGER.info("Finished {}. Converted {} chunks.", mcaPath.getFileName(), migrated);
+        LOGGER.info("Finished {}. Converted {} chunks, failed {}.", mcaPath.getFileName(), migrated, failed);
         return migrated;
     }
 
@@ -269,7 +260,7 @@ public final class McaMigrator {
         final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();
         final NbtCompound structureData = CisNbtUtil.extractStructureData(sourceNbt);
         delta.setSuppressInitialRepopulation(true);
-        delta.setChunkMetadata(CisNbtUtil.createChunkMetadata(structureData, true), false);
+        delta.setChunkMetadata(createMigratedChunkMetadata(structureData), false);
 
         final int startX = globalPos.getStartX();
         final int startZ = globalPos.getStartZ();
@@ -309,6 +300,10 @@ public final class McaMigrator {
         return delta;
     }
 
+    static NbtCompound createMigratedChunkMetadata(final NbtCompound structureData) {
+        return CisNbtUtil.createChunkMetadataTakingOwnership(structureData, true, true);
+    }
+
     /**
      * Renames the original MCA file to indicate it was backed up after migration.
      *
@@ -318,7 +313,7 @@ public final class McaMigrator {
         final Path backupPath = mcaPath.resolveSibling(mcaPath.getFileName() + ".backup");
         try {
             Files.move(mcaPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
-            LOGGER.info("Backed up {} → {}", mcaPath.getFileName(), backupPath.getFileName());
+            LOGGER.info("Backed up {} -> {}", mcaPath.getFileName(), backupPath.getFileName());
         } catch (final IOException e) {
             LOGGER.error("Failed to back up {}", mcaPath.getFileName(), e);
         }

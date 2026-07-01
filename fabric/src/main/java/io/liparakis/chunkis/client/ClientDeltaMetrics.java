@@ -19,7 +19,7 @@ import org.jetbrains.annotations.NotNull;
  * {@code -Dchunkis.client.metrics=true}.
  *
  * <p>
- * This class is purely additive — it never retains world, chunk, or block
+ * This class is purely additive - it never retains world, chunk, or block
  * references.
  */
 @Environment(EnvType.CLIENT)
@@ -109,10 +109,10 @@ public final class ClientDeltaMetrics {
 
         final String message = messageSupplier.get();
         if (cause != null) {
-            Chunkis.LOGGER.error("{} — error #{} (logging every {}th)",
+            Chunkis.LOGGER.error("{} - error #{} (logging every {}th)",
                     message, errors, ERROR_LOG_INTERVAL, cause);
         } else {
-            Chunkis.LOGGER.error("{} — error #{} (logging every {}th)",
+            Chunkis.LOGGER.error("{} - error #{} (logging every {}th)",
                     message, errors, ERROR_LOG_INTERVAL);
         }
     }
@@ -133,7 +133,7 @@ public final class ClientDeltaMetrics {
         final double avgBlocks = averagePerPacket(totalBlocksChanged.sum(), packets);
 
         Chunkis.LOGGER.info(String.format(
-                "Chunk Delta Metrics — Packets: %d, Avg: %.1f bytes, %.1f blocks, %.2fμs decode",
+                "Chunk Delta Metrics - Packets: %d, Avg: %.1f bytes, %.1f blocks, %.2fus decode",
                 packets, avgBytes, avgBlocks, avgMicros));
     }
 
@@ -217,7 +217,7 @@ public final class ClientDeltaMetrics {
 
         @Override
         public @NotNull String toString() {
-            return String.format("Packets: %d, Avg: %.1f bytes, %.1f blocks, %.2fμs, Errors: %d",
+            return String.format("Packets: %d, Avg: %.1f bytes, %.1f blocks, %.2fus, Errors: %d",
                     packets, avgBytes(), avgBlocks(), avgDecodeMicros(), errors);
         }
     }

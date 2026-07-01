@@ -18,11 +18,11 @@ import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 /**
- * Region file handler for 32—32 chunks.
+ * Region file handler for 32-32 chunks.
  *
  * <p>Layout (byte offsets):
  * <pre>
- *   [0, 8192)        fixed header 1024 — (offset:int, length:int)
+ *   [0, 8192)        fixed header 1024 - (offset:int, length:int)
  *   [8192, dataEnd)  chunk payloads, potentially with gaps reused by the allocator
  *   [dataEnd, EOF)   allocation metadata footer (optional; absent in legacy files)
  * </pre>
@@ -41,7 +41,7 @@ public final class RegionFile implements AutoCloseable {
      */
     static final int CHUNKS_PER_REGION = 1024;
     /**
-     * Total header size: 1024 chunk entries — 8 bytes per entry.
+     * Total header size: 1024 chunk entries - 8 bytes per entry.
      */
     static final int HEADER_SIZE = 8192;
     /**

@@ -36,7 +36,7 @@ import java.util.Objects;
 public abstract class AbstractCisEncoder<S, N> {
 
     /**
-     * Total number of blocks in a chunk section (16×16×16).
+     * Total number of blocks in a chunk section (16x16x16).
      */
     protected static final int SECTION_VOLUME = 4096;
 
@@ -287,16 +287,16 @@ public abstract class AbstractCisEncoder<S, N> {
     }
 
     /**
-     * Selects and writes the most compact encoding for a single 16×16×16 section.
+     * Selects and writes the most compact encoding for a single 16x16x16 section.
      *
      * <p>Four encodings are evaluated; the one with the lowest bit cost wins:
      * <ul>
-     *   <li><b>UNIFORM</b> – all 4096 positions share one state.</li>
-     *   <li><b>DEFAULT_SPARSE</b> – one dominant state is implied; only differing
+     *   <li><b>UNIFORM</b> - all 4096 positions share one state.</li>
+     *   <li><b>DEFAULT_SPARSE</b> - one dominant state is implied; only differing
      *       positions are emitted as (position, state) pairs.</li>
-     *   <li><b>SPARSE</b> – a flat list of (position, state) pairs for every
+     *   <li><b>SPARSE</b> - a flat list of (position, state) pairs for every
      *       non-null block; efficient for sections with few changes.</li>
-     *   <li><b>DENSE</b> – a local palette plus a full 4096-slot bit-array;
+     *   <li><b>DENSE</b> - a local palette plus a full 4096-slot bit-array;
      *       efficient when most positions are occupied.</li>
      * </ul>
      * </p>
@@ -562,7 +562,7 @@ public abstract class AbstractCisEncoder<S, N> {
      * Computes the bit cost of dense encoding.
      *
      * <p><b>Side-effect:</b> populates {@code ctx.fastLocalPaletteIndex} and
-     * {@code ctx.localPaletteIds} as a by-product. This is intentional — the
+     * {@code ctx.localPaletteIds} as a by-product. This is intentional - the
      * actual dense encoder reuses those structures immediately after this call.
      * Do not call this method between cost evaluation and dense encoding.</p>
      */
@@ -671,7 +671,7 @@ public abstract class AbstractCisEncoder<S, N> {
     /**
      * Returns a dense 4096-slot state array for the section. If the section is
      * already in dense mode the array is returned directly. For sparse-mode
-     * sections a scratch buffer is populated and returned — callers must not
+     * sections a scratch buffer is populated and returned - callers must not
      * retain a reference across subsequent calls.
      */
     private Object[] denseStatesForSection(final EncoderContext<S> ctx, final CisSection<S> section) {
@@ -764,11 +764,11 @@ public abstract class AbstractCisEncoder<S, N> {
         public final BitWriter bitWriter = new BitWriter(8192);
 
         /**
-         * Global palette reverse lookup: block state → encoded palette index.
+         * Global palette reverse lookup: block state -> encoded palette index.
          */
         public final Reference2IntMap<S> globalIdMap = new Reference2IntOpenHashMap<>();
         /**
-         * Dense-section reverse lookup: block state identity → local palette index.
+         * Dense-section reverse lookup: block state identity -> local palette index.
          */
         public final Reference2IntMap<S> fastLocalPaletteIndex = new Reference2IntOpenHashMap<>();
         /**

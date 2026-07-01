@@ -181,11 +181,11 @@ public final class PropertyPacker<B, S, P> {
          * Calculates the minimum number of bits needed to represent valueCount distinct
          * values.
          * Examples:
-         * - 1 value → 1 bit (special case, minimum)
-         * - 2 values → 1 bit (0, 1)
-         * - 3 values → 2 bits (0, 1, 2, with 3 unused)
-         * - 4 values → 2 bits (0, 1, 2, 3)
-         * - 5 values → 3 bits (0-4, with 5-7 unused)
+         * - 1 value -> 1 bit (special case, minimum)
+         * - 2 values -> 1 bit (0, 1)
+         * - 3 values -> 2 bits (0, 1, 2, with 3 unused)
+         * - 4 values -> 2 bits (0, 1, 2, 3)
+         * - 5 values -> 3 bits (0-4, with 5-7 unused)
          *
          * @param valueCount Number of values to encode
          * @return Minimum bits required (at least 1)

@@ -54,7 +54,7 @@ public final class ChunkisDebugConfig {
      * <p>This is the hot-path gate called before every trace event. It must
      * remain allocation-free.</p>
      *
-     * <p><b>Note:</b> {@code domain} is accepted for forward compatibility —
+     * <p><b>Note:</b> {@code domain} is accepted for forward compatibility -
      * future level granularity will filter per-domain. Currently it is only
      * null-checked.</p>
      *

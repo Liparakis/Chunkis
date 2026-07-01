@@ -612,7 +612,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * {@code id} field matches a registry type that supports the current block
      * state, returning {@code null} when it does not. The previous explicit
      * {@code isBlockEntityNbtCompatibleWithState} pre-check was therefore
-     * redundant — it performed the same NBT id lookup, registry resolution, and
+     * redundant - it performed the same NBT id lookup, registry resolution, and
      * {@code BlockEntityType#supports} call that {@code createFromNbt} repeats
      * internally, costing ~1.2ms per chunk restore.</p>
      *

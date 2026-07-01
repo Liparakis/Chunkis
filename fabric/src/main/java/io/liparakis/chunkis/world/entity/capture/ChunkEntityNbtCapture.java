@@ -39,7 +39,7 @@ public final class ChunkEntityNbtCapture {
      * as exceptions. After serialization, {@link CisNbtUtil#ensureEntityIdPresent} injects the entity
      * type ID if the vanilla serializer omitted it.</p>
      *
-     * <p>Returns {@code null} if serialization throws — for example, if the
+     * <p>Returns {@code null} if serialization throws - for example, if the
      * entity's registry manager is unavailable or the entity type is unregistered. {@code null} tells
      * the caller to skip this entity rather than storing corrupt data.</p>
      *

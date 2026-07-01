@@ -30,7 +30,7 @@ import java.util.Objects;
  * Region-based storage system for Chunkis chunk deltas.
  *
  * <ul>
- *   <li>32—32 chunk region files</li>
+ *   <li>32-32 chunk region files</li>
  *   <li>bounded LRU cache of open region files</li>
  *   <li>thread-local encoder, decoder, and compression state</li>
  *   <li>automatic region lookup by chunk position</li>

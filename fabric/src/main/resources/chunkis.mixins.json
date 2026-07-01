@@ -20,6 +20,9 @@
         "world.entity.EntityMixin",
         "world.server.ServerWorldMixin"
     ],
+    "client": [
+        "client.screen.LevelLoadingScreenMixin"
+    ],
     "injectors": {
         "defaultRequire": 1
   }

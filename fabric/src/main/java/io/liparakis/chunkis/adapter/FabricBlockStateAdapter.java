@@ -35,7 +35,7 @@ public final class FabricBlockStateAdapter
     private static final List<Property<?>> EMPTY_PROPERTIES = Collections.emptyList();
     private static final List<Object> EMPTY_VALUES = Collections.emptyList();
     private static final java.lang.reflect.Method GET_VALUES_METHOD = resolveGetValuesMethod();
-    // Caches for immutable block metadata — safe to retain indefinitely since
+    // Caches for immutable block metadata - safe to retain indefinitely since
     // block properties and their values are fixed at registration time.
     private final Map<Block, List<Property<?>>> blockPropertiesCache = new ConcurrentHashMap<>(256);
     private final Map<Property<?>, List<Object>> propertyValuesCache = new ConcurrentHashMap<>(512);
@@ -137,7 +137,7 @@ public final class FabricBlockStateAdapter
         if (GET_VALUES_METHOD != null) {
             return (Collection<?>) GET_VALUES_METHOD.invoke(property);
         }
-        // Direct call fallback — used when reflection resolution failed entirely
+        // Direct call fallback - used when reflection resolution failed entirely
         return property.getValues();
     }
 
@@ -348,7 +348,7 @@ public final class FabricBlockStateAdapter
      * Package-private for testing visibility.
      *
      * @param property the property to build or retrieve an index map for
-     * @return unmodifiable map of value → index
+     * @return unmodifiable map of value -> index
      */
     Map<Object, Integer> getOrCreateIndexMap(final Property<?> property) {
         return valueIndexCache.computeIfAbsent(property, this::buildIndexMap);
@@ -359,7 +359,7 @@ public final class FabricBlockStateAdapter
      * over its cached values list.
      *
      * @param property the property to index
-     * @return unmodifiable map of value → index
+     * @return unmodifiable map of value -> index
      */
     private Map<Object, Integer> buildIndexMap(final Property<?> property) {
         final List<Object> values = getPropertyValues(property);

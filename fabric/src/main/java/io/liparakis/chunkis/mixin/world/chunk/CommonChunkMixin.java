@@ -23,7 +23,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  *
  * <p>Implements {@link ChunkisDeltaDuck} to attach a per-chunk delta, and
  * overrides {@code needsSaving()} so that a chunk is always considered dirty
- * when its delta has unsaved changes — even if vanilla would report it clean.</p>
+ * when its delta has unsaved changes - even if vanilla would report it clean.</p>
  */
 @Mixin(Chunk.class)
 public abstract class CommonChunkMixin implements ChunkisDeltaDuck {

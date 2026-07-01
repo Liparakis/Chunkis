@@ -22,7 +22,7 @@ import net.minecraft.util.math.BlockPos;
  * the mutable {@link BlockPos} (~40 bytes per block change).
  *
  * <p>
- * <b>Thread safety:</b> Not thread-safe by design — must only be used from
+ * <b>Thread safety:</b> Not thread-safe by design - must only be used from
  * the thread that created it (guaranteed by the {@link ThreadLocal} wrapper).
  *
  * <p>
@@ -40,7 +40,7 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
      */
     private final BlockPos.Mutable mutablePos = new BlockPos.Mutable();
 
-    // Mutable context — set by reset() before each delta application.
+    // Mutable context - set by reset() before each delta application.
     private ChunkDelta<BlockState, NbtCompound> clientDelta;
     private ClientWorld world;
 

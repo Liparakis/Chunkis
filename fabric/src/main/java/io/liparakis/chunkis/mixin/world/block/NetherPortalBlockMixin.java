@@ -69,11 +69,11 @@ public abstract class NetherPortalBlockMixin {
 
     /**
      * Returns whether the source and destination worlds form a vanilla
-     * Overworld–Nether portal pair.
+     * Overworld-Nether portal pair.
      *
      * @param sourceWorld      source world
      * @param destinationWorld destination world
-     * @return {@code true} if traveling Overworld → Nether or Nether → Overworld
+     * @return {@code true} if traveling Overworld -> Nether or Nether -> Overworld
      */
     @Unique
     private static boolean chunkis$isNetherOverworldPair(
@@ -93,7 +93,7 @@ public abstract class NetherPortalBlockMixin {
      * <p>The flow is intentionally conservative:
      * <ol>
      *   <li>Ignore non-player entities.</li>
-     *   <li>Ignore non Overworld–Nether transfers.</li>
+     *   <li>Ignore non Overworld-Nether transfers.</li>
      *   <li>Use an already-registered Chunkis portal link if one exists.</li>
      *   <li>Let vanilla continue if it can find an existing destination portal
      *       (recording the link for future direct reuse).</li>
@@ -155,7 +155,7 @@ public abstract class NetherPortalBlockMixin {
             PortalLinkManager.registerBidirectionalIfPresent(
                     sourceWorld, sourcePortalPos, destinationWorld, existingDestination.get()
             );
-            // Existing portal found — let vanilla handle teleportation normally.
+            // Existing portal found - let vanilla handle teleportation normally.
             return;
         }
 

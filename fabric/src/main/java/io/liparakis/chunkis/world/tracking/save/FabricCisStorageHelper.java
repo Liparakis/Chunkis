@@ -123,7 +123,7 @@ public final class FabricCisStorageHelper {
 
         final RegistryKey<World> key = world.getRegistryKey();
 
-        // Fast path: wrapper present and open — avoid compute overhead
+        // Fast path: wrapper present and open - avoid compute overhead
         final StorageWrapper existing = storageMap.get(key);
         if (existing != null && existing.isOpen()) {
             return existing.getStorage();
@@ -410,7 +410,7 @@ public final class FabricCisStorageHelper {
 
         /**
          * Closes the underlying storage under a write lock.
-         * Idempotent — subsequent calls after the first are ignored.
+         * Idempotent - subsequent calls after the first are ignored.
          */
         void close() {
             lock.writeLock()

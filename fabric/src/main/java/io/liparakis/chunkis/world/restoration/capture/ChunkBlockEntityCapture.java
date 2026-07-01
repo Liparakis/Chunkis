@@ -29,7 +29,7 @@ import org.slf4j.Logger;
  * <ul>
  *   <li>removed block entities</li>
  *   <li>block entities whose current block state no longer supports block entities
- *       (sweep path only — stale delta data is also removed)</li>
+ *       (sweep path only - stale delta data is also removed)</li>
  *   <li>block entities that serialize to null or empty NBT</li>
  *   <li>block entities whose type has no registry ID</li>
  * </ul>

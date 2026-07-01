@@ -139,7 +139,7 @@ public class ChunkSerializerMixin {
      *
      * <p>Restore order:</p>
      * <ol>
-     *   <li>Load delta (memory → disk).</li>
+     *   <li>Load delta (memory -> disk).</li>
      *   <li>Trace log.</li>
      *   <li>Set suppression flag from persisted metadata.</li>
      *   <li>Attach delta to chunk via {@link ChunkisDeltaDuck}.</li>

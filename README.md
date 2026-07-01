@@ -24,25 +24,25 @@
 | **File size**          | Often smaller than vanilla, but depends on world history     |
 | **Performance impact** | Lower save/load overhead with stability-focused safeguards   |
 | **Compatibility**      | Fabric only                                                  |
-| **Reversibility**      | ⚠️ **Not reversible** — always back up before installing     |
+| **Reversibility**      | WARNING: **Not reversible** - always back up before installing     |
 | **Maturity**           | Beta; tested on single-player and multiplayer servers        |
 
 ---
 
-## ✅ Is This For You?
+## - Is This For You?
 
 **Good fit if:**
-- ✅ You want Chunkis-specific persistence behavior instead of vanilla chunk storage
-- ✅ You care about migration control and safer chunk restore behavior
-- ✅ You run a modpack server where world storage still matters and you are willing to test
-- ✅ Your modpack does not include mods that read `.mca` region files directly
-- ✅ You are able to test on a backup world before committing
+- - You want Chunkis-specific persistence behavior instead of vanilla chunk storage
+- - You care about migration control and safer chunk restore behavior
+- - You run a modpack server where world storage still matters and you are willing to test
+- - Your modpack does not include mods that read `.mca` region files directly
+- - You are able to test on a backup world before committing
 
 **Not a good fit if:**
-- ❌ You are looking only for FPS or TPS improvements
-- ❌ You need guaranteed smaller storage than vanilla in every world
-- ❌ Your modpack includes mods listed under Known Incompatibilities
-- ❌ You do not have a backup strategy in place
+- - You are looking only for FPS or TPS improvements
+- - You need guaranteed smaller storage than vanilla in every world
+- - Your modpack includes mods listed under Known Incompatibilities
+- - You do not have a backup strategy in place
 
 ---
 
@@ -64,12 +64,12 @@ That means Chunkis is no longer purely a "write only changed blocks" system in e
 **On-disk layout (overworld example):**
 ```text
 world/
-└── chunkis/
-    ├── global_ids.json
-    └── regions/
-        ├── r.0.0.cis
-        ├── r.0.1.cis
-        └── ...
+\-- chunkis/
+    |-- global_ids.json
+    \-- regions/
+        |-- r.0.0.cis
+        |-- r.0.1.cis
+        \-- ...
 ```
 
 For non-overworld dimensions, Chunkis stores data under `world/dimensions/<namespace>/<path>/chunkis/`, including a dimension-local `global_ids.json` alongside that dimension's `regions/` directory.
@@ -96,7 +96,7 @@ For non-overworld dimensions, Chunkis stores data under `world/dimensions/<names
 
 The following are incompatible with Chunkis:
 
-- **WorldEdit** — reads and writes `.mca` region files directly
+- **WorldEdit** - reads and writes `.mca` region files directly
 - Any mod that directly manipulates region files
 - Mods that apply chunk post-processing after world generation
 - Custom world managers with their own chunk serialization

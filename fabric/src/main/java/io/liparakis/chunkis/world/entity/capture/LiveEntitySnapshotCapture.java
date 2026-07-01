@@ -206,7 +206,7 @@ public final class LiveEntitySnapshotCapture {
      * <ul>
      *   <li>The chunk fails the safety check (e.g. chunk is in a transitional
      *       state where entity data would be unreliable).</li>
-     *   <li>The existing delta has known entities but the live scan found none —
+     *   <li>The existing delta has known entities but the live scan found none -
      *       this is treated as a suspicious transient empty state that would
      *       otherwise overwrite valid persisted data.</li>
      * </ul>
@@ -230,7 +230,7 @@ public final class LiveEntitySnapshotCapture {
      * skipping any whose UUID is already live in the world.
      *
      * <p>A pending entity is considered "unresolved" if its UUID is not present in
-     * {@code liveEntityUuids} — meaning it has not yet materialized as a live entity.
+     * {@code liveEntityUuids} - meaning it has not yet materialized as a live entity.
      * These are retained so the replay queue can attempt to spawn them later.</p>
      *
      * @param existingDelta   source delta; does nothing when {@code null} or empty

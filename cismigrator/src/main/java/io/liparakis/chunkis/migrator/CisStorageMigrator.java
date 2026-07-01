@@ -173,7 +173,7 @@ public final class CisStorageMigrator<S, N> {
     }
 
     /**
-     * Iterates every chunk slot within one 32×32 region and delegates each to
+     * Iterates every chunk slot within one 32x32 region and delegates each to
      * {@link #migrateChunk}.
      *
      * @param rx     region X coordinate

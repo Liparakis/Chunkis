@@ -37,7 +37,7 @@ public abstract class AbstractCisDecoder<S, N> {
     protected static final int BITS_PER_NIBBLE = 4;
 
     /**
-     * Total number of blocks in a chunk section (16×16×16).
+     * Total number of blocks in a chunk section (16x16x16).
      */
     protected static final int SECTION_VOLUME = 4096;
 
@@ -48,7 +48,7 @@ public abstract class AbstractCisDecoder<S, N> {
 
     /**
      * Maximum entity count accepted per chunk. Matches {@link #MAX_REASONABLE_PALETTE_SIZE}
-     * by convention — both guard against corrupt or malicious payloads.
+     * by convention - both guard against corrupt or malicious payloads.
      */
     private static final int MAX_ENTITY_COUNT = 10_000;
 
@@ -203,7 +203,7 @@ public abstract class AbstractCisDecoder<S, N> {
         this.decodedVersion = readIntBE(data, 4);
         if (decodedVersion < 7 || decodedVersion > CisConstants.VERSION) {
             throw new IOException(String.format(
-                    "Unsupported CIS version: %d (supported range: 7–%d)",
+                    "Unsupported CIS version: %d (supported range: 7-%d)",
                     decodedVersion, CisConstants.VERSION
             ));
         }
@@ -296,7 +296,7 @@ public abstract class AbstractCisDecoder<S, N> {
 
     /**
      * Decodes a uniform section: one state fills all 4096 positions.
-     * Air is skipped — absent positions already decode as air.
+     * Air is skipped - absent positions already decode as air.
      */
     private void decodeUniformSection(
             final BitReader reader,
@@ -352,7 +352,7 @@ public abstract class AbstractCisDecoder<S, N> {
             final int exceptionPaletteIndex = sanitizeGlobalIndex(globalIdx);
             final S exceptionState = getStateFromPalette(exceptionPaletteIndex);
 
-            // Skip air exceptions when the default is already air — the position
+            // Skip air exceptions when the default is already air - the position
             // was never filled, so no overwrite is needed.
             if (defaultIsAir && isAir(exceptionState)) {
                 continue;
@@ -372,7 +372,7 @@ public abstract class AbstractCisDecoder<S, N> {
 
 
     /**
-     * Decodes a dense section (full 16×16×16 bit-array with local palette).
+     * Decodes a dense section (full 16x16x16 bit-array with local palette).
      *
      * <p>CIS v7 used an 8-bit palette size field; v8+ use
      * {@link CisConstants#PALETTE_SIZE_BITS}.</p>
@@ -496,7 +496,7 @@ public abstract class AbstractCisDecoder<S, N> {
     /**
      * Reads the entity section from the stream, if present.
      *
-     * <p>Entity data is optional. An {@link EOFException} is silently ignored —
+     * <p>Entity data is optional. An {@link EOFException} is silently ignored -
      * older CIS files may not include this section. The count is also bounded by
      * {@link #MAX_ENTITY_COUNT} to guard against corrupt or malicious payloads.</p>
      */
@@ -533,7 +533,7 @@ public abstract class AbstractCisDecoder<S, N> {
                 delta.setChunkMetadata(readNbtPayload(dis), false);
             }
         } catch (EOFException e) {
-            Chunkis.LOGGER.warn("CIS v9 chunk metadata missing at offset {} — treating as absent", offset);
+            Chunkis.LOGGER.warn("CIS v9 chunk metadata missing at offset {} - treating as absent", offset);
         }
     }
 
@@ -552,7 +552,7 @@ public abstract class AbstractCisDecoder<S, N> {
      * Fills all 4096 positions of a section with the given palette id.
      *
      * <p>Delegates to {@link ChunkDelta#fillDecodedSection} which writes
-     * directly into the backing array in a tight y→z→x loop, avoiding the
+     * directly into the backing array in a tight y->z->x loop, avoiding the
      * 4096 individual {@link ChunkDelta#appendDecodedBlockFast} calls that
      * this method previously issued.</p>
      */

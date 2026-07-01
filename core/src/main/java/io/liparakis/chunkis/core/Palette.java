@@ -45,12 +45,12 @@ public class Palette<T> {
     private static final int INITIAL_CAPACITY = 32;
 
     /**
-     * Sequential list mapping IDs to entries (ID → Entry)
+     * Sequential list mapping IDs to entries (ID -> Entry)
      */
     private final List<T> idToEntry = new ArrayList<>(INITIAL_CAPACITY);
 
     /**
-     * Reverse lookup mapping entries to their assigned IDs (Entry → ID)
+     * Reverse lookup mapping entries to their assigned IDs (Entry -> ID)
      */
     private final Map<T, Integer> entryToId = new HashMap<>(INITIAL_CAPACITY);
 

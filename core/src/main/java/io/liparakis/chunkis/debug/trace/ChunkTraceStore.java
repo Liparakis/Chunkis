@@ -109,7 +109,7 @@ public final class ChunkTraceStore {
      *
      * <p>The ID has the form {@code "<prefix>-<n>"} where {@code n} is a
      * monotonically increasing integer. Used to correlate save lifecycle events
-     * (queue → flush-start → flush-end) across multiple trace records.</p>
+     * (queue -> flush-start -> flush-end) across multiple trace records.</p>
      *
      * @param prefix label prefix; must not be {@code null}
      * @return a unique operation ID string
@@ -254,7 +254,7 @@ public final class ChunkTraceStore {
      * Returns up to {@code count} of the most recently recorded events that
      * satisfy {@code predicate}, newest first.
      *
-     * @param count     maximum number of events to return; returns empty list if ≤ 0
+     * @param count     maximum number of events to return; returns empty list if <= 0
      * @param predicate filter applied to each candidate event
      * @return filtered event list, newest first
      */
@@ -307,7 +307,7 @@ public final class ChunkTraceStore {
      * from newest to oldest.
      *
      * <p>Returns {@code null} if the event has already been overwritten or
-     * {@code eventId} is invalid (≤ 0).</p>
+     * {@code eventId} is invalid (<= 0).</p>
      *
      * @param eventId the event ID to look up
      * @return the matching event, or {@code null}
@@ -465,8 +465,8 @@ public final class ChunkTraceStore {
      * Returns the event at ring-buffer offset {@code i} from the most recent
      * write position.
      *
-     * <p>{@code i = 0} → most recently written event;
-     * {@code i = size-1} → oldest retained event.</p>
+     * <p>{@code i = 0} -> most recently written event;
+     * {@code i = size-1} -> oldest retained event.</p>
      *
      * <p>Must be called with {@link #MONITOR} held.</p>
      *
@@ -576,7 +576,7 @@ public final class ChunkTraceStore {
         final List<ChunkTraceEvent> matches = new ArrayList<>(DEFAULT_SUSPECT_TIMELINE_CAPACITY);
 
         synchronized (MONITOR) {
-            // oldest-first traversal (i = size-1 → 0)
+            // oldest-first traversal (i = size-1 -> 0)
             for (int i = size - 1; i >= 0; i--) {
                 final ChunkTraceEvent candidate = ringAt(i);
                 if (candidate == null) {

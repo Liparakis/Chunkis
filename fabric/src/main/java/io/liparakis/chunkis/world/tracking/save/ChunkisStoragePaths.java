@@ -157,8 +157,8 @@ public final class ChunkisStoragePaths {
      * Mirrors Minecraft's save layout to determine the dimension base directory.
      *
      * <ul>
-     *   <li>{@code minecraft:overworld} → {@code <saveRoot>/} (no subdirectory)
-     *   <li>All other dimensions → {@code <saveRoot>/dimensions/<namespace>/<path>/}
+     *   <li>{@code minecraft:overworld} -> {@code <saveRoot>/} (no subdirectory)
+     *   <li>All other dimensions -> {@code <saveRoot>/dimensions/<namespace>/<path>/}
      * </ul>
      *
      * @param saveRoot the world save root

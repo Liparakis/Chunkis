@@ -10,7 +10,7 @@ import java.util.Arrays;
  * <p>Two insertion modes are supported:</p>
  * <ul>
  *   <li>{@link #add(long, long)} eagerly updates the position map on every
- *       insert — required by mutation paths that may upsert or look up
+ *       insert - required by mutation paths that may upsert or look up
  *       positions immediately.</li>
  *   <li>{@link #addAppendOnly(long)} skips the position-map insert entirely
  *       and marks the map dirty. The map is rebuilt lazily on the first call
@@ -52,7 +52,7 @@ final class BlockInstructionStorage {
     BlockInstructionStorage() {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;
-        // positionMap intentionally left null — created lazily on first lookup/add.
+        // positionMap intentionally left null - created lazily on first lookup/add.
     }
 
     void copyInto(final BlockInstructionStorage target) {
@@ -214,8 +214,8 @@ final class BlockInstructionStorage {
      *
      * <p>Each packed instruction is a {@code long} with the following layout:</p>
      * <pre>
-     *   bits 63–32  palette ID   (block state reference)
-     *   bits 31–0   position mask (packed x/y/z section coordinates)
+     *   bits 63-32  palette ID   (block state reference)
+     *   bits 31-0   position mask (packed x/y/z section coordinates)
      * </pre>
      *
      * <p>This method replaces only the upper 32 bits, leaving the lower

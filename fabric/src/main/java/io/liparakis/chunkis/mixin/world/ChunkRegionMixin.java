@@ -43,7 +43,7 @@ public class ChunkRegionMixin {
      *
      * <p>The fast path exits immediately when {@code entity} is {@code null},
      * when the owning chunk does not implement {@link ChunkisDeltaDuck}, or when
-     * no delta is attached — covering the common non-restored case with minimal
+     * no delta is attached - covering the common non-restored case with minimal
      * overhead.</p>
      *
      * @param entity the entity vanilla is attempting to spawn during generation

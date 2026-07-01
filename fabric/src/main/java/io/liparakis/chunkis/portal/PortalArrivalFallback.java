@@ -29,7 +29,7 @@ import net.minecraft.world.poi.PointOfInterestTypes;
  * only when the full frame footprint is validated as non-destructive, and the teleport target is
  * set to a validated walkable egress tile beside it.
  *
- * <p>Fallback order: safe portal frame → validated egress tile → safe standing position →
+ * <p>Fallback order: safe portal frame -> validated egress tile -> safe standing position ->
  * emergency surface arrival.</p>
  */
 public final class PortalArrivalFallback {
