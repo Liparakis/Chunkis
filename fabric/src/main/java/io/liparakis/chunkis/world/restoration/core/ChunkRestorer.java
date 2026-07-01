@@ -6,6 +6,7 @@ import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.ChunkTraceInvariants;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
@@ -336,7 +337,11 @@ public final class ChunkRestorer {
                 "restore completed: blocks=" + visitor.appliedBlocksCount()
                         + ", blockEntities=" + visitor.restoredBlockEntitiesCount()
                         + ", blockReplay=" + visitor.blockApplyFailureCounters()
-                        .describe(),
+                        .describe()
+                        + (ServerHotpathMetrics.ENABLED
+                        ? ", sectionCursor=" + visitor.sectionWriteCursorStats()
+                                               .describe()
+                        : ""),
                 world.getRegistryKey()
                         .getValue()
                         .toString(),
@@ -391,6 +396,9 @@ public final class ChunkRestorer {
                         null
                 );
             }
+        }
+        if (ServerHotpathMetrics.ENABLED && (ServerHotpathMetrics.restoreCount() & 0x7F) == 0) {
+            ServerHotpathMetrics.logRestoreSummary();
         }
     }
 

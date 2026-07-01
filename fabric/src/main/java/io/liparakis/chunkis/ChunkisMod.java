@@ -4,6 +4,7 @@ import io.liparakis.chunkis.command.ChunkDebugCommand;
 import io.liparakis.chunkis.command.DurabilityTestCommand;
 import io.liparakis.chunkis.command.StorageReportCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.migration.CisWorldMigrator;
 import io.liparakis.chunkis.migration.McaMigrator;
@@ -217,6 +218,9 @@ public final class ChunkisMod implements ModInitializer {
         registerPayloads();
         registerCommands();
         registerEvents();
+        if (ServerHotpathMetrics.ENABLED) {
+            Chunkis.LOGGER.info("Chunkis server hot-path metrics enabled.");
+        }
     }
 }
 

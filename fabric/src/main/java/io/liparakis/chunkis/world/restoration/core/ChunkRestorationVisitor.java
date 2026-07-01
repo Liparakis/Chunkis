@@ -2,6 +2,7 @@ package io.liparakis.chunkis.world.restoration.core;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
@@ -240,6 +241,16 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 touchedSections,
                 !clearedToAir
         );
+        if (ServerHotpathMetrics.ENABLED) {
+            final SectionWriteCursorStats cursorStats = sectionWriteCursor.snapshot();
+            ServerHotpathMetrics.recordRestoreCursor(
+                    cursorStats.writes(),
+                    cursorStats.rebinds(),
+                    cursorStats.paletteHits(),
+                    cursorStats.paletteMisses(),
+                    cursorStats.paletteInvalidations()
+            );
+        }
         if (runtimeDelta != null) {
             runtimeDelta.markSaved();
         }
@@ -294,6 +305,13 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      */
     ChunkRestorer.BlockApplyFailureCounters blockApplyFailureCounters() {
         return blockApplyFailureCounters;
+    }
+
+    /**
+     * Returns restore-time cursor counters for diagnostics.
+     */
+    SectionWriteCursorStats sectionWriteCursorStats() {
+        return sectionWriteCursor.snapshot();
     }
 
     /**

@@ -7,6 +7,7 @@ import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.storage.codec.network.CisNetworkEncoder;
@@ -127,7 +128,7 @@ public final class ChunkisNetworking {
                 delta.isDirty(),
                 null
         );
-        final PreparedPayload preparedPayload = preparePayload(chunkPos, worldId, delta, operationId);
+        final PreparedPayload preparedPayload = preparePayload(chunkPos, worldId, delta, operationId, 1);
         if (preparedPayload == null) {
             return;
         }
@@ -163,7 +164,7 @@ public final class ChunkisNetworking {
         }
 
         final String operationId = ChunkTraceStore.nextOperationId("sync");
-        final PreparedPayload preparedPayload = preparePayload(chunkPos, worldId, delta, operationId);
+        final PreparedPayload preparedPayload = preparePayload(chunkPos, worldId, delta, operationId, players.size());
         if (preparedPayload == null) {
             return;
         }
@@ -219,11 +220,13 @@ public final class ChunkisNetworking {
             final ChunkPos pos,
             final String worldId,
             final ChunkDelta<?, ?> delta,
-            final String operationId
+            final String operationId,
+            final int playerCount
     ) {
         try {
-            final byte[] rawData = ENCODER_POOL.get()
-                    .encode(delta);
+            final long encodeStartNanos = ServerHotpathMetrics.startTimer();
+            final byte[] rawData = ENCODER_POOL.get().encode(delta);
+            final long encodeNanos = ServerHotpathMetrics.ENABLED ? System.nanoTime() - encodeStartNanos : 0L;
 
             if (exceedsSizeLimit(rawData)) {
                 traceSyncFailure(
@@ -240,8 +243,23 @@ public final class ChunkisNetworking {
                 return null;
             }
 
+            final long wrapStartNanos = ServerHotpathMetrics.startTimer();
             final ChunkDeltaPayload payload = ChunkDeltaPayload.create(rawData, pos.x, pos.z);
-            return new PreparedPayload(rawData.length, payload);
+            final long wrapNanos = ServerHotpathMetrics.ENABLED ? System.nanoTime() - wrapStartNanos : 0L;
+            if (ServerHotpathMetrics.ENABLED) {
+                ServerHotpathMetrics.recordPreparedPayload(
+                        encodeNanos,
+                        wrapNanos,
+                        rawData.length,
+                        payload.data().length,
+                        playerCount
+                );
+                if ((ServerHotpathMetrics.payloadCount() & 0x7F) == 0) {
+                    // ponytail: piggyback a cheap periodic summary instead of another scheduler.
+                    ServerHotpathMetrics.logPayloadSummary();
+                }
+            }
+            return new PreparedPayload(rawData.length, payload, encodeNanos, wrapNanos, playerCount);
 
         } catch (final Exception e) {
             traceSyncFailure(
@@ -276,7 +294,7 @@ public final class ChunkisNetworking {
                 ChunkTraceReason.NONE,
                 SEND_SOURCE,
                 describePayloadOutcome(player.getName()
-                        .getString(), preparedPayload.rawBytes(), preparedPayload.payload()),
+                        .getString(), preparedPayload),
                 worldId,
                 DebugChunkKeys.of(pos),
                 null,
@@ -353,23 +371,34 @@ public final class ChunkisNetworking {
      */
     static String describePayloadOutcome(
             final String playerName,
-            final int rawBytes,
-            final ChunkDeltaPayload payload
+            final PreparedPayload preparedPayload
     ) {
         return "sent delta to player "
                 + playerName
                 + " rawBytes="
-                + rawBytes
+                + preparedPayload.rawBytes()
                 + " wireBytes="
-                + payload.data().length
+                + preparedPayload.payload().data().length
                 + " compressed="
-                + payload.compressed();
+                + preparedPayload.payload().compressed()
+                + " encodeMicros="
+                + ServerHotpathMetrics.nanosToMicros(preparedPayload.encodeNanos())
+                + " wrapMicros="
+                + ServerHotpathMetrics.nanosToMicros(preparedPayload.wrapNanos())
+                + " players="
+                + preparedPayload.playerCount();
     }
 
     /**
      * Immutable prepared send state shared across watcher fan-out.
      */
-    private record PreparedPayload(int rawBytes, ChunkDeltaPayload payload) {
+    private record PreparedPayload(
+            int rawBytes,
+            ChunkDeltaPayload payload,
+            long encodeNanos,
+            long wrapNanos,
+            int playerCount
+    ) {
 
     }
 }

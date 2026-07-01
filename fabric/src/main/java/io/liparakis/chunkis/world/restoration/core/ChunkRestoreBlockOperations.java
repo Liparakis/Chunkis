@@ -403,6 +403,26 @@ final class ChunkRestoreBlockOperations {
          * Per-section cache from block-state identity to resolved raw palette id.
          */
         private final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
+        /**
+         * Count of block writes executed by this cursor.
+         */
+        private long writes;
+        /**
+         * Count of times this cursor bound to a different section.
+         */
+        private long rebinds;
+        /**
+         * Count of palette-id cache hits for the currently bound section.
+         */
+        private long paletteHits;
+        /**
+         * Count of palette-id cache misses for the currently bound section.
+         */
+        private long paletteMisses;
+        /**
+         * Count of palette cache clears caused by palette/storage replacement.
+         */
+        private long paletteInvalidations;
 
         /**
          * Writes one restored block into the target section.
@@ -425,6 +445,7 @@ final class ChunkRestoreBlockOperations {
                 final int localZ,
                 final BlockState state
         ) {
+            writes++;
             if (targetSectionIndex != sectionIndex) {
                 bindSection(section, targetSectionIndex);
             }
@@ -435,14 +456,18 @@ final class ChunkRestoreBlockOperations {
 
             Integer paletteId = paletteIds.get(state);
             if (paletteId == null) {
+                paletteMisses++;
                 final Object before = dataRef;
                 final int resolvedId = palette.index(state, container);
                 refreshData();
                 if (dataRef != before) {
+                    paletteInvalidations++;
                     paletteIds.clear();
                 }
                 paletteIds.put(state, resolvedId);
                 paletteId = resolvedId;
+            } else {
+                paletteHits++;
             }
 
             storage.set(toSectionLocalIndex(localX, localY, localZ), paletteId);
@@ -455,12 +480,26 @@ final class ChunkRestoreBlockOperations {
          * @param targetSectionIndex section index within the chunk section array
          */
         private void bindSection(final ChunkSection section, final int targetSectionIndex) {
+            rebinds++;
             sectionIndex = targetSectionIndex;
             container = section.getBlockStateContainer();
             paletteIds.clear();
             if (PALETTED_CONTAINER_REFLECTION.available()) {
                 refreshData();
             }
+        }
+
+        /**
+         * Returns a snapshot of accumulated cursor counters.
+         */
+        SectionWriteCursorStats snapshot() {
+            return new SectionWriteCursorStats(
+                    writes,
+                    rebinds,
+                    paletteHits,
+                    paletteMisses,
+                    paletteInvalidations
+            );
         }
 
         /**
