@@ -46,7 +46,8 @@ final class BlockInstructionStorage {
      * rebuilt via {@link #ensurePositionMap()} before any lookup.
      * Irrelevant when {@link #positionMap} is {@code null}.
      */
-    private boolean positionMapDirty;
+    boolean positionMapDirty;
+
 
     BlockInstructionStorage() {
         this.packedInstructions = new long[INITIAL_CAPACITY];

@@ -42,11 +42,6 @@ public abstract class AbstractCisDecoder<S, N> {
     protected static final int SECTION_VOLUME = 4096;
 
     /**
-     * Width/height/depth of a chunk section in blocks.
-     */
-    protected static final int SECTION_SIZE = 16;
-
-    /**
      * Maximum reasonable palette size to prevent memory exhaustion attacks.
      */
     protected static final int MAX_REASONABLE_PALETTE_SIZE = 10_000;
@@ -68,6 +63,12 @@ public abstract class AbstractCisDecoder<S, N> {
      * Reusable buffer for dense palette block indices.
      */
     protected final int[] denseIndicesBuffer;
+    /**
+     * Reusable buffer for globally-resolved palette ids produced by the
+     * local-to-global translation pass in {@link #readDenseBlocks}.
+     * Handed directly to {@link ChunkDelta#appendDecodedDenseSection}.
+     */
+    protected final int[] globalIndicesBuffer;
     /**
      * Adapter used to decode block entities, entities, and chunk metadata payloads.
      */
@@ -92,6 +93,7 @@ public abstract class AbstractCisDecoder<S, N> {
         this.sectionReader = new BitReader(new byte[0]);
         this.localPaletteBuffer = new int[SECTION_VOLUME];
         this.denseIndicesBuffer = new int[SECTION_VOLUME];
+        this.globalIndicesBuffer = new int[SECTION_VOLUME];
     }
 
     /**
@@ -378,11 +380,16 @@ public abstract class AbstractCisDecoder<S, N> {
     }
 
     /**
-     * Expands a dense section by translating each local palette index back to a block state.
+     * Expands a dense section by translating each local palette index back to a global
+     * palette id, then bulk-appending all non-air entries via
+     * {@link ChunkDelta#appendDecodedDenseSection}.
      *
-     * <p>Local index 0 means "no change" and is skipped. Indices 1..N map to
-     * {@code localPaletteBuffer[index - 1]}. Out-of-range indices are clamped to
-     * global index 0 (air) with a warning.</p>
+     * <p>Local index 0 means "no change" and maps to global id 0 (skipped by
+     * the bulk writer). Indices 1..N map to {@code localPaletteBuffer[index - 1]}.
+     * Out-of-range indices are clamped to global id 0 (air) with a warning.
+     * The translation pass produces a fully-resolved {@code globalIndicesBuffer}
+     * which is handed off to the tight inner loop in ChunkDelta, avoiding
+     * 4096 individual method-call chains.</p>
      */
     private void readDenseBlocks(
             BitReader reader,
@@ -391,35 +398,32 @@ public abstract class AbstractCisDecoder<S, N> {
             int localSize,
             int bitsPerBlock) {
         reader.readBatch(bitsPerBlock, denseIndicesBuffer);
-        int index = 0;
         final int baseY = sectionY << BITS_PER_NIBBLE;
+        final int paletteSize = globalPalette.size();
 
-        for (int y = 0; y < SECTION_SIZE; y++) {
-            for (int z = 0; z < SECTION_SIZE; z++) {
-                for (int x = 0; x < SECTION_SIZE; x++) {
-                    int localIndex = denseIndicesBuffer[index++];
-                    if (localIndex == 0) {
-                        continue; // index 0 = no change
-                    }
-
-                    int paletteIndex = localIndex - 1;
-                    if (paletteIndex >= localSize) {
-                        Chunkis.LOGGER.warn(
-                                "Dense section local palette index {} out of range (size {}); using air",
-                                paletteIndex, localSize
-                        );
-                        paletteIndex = 0;
-                    }
-
-                    int globalIndex = localPaletteBuffer[paletteIndex];
-                    if (globalIndex < 0 || globalIndex >= globalPalette.size()) {
-                        globalIndex = 0;
-                    }
-
-                    delta.appendDecodedBlockFast(x, baseY + y, z, globalIndex);
-                }
+        // Translate local indices to global palette ids in a single pass.
+        // globalIndicesBuffer[i] == 0 means "no-change / air" and is skipped
+        // by the bulk writer, preserving the exact same semantics as before.
+        for (int i = 0; i < SECTION_VOLUME; i++) {
+            int localIndex = denseIndicesBuffer[i];
+            if (localIndex == 0) {
+                globalIndicesBuffer[i] = 0;
+                continue;
             }
+            int paletteIndex = localIndex - 1;
+            if (paletteIndex >= localSize) {
+                Chunkis.LOGGER.warn(
+                        "Dense section local palette index {} out of range (size {}); using air",
+                        paletteIndex, localSize
+                );
+                globalIndicesBuffer[i] = 0;
+                continue;
+            }
+            int globalIndex = localPaletteBuffer[paletteIndex];
+            globalIndicesBuffer[i] = (globalIndex >= 0 && globalIndex < paletteSize) ? globalIndex : 0;
         }
+
+        delta.appendDecodedDenseSection(baseY, globalIndicesBuffer);
     }
 
     /**
@@ -526,19 +530,15 @@ public abstract class AbstractCisDecoder<S, N> {
     }
 
     /**
-     * Materializes a full 16×16×16 section into the delta using a single state.
-     * Callers are expected to guard against air before calling this method.
+     * Fills all 4096 positions of a section with the given palette id.
+     *
+     * <p>Delegates to {@link ChunkDelta#fillDecodedSection} which writes
+     * directly into the backing array in a tight y→z→x loop, avoiding the
+     * 4096 individual {@link ChunkDelta#appendDecodedBlockFast} calls that
+     * this method previously issued.</p>
      */
     private void fillSection(final ChunkDelta<S, N> delta, final int sectionY, final int paletteIndex) {
-        final int baseY = sectionY << BITS_PER_NIBBLE;
-
-        for (int y = 0; y < SECTION_SIZE; y++) {
-            for (int z = 0; z < SECTION_SIZE; z++) {
-                for (int x = 0; x < SECTION_SIZE; x++) {
-                    delta.appendDecodedBlockFast(x, baseY + y, z, paletteIndex);
-                }
-            }
-        }
+        delta.fillDecodedSection(sectionY, paletteIndex);
     }
 
     /**

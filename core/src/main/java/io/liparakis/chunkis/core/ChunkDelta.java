@@ -643,6 +643,113 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
+     * Fills all 4096 positions of a section with a single palette id.
+     *
+     * <p>This is the bulk fast-path used by {@code fillSection} in the decoder.
+     * Rather than issuing 4096 individual {@link #appendDecodedBlockFast} calls,
+     * this method precomputes the constant upper 32 bits (palette id), iterates
+     * the y/z/x positions in the canonical order, and writes directly into
+     * the packed instruction array. {@link #trackBlockSection} is called once
+     * for the whole section instead of once per block.</p>
+     *
+     * <p>Packed position layout (matches {@link BlockInstruction#packPos}):</p>
+     * <pre>
+     *   bits 31–12  Y coordinate (20-bit, sign-extended)
+     *   bits 11–8   X coordinate (4-bit)
+     *   bits  7–4   Z coordinate (4-bit)
+     *   bits  3–0   Reserved (0)
+     * </pre>
+     *
+     * <p><strong>Order invariant:</strong> blocks are written in y→z→x order,
+     * matching the index formula used by the default-sparse exception path:
+     * {@code startOffset + (y << 8) + (z << 4) + x}.</p>
+     *
+     * @param sectionY  section Y coordinate (block Y >> 4)
+     * @param paletteId palette id to fill with
+     */
+    public void fillDecodedSection(final int sectionY, final int paletteId) {
+        final int baseY = sectionY << 4;
+        // Pre-size storage for 4096 additional instructions.
+        instructions.ensureBlockCapacity(4096);
+
+        // Precompute the constant upper half of the packed instruction.
+        final long paletteHigh = (long) paletteId << Integer.SIZE;
+
+        // Write directly into the backing array, bypassing per-block method calls.
+        // The inner loop is intentionally tight: no capacity check per iteration
+        // (guaranteed by ensureBlockCapacity above), no dirty flag update per
+        // iteration (set once at end), no trackBlockSection per block (done once).
+        final long[] arr = instructions.packedInstructions;
+        int count = instructions.instructionCount;
+
+        for (int y = 0; y < 16; y++) {
+            // Precompute the y-contribution to the position key once per y-slice.
+            final long yBits = (long) ((baseY + y) & 0xFFFFF) << 12;
+            for (int z = 0; z < 16; z++) {
+                final long yzBits = yBits | ((long) z << 4);
+                for (int x = 0; x < 16; x++) {
+                    arr[count++] = paletteHigh | yzBits | ((long) x << 8);
+                }
+            }
+        }
+
+        instructions.instructionCount = count;
+        instructions.positionMapDirty = true;
+
+        // Track the section once: use any position in the section (y=baseY, x=0, z=0).
+        blockSectionMask |= sectionBit(baseY);
+    }
+
+    /**
+     * Appends all non-zero entries from a dense section's already-translated
+     * global palette index array directly into the instruction store.
+     *
+     * <p>This is the inner-loop fast-path used by {@code readDenseBlocks}.
+     * Instead of calling {@link #appendDecodedBlockFast} per block (which
+     * traverses a method-call chain per entry), this method writes directly
+     * into the backing array in a single tight loop. {@link #trackBlockSection}
+     * is called once for the whole section.</p>
+     *
+     * <p>The {@code globalIndices} array must be indexed in y→z→x order
+     * (same as the dense section storage format), length exactly 4096.</p>
+     *
+     * @param baseY         absolute block Y of this section's bottom (sectionY << 4)
+     * @param globalIndices 4096-element array of global palette ids; entry is
+     *                      {@code 0} (air/no-change) to skip, or the palette id to write
+     */
+    public void appendDecodedDenseSection(final int baseY, final int[] globalIndices) {
+        // Upper bound: at most 4096 new instructions. Pre-size to avoid any
+        // mid-loop capacity checks in addAppendOnly.
+        instructions.ensureBlockCapacity(4096);
+
+        final long[] arr = instructions.packedInstructions;
+        int count = instructions.instructionCount;
+        int written = 0;
+        int flatIdx = 0;
+
+        for (int y = 0; y < 16; y++) {
+            final long yBits = (long) ((baseY + y) & 0xFFFFF) << 12;
+            for (int z = 0; z < 16; z++) {
+                final long yzBits = yBits | ((long) z << 4);
+                for (int x = 0; x < 16; x++) {
+                    final int globalIndex = globalIndices[flatIdx++];
+                    if (globalIndex == 0) {
+                        continue;
+                    }
+                    arr[count++] = ((long) globalIndex << Integer.SIZE) | yzBits | ((long) x << 8);
+                    written++;
+                }
+            }
+        }
+
+        instructions.instructionCount = count;
+        if (written > 0) {
+            instructions.positionMapDirty = true;
+            blockSectionMask |= sectionBit(baseY);
+        }
+    }
+
+    /**
      * Updates only the palette/state of an already pre-filled decoded block instruction.
      *
      * <p>This is intended for default-sparse section decoding where the section baseline
@@ -661,6 +768,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         assert instructions.hasIndex(index) : "Index " + index + " out of bounds";
         instructions.updatePalette(index, paletteId);
     }
+
 
     /**
      * Appends a block change for bulk replay/capture paths.
