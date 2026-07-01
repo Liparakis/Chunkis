@@ -17,6 +17,11 @@ import java.util.Arrays;
  *       to {@link #ensurePositionMap()}. Decode paths where positions are
  *       guaranteed unique should prefer this method.</li>
  * </ul>
+ *
+ * <p>The position map itself is lazily initialised: it is {@code null} until
+ * the first call to {@link #add(long, long)} or {@link #ensurePositionMap()}.
+ * Decode paths that exclusively use {@link #addAppendOnly(long)} and never
+ * perform position lookups therefore never pay the map allocation cost.</p>
  */
 final class BlockInstructionStorage {
 
@@ -27,32 +32,45 @@ final class BlockInstructionStorage {
      */
     private static final long POSITION_MASK = 0xFFFF_FFFFL;
 
-    final Long2IntOpenHashMap positionMap;
+    /**
+     * Position map, lazily created on the first call to {@link #add(long, long)}
+     * or {@link #ensurePositionMap()}. {@code null} on decode-only instances that
+     * have only ever received {@link #addAppendOnly(long)} calls.
+     */
+    Long2IntOpenHashMap positionMap;
     long[] packedInstructions;
     int instructionCount;
 
     /**
      * When {@code true} the position map is out of date and must be
      * rebuilt via {@link #ensurePositionMap()} before any lookup.
+     * Irrelevant when {@link #positionMap} is {@code null}.
      */
     private boolean positionMapDirty;
 
     BlockInstructionStorage() {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;
-        this.positionMap = new Long2IntOpenHashMap(INITIAL_CAPACITY);
-        this.positionMap.defaultReturnValue(-1);
+        // positionMap intentionally left null — created lazily on first lookup/add.
     }
 
     void copyInto(final BlockInstructionStorage target) {
         target.packedInstructions = Arrays.copyOf(this.packedInstructions, this.packedInstructions.length);
         target.instructionCount = this.instructionCount;
-        // Propagate dirty state: if source is dirty, target inherits dirty
-        // status instead of eagerly rebuilding the map.
-        if (this.positionMapDirty) {
+        // Propagate dirty state: if source is dirty or has no map, target inherits
+        // dirty status instead of eagerly rebuilding the map.
+        if (this.positionMapDirty || this.positionMap == null) {
             target.positionMapDirty = true;
+            if (target.positionMap != null) {
+                target.positionMap.clear();
+            }
         } else {
-            target.positionMap.clear();
+            if (target.positionMap == null) {
+                target.positionMap = new Long2IntOpenHashMap(this.positionMap.size());
+                target.positionMap.defaultReturnValue(-1);
+            } else {
+                target.positionMap.clear();
+            }
             target.positionMap.putAll(this.positionMap);
             target.positionMapDirty = false;
         }
@@ -61,7 +79,9 @@ final class BlockInstructionStorage {
     void clear() {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;
-        this.positionMap.clear();
+        if (this.positionMap != null) {
+            this.positionMap.clear();
+        }
         this.positionMapDirty = false;
     }
 
@@ -72,6 +92,17 @@ final class BlockInstructionStorage {
         packedInstructions = Arrays.copyOf(packedInstructions, packedInstructions.length << 1);
     }
 
+    /**
+     * Pre-sizes the instruction array for bulk decode paths.
+     *
+     * <p>The position map is intentionally <em>not</em> pre-sized here.
+     * Decode paths use {@link #addAppendOnly(long)} and never consult the map,
+     * so growing it upfront would waste ~0.5ms per chunk on a table that is
+     * never needed. The map is sized correctly inside {@link #ensurePositionMap()}
+     * the first time a lookup is actually required.</p>
+     *
+     * @param additionalBlocks number of additional block instructions expected
+     */
     void ensureBlockCapacity(final int additionalBlocks) {
         if (additionalBlocks <= 0) {
             return;
@@ -84,13 +115,13 @@ final class BlockInstructionStorage {
             }
             packedInstructions = Arrays.copyOf(packedInstructions, newCapacity);
         }
-        // Always pre-size the position map regardless of dirty state.
-        // When dirty, ensurePositionMap() will do a bulk rebuild; without a
-        // capacity hint here, that rebuild triggers a rehash mid-fill on large
-        // decode batches (e.g. sectionCount * 4096 instructions).
-        positionMap.ensureCapacity(requiredCapacity);
+        // Only pre-size the map if it already exists and is being actively maintained
+        // (not dirty). When dirty or null, ensurePositionMap() will size it correctly
+        // at rebuild time.
+        if (positionMap != null && !positionMapDirty) {
+            positionMap.ensureCapacity(requiredCapacity);
+        }
     }
-
 
     /**
      * Inserts a packed instruction and eagerly updates the position map.
@@ -104,6 +135,19 @@ final class BlockInstructionStorage {
     void add(final long instruction, final long posKey) {
         ensureCapacity();
         packedInstructions[instructionCount] = instruction;
+        if (positionMap == null) {
+            positionMap = new Long2IntOpenHashMap(INITIAL_CAPACITY);
+            positionMap.defaultReturnValue(-1);
+            // Map was null: any prior addAppendOnly entries are not in the map yet.
+            // Rebuild from scratch so this new keyed insert is consistent.
+            if (positionMapDirty) {
+                positionMap.ensureCapacity(instructionCount + 1);
+                for (int i = 0; i < instructionCount; i++) {
+                    positionMap.put(packedInstructions[i] & POSITION_MASK, i);
+                }
+                positionMapDirty = false;
+            }
+        }
         positionMap.put(posKey, instructionCount);
         instructionCount++;
     }
@@ -127,17 +171,23 @@ final class BlockInstructionStorage {
 
     /**
      * Ensures the position map is up to date by rebuilding it from the
-     * packed instruction array if it has been marked dirty.
+     * packed instruction array if it has been marked dirty or was never created.
      *
      * <p>Must be called before any operation that reads from
      * {@link #positionMap} (e.g. upsert lookups, contains checks).</p>
      */
     void ensurePositionMap() {
-        if (!positionMapDirty) {
+        if (positionMap != null && !positionMapDirty) {
             return;
         }
-        positionMap.clear();
-        positionMap.ensureCapacity(instructionCount);
+        if (positionMap == null) {
+            // First-time creation: size the map precisely to avoid any rehash.
+            positionMap = new Long2IntOpenHashMap(instructionCount);
+            positionMap.defaultReturnValue(-1);
+        } else {
+            positionMap.clear();
+            positionMap.ensureCapacity(instructionCount);
+        }
         for (int i = 0; i < instructionCount; i++) {
             positionMap.put(packedInstructions[i] & POSITION_MASK, i);
         }
@@ -185,4 +235,3 @@ final class BlockInstructionStorage {
         packedInstructions[index] = ((long) paletteId << 32) | (packedInstructions[index] & POSITION_MASK);
     }
 }
-
