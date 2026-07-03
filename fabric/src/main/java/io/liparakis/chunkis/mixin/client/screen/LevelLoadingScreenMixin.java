@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Renders MCA-to-CIS migration progress on the singleplayer world loading screen.
  */
 @Mixin(LevelLoadingScreen.class)
-abstract class LevelLoadingScreenMixin extends Screen {
+public abstract class LevelLoadingScreenMixin extends Screen {
 
     /**
      * Protected constructor required by the Screen base class.
@@ -29,10 +29,10 @@ abstract class LevelLoadingScreenMixin extends Screen {
      * Draws the current migration status below the default level loading UI.
      *
      * @param context draw context for the current frame
-     * @param mouseX current mouse X position
-     * @param mouseY current mouse Y position
-     * @param delta frame interpolation delta
-     * @param ci mixin callback
+     * @param mouseX  current mouse X position
+     * @param mouseY  current mouse Y position
+     * @param delta   frame interpolation delta
+     * @param ci      mixin callback
      */
     @Inject(method = "render", at = @At("TAIL"))
     private void chunkis$renderMigrationProgress(

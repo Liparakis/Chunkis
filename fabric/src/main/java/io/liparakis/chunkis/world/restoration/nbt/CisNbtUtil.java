@@ -73,6 +73,21 @@ public final class CisNbtUtil {
     public static final String STRUCTURE_REFERENCES_KEY = "References";
 
     /**
+     * Vanilla root key for serialized heightmaps.
+     */
+    public static final String HEIGHTMAPS_KEY = "Heightmaps";
+
+    /**
+     * Vanilla root key recording whether light data was stored for the chunk.
+     */
+    public static final String IS_LIGHT_ON_KEY = "isLightOn";
+
+    /**
+     * Vanilla root key for serialized section payloads.
+     */
+    public static final String SECTIONS_KEY = "sections";
+
+    /**
      * Chunkis metadata envelope key inside persisted chunk metadata.
      */
     public static final String CHUNKIS_METADATA_KEY = "chunkis";
@@ -94,6 +109,18 @@ public final class CisNbtUtil {
      * one nether portal block and should participate in portal lookup indexing.
      */
     public static final String PORTAL_CHUNK_KEY = "portal_chunk";
+
+    /**
+     * Chunkis metadata flag identifying an offline-translated authoritative MCA
+     * snapshot.
+     */
+    public static final String MIGRATED_AUTHORITATIVE_CHUNK_KEY = "migrated_authoritative_chunk";
+
+    /**
+     * Chunkis metadata key holding preserved auxiliary vanilla chunk NBT that is
+     * not modeled explicitly by Chunkis.
+     */
+    public static final String PRESERVED_AUXILIARY_CHUNK_NBT_KEY = "preserved_auxiliary_chunk_nbt";
 
     /**
      * Chunkis metadata key for a vanilla-compatible serialized base chunk.
@@ -574,6 +601,124 @@ public final class CisNbtUtil {
     }
 
     /**
+     * Marks metadata as an authoritative offline-translated chunk snapshot.
+     *
+     * @param chunkMetadata metadata envelope to mutate
+     */
+    public static void markMigratedAuthoritativeChunk(final NbtCompound chunkMetadata) {
+        Objects.requireNonNull(chunkMetadata, "chunkMetadata");
+
+        final NbtCompound chunkisMetadata = getOrCreateChunkisMetadata(chunkMetadata);
+        chunkisMetadata.putBoolean(MIGRATED_AUTHORITATIVE_CHUNK_KEY, true);
+    }
+
+    /**
+     * Returns whether metadata is marked as an authoritative offline-translated
+     * chunk snapshot.
+     *
+     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @return {@code true} only when the explicit marker exists and is true
+     */
+    public static boolean isMigratedAuthoritativeChunk(final Object chunkMetadata) {
+        if (!(chunkMetadata instanceof NbtCompound metadata)) {
+            return false;
+        }
+
+        final NbtCompound chunkisMetadata = getCompoundOrNull(metadata, CHUNKIS_METADATA_KEY);
+        return chunkisMetadata != null
+                && chunkisMetadata.getBoolean(MIGRATED_AUTHORITATIVE_CHUNK_KEY).orElse(false);
+    }
+
+    /**
+     * Stores preserved auxiliary vanilla chunk metadata in the persisted Chunkis
+     * envelope.
+     *
+     * @param chunkMetadata metadata envelope to mutate
+     * @param auxiliaryNbt  opaque auxiliary payload, may be {@code null}
+     */
+    public static void putPreservedAuxiliaryChunkNbt(
+            final NbtCompound chunkMetadata,
+            final NbtCompound auxiliaryNbt
+    ) {
+        Objects.requireNonNull(chunkMetadata, "chunkMetadata");
+
+        if (auxiliaryNbt == null || auxiliaryNbt.isEmpty()) {
+            chunkMetadata.remove(PRESERVED_AUXILIARY_CHUNK_NBT_KEY);
+            return;
+        }
+
+        chunkMetadata.put(PRESERVED_AUXILIARY_CHUNK_NBT_KEY, auxiliaryNbt);
+    }
+
+    /**
+     * Copies migrated-authoritative markers and preserved auxiliary vanilla NBT
+     * from one metadata envelope into another.
+     *
+     * <p>This keeps offline-translated authoritative chunks authoritative across
+     * later save-time recapture paths that rebuild the metadata envelope from
+     * explicit runtime state.</p>
+     *
+     * @param sourceMetadata metadata to read from, may be {@code null}
+     * @param targetMetadata metadata to mutate
+     */
+    public static void preserveMigratedAuthoritativeMetadata(
+            final NbtCompound sourceMetadata,
+            final NbtCompound targetMetadata
+    ) {
+        Objects.requireNonNull(targetMetadata, "targetMetadata");
+
+        if (sourceMetadata == null) {
+            return;
+        }
+
+        if (isMigratedAuthoritativeChunk(sourceMetadata)) {
+            markMigratedAuthoritativeChunk(targetMetadata);
+        }
+
+        final NbtCompound preservedAuxiliary =
+                extractPreservedAuxiliaryChunkNbt(sourceMetadata);
+        if (preservedAuxiliary != null && !preservedAuxiliary.isEmpty()) {
+            putPreservedAuxiliaryChunkNbt(targetMetadata, preservedAuxiliary);
+        }
+    }
+
+    /**
+     * Returns a copied preserved auxiliary vanilla chunk payload.
+     *
+     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @return copied auxiliary payload, or {@code null}
+     */
+    public static NbtCompound extractPreservedAuxiliaryChunkNbt(final Object chunkMetadata) {
+        if (!(chunkMetadata instanceof NbtCompound metadata)) {
+            return null;
+        }
+
+        final NbtCompound auxiliary = getCompoundOrNull(metadata, PRESERVED_AUXILIARY_CHUNK_NBT_KEY);
+        return auxiliary != null ? auxiliary.copy() : null;
+    }
+
+    /**
+     * Extracts the opaque auxiliary vanilla chunk payload from a raw chunk NBT
+     * root by removing data that Chunkis stores explicitly elsewhere.
+     *
+     * @param sourceRoot raw vanilla chunk root
+     * @return copied auxiliary payload, or {@code null} if nothing remains
+     */
+    public static NbtCompound extractPreservedAuxiliaryChunkNbtFromChunkRoot(final NbtCompound sourceRoot) {
+        Objects.requireNonNull(sourceRoot, "sourceRoot");
+
+        final NbtCompound auxiliary = sourceRoot.copy();
+        auxiliary.remove(STRUCTURES_KEY);
+        auxiliary.remove(HEIGHTMAPS_KEY);
+        auxiliary.remove(IS_LIGHT_ON_KEY);
+        auxiliary.remove(SECTIONS_KEY);
+        auxiliary.remove("block_entities");
+        auxiliary.remove("entities");
+
+        return auxiliary.isEmpty() ? null : auxiliary;
+    }
+
+    /**
      * Returns whether restored loads should suppress initial repopulation work.
      *
      * <p>Explicit persisted metadata wins. Legacy chunks with a non-empty delta
@@ -717,6 +862,23 @@ public final class CisNbtUtil {
      */
     private static Boolean readPortalChunkFlag(final NbtCompound chunkMetadata) {
         return ChunkisMetadataFlags.readPortalChunkFlag(chunkMetadata);
+    }
+
+    /**
+     * Returns the nested Chunkis metadata compound, creating it when missing.
+     *
+     * @param chunkMetadata parent persisted metadata envelope
+     * @return existing or newly inserted nested Chunkis metadata compound
+     */
+    private static NbtCompound getOrCreateChunkisMetadata(final NbtCompound chunkMetadata) {
+        final NbtCompound existing = getCompoundOrNull(chunkMetadata, CHUNKIS_METADATA_KEY);
+        if (existing != null) {
+            return existing;
+        }
+
+        final NbtCompound created = new NbtCompound();
+        chunkMetadata.put(CHUNKIS_METADATA_KEY, created);
+        return created;
     }
 
     /**

@@ -1,7 +1,6 @@
 package io.liparakis.chunkis.migration;
 
 import java.util.concurrent.atomic.AtomicReference;
-import net.minecraft.server.world.ServerWorld;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -15,12 +14,12 @@ public final class MigrationProgressTracker {
         throw new AssertionError("Utility class");
     }
 
-    public static void begin(final ServerWorld world, final int totalRegions) {
-        STATUS.set("Scanning MCA regions for " + world.getRegistryKey().getValue() + " (" + totalRegions + " region(s))");
+    public static void begin(final String worldId, final int totalRegions) {
+        STATUS.set("Scanning MCA regions for " + worldId + " (" + totalRegions + " region(s))");
     }
 
     public static void region(
-            final ServerWorld world,
+            final String worldId,
             final String sourceRegionFileName,
             final int currentRegion,
             final int totalRegions
@@ -36,13 +35,13 @@ public final class MigrationProgressTracker {
                         + "/"
                         + totalRegions
                         + ") ["
-                        + world.getRegistryKey().getValue()
+                        + worldId
                         + "]"
         );
     }
 
-    public static void finish(final ServerWorld world) {
-        STATUS.set("Finished MCA -> CIS migration for " + world.getRegistryKey().getValue());
+    public static void finish(final String worldId) {
+        STATUS.set("Finished MCA -> CIS migration for " + worldId);
     }
 
     public static void clear() {

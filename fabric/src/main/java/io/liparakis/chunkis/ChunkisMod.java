@@ -6,8 +6,6 @@ import io.liparakis.chunkis.command.StorageReportCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
-import io.liparakis.chunkis.migration.CisWorldMigrator;
-import io.liparakis.chunkis.migration.McaMigrator;
 import io.liparakis.chunkis.migration.MigrationProgressTracker;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.portal.PortalChunkIndexManager;
@@ -24,7 +22,6 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -81,29 +78,15 @@ public final class ChunkisMod implements ModInitializer {
     /**
      * Registers server and world lifecycle hooks.
      *
-     * <p>World load runs migration. Server stopping flushes Chunkis runtime state while worlds and
-     * storage are still available. Server stopped clears static managers.</p>
+     * <p>Server stopping flushes Chunkis runtime state while worlds and storage
+     * are still available. Server stopped clears static managers.</p>
      */
     private static void registerEvents() {
-        ServerWorldEvents.LOAD.register((server, world) -> migrateWorld(world));
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk));
         ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
         ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> clearRuntimeState());
-    }
-
-    /**
-     * Runs world migration passes.
-     *
-     * <p>MCA migration runs before CIS world migration, matching the existing
-     * migration flow.</p>
-     *
-     * @param world loaded server world
-     */
-    private static void migrateWorld(final ServerWorld world) {
-        McaMigrator.migrateWorld(world);
-        CisWorldMigrator.migrateWorld(world);
     }
 
     /**

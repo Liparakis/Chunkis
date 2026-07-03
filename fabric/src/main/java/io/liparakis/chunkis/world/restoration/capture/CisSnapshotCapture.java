@@ -138,13 +138,15 @@ public final class CisSnapshotCapture {
             final NbtCompound existingMetadata,
             final boolean portalChunk
     ) {
-        return CisNbtUtil.createChunkMetadataTakingOwnership(
+        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 CisNbtUtil.extractPersistedStructureMetadata(existingMetadata),
                 true,
                 true,
                 null,
                 portalChunk
         );
+        CisNbtUtil.preserveMigratedAuthoritativeMetadata(existingMetadata, metadata);
+        return metadata;
     }
 
     private static void captureAuthoritativeBlockBaseline(

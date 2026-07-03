@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Hard-stops vanilla MCA writes.
+ * Blocks vanilla MCA I/O only when Chunkis explicitly owns the chunk lifecycle.
  */
 @Mixin(RegionBasedStorage.class)
 public class StoragePreventionMixin {
@@ -46,7 +46,8 @@ public class StoragePreventionMixin {
     }
 
     /**
-     * Injects at head of RegionBasedStorage#write to cancel vanilla saves and document the bypassed decision.
+     * Injects at head of RegionBasedStorage#write to cancel only Chunkis-owned
+     * vanilla saves.
      *
      * @param pos target chunk position
      * @param nbt target chunk NBT payload
@@ -58,17 +59,16 @@ public class StoragePreventionMixin {
         final PendingVanillaSaveDecision.Snapshot snapshot = PendingVanillaSaveDecision.take(pos);
         final ChunkTraceReason reason = snapshot != null ? snapshot.reason() :
                 ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
-        if (snapshot == null) {
-            ChunkOwnershipTraceHelper.traceDecision(
-                    null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
-                    null, null
-            );
-        } else {
-            ChunkOwnershipTraceHelper.traceDecision(
-                    null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
-                    snapshot.delta(), null
-            );
+        if (!chunkis$shouldBlockVanillaWrite(snapshot)) {
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.trace("Allowing vanilla MCA write for {}", pos);
+            }
+            return;
         }
+        ChunkOwnershipTraceHelper.traceDecision(
+                null, pos, "BYPASSED", reason, SOURCE + "#chunkis$blockWrite",
+                snapshot.delta(), null
+        );
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.VANILLA_SAVE_CANCELLED,
@@ -79,36 +79,31 @@ public class StoragePreventionMixin {
     }
 
     /**
-     * Records passive vanilla chunk read attempts without claiming ownership.
+     * Leaves vanilla chunk reads intact.
      *
      * @param pos target chunk position
      * @param cir callback info returnable wrapper
      */
-    @Inject(method = "getTagAt(Lnet/minecraft/util/math/ChunkPos;)Lnet/minecraft/nbt/NbtCompound;", at = @At("HEAD"),
-            cancellable = true)
-    private void chunkis$blockGetTagAt(final ChunkPos pos, final CallbackInfoReturnable<NbtCompound> cir) {
-        ChunkOwnershipTraceHelper.traceDecision(
-                null, pos, "BYPASSED", ChunkTraceReason.PASSIVE_VANILLA_LOAD,
-                SOURCE + "#chunkis$blockGetTagAt", null, null
-        );
-        cir.setReturnValue(null);
+    @Inject(method = "getTagAt(Lnet/minecraft/util/math/ChunkPos;)Lnet/minecraft/nbt/NbtCompound;", at = @At("HEAD"))
+    private void chunkis$traceGetTagAt(final ChunkPos pos, final CallbackInfoReturnable<NbtCompound> cir) {
+        if (LOGGER.isTraceEnabled()) {
+            LOGGER.trace("Allowing vanilla MCA read for {}", pos);
+        }
     }
 
     /**
-     * Records passive vanilla chunk scans without claiming ownership.
+     * Leaves vanilla chunk scans intact.
      *
      * @param chunkPos target chunk position
      * @param scanner  NBT scanner instance
      * @param ci       callback info helper
      */
     @Inject(method = "scanChunk(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/scanner/NbtScanner;)V", at =
-    @At("HEAD"), cancellable = true)
-    private void chunkis$blockScanChunk(final ChunkPos chunkPos, final NbtScanner scanner, final CallbackInfo ci) {
-        ChunkOwnershipTraceHelper.traceDecision(
-                null, chunkPos, "BYPASSED", ChunkTraceReason.PASSIVE_VANILLA_LOAD,
-                SOURCE + "#chunkis$blockScanChunk", null, null
-        );
-        ci.cancel();
+    @At("HEAD"))
+    private void chunkis$traceScanChunk(final ChunkPos chunkPos, final NbtScanner scanner, final CallbackInfo ci) {
+        if (LOGGER.isTraceEnabled()) {
+            LOGGER.trace("Allowing vanilla MCA scan for {}", chunkPos);
+        }
     }
 
     /**
@@ -121,5 +116,17 @@ public class StoragePreventionMixin {
         if (LOGGER.isTraceEnabled()) {
             LOGGER.trace("Allowing vanilla storage sync");
         }
+    }
+
+    /**
+     * Returns whether the current vanilla write should be cancelled in favor of
+     * Chunkis persistence.
+     *
+     * @param snapshot pending save decision carried from the higher-level save path
+     * @return {@code true} only when Chunkis explicitly owns the write
+     */
+    @Unique
+    private static boolean chunkis$shouldBlockVanillaWrite(final PendingVanillaSaveDecision.Snapshot snapshot) {
+        return snapshot != null && snapshot.reason() != ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
     }
 }

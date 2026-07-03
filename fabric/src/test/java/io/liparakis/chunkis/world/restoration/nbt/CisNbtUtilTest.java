@@ -188,6 +188,60 @@ class CisNbtUtilTest {
         assertFalse(result.root().contains("sentinel_block_from_stale_base"));
         assertTrue(result.root().contains(CisNbtUtil.CHUNKIS_DATA_KEY));
     }
+
+    @Test
+    void extractPreservedAuxiliaryChunkNbtRemovesRuntimeOwnedFields() {
+        final NbtCompound source = new NbtCompound();
+        source.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
+        source.put(CisNbtUtil.STRUCTURES_KEY, new NbtCompound());
+        source.put(CisNbtUtil.HEIGHTMAPS_KEY, new NbtCompound());
+        source.putBoolean(CisNbtUtil.IS_LIGHT_ON_KEY, true);
+        source.put("sections", new NbtList());
+        source.put("entities", new NbtList());
+        source.put("block_entities", new NbtList());
+        source.putString("PostProcessing", "keep-me");
+
+        final NbtCompound preserved = CisNbtUtil.extractPreservedAuxiliaryChunkNbtFromChunkRoot(source);
+
+        assertNotNull(preserved);
+        assertEquals("minecraft:full", preserved.getString(CisNbtUtil.STATUS_KEY).orElseThrow());
+        assertEquals("keep-me", preserved.getString("PostProcessing").orElseThrow());
+        assertFalse(preserved.contains(CisNbtUtil.STRUCTURES_KEY));
+        assertFalse(preserved.contains(CisNbtUtil.HEIGHTMAPS_KEY));
+        assertFalse(preserved.contains(CisNbtUtil.IS_LIGHT_ON_KEY));
+        assertFalse(preserved.contains("sections"));
+        assertFalse(preserved.contains("entities"));
+        assertFalse(preserved.contains("block_entities"));
+    }
+
+    @Test
+    void buildLoadChunkNbtMergesPreservedAuxiliaryMetadataForMigratedChunks() {
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(0, 64, 0, "stone", false);
+
+        final NbtCompound auxiliary = new NbtCompound();
+        auxiliary.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
+        auxiliary.putString("PostProcessing", "kept");
+
+        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+                null,
+                true,
+                true,
+                null,
+                false
+        );
+        CisNbtUtil.putPreservedAuxiliaryChunkNbt(metadata, auxiliary);
+        CisNbtUtil.markMigratedAuthoritativeChunk(metadata);
+        delta.setChunkMetadata(metadata, false);
+
+        final CisNbtUtil.LoadChunkNbtResult result =
+                CisNbtUtil.buildLoadChunkNbt(8, 9, 3953, delta);
+
+        assertEquals("minecraft:full", result.root().getString(CisNbtUtil.STATUS_KEY).orElseThrow());
+        assertEquals("kept", result.root().getString("PostProcessing").orElseThrow());
+        assertEquals(8, result.root().getInt(CisNbtUtil.X_POS_KEY).orElseThrow());
+        assertEquals(9, result.root().getInt(CisNbtUtil.Z_POS_KEY).orElseThrow());
+    }
 }
 
 

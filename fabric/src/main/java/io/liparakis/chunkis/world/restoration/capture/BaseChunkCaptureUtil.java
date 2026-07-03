@@ -147,6 +147,7 @@ public final class BaseChunkCaptureUtil {
                 CisNbtUtil.extractPersistedStructureMetadata(delta.getChunkMetadata()), true, false,
                 SerializedChunk.fromChunk(world, chunk)
                         .serialize(), portalChunk);
+        CisNbtUtil.preserveMigratedAuthoritativeMetadata(delta.getChunkMetadata(), metadata);
 
         delta.setChunkMetadata(metadata);
         traceLifecycle(world, chunk, delta, ChunkTraceEventType.BASE_METADATA_ATTACHED,

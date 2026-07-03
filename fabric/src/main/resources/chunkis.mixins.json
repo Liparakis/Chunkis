@@ -21,6 +21,7 @@
         "world.server.ServerWorldMixin"
     ],
     "client": [
+        "client.storage.MinecraftClientMixin",
         "client.screen.LevelLoadingScreenMixin"
     ],
     "injectors": {

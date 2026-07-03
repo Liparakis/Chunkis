@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import net.minecraft.nbt.NbtCompound;
@@ -44,6 +45,30 @@ class CisSnapshotCaptureTest {
         assertNull(CisNbtUtil.extractPersistedBaseChunkNbt(metadata));
         assertEquals(structures, CisNbtUtil.extractPersistedStructureMetadata(metadata));
         assertFalse(CisNbtUtil.hasPersistedPortalChunk(metadata));
+    }
+
+    @Test
+    void authoritativeSnapshotMetadataPreservesMigratedAuxiliaryMetadata() {
+        final NbtCompound existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+                null,
+                true,
+                false,
+                null,
+                true
+        );
+        final NbtCompound auxiliary = new NbtCompound();
+        auxiliary.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
+        auxiliary.putString("PostProcessing", "kept");
+        CisNbtUtil.putPreservedAuxiliaryChunkNbt(existingMetadata, auxiliary);
+        CisNbtUtil.markMigratedAuthoritativeChunk(existingMetadata);
+
+        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false);
+
+        assertTrue(CisNbtUtil.isMigratedAuthoritativeChunk(metadata));
+        final NbtCompound preservedAuxiliary = CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
+        assertNotNull(preservedAuxiliary);
+        assertEquals("minecraft:full", preservedAuxiliary.getString(CisNbtUtil.STATUS_KEY).orElseThrow());
+        assertEquals("kept", preservedAuxiliary.getString("PostProcessing").orElseThrow());
     }
 
     @Test

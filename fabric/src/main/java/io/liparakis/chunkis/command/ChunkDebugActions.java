@@ -11,12 +11,16 @@ import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceJsonl;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
+import io.liparakis.chunkis.migration.offline.OfflineMcaCisTranslator;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
+import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,16 +28,27 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.nbt.NbtHelper;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtSizeTracker;
+import net.minecraft.registry.Registries;
 import net.minecraft.state.property.Property;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import net.minecraft.util.WorldSavePath;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.chunk.PalettesFactory;
 import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.storage.RegionFile;
+import net.minecraft.world.storage.StorageKey;
 
 /**
  * Execution actions backing the Chunkis debug and trace commands.
@@ -411,6 +426,119 @@ public final class ChunkDebugActions {
     }
 
     /**
+     * Compares the caller's current chunk between raw MCA source data and the
+     * persisted CIS snapshot.
+     *
+     * @param source command execution source
+     * @return {@code 1} after emitting diagnostic output
+     */
+    public static int inspectCurrentChunkAgainstMca(final ServerCommandSource source) {
+        final ChunkPos center = new ChunkPos(BlockPos.ofFloored(source.getPosition()));
+        return inspectChunkAgainstMca(source, center.x, center.z);
+    }
+
+    /**
+     * Compares one chunk between raw MCA source data and the persisted CIS
+     * snapshot.
+     *
+     * @param source command execution source
+     * @param chunkX chunk X coordinate
+     * @param chunkZ chunk Z coordinate
+     * @return {@code 1} after emitting diagnostic output
+     */
+    public static int inspectChunkAgainstMca(
+            final ServerCommandSource source,
+            final int chunkX,
+            final int chunkZ
+    ) {
+        final var world = source.getWorld();
+        final ChunkPos pos = new ChunkPos(chunkX, chunkZ);
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+                FabricCisStorageHelper.getStorage(world);
+
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> cisDelta;
+        try {
+            cisDelta = storage.contains(FabricCisStorageHelper.toStoragePos(pos))
+                    ? storage.loadWithoutClearing(FabricCisStorageHelper.toStoragePos(pos))
+                    : null;
+        } catch (final IOException e) {
+            sendFeedback(source,
+                    "[Chunkis] Compare failed to load CIS chunk " + chunkX + "," + chunkZ + ": " + e.getMessage(),
+                    false);
+            return 0;
+        }
+
+        final NbtCompound mcaRoot;
+        try {
+            mcaRoot = loadMcaChunkNbt(source, pos);
+        } catch (final IOException e) {
+            sendFeedback(source,
+                    "[Chunkis] Compare failed to read MCA chunk " + chunkX + "," + chunkZ + ": " + e.getMessage(),
+                    false);
+            return 0;
+        }
+
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> mcaDelta =
+                mcaRoot == null
+                        ? null
+                        : OfflineMcaCisTranslator.buildChunkDelta(
+                                world,
+                                PalettesFactory.fromRegistryManager(world.getRegistryManager()),
+                                mcaRoot,
+                                pos
+                        );
+
+        sendFeedback(
+                source,
+                "[Chunkis] Compare chunk=" + chunkX + "," + chunkZ
+                        + " mcaPresent=" + (mcaRoot != null)
+                        + " cisPresent=" + (cisDelta != null),
+                false
+        );
+        sendFeedback(source, "[Chunkis] MCA  " + describeDetailedDelta(mcaDelta), false);
+        sendFeedback(source, "[Chunkis] CIS  " + describeDetailedDelta(cisDelta), false);
+
+        if (mcaDelta == null || cisDelta == null) {
+            return 1;
+        }
+
+        final ComparisonSummary summary = compareDeltas(mcaDelta, cisDelta);
+        sendFeedback(
+                source,
+                "[Chunkis] Diff realBlocks=" + summary.realBlockMismatchCount()
+                        + ", explicitAirOnly=" + summary.explicitAirOnlyMismatchCount()
+                        + ", totalBlocks=" + summary.totalBlockMismatchCount()
+                        + ", blockEntities=" + summary.blockEntityMismatchCount()
+                        + ", entitiesMatch=" + summary.entitiesMatch()
+                        + ", metadataMatch=" + summary.metadataMatch(),
+                false
+        );
+        if (!summary.realBlockSamples()
+                .isEmpty()) {
+            sendFeedback(source,
+                    "[Chunkis] Real block samples " + String.join(" | ", summary.realBlockSamples()),
+                    false);
+        }
+        if (!summary.explicitAirOnlySamples()
+                .isEmpty()) {
+            sendFeedback(source,
+                    "[Chunkis] Explicit air samples " + String.join(" | ", summary.explicitAirOnlySamples()),
+                    false);
+        }
+        if (!summary.blockEntitySamples()
+                .isEmpty()) {
+            sendFeedback(source,
+                    "[Chunkis] BlockEntity samples " + String.join(" | ", summary.blockEntitySamples()),
+                    false);
+        }
+        if (!summary.entitySamples()
+                .isEmpty()) {
+            sendFeedback(source, "[Chunkis] Entity samples " + String.join(" | ", summary.entitySamples()), false);
+        }
+        return 1;
+    }
+
+    /**
      * Exports latest trace events to a JSONL log file.
      *
      * @param source command execution source
@@ -589,7 +717,8 @@ public final class ChunkDebugActions {
             final net.minecraft.server.world.ServerWorld world,
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final ChunkPos pos) {
-        final WorldChunk liveChunk = world.getChunkManager().getWorldChunk(pos.x, pos.z, false);
+        final WorldChunk liveChunk = world.getChunkManager()
+                .getWorldChunk(pos.x, pos.z, false);
         final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> liveDelta =
                 liveChunk instanceof io.liparakis.chunkis.api.ChunkisDeltaDuck duck
                         && duck.chunkis$getDelta() instanceof io.liparakis.chunkis.core.ChunkDelta<?, ?> delta
@@ -642,5 +771,404 @@ public final class ChunkDebugActions {
                 + ", useBase=" + CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata)
                 + ", suppress=" + delta.shouldSuppressInitialRepopulation()
                 + ", ver=" + delta.getSourceVersion();
+    }
+
+    /**
+     * Summarizes one delta with the fields most relevant to MCA-vs-CIS
+     * migration diagnostics.
+     *
+     * @param delta delta to summarize
+     * @return one-line summary string
+     */
+    private static String describeDetailedDelta(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta) {
+        if (delta == null) {
+            return "<none>";
+        }
+
+        final NbtCompound metadata = delta.getChunkMetadata() instanceof NbtCompound compound ? compound : null;
+        final NbtCompound auxiliary = metadata == null ? null : CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
+        return describeDelta(delta)
+                + ", blockEntities=" + delta.getBlockEntities()
+                .size()
+                + ", pendingEntities=" + delta.countPendingEntities()
+                + ", migrated=" + CisNbtUtil.isMigratedAuthoritativeChunk(metadata)
+                + ", auxKeys=" + (auxiliary == null ? 0 : auxiliary.getKeys()
+                                                          .size());
+    }
+
+    /**
+     * Loads the raw MCA chunk NBT for one chunk, if a source chunk still exists.
+     *
+     * @param source command execution source
+     * @param pos    chunk coordinates
+     * @return raw chunk NBT, or {@code null} when the source MCA chunk is absent
+     * @throws IOException if reading fails
+     */
+    private static NbtCompound loadMcaChunkNbt(
+            final ServerCommandSource source,
+            final ChunkPos pos
+    ) throws IOException {
+        final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(
+                source.getServer()
+                        .getSavePath(WorldSavePath.ROOT),
+                source.getWorld()
+                        .getRegistryKey()
+        );
+        final String baseName = "r." + pos.getRegionX() + "." + pos.getRegionZ() + ".mca";
+        final Path livePath = regionDir.resolve(baseName);
+        final Path backupPath = regionDir.resolve(baseName + ".backup");
+        final Path mcaPath;
+        if (Files.exists(livePath)) {
+            mcaPath = livePath;
+        } else if (Files.exists(backupPath)) {
+            mcaPath = backupPath;
+        } else {
+            return null;
+        }
+
+        final StorageKey storageKey = new StorageKey("chunk",
+                source.getWorld()
+                        .getRegistryKey(),
+                "chunk");
+        try (RegionFile regionFile = new RegionFile(storageKey, mcaPath, mcaPath.getParent(), true);
+                DataInputStream input = regionFile.getChunkInputStream(pos)) {
+            if (input == null) {
+                return null;
+            }
+            return NbtIo.readCompound(input, NbtSizeTracker.ofUnlimitedBytes());
+        }
+    }
+
+    /**
+     * Compares two chunk deltas and extracts high-signal mismatch summaries.
+     *
+     * @param expected translated MCA snapshot
+     * @param actual   persisted CIS snapshot
+     * @return comparison summary
+     */
+    private static ComparisonSummary compareDeltas(
+            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> expected,
+            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> actual
+    ) {
+        final List<String> realBlockSamples = new ArrayList<>();
+        final List<String> explicitAirOnlySamples = new ArrayList<>();
+        final List<String> blockEntitySamples = new ArrayList<>();
+        final List<String> entitySamples = new ArrayList<>();
+
+        final var expectedBlocks = materializeBlocks(expected);
+        final var actualBlocks = materializeBlocks(actual);
+        final BlockMismatchSummary blockMismatchSummary =
+                countBlockMismatches(expectedBlocks, actualBlocks, realBlockSamples, explicitAirOnlySamples);
+
+        final int blockEntityMismatchCount = countBlockEntityMismatches(
+                expected.getBlockEntities(),
+                actual.getBlockEntities(),
+                blockEntitySamples
+        );
+
+        final boolean entitiesMatch = compareEntityPayloads(expected, actual, entitySamples);
+        final boolean metadataMatch = compareMetadata(expected.getChunkMetadata(), actual.getChunkMetadata());
+        return new ComparisonSummary(
+                blockMismatchSummary.realMismatchCount(),
+                blockMismatchSummary.explicitAirOnlyMismatchCount(),
+                blockMismatchSummary.totalMismatchCount(),
+                blockEntityMismatchCount,
+                entitiesMatch,
+                metadataMatch,
+                realBlockSamples,
+                explicitAirOnlySamples,
+                blockEntitySamples,
+                entitySamples
+        );
+    }
+
+    /**
+     * Materializes one delta's sparse blocks into a local-position map.
+     *
+     * @param delta source delta
+     * @return local position to state map
+     */
+    private static java.util.Map<Long, BlockState> materializeBlocks(
+            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta
+    ) {
+        final java.util.Map<Long, BlockState> blocks = new java.util.HashMap<>();
+        delta.forEachBlockInstruction((x, y, z, paletteId, state) -> blocks.put(BlockPos.asLong(x, y, z), state));
+        return blocks;
+    }
+
+    /**
+     * Counts block-state mismatches between two materialized block maps and
+     * records a few examples.
+     *
+     * @param expected expected block map
+     * @param actual   actual block map
+     * @param samples  sample output collector
+     * @return total mismatch count
+     */
+    private static BlockMismatchSummary countBlockMismatches(
+            final java.util.Map<Long, BlockState> expected,
+            final java.util.Map<Long, BlockState> actual,
+            final List<String> realSamples,
+            final List<String> explicitAirOnlySamples
+    ) {
+        final java.util.Set<Long> keys = new java.util.HashSet<>(expected.keySet());
+        keys.addAll(actual.keySet());
+
+        int totalMismatches = 0;
+        int realMismatches = 0;
+        int explicitAirOnlyMismatches = 0;
+        for (final long key : keys) {
+            final BlockState expectedState = expected.get(key);
+            final BlockState actualState = actual.get(key);
+            if (Objects.equals(expectedState, actualState)) {
+                continue;
+            }
+
+            totalMismatches++;
+            if (isExplicitAirOnlyMismatch(expectedState, actualState)) {
+                explicitAirOnlyMismatches++;
+                if (explicitAirOnlySamples.size() < 6) {
+                    explicitAirOnlySamples.add(
+                            formatLocalBlockPosition(key)
+                                    + "="
+                                    + describeState(expectedState)
+                                    + " -> "
+                                    + describeState(actualState)
+                    );
+                }
+                continue;
+            }
+
+            realMismatches++;
+            if (realSamples.size() < 6) {
+                realSamples.add(
+                        formatLocalBlockPosition(key)
+                                + "="
+                                + describeState(expectedState)
+                                + " -> "
+                                + describeState(actualState)
+                );
+            }
+        }
+        return new BlockMismatchSummary(realMismatches, explicitAirOnlyMismatches, totalMismatches);
+    }
+
+    /**
+     * Returns whether a block mismatch is only an explicit persisted air entry
+     * on one side versus no sparse entry on the other.
+     *
+     * @param expectedState expected block state, may be null
+     * @param actualState   actual block state, may be null
+     * @return {@code true} when the mismatch is explicit-air-only
+     */
+    private static boolean isExplicitAirOnlyMismatch(
+            final BlockState expectedState,
+            final BlockState actualState
+    ) {
+        return expectedState == null && isAirState(actualState)
+                || actualState == null && isAirState(expectedState);
+    }
+
+    /**
+     * Returns whether a block state is an air state.
+     *
+     * @param state block state, may be null
+     * @return {@code true} when the state is non-null and air
+     */
+    private static boolean isAirState(final BlockState state) {
+        return state != null && state.isAir();
+    }
+
+    /**
+     * Counts block-entity payload mismatches between two maps and records a few
+     * examples.
+     *
+     * @param expected expected block entities
+     * @param actual   actual block entities
+     * @param samples  sample output collector
+     * @return total mismatch count
+     */
+    private static int countBlockEntityMismatches(
+            final Long2ObjectMap<NbtCompound> expected,
+            final Long2ObjectMap<NbtCompound> actual,
+            final List<String> samples
+    ) {
+        final java.util.Set<Long> keys = new java.util.HashSet<>();
+        keys.addAll(expected.keySet());
+        keys.addAll(actual.keySet());
+
+        int mismatches = 0;
+        for (final long key : keys) {
+            final NbtCompound expectedNbt = expected.get(key);
+            final NbtCompound actualNbt = actual.get(key);
+            if (NbtHelper.matches(expectedNbt, actualNbt, true)) {
+                continue;
+            }
+
+            mismatches++;
+            if (samples.size() < 4) {
+                samples.add(
+                        formatLocalBlockPosition(key)
+                                + "="
+                                + describeBlockEntity(expectedNbt)
+                                + " -> "
+                                + describeBlockEntity(actualNbt)
+                );
+            }
+        }
+        return mismatches;
+    }
+
+    /**
+     * Compares entity payload collections as normalized sorted NBT strings.
+     *
+     * @param expected expected delta
+     * @param actual   actual delta
+     * @param samples  mismatch sample collector
+     * @return {@code true} when entity payloads match
+     */
+    private static boolean compareEntityPayloads(
+            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> expected,
+            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> actual,
+            final List<String> samples
+    ) {
+        final List<String> expectedEntities = materializeEntities(expected);
+        final List<String> actualEntities = materializeEntities(actual);
+        if (expectedEntities.equals(actualEntities)) {
+            return true;
+        }
+
+        samples.add("expectedCount=" + expectedEntities.size() + ", actualCount=" + actualEntities.size());
+        if (!expectedEntities.isEmpty()) {
+            samples.add("expectedFirst=" + expectedEntities.getFirst());
+        }
+        if (!actualEntities.isEmpty()) {
+            samples.add("actualFirst=" + actualEntities.getFirst());
+        }
+        return false;
+    }
+
+    /**
+     * Materializes and normalizes entity payloads for equality comparison.
+     *
+     * @param delta source delta
+     * @return sorted entity payload list
+     */
+    private static List<String> materializeEntities(
+            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta
+    ) {
+        final List<String> entities = new ArrayList<>();
+        delta.forEachEntity(entity -> entities.add(entity == null ? "<null>" : entity.toString()));
+        Collections.sort(entities);
+        return entities;
+    }
+
+    /**
+     * Compares the metadata fields Chunkis owns or preserves for migrated
+     * authoritative chunks.
+     *
+     * @param expected expected metadata
+     * @param actual   actual metadata
+     * @return {@code true} when the relevant metadata matches
+     */
+    private static boolean compareMetadata(final NbtCompound expected, final NbtCompound actual) {
+        if (expected == null || actual == null) {
+            return expected == actual;
+        }
+
+        return CisNbtUtil.hasFullBlockBaseline(expected) == CisNbtUtil.hasFullBlockBaseline(actual)
+                && CisNbtUtil.isMigratedAuthoritativeChunk(expected) == CisNbtUtil.isMigratedAuthoritativeChunk(actual)
+                && CisNbtUtil.hasPersistedBaseChunkNbt(expected) == CisNbtUtil.hasPersistedBaseChunkNbt(actual)
+                && CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(expected)
+                == CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(actual)
+                && NbtHelper.matches(
+                CisNbtUtil.extractStructureData(expected),
+                CisNbtUtil.extractStructureData(actual),
+                true
+        )
+                && NbtHelper.matches(
+                CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected),
+                CisNbtUtil.extractPreservedAuxiliaryChunkNbt(actual),
+                true
+        );
+    }
+
+    /**
+     * Formats a packed local block position as {@code x,y,z}.
+     *
+     * @param key packed local position key
+     * @return formatted local coordinate string
+     */
+    private static String formatLocalBlockPosition(final long key) {
+        return BlockPos.unpackLongX(key) + "," + BlockPos.unpackLongY(key) + "," + BlockPos.unpackLongZ(key);
+    }
+
+    /**
+     * Formats a block state for readable diagnostics.
+     *
+     * @param state block state, may be null
+     * @return compact state string
+     */
+    private static String describeState(final BlockState state) {
+        if (state == null) {
+            return "<air>";
+        }
+        return Registries.BLOCK.getId(state.getBlock()) + state.getEntries()
+                .toString();
+    }
+
+    /**
+     * Formats a block-entity payload for readable diagnostics.
+     *
+     * @param nbt block-entity payload, may be null
+     * @return compact payload summary
+     */
+    private static String describeBlockEntity(final NbtCompound nbt) {
+        if (nbt == null) {
+            return "<none>";
+        }
+        return nbt.getString("id", "<missing>") + nbt.getKeys();
+    }
+
+    /**
+     * Comparison summary for one MCA-vs-CIS chunk diff.
+     *
+     * @param blockMismatchCount       mismatched block count
+     * @param blockEntityMismatchCount mismatched block-entity count
+     * @param entitiesMatch            true when entity payloads match
+     * @param metadataMatch            true when owned/preserved metadata matches
+     * @param blockSamples             sample block mismatches
+     * @param blockEntitySamples       sample block-entity mismatches
+     * @param entitySamples            sample entity mismatch details
+     */
+    private record ComparisonSummary(
+            int realBlockMismatchCount,
+            int explicitAirOnlyMismatchCount,
+            int totalBlockMismatchCount,
+            int blockEntityMismatchCount,
+            boolean entitiesMatch,
+            boolean metadataMatch,
+            List<String> realBlockSamples,
+            List<String> explicitAirOnlySamples,
+            List<String> blockEntitySamples,
+            List<String> entitySamples
+    ) {
+
+    }
+
+    /**
+     * Block mismatch breakdown separating real drift from explicit-air-only
+     * sparse entry pollution.
+     *
+     * @param realMismatchCount            count of actual state mismatches
+     * @param explicitAirOnlyMismatchCount count of null-vs-air mismatches
+     * @param totalMismatchCount           total mismatch count
+     */
+    private record BlockMismatchSummary(
+            int realMismatchCount,
+            int explicitAirOnlyMismatchCount,
+            int totalMismatchCount
+    ) {
+
     }
 }

@@ -37,8 +37,12 @@ final class ChunkLoadNbtBuilder {
     ) {
         final Object metadata = delta != null ? delta.getChunkMetadata() : null;
         final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
+        final NbtCompound preservedAuxiliaryChunkNbt =
+                CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
         final boolean usePersistedBaseChunkForBlocks =
                 CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
+        final boolean migratedAuthoritativeChunk =
+                CisNbtUtil.isMigratedAuthoritativeChunk(metadata);
         final CisNbtUtil.PersistedBaseChunkUsage baseChunkUsage;
         final NbtCompound root;
 
@@ -51,6 +55,15 @@ final class ChunkLoadNbtBuilder {
             }
         } else {
             root = CisNbtUtil.createBaseNbt(chunkX, chunkZ, dataVersion);
+            if (migratedAuthoritativeChunk && preservedAuxiliaryChunkNbt != null) {
+                mergePreservedAuxiliaryMetadata(root, preservedAuxiliaryChunkNbt);
+                root.putInt(CisNbtUtil.DATA_VERSION_KEY, dataVersion);
+                root.putInt(CisNbtUtil.X_POS_KEY, chunkX);
+                root.putInt(CisNbtUtil.Z_POS_KEY, chunkZ);
+                if (delta.countNonNullEntities() > 0) {
+                    replaceChunkEntitiesFromDelta(root, castDelta(delta));
+                }
+            }
             baseChunkUsage = CisNbtUtil.hasPersistedBaseChunkNbt(metadata)
                     ? CisNbtUtil.PersistedBaseChunkUsage.SKIPPED
                     : CisNbtUtil.PersistedBaseChunkUsage.MISSING;
@@ -109,6 +122,22 @@ final class ChunkLoadNbtBuilder {
         if (structures != null && !structures.isEmpty()) {
             root.put(CisNbtUtil.STRUCTURES_KEY, structures);
         }
+    }
+
+    /**
+     * Merges preserved auxiliary vanilla metadata into the synthetic load root.
+     *
+     * <p>Callers should apply explicit Chunkis-owned fields afterward so those
+     * authoritative values win over the preserved payload.</p>
+     *
+     * @param root                  target synthetic root
+     * @param preservedAuxiliaryNbt preserved opaque vanilla metadata
+     */
+    private static void mergePreservedAuxiliaryMetadata(
+            final NbtCompound root,
+            final NbtCompound preservedAuxiliaryNbt
+    ) {
+        root.copyFrom(preservedAuxiliaryNbt);
     }
 
     /**

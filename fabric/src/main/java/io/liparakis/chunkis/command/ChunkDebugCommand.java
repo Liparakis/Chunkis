@@ -197,7 +197,16 @@ public final class ChunkDebugCommand {
                                 ))))
                 .then(CommandManager.literal("inspect")
                         .then(CommandManager.literal("neighbors")
-                                .executes(ctx -> ChunkDebugActions.inspectNeighborChunks(ctx.getSource()))))
+                                .executes(ctx -> ChunkDebugActions.inspectNeighborChunks(ctx.getSource())))
+                        .then(CommandManager.literal("compare")
+                                .executes(ctx -> ChunkDebugActions.inspectCurrentChunkAgainstMca(ctx.getSource()))
+                                .then(CommandManager.argument("x", IntegerArgumentType.integer())
+                                        .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                                                .executes(ctx -> ChunkDebugActions.inspectChunkAgainstMca(
+                                                        ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(ctx, "x"),
+                                                        IntegerArgumentType.getInteger(ctx, "z")
+                                                ))))))
                 .then(watchCommand);
 
         dispatcher.register(CommandManager.literal("chunkis")
