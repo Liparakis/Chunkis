@@ -55,7 +55,7 @@ A source `.mca` region is retired to `.backup` only when:
 
 Any validation failure, I/O error, or omitted placeholder failure keeps the original region in place. This rule is intentionally strict and was never relaxed.
 
-## Unit Test Coverage (CisStorageMigratorTest + new tests)
+## Unit Test Coverage
 
 - Round-trip identity for normal chunks
 - Property preservation: stairs (facing, half, shape, waterlogged), slabs (type, waterlogged), fences (connected states), doors (hinge, half, facing, open), trapdoors, buttons, signs (rotation, waterlogged)
@@ -65,4 +65,4 @@ Any validation failure, I/O error, or omitted placeholder failure keeps the orig
 - Empty placeholder omission (`isOmittableEmptyChunk`)
 - Validation failure paths (count mismatch, state mismatch, missing markers)
 
-All tests pass `lint` and `test` targets.
+The source of truth for current verification is the repository test suite, not this note. Keep this document focused on migration semantics and validation rules.

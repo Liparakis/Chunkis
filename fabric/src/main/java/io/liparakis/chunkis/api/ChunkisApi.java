@@ -11,12 +11,16 @@ import net.minecraft.state.property.Property;
 import net.minecraft.world.chunk.Chunk;
 
 /**
- * Public API for interacting with the Chunkis mod storage system.
- * <p>
- * This interface provides methods to access the underlying {@link CisStorage}
- * for a world, as well as helper methods for working with Chunkis-managed
- * chunks.
- * </p>
+ * Public read-oriented API for querying Chunkis runtime state.
+ *
+ * <p>The API exposes the world-local {@link CisStorage} instance and the delta
+ * currently attached to a chunk. It does not bypass Chunkis' normal save/load
+ * pipeline, and it does not grant ownership of the returned objects to the
+ * caller.</p>
+ *
+ * <p><b>Threading:</b> call from the normal server thread. The returned storage
+ * and delta objects participate in live runtime state and are not documented as
+ * safe for arbitrary cross-thread mutation.</p>
  */
 public interface ChunkisApi {
 
@@ -31,26 +35,39 @@ public interface ChunkisApi {
     }
 
     /**
-     * Gets the Chunkis storage manager for the specified server world.
+     * Returns the shared CIS storage instance for one server world.
      *
-     * @param world the world to get storage for
-     * @return the storage manager
+     * <p>The storage is world-scoped and owned by Chunkis. Callers must not
+     * close it.</p>
+     *
+     * @param world world whose Chunkis storage should be returned
+     * @return shared storage instance for {@code world}
+     * @throws NullPointerException if {@code world} is {@code null}
      */
     CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage(ServerWorld world);
 
     /**
-     * Gets the chunk delta data associated with the given chunk, if it exists.
+     * Returns the delta currently attached to a chunk, if any.
      *
-     * @param chunk the chunk to inspect
-     * @return an Optional containing the delta if present, or empty otherwise
+     * <p>The returned delta is the live attached runtime object, not a defensive
+     * copy. Callers must treat it as Chunkis-owned state.</p>
+     *
+     * @param chunk chunk to inspect
+     * @return attached delta, or empty when the chunk does not expose Chunkis state
+     * @throws NullPointerException if {@code chunk} is {@code null}
      */
     Optional<ChunkDelta<BlockState, NbtCompound>> getDelta(Chunk chunk);
 
     /**
-     * Checks if the given chunk contains any Chunkis-managed delta data.
+     * Returns whether the chunk currently carries a non-empty attached delta.
      *
-     * @param chunk the chunk to check
-     * @return true if the chunk has a non-empty delta, false otherwise
+     * <p>This is a shape check, not a persistence guarantee. A chunk with stored
+     * anchors but no replay payload can still be meaningful to Chunkis even if
+     * this method returns {@code false}.</p>
+     *
+     * @param chunk chunk to inspect
+     * @return {@code true} when the attached delta exists and is non-empty
+     * @throws NullPointerException if {@code chunk} is {@code null}
      */
     boolean hasChunkisData(Chunk chunk);
 }

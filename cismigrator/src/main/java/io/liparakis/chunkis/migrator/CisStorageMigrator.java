@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 
 /**
- * Generic migrator for existing Chunkis CIS region storage.
+ * Storage-backed migrator for existing Chunkis CIS region storage.
  *
  * <p>The migrator is storage-backed rather than codec-backed: it uses the
  * caller's configured {@link CisStorage} so the same adapters and mappings
@@ -24,7 +24,10 @@ import org.slf4j.Logger;
  *
  * <p><b>Threading:</b> All methods must be called from the background migration
  * thread. No Minecraft world state is accessed; only CIS region files on disk
- * are read and rewritten via the provided {@link CisStorage}.
+ * are read and rewritten via the provided {@link CisStorage}.</p>
+ *
+ * <p><b>Ownership:</b> the migrator does not own the provided storage instance
+ * and does not close it.</p>
  *
  * @param <S> block state type
  * @param <N> chunk NBT type

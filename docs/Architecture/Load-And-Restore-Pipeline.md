@@ -1,136 +1,100 @@
 # Load And Restore Pipeline
 
-## Problem this subsystem solves
+## Purpose
 
-Chunkis must load chunk data without vanilla `.mca` storage, yet still reuse vanilla deserialization and worldgen where useful. The load pipeline therefore builds synthetic chunk NBT, lets vanilla produce a `ProtoChunk`, and then restores Chunkis state around that process.
+Chunkis must load chunk state without reading vanilla region data, while still reusing vanilla deserialization where
+that is safer than decoding directly into a live chunk.
 
-## Responsibilities
+## Main Classes
 
-- Block vanilla region reads.
-- Build synthetic load NBT rooted in Chunkis data.
-- Resolve whether the source is tracker memory, storage, or neither.
-- Attach decoded deltas to proto chunks.
-- Handle both normal proto promotion and already-live wrapped proto chunks.
-- Restore data into live `WorldChunk` instances.
-- Keep portal-related auxiliary state aligned after restore.
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/StoragePreventionMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ThreadedAnvilChunkStorageMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ChunkSerializerMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/world/chunk/WorldChunkMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/core/ChunkRestorer.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/CisNbtUtil.java`
 
-## What it does not do
-
-- It does not decode raw CIS directly into a live chunk in one step.
-- It does not treat generated terrain as authoritative when a persisted base snapshot exists.
-- It does not silently keep stale block entities after block-grid restore.
-
-## Owning classes
-
-- `fabric/.../mixin/storage/StoragePreventionMixin`
-- `fabric/.../mixin/storage/ThreadedAnvilChunkStorageMixin`
-- `fabric/.../mixin/storage/ChunkSerializerMixin`
-- `fabric/.../mixin/world/WorldChunkMixin`
-- `fabric/.../world/ChunkRestorer`
-- `fabric/.../storage/CisNbtUtil`
-
-## Architecture
+## Pipeline
 
 ```mermaid
 flowchart TD
-    A["Chunk load request"] --> B["Tracked delta?"]
-    B -->|yes| C["Use tracker delta"]
-    B -->|no| D["Load from CisStorage"]
-    C --> E["Build synthetic chunk NBT"]
-    D --> E
-    E --> F["Vanilla deserializes to SerializedChunk/ProtoChunk"]
-    F --> G["ChunkSerializerMixin attaches ChunkDelta"]
-    G --> H{"Wrapped live chunk already exists?"}
-    H -->|yes| I["Restore directly into wrapped WorldChunk"]
-    H -->|no| J["WorldChunk promotion"]
-    J --> K["Restore from constructor path"]
-    I --> L["Portal POI + portal index resync"]
-    K --> L
+    A["Chunk load request"] --> B["Resolve tracker delta or CIS storage"]
+    B --> C["CisNbtUtil.buildLoadChunkNbt"]
+    C --> D["Vanilla deserialize to ProtoChunk"]
+    D --> E["ChunkSerializerMixin attaches decoded delta"]
+    E --> F{"WrapperProtoChunk already wraps live WorldChunk?"}
+    F -->|yes| G["Restore immediately into wrapped live chunk"]
+    F -->|no| H["WorldChunk construction path"]
+    H --> I["WorldChunkMixin restore hook"]
+    G --> J["ChunkRestorer replay + derived-state refresh"]
+    I --> J
 ```
 
-## Source selection
+## Source Resolution
 
-`ChunkSerializerMixin.chunkis$loadDelta(...)` uses this order:
+`ThreadedAnvilChunkStorageMixin#chunkis$resolveDeltaForLoad(...)` prefers sources in this order:
 
-1. `GlobalChunkTracker` memory / unload-cache state
-2. `CisStorage.load(...)`
-3. nothing meaningful (`NEITHER`)
+1. tracked in-memory delta
+2. unload-cache delta
+3. CIS storage
+4. no Chunkis state
 
-This preserves newer in-memory state over older on-disk state.
+If a tracked dirty delta exists, Chunkis can synchronously flush it before building synthetic load NBT so storage and
+memory do not drift during load.
 
-## Synthetic NBT strategy
+## Synthetic NBT
 
-`ThreadedAnvilChunkStorageMixin.chunkis$onGetUpdatedChunkNbt(...)` creates the NBT that vanilla will deserialize.
+`CisNbtUtil.buildLoadChunkNbt(...)` chooses between:
 
-There are two cases:
+- a persisted base chunk NBT baseline
+- a synthetic empty-shell chunk root
 
-- persisted base chunk NBT exists
-  Chunkis uses it as the vanilla deserialization baseline
-- no persisted base chunk NBT exists
-  Chunkis creates a minimal synthetic chunk root with status `minecraft:empty`
+The base chunk is used only when metadata says it should be the block baseline. Full-baseline CIS snapshots do not use
+persisted base chunk blocks during load.
 
-This is why load is still partly "vanilla-shaped" even though storage is not.
+## Proto Attach Stage
 
-## Proto attach stage
+`ChunkSerializerMixin` attaches the decoded `ChunkDelta` to the proto chunk through `ChunkisDeltaDuck`.
 
-`ChunkSerializerMixin` runs after vanilla converts serialized NBT into a `ProtoChunk`.
+It also preserves the base-baseline decision:
 
-It attaches the resolved `ChunkDelta` through `ChunkisDeltaDuck` and then:
+- base-backed loads keep the relevant metadata attached
+- baseline-free loads keep the proto ready for regeneration-first restore behavior
 
-- keeps the persisted base baseline if base chunk NBT existed
-- otherwise resets the proto status to `ChunkStatus.EMPTY` so terrain will regenerate before sparse replay
+## Restore Stage
 
-If the returned proto is a full `WrapperProtoChunk` that already wraps a live `WorldChunk`, Chunkis now restores immediately into that wrapped chunk instead of waiting for a later `WorldChunk(ProtoChunk, ...)` constructor path that may never run for that load.
+`ChunkRestorer.restore(...)` currently:
 
-## Restore stage
+1. clears runtime delta payloads and copies metadata/palette from the proto delta
+2. decides whether a persisted base chunk already supplies the block baseline
+3. clears the live chunk to air when restore must rebuild the baseline itself
+4. replays blocks, block entities, and pending or legacy entity payloads
+5. refreshes heightmaps and lighting
+6. repopulates the runtime delta without making it dirty
 
-There are now two valid restore entry points:
+For bulk restore cases, Chunkis resends a full vanilla chunk packet and then sends a fresh Chunkis delta to chunk
+watchers.
 
-- `ChunkSerializerMixin` restores immediately when decode lands on a wrapped full proto chunk that already owns a live `WorldChunk`
-- `WorldChunkMixin` restores when a `WorldChunk` is constructed from a `ProtoChunk`
+## Restore-Time Safety Rules
 
-`ChunkRestorer` then:
+- Block-entity-only sparse payloads without a base are rejected.
+- Restore runs on the server thread.
+- Restore must not become a fresh tracked player mutation.
+- Derived state such as lighting and heightmaps is refreshed after raw writes.
 
-- clears the chunk to air when no persisted base snapshot exists
-- removes stale block entities
-- replays blocks, block entities, and legacy entity payloads
-- copies restored state into the runtime delta without marking it dirty
-- marks the runtime delta saved
+## Portal And Entity Follow-Up
 
-## Portal follow-up
+After restore, Chunkis may also:
 
-Restore also has non-block follow-up work:
+- replay pending entities through `EntityReplayCoordinator`
+- rebuild portal index state through the portal managers
+- resend updated chunk state to watching players
 
-- rebuild portal POIs in vanilla POI storage
-- update `PortalChunkIndexManager`
+Those are follow-up effects of restore, not separate persistence sources.
 
-Those are intentionally outside core sparse replay, so failures there are traced as post-restore failures rather than hidden.
+## Related Docs
 
-## Invariants
-
-- If a persisted base chunk exists, Chunkis must preserve that baseline through deserialization.
-- If no persisted base chunk exists, missing block entries mean regenerate first, then replay.
-- Restore must not turn replay into a new dirty mutation.
-- Stale block entities must be removed when restored block state no longer supports them.
-
-## Common debugging locations
-
-- [StoragePreventionMixin.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/mixin/storage/StoragePreventionMixin.java)
-- [ThreadedAnvilChunkStorageMixin.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ThreadedAnvilChunkStorageMixin.java)
-- [ChunkSerializerMixin.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ChunkSerializerMixin.java)
-- [WorldChunkMixin.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/mixin/world/WorldChunkMixin.java)
-- [ChunkRestorer.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/world/ChunkRestorer.java)
-
-## Common failure modes
-
-- storage decode or decompression failure causing an entry clear
-- restore skipped because a block-entity-only sparse payload had no base snapshot
-- decoded payload attached to a proto chunk but never crossed into a live world chunk
-- restore succeeds but portal follow-up fails later
-- clean unload-cache delta being mistakenly treated as authoritative until invalidated
-
-## See also
-
-- [Save Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Save-Pipeline.md)
-- [Snapshots And Metadata](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Snapshots-And-Metadata.md)
-- [Tracking, Guards, And Durability](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Tracking-Guards-And-Durability.md)
+- [Save Pipeline](Save-Pipeline.md)
+- [Snapshots And Metadata](Snapshots-And-Metadata.md)
+- [Tracking, Guards, And Durability](Tracking-Guards-And-Durability.md)
+- [Networking And Client Sync](Networking-And-Client-Sync.md)

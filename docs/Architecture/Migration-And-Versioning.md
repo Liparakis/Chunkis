@@ -1,94 +1,73 @@
 # Migration And Versioning
 
-## Problem this subsystem solves
+## Purpose
 
-Chunkis owns both vanilla-to-CIS migration and CIS-to-newer-CIS migration. Those are different problems and the code keeps them separate on purpose.
+Chunkis currently has two distinct migration concerns:
 
-## Responsibilities
+- offline MCA-to-CIS translation
+- CIS-to-CIS storage version upgrades
 
-- Import existing `.mca` worlds into CIS.
-- Upgrade older CIS payloads to the current CIS version.
-- Preserve source bytes during migration-oriented decode paths when needed.
-- Keep per-dimension storage directories and mappings consistent.
+They are separate code paths on purpose.
 
-## What it does not do
+## Main Classes
 
-- It does not try to be reversible back to vanilla storage.
-- It does not mix MCA import logic with CIS version upgrades.
-- It does not mutate live game state during migration; it operates on storage.
+- `fabric/src/main/java/io/liparakis/chunkis/migration/offline/PreLaunchMigrationCoordinator.java`
+- `fabric/src/main/java/io/liparakis/chunkis/migration/offline/OfflineMcaCisTranslator.java`
+- `fabric/src/main/java/io/liparakis/chunkis/migration/offline/MigrationValidationResult.java`
+- `cismigrator/src/main/java/io/liparakis/chunkis/migrator/CisStorageMigrator.java`
+- `cismigrator/src/main/java/io/liparakis/chunkis/migrator/CisVersionMap.java`
+- `cismigrator/src/main/java/io/liparakis/chunkis/migrator/CisVersionPath.java`
+- `core/src/main/java/io/liparakis/chunkis/storage/model/CisConstants.java`
 
-## Owning classes
+## Offline MCA To CIS Translation
 
-- `fabric/.../migration/McaMigrator`
-- `fabric/.../migration/CisWorldMigrator`
-- `cismigrator/.../migrator/CisStorageMigrator`
-- `cismigrator/.../migrator/CisVersionMap`
-- `cismigrator/.../migrator/CisVersionPath`
+`PreLaunchMigrationCoordinator` decides whether a dimension needs offline translation before integrated-server startup continues.
 
-## Two migration pipelines
+`OfflineMcaCisTranslator` then:
 
-### MCA -> CIS import
+1. scans vanilla `.mca` region files
+2. deserializes chunk NBT through vanilla `SerializedChunk`
+3. builds authoritative Chunkis snapshots
+4. writes them with `CisStorage.replace(...)`
+5. validates the written CIS payloads
+6. retires the source `.mca` file to `.backup` only after successful full-region coverage
 
-`McaMigrator` runs on world load and:
+Current translated chunks are marked as migrated authoritative snapshots in metadata.
 
-- scans vanilla region files
-- reads chunk NBT through vanilla `RegionFile`
-- builds a `ProtoChunk`
-- converts it into a `ChunkDelta`
-- saves that delta into CIS storage
-- backs up the original region file afterward
+## CIS Version Upgrades
 
-This is import, not in-place CIS upgrade.
+`CisStorageMigrator` performs storage-backed version upgrades using the same `CisStorage` adapters and mappings as runtime code.
 
-### CIS version upgrade
+Current behavior:
 
-`CisWorldMigrator` runs on existing Chunkis storage directories and delegates to the standalone `cismigrator` module.
+- scans `r.<x>.<z>.cis` files
+- loads chunks with `loadWithoutClearing(...)`
+- checks `ChunkDelta.sourceVersion`
+- plans an upgrade path with `CisVersionMap`
+- rewrites outdated chunks by saving them back through the current runtime storage stack
+- writes a `.chunkis-cis-version` marker after a clean directory scan
 
-That path:
+## Version Ownership
 
-- resolves old chunk version
-- finds a legal path to the current version
-- rewrites stored CIS payloads in place as needed
+- `CisConstants.VERSION` is the current on-disk CIS version.
+- `ChunkDelta.sourceVersion` records the version a delta came from or was last saved as.
+- `CisVersionMap` is the legal upgrade graph.
 
-## Version ownership
+## Current Scope
 
-- `CisConstants.VERSION` is the current storage version.
-- `ChunkDelta.sourceVersion` remembers the version a delta was decoded from or last saved as.
-- `CisVersionMap` defines the legal migration graph.
+Implemented today:
 
-## Important entry points
+- integrated-server prelaunch offline MCA translation
+- storage-backed CIS version migration
+- migration validation helpers and reports
 
-- `ChunkisMod.migrateWorld(...)`
-- `McaMigrator.migrateWorld(...)`
-- `CisWorldMigrator.migrateWorld(...)`
-- `CisStorage.loadWithoutClearing(...)`
+Not implemented here:
 
-`loadWithoutClearing(...)` exists partly for migration/recovery flows where unreadable bytes should not be auto-cleared by the normal self-healing load path.
+- reversal from CIS back to vanilla Anvil
+- a generic dedicated-server offline migration orchestrator beyond the code paths in this repository
 
-## Invariants
+## Related Docs
 
-- MCA migration runs before CIS-to-CIS migration in world load flow.
-- Migration must happen before gameplay starts using the storage.
-- Storage upgrades are dimension-local.
-- Mapping ids and migrated payloads must stay consistent.
-
-## Common debugging locations
-
-- [ChunkisMod.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/ChunkisMod.java)
-- [McaMigrator.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/migration/McaMigrator.java)
-- [CisWorldMigrator.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/migration/CisWorldMigrator.java)
-- [CisStorageMigrator.java](C:/Users/Liparakis/Desktop/Chunkis/cismigrator/src/main/java/io/liparakis/chunkis/migrator/CisStorageMigrator.java)
-- [CisVersionMap.java](C:/Users/Liparakis/Desktop/Chunkis/cismigrator/src/main/java/io/liparakis/chunkis/migrator/CisVersionMap.java)
-
-## Common failure modes
-
-- import produces sparse payloads that depend too much on generated terrain
-- world starts using storage before migration finished
-- decode failure during migration where original bytes should have been preserved
-- unsupported version graph path
-
-## See also
-
-- [Storage Format](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Storage-Format.md)
-- [Load And Restore Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Load-And-Restore-Pipeline.md)
-- [Snapshots And Metadata](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Snapshots-And-Metadata.md)
+- [Storage Format](Storage-Format.md)
+- [Snapshots And Metadata](Snapshots-And-Metadata.md)
+- [Startup And Lifecycle](Startup-And-Lifecycle.md)

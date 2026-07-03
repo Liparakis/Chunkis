@@ -1,104 +1,63 @@
 # Tracking, Guards, And Durability
 
-## Problem this subsystem solves
+## Purpose
 
-Once Chunkis disables vanilla region storage, losing track of a dirty chunk is a real durability bug. The project therefore needs explicit ownership tracking, unload survivability, guard rails against unsafe payloads, and asynchronous-save generation checks.
+Once Chunkis disables vanilla chunk persistence, losing a dirty chunk is a real durability bug. This subsystem keeps runtime ownership explicit and prevents stale or unsafe saves.
 
-## Responsibilities
+## Main Classes
 
-- Track dirty chunk deltas across the world lifecycle.
-- Keep recently unloaded deltas available long enough to service loads.
-- Reject or repair unsafe sparse payloads.
-- Prevent stale async completions from marking newer state clean.
-- Provide the operational surface for durability investigation.
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/GlobalChunkTracker.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/GlobalChunkUnloadCache.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/ownership/DeltaPersistenceGuard.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/BaseChunkCaptureUtil.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/save/AsyncCisSaveManager.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/save/AsyncCisSaveWorker.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/LeafTickContext.java`
 
-## What it does not do
+## Tracker Model
 
-- It does not prove persistence correctness from one event alone.
-- It does not keep an infinite history of unloaded chunks.
-- It does not make sparse payloads safe by wishful thinking; it either anchors them or rejects them.
+`GlobalChunkTracker` maintains:
 
-## Owning classes
+- `dirtyDeltas`: the current authoritative dirty deltas
+- unload cache state: recently unloaded deltas that may still be more authoritative than storage
 
-- `fabric/.../world/GlobalChunkTracker`
-- `fabric/.../storage/DeltaPersistenceGuard`
-- `fabric/.../storage/BaseChunkCaptureUtil`
-- `fabric/.../storage/BaseChunkCaptureScheduler`
-- `fabric/.../storage/AsyncCisSaveManager`
-- `fabric/.../world/LeafTickContext`
+The tracker also refuses weaker replacements when an existing delta still carries the authoritative anchor.
 
-## Tracker model
+## Guard Model
 
-`GlobalChunkTracker` keeps two layers:
+`DeltaPersistenceGuard` rejects payloads that still contain replay content but have neither:
 
-- `dirtyDeltas`
-  authoritative currently tracked dirty deltas
-- `unloadCache`
-  bounded LRU cache of recently unloaded deltas
+- persisted base chunk metadata
+- full block baseline metadata
 
-This lets the load path prefer newer in-memory state even after a chunk unload.
+The most explicit invalid case is block-entity-only payload without a base.
 
-## Guard model
+## Async Durability Model
 
-`DeltaPersistenceGuard` rejects replay payloads that have neither:
+`AsyncCisSaveManager` snapshots the delta and records its generation.
 
-- persisted base chunk NBT
-- full-block baseline metadata
+`AsyncCisSaveWorker` only marks the live delta saved when:
 
-The most explicit invalid shape is block-entity-only payload without a base.
-
-## Async durability model
-
-`AsyncCisSaveManager` snapshots the delta and remembers its generation.
-
-On completion it only calls `GlobalChunkTracker.markSavedIfUnchanged(...)` if:
-
-- the live delta instance is still the same one
+- the same live delta instance is still current
 - the generation still matches
 
-That is the core anti-stale-write invariant.
+Otherwise the async completion is ignored as stale.
 
-## Natural mutation exceptions
+## Natural-Mutation Exception
 
-`LeafTickContext` exists so natural leaf decay does not get mistaken for a meaningful tracked user edit. That is a narrow policy exception, not a general "ignore world changes" escape hatch.
+`LeafTickContext` is a narrow policy escape hatch so natural leaf-decay churn does not become tracked meaningful mutation.
 
-## Data flow
-
-```mermaid
-flowchart TD
-    A["WorldChunk mutation"] --> B["Runtime ChunkDelta dirty"]
-    B --> C["GlobalChunkTracker dirtyDeltas"]
-    C --> D["Chunk unload"]
-    D --> E["unloadCache"]
-    C --> F["Async save snapshot"]
-    F --> G["generation check on completion"]
-    G --> H["markSavedIfUnchanged"]
-```
+It is not a general permission to ignore world changes.
 
 ## Invariants
 
-- Dirty deltas must be registered with the tracker.
-- Clean unload-cache entries are not authoritative and are invalidated on lookup.
-- A stale async completion must never clean a newer generation.
-- Unsafe sparse payloads must be rejected or upgraded with a base capture.
+- Dirty meaningful deltas must enter the tracker.
+- Clean unload-cache placeholders are not authoritative and are invalidated on lookup.
+- Stale async completions must not clean newer state.
+- Unsafe sparse payloads must be repaired or rejected before persistence.
 
-## Common debugging locations
+## Related Docs
 
-- [GlobalChunkTracker.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/world/GlobalChunkTracker.java)
-- [DeltaPersistenceGuard.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/DeltaPersistenceGuard.java)
-- [AsyncCisSaveManager.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/AsyncCisSaveManager.java)
-- [BaseChunkCaptureScheduler.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/BaseChunkCaptureScheduler.java)
-- [LeafTickContext.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/world/LeafTickContext.java)
-
-## Common failure modes
-
-- dirty chunk unload with no confirmed save evidence
-- tracker keeps a weaker incoming delta instead of the authoritative one
-- sparse save rejected late because earlier base capture never happened
-- shutdown path forced to flush too much queued work
-
-## See also
-
-- [Save Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Save-Pipeline.md)
-- [Load And Restore Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Load-And-Restore-Pipeline.md)
-- [Observability And Debugging](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Observability-And-Debugging.md)
+- [Save Pipeline](Save-Pipeline.md)
+- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
+- [Observability And Debugging](Observability-And-Debugging.md)

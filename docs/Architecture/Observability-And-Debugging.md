@@ -1,145 +1,79 @@
 # Observability And Debugging
 
-## Problem this subsystem solves
+## Purpose
 
-Chunk persistence bugs are usually timeline bugs: a chunk was mutated, queued, unloaded, restored, or rejected at the wrong time. Chunkis therefore has an in-memory event recorder focused on save/load/restore/durability timelines, not generic application logging.
+Chunkis persistence bugs are usually timeline bugs, not single-method bugs. The observability stack records the boundaries that matter when save, load, restore, or client sync goes wrong.
 
-## Responsibilities
+## Main Classes
 
-- Record bounded in-memory trace events.
-- Attach operation ids to save/load/restore/client-sync flows.
-- Surface high-value invariant failures as explicit assertion events.
-- Promote suspicious chunks into retained suspect snapshots.
-- Expose debug, watchpoint, export, and durability commands.
-- Follow one watched payload through decode, proto attach, live restore, and client visibility.
+- `core/src/main/java/io/liparakis/chunkis/debug/trace/ChunkTraceStore.java`
+- `core/src/main/java/io/liparakis/chunkis/debug/trace/ChunkTraceInvariants.java`
+- `core/src/main/java/io/liparakis/chunkis/debug/model/ChunkTraceEvent.java`
+- `core/src/main/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpoints.java`
+- `core/src/main/java/io/liparakis/chunkis/debug/trace/ChunkTraceJsonl.java`
+- `fabric/src/main/java/io/liparakis/chunkis/debug/trace/PayloadWatchTracer.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/StorageReportCommand.java`
 
-## What it does not do
+## Current Model
 
-- It does not persist an always-on long-term trace database.
-- It does not prove all multi-event invariants automatically.
-- It does not instrument every micro-step of encoding and decoding.
+The trace store records bounded in-memory events around:
 
-## Owning classes
-
-- `core/.../debug/ChunkTraceStore`
-- `core/.../debug/ChunkTraceInvariants`
-- `core/.../debug/ChunkTraceEvent*`
-- `core/.../debug/ChunkTraceWatchpoints`
-- `core/.../debug/ChunkTraceJsonl`
-- `fabric/.../command/ChunkDebugCommand`
-- `fabric/.../command/DurabilityTestCommand`
-- `fabric/.../command/StorageReportCommand`
-- `fabric/.../debug/PayloadWatchTracer`
-
-## Event model
-
-The event model is built around boundaries that matter when persistence goes wrong:
-
-- save requested / queued / flushed / failed
-- vanilla save cancelled
-- load started / source resolved / ended
-- region read/write
-- restore started / completed / failed
-- proto attach / world-chunk attach / restore-apply boundaries
-- tracker state transitions
-- client sync boundaries
+- save requested, queued, flushed, failed
+- load started, source resolved, completed, failed
+- region reads and writes
+- restore started, applied, completed, failed
+- tracker transitions
+- client sync send and apply
 - assertion failures
 
-## Assertion model
+`ChunkTraceInvariants` only checks cheap, high-confidence rules. It does not attempt full causal proof.
 
-`ChunkTraceInvariants` only asserts cheap, high-confidence rules. Current examples:
+## Suspects And Watches
 
-- `SAVE_REJECTED` must have a real reason
-- `LOAD_SOURCE_RESOLVED` must use a valid source reason
-- save queue/flush events must carry operation ids and chunk keys
-- `DELTA_MARKED_CLEAN` must report `dirtyState=false`
+`ChunkTraceStore` promotes high-value failures into retained suspects so the ring buffer can rotate without immediately losing the interesting case.
 
-That is intentionally narrower than full causal proof.
+Watch tooling is layered on top:
 
-Payload Watch adds a second layer on top of that chunk timeline: it can now prove the difference between:
+- chunk watchpoints
+- region watchpoints
+- payload watches for blocks, block entities, and entities
 
-- payload exists in decoded storage data
-- payload is only attached to a proto chunk
-- payload reached a live `WorldChunk`
-- payload was applied and later overwritten
-- payload is correct on the server but not on the client
-
-## Suspect model
-
-`ChunkTraceStore` promotes chunks to suspects when it sees high-value signals such as:
-
-- assertion failure
-- save rejection
-- save flush failure
-- restore failure
-- load resolved to `NEITHER` after prior stored payload existed
-- delta marked clean before confirmed flush
-
-Each suspect keeps a copied compact timeline so the ring buffer can rotate without losing the interesting case immediately.
+See [Payload Watch Framework](Payload-Watch-Framework.md).
 
 ## Commands
 
-Main operational commands:
+Current operator-facing commands include:
 
 - `/chunkis debug on|off`
 - `/chunkis debug latest <count>`
+- `/chunkis debug failures [count]`
 - `/chunkis debug suspects`
 - `/chunkis debug suspect <id>`
-- `/chunkis debug suspect timeline <id>`
-- `/chunkis debug failures [count]`
-- `/chunkis debug export latest <count>`
-- `/chunkis debug watch chunk|region ...`
-- `/chunkis debug watch block|blockentity|entity ...`
-- `/chunkis debug watch pending`
+- `/chunkis debug watch ...`
 - `/chunkis durability ...`
 - `/chunkis_storage_report`
 
-## Debugging a persistence bug
+## Practical Debug Order
 
-The usual order is:
+For a persistence bug:
 
 1. enable debug
 2. reproduce
-3. inspect suspect/failure timelines
-4. correlate save request, vanilla cancellation, queue/flush, load source, and restore result
-5. check pending-save and deferred-base-capture snapshots for watched chunks
+3. inspect suspect and failure timelines
+4. correlate save request, queue/flush, load source, restore, and client sync
+5. inspect pending async saves or payload watches when the chunk timeline alone is too coarse
 
-For watched payloads, ask these in order:
+## Limits
 
-1. did `WATCH_DECODED` prove the payload exists in the decoded delta?
-2. did `WATCH_PROTO_DELTA_ATTACHED` prove the payload reached the proto chunk?
-3. did `WATCH_WORLDCHUNK_DELTA_ATTACHED` or `WATCH_WORLD_CHUNK_CONSTRUCTOR_CONSUMED` prove the payload reached a live chunk handoff?
-4. did `WATCH_RESTORE_APPLIED` prove live replay?
-5. did `WATCH_OVERWRITTEN_AFTER_RESTORE` prove a later overwrite?
-6. did client-send or client-visible events diverge from server state?
+- Debugging is bounded and mostly in-memory, not a permanent trace database.
+- A clean delta is not proof of a successful flush without matching timeline evidence.
+- Payload watches prove stage boundaries, not impossible facts between stages.
 
-## Invariants
+## Related Docs
 
-- Debug off means most event construction is skipped, not merely hidden.
-- Event ids, operation ids, and suspect ids are independent.
-- Suspect retention is bounded.
-- Assertion events are additive; they do not change runtime persistence decisions by themselves.
-
-## Common debugging locations
-
-- [ChunkTraceStore.java](C:/Users/Liparakis/Desktop/Chunkis/core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceStore.java)
-- [ChunkTraceInvariants.java](C:/Users/Liparakis/Desktop/Chunkis/core/src/main/java/io/liparakis/chunkis/debug/ChunkTraceInvariants.java)
-- [ChunkDebugCommand.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java)
-- [DurabilityTestCommand.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java)
-- [StorageReportCommand.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/command/StorageReportCommand.java)
-
-## Common failure modes
-
-- reading only the last event instead of the whole operation timeline
-- assuming `VANILLA_SAVE_CANCELLED` proves a Chunkis save completed
-- assuming a clean delta implies a confirmed flush without the matching operation id
-- missing unload-cache or deferred-base-capture state while debugging durability
-- watching the chunk when the bug is really payload-local; use a payload watch first
-- treating `WATCH_DECODED` as proof of live-world restore; it only proves decoded-delta contents
-
-## See also
-
-- [Tracking, Guards, And Durability](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Tracking-Guards-And-Durability.md)
-- [Save Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Save-Pipeline.md)
-- [Load And Restore Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Load-And-Restore-Pipeline.md)
-- [Payload Watch Framework](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Payload-Watch-Framework.md)
+- [Tracking, Guards, And Durability](Tracking-Guards-And-Durability.md)
+- [Payload Watch Framework](Payload-Watch-Framework.md)
+- [Save Pipeline](Save-Pipeline.md)
+- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)

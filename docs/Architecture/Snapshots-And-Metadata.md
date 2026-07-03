@@ -1,102 +1,72 @@
 # Snapshots And Metadata
 
-## Problem this subsystem solves
+## Purpose
 
-Chunkis cannot rely on world generation staying identical forever. It needs durable metadata that explains how to restore a chunk safely, and it needs a snapshot strategy that separates "live edits right now" from "what must exist on disk to reproduce the chunk later".
+Chunkis separates runtime mutation tracking from the persisted information needed to restore a chunk safely later.
 
-## Responsibilities
+## Main Classes
 
-- Capture authoritative save-time snapshots.
-- Capture persisted base chunk NBT when sparse replay alone would be unsafe.
-- Preserve structure metadata, replay suppression flags, portal markers, and baseline flags.
-- Build synthetic load NBT from those persisted metadata anchors.
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/CisSnapshotCapture.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/BaseChunkCaptureUtil.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/CisNbtUtil.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/ChunkLoadNbtBuilder.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/StructureMetadataExtractor.java`
 
-## What it does not do
+## Two Snapshot Shapes
 
-- It does not store metadata as an external side table.
-- It does not treat structure metadata as optional decoration.
-- It does not assume worldgen can reconstruct old chunks correctly without anchors.
+### Authoritative save snapshot
 
-## Owning classes
+`CisSnapshotCapture.capture(...)` rebuilds the persisted chunk shape used by normal saves.
 
-- `fabric/.../storage/CisSnapshotCapture`
-- `fabric/.../storage/BaseChunkCaptureUtil`
-- `fabric/.../storage/BaseChunkCaptureScheduler`
-- `fabric/.../storage/CisNbtUtil`
-- `fabric/.../storage/StructureMetadataExtractor`
+Current behavior:
 
-## Two snapshot concepts
-
-### Save-time authoritative snapshot
-
-`CisSnapshotCapture.capture(...)` rebuilds a delta from a live `WorldChunk` by:
-
-- clearing old block/block-entity payloads
-- scanning chunk sections for non-air blocks
-- capturing block entities
-- rebuilding metadata with structure data and existing persisted base if present
-
-This is the normal persisted save shape.
+- if block entities are present, Chunkis captures a persisted base chunk snapshot and marks suppression metadata
+- otherwise it captures a full authoritative block baseline directly into the delta
 
 ### Persisted base chunk snapshot
 
-`BaseChunkCaptureUtil.captureBaseChunk(...)` serializes a vanilla-compatible chunk NBT snapshot and stores it under metadata key `base_chunk_nbt`.
+`BaseChunkCaptureUtil.captureBaseChunk(...)` stores a vanilla-compatible base chunk snapshot inside chunk metadata. This is used as a restore anchor when sparse replay alone would be unsafe.
 
-This is a durability anchor used when sparse replay must be based on a stable serialized baseline rather than on future terrain generation.
+## Metadata Envelope
 
-## Metadata envelope
-
-`CisNbtUtil` builds the metadata envelope. Important pieces are:
+`CisNbtUtil` owns the current metadata envelope. Important fields include:
 
 - `structures`
-- `base_chunk_nbt`
-- nested `chunkis` metadata
+- `base_chunk_nbt` or packed `base_chunk_payload`
+- nested `chunkis`
   - `suppress_initial_repopulation`
   - `full_block_baseline`
   - `portal_chunk`
+  - `migrated_authoritative_chunk`
+- `preserved_auxiliary_chunk_nbt`
 
-## Why this exists
+## Load-Side Use
 
-Without persisted metadata:
+`CisNbtUtil.buildLoadChunkNbt(...)` decides whether load should use:
 
-- structures can disappear or repopulate incorrectly
-- sparse block entities can be restored onto the wrong block grid
-- one-time worldgen side effects can replay when they should not
-- portal support can drift from restored block contents
+- the persisted base chunk as the vanilla deserialization baseline
+- or a synthetic empty-shell chunk root
 
-## Load-side usage
+That decision depends on metadata, especially whether the stored CIS payload already represents the authoritative block baseline.
 
-`CisNbtUtil.buildLoadChunkNbt(...)` chooses between:
+## Structural Metadata
 
-- persisted base chunk NBT as the deserialization baseline
-- synthetic empty-shell NBT as the regeneration baseline
+Chunkis currently preserves:
 
-That choice is the pivot between snapshot-backed restore and regenerate-then-replay restore.
+- vanilla structure metadata
+- portal chunk markers
+- auxiliary vanilla chunk data that Chunkis does not explicitly model
+- migration markers for offline authoritative imports
 
 ## Invariants
 
-- Base chunk capture is idempotent once persisted; later saves must not overwrite the original baseline casually.
-- Structure metadata must survive save/load even when block replay is sparse.
-- Replay suppression lives in metadata because it is restore policy, not a transient runtime toggle.
-- Portal presence is metadata because portal indexing must survive persistence.
+- Persisted base capture is idempotent once present.
+- Full block baseline and persisted base chunk are different anchors with different load semantics.
+- Metadata is not optional decoration; it carries restore policy.
 
-## Common debugging locations
+## Related Docs
 
-- [CisSnapshotCapture.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/CisSnapshotCapture.java)
-- [BaseChunkCaptureUtil.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/BaseChunkCaptureUtil.java)
-- [BaseChunkCaptureScheduler.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/BaseChunkCaptureScheduler.java)
-- [CisNbtUtil.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/CisNbtUtil.java)
-- [StructureMetadataExtractor.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/StructureMetadataExtractor.java)
-
-## Common failure modes
-
-- block-entity-only sparse payload without persisted base
-- base chunk existed in metadata but was skipped or failed during synthetic load construction
-- structure metadata lost because a metadata rewrite path ignored existing structures
-- base capture deferred too long and only recovered at a later guard/shutdown path
-
-## See also
-
-- [Delta And Ownership Model](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Delta-And-Ownership-Model.md)
-- [Save Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Save-Pipeline.md)
-- [Load And Restore Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Load-And-Restore-Pipeline.md)
+- [Delta And Ownership Model](Delta-And-Ownership-Model.md)
+- [Save Pipeline](Save-Pipeline.md)
+- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
+- [Migration And Versioning](Migration-And-Versioning.md)

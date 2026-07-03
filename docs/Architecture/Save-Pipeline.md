@@ -1,121 +1,107 @@
 # Save Pipeline
 
-## Problem this subsystem solves
+## Purpose
 
-Chunkis needs to persist chunk state without relying on vanilla `.mca` writes, while preserving enough information to reload safely after terrain generation, async saves, and migration.
+Chunkis must persist chunk state without falling back to vanilla region writes, while still preventing unsafe sparse payloads from reaching disk.
 
-## Responsibilities
+## Main Classes
 
-- Intercept vanilla save requests.
-- Capture authoritative chunk state.
-- Validate whether the payload is safe to persist.
-- Encode, compress, and write the payload to the correct CIS region slot.
-- Keep dirty tracking and async-save completion coherent.
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ThreadedAnvilChunkStorageMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/CisSnapshotCapture.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/BaseChunkCaptureUtil.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/entity/capture/LiveEntitySnapshotCapture.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/ownership/DeltaPersistenceGuard.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/save/AsyncCisSaveManager.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/save/AsyncCisSaveWorker.java`
+- `core/src/main/java/io/liparakis/chunkis/storage/io/CisStorage.java`
 
-## What it does not do
-
-- It does not let vanilla region storage remain a fallback path.
-- It does not persist arbitrary sparse deltas blindly.
-- It does not perform base capture on every path by default; that is done only when needed.
-
-## Owning classes
-
-- `fabric/.../mixin/storage/ThreadedAnvilChunkStorageMixin`
-- `fabric/.../storage/CisSnapshotCapture`
-- `fabric/.../storage/AsyncCisSaveManager`
-- `fabric/.../storage/BaseChunkCaptureUtil`
-- `fabric/.../storage/BaseChunkCaptureScheduler`
-- `fabric/.../storage/DeltaPersistenceGuard`
-- `core/.../storage/io/CisStorage`
-- `core/.../storage/io/RegionFile`
-
-## Architecture
+## Pipeline
 
 ```mermaid
 flowchart TD
-    A["Vanilla save hook"] --> B["Resolve current ChunkDelta"]
-    B --> C["Capture authoritative snapshot"]
-    C --> D["Capture structure metadata + entities"]
-    D --> E["Guard sparse payloads"]
-    E --> F["AsyncCisSaveManager or sync save"]
-    F --> G["CisStorage prepare/encode"]
-    G --> H["Zstd compress"]
-    H --> I["RegionFile write slot"]
-    I --> J["GlobalChunkTracker markSaved"]
+    A["Vanilla save hook"] --> B["Resolve chunk + runtime delta"]
+    B --> C["Ownership / dirty preflight"]
+    C --> D["CisSnapshotCapture rebuilds authoritative block state"]
+    D --> E["Structure metadata + entity capture"]
+    E --> F["Sparse guard / base recovery"]
+    F --> G{"Normal save?"}
+    G -->|yes| H["AsyncCisSaveManager.submit"]
+    G -->|no| I["FabricCisStorageHelper.saveTrackedDelta"]
+    H --> J["AsyncCisSaveWorker prepareSave/writePrepared"]
+    I --> K["CisStorage.save"]
+    J --> L["GlobalChunkTracker.markSavedIfUnchanged"]
+    K --> L
 ```
 
-## Normal save path
+## What Happens On A Normal Save
 
-`ThreadedAnvilChunkStorageMixin.chunkis$onSave(...)` is the main save hook.
+`ThreadedAnvilChunkStorageMixin#chunkis$onSave` is the authoritative save hook.
 
-Sequence:
+The current sequence is:
 
-1. Resolve the chunk and current delta.
-2. Skip if Chunkis does not own meaningful state.
-3. Rebuild the delta with `CisSnapshotCapture.capture(...)`.
-4. Merge structure metadata and current entity payloads.
-5. Queue the result through `AsyncCisSaveManager.submit(...)`.
-6. Return `true` and suppress vanilla save behavior.
+1. resolve the chunk instance to save
+2. resolve the attached `ChunkDelta`
+3. reject clean or unowned placeholder state
+4. rebuild an authoritative snapshot with `CisSnapshotCapture.capture(...)`
+5. merge structure metadata and live entity payload capture where needed
+6. run sparse-payload recovery and guard checks
+7. queue the result through `AsyncCisSaveManager.submit(...)`
 
-The key design choice is step 3. The normal save path persists an authoritative snapshot, not the incremental live mutation shape.
+The important part is step 4: normal persistence is snapshot-based, not just "write whatever incremental live edits are currently attached."
 
-## Synchronous save paths
+## Snapshot Rules
 
-Chunkis still uses direct synchronous saves in a few places:
+`CisSnapshotCapture` currently does two different things:
 
-- load-path flush of a dirty tracked delta before synthetic load NBT is built
+- if the chunk has block entities, it captures a persisted base chunk through `BaseChunkCaptureUtil.captureBaseChunk(...)`
+- otherwise it clears block payloads and rebuilds a full authoritative block baseline directly into the delta
+
+That means the save path is deliberately conservative around block entities and restore safety.
+
+## Sparse Guard And Recovery
+
+`DeltaPersistenceGuard` rejects payloads that still have replay content but have neither:
+
+- persisted base chunk NBT
+- full block baseline metadata
+
+Before rejecting, the save hook attempts recovery through `BaseChunkCaptureUtil` when a live `WorldChunk` is still available.
+
+## Async Save Model
+
+`AsyncCisSaveManager` snapshots the live delta on the server thread and hands it to a per-dimension `AsyncCisSaveWorker`.
+
+`AsyncCisSaveWorker`:
+
+1. checks that the queued delta generation is still current
+2. caches encoded chunk metadata when needed
+3. runs `CisStorage.prepareSave(...)`
+4. re-checks generation freshness
+5. runs `CisStorage.writePrepared(...)`
+6. marks the live delta saved only if the same delta instance and generation are still current
+
+This is the main stale-write protection in the current implementation.
+
+## Synchronous Save Paths
+
+Chunkis still saves synchronously in a few cases:
+
+- dirty-delta flush during the load path
 - shutdown safety sweeps
-- direct base capture persistence in `BaseChunkCaptureUtil.captureAndPersistBaseChunkIfMissing(...)`
+- final force-save passes when normal async completion did not happen in time
 
-These paths all end in `CisStorage.save(...)`.
-
-## Async save path
-
-`AsyncCisSaveManager` snapshots the live delta, coalesces queued saves per chunk, then writes on a per-dimension worker thread.
-
-Important details:
-
-- encoding-sensitive live state is snapshotted on the server thread
-- compression and file I/O happen on the worker thread
-- stale generations are ignored
-- successful completion only marks the live delta saved if the generation still matches
-
-## Base capture during save
-
-`BaseChunkCaptureUtil` and `BaseChunkCaptureScheduler` exist for safety, not as the main save shape.
-
-They are used when Chunkis detects that a sparse replay payload would be unsafe without a persisted baseline. In that case Chunkis can:
-
-- capture base chunk NBT immediately
-- persist it synchronously
-- or defer the capture and flush it later
+Those paths still go through the same persistence guard logic.
 
 ## Invariants
 
-- Vanilla `.mca` writes are always cancelled.
-- A queued async save must not mark a newer generation clean.
-- Sparse replay payloads without a persistence anchor must be rejected or repaired before write.
-- Empty deltas are encoded as chunk-entry clears in storage, not as meaningless payloads.
+- Chunkis does not keep vanilla `.mca` writes as a safety fallback.
+- Empty deltas clear the CIS entry instead of writing fake payloads.
+- Async completion must never mark a newer generation clean.
+- Save-time snapshot capture can rewrite the delta shape before persistence.
 
-## Common debugging locations
+## Related Docs
 
-- [ThreadedAnvilChunkStorageMixin.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ThreadedAnvilChunkStorageMixin.java)
-- [AsyncCisSaveManager.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/AsyncCisSaveManager.java)
-- [BaseChunkCaptureUtil.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/BaseChunkCaptureUtil.java)
-- [BaseChunkCaptureScheduler.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/storage/BaseChunkCaptureScheduler.java)
-- [CisStorage.java](C:/Users/Liparakis/Desktop/Chunkis/core/src/main/java/io/liparakis/chunkis/storage/io/CisStorage.java)
-- [RegionFile.java](C:/Users/Liparakis/Desktop/Chunkis/core/src/main/java/io/liparakis/chunkis/storage/io/RegionFile.java)
-
-## Common failure modes
-
-- save rejected because the payload is sparse and has no base
-- stale async completion ignored because the delta mutated again
-- storage write failure after encode/compress
-- shutdown flush finding dirty deltas that never made it through the normal path
-
-## See also
-
-- [Delta And Ownership Model](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Delta-And-Ownership-Model.md)
-- [Snapshots And Metadata](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Snapshots-And-Metadata.md)
-- [Storage Format](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Storage-Format.md)
-- [Tracking, Guards, And Durability](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Tracking-Guards-And-Durability.md)
+- [Delta And Ownership Model](Delta-And-Ownership-Model.md)
+- [Snapshots And Metadata](Snapshots-And-Metadata.md)
+- [Tracking, Guards, And Durability](Tracking-Guards-And-Durability.md)
+- [Storage Format](Storage-Format.md)

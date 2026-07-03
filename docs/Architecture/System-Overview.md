@@ -1,93 +1,73 @@
 # System Overview
 
-## Why Chunkis exists
+## Purpose
 
-Chunkis replaces vanilla chunk persistence with a CIS-based storage layer that keeps chunk data under Chunkis control instead of `.mca` files. The project exists to support Chunkis-specific persistence behavior, migration control, safer reload semantics, and debugging around chunk durability.
+Chunkis replaces vanilla chunk persistence with a Chunkis-owned CIS pipeline. It does not just swap file formats. It owns:
 
-The important architectural point is that Chunkis is not "just a new file format". It owns the load path, the save path, the persistence metadata, and the restore rules.
+- chunk mutation tracking
+- save-time snapshot capture
+- disk persistence
+- synthetic load NBT generation
+- restore-time replay
+- client delta sync
+- migration and debug tooling around that pipeline
 
-## What the system does
+## Modules
 
-- Tracks live chunk mutations in memory through `ChunkDelta`.
-- Cancels vanilla region-file I/O through `StoragePreventionMixin`.
-- Saves chunk state into CIS region files through `CisStorage` and `RegionFile`.
-- Rebuilds vanilla load inputs from Chunkis state through `ThreadedAnvilChunkStorageMixin` and `ChunkSerializerMixin`.
-- Restores decoded data into live `WorldChunk` instances through `ChunkRestorer` and `WorldChunkMixin`.
-- Preserves durability anchors such as persisted base chunk NBT, structure metadata, and replay suppression metadata.
-- Provides migration, debug tracing, storage inspection, and client delta sync.
+| Module | Responsibilities |
+| --- | --- |
+| `core/` | `ChunkDelta`, CIS codecs, region files, compression, mapping, debug event model |
+| `fabric/` | Fabric entrypoints, mixins, runtime tracking, snapshot capture, restore, networking, commands, offline migration |
+| `cismigrator/` | CIS version graph and storage-backed CIS-to-CIS migration |
 
-## What the system does not do
-
-- It does not coexist with vanilla `.mca` chunk persistence for the same chunk data.
-- It does not guarantee smaller storage than vanilla in every world.
-- It does not treat the live runtime delta as the exact persisted representation on the normal save path.
-- It does not make gameplay or rendering faster by itself.
-
-## Module layout
-
-- `core/`
-  Shared storage engine, encoding/decoding, mapping, region files, and debug event model.
-- `fabric/`
-  Minecraft/Fabric integration: mixins, world hooks, chunk tracking, restore, commands, networking, migration, and storage bootstrap.
-- `cismigrator/`
-  Version-to-version CIS migration logic used by the Fabric world migrator.
-
-## High-level data flow
+## High-Level Runtime Flow
 
 ```mermaid
 flowchart TD
     A["Live WorldChunk"] --> B["ChunkDelta runtime state"]
-    B --> C["Save hook rebuilds authoritative snapshot"]
-    C --> D["CisStorage encode + compress"]
-    D --> E["RegionFile slot write"]
-    E --> F["r.<x>.<z>.cis"]
+    B --> C["ThreadedAnvilChunkStorageMixin save hook"]
+    C --> D["CisSnapshotCapture / BaseChunkCaptureUtil / entity capture"]
+    D --> E["AsyncCisSaveManager or synchronous save"]
+    E --> F["CisStorage encode + compress"]
+    F --> G["RegionFile write"]
 ```
 
 ```mermaid
 flowchart TD
-    A["Chunk load request"] --> B["Synthetic NBT from Chunkis"]
-    B --> C["Vanilla deserialization to ProtoChunk"]
-    C --> D["Attach decoded ChunkDelta"]
-    D --> E["Promote to WorldChunk"]
-    E --> F["ChunkRestorer replay"]
-    F --> G["Live world chunk + runtime delta"]
+    A["Chunk load request"] --> B["Tracked delta or CIS storage"]
+    B --> C["CisNbtUtil.buildLoadChunkNbt"]
+    C --> D["Vanilla deserialize to ProtoChunk"]
+    D --> E["ChunkSerializerMixin attaches ChunkDelta"]
+    E --> F["WorldChunk promotion or wrapped live chunk path"]
+    F --> G["ChunkRestorer replay"]
+    G --> H["Runtime delta repopulated without fresh dirtiness"]
 ```
 
-## Main integration points
+## Current Entry Points
 
-- `ChunkisMod`: registers commands, lifecycle hooks, migration, scheduler ticks, and shutdown flushing.
-- `StoragePreventionMixin`: blocks vanilla region reads/writes/sync.
-- `ThreadedAnvilChunkStorageMixin`: injects the main save and synthetic-load logic.
-- `ChunkSerializerMixin`: attaches decoded Chunkis state to proto chunks.
-- `WorldChunkMixin`: captures live mutations and performs restore after proto promotion.
-- `CommonChunkMixin`: attaches a `ChunkDelta` to every chunk and keeps vanilla dirty state aligned.
+- `ChunkisMod` registers payloads, commands, lifecycle hooks, shutdown flushing, and cleanup.
+- `ClientChunkisMod` registers client networking and migration-status UI updates.
+- `StoragePreventionMixin` blocks vanilla region I/O.
+- `ThreadedAnvilChunkStorageMixin` owns the main save/load interception path.
+- `ChunkSerializerMixin` attaches decoded Chunkis state during vanilla load conversion.
+- `WorldChunkMixin` tracks live mutation and restores state into promoted chunks.
+- `ChunkHolderMixin` piggybacks Chunkis client sync onto vanilla chunk packet sends.
 
-## Core invariants
+## Core Invariants
 
-- Vanilla chunk region I/O is cancelled. Chunkis is the authoritative persistence path.
-- Every loaded/saved chunk carries a `ChunkDelta`, even if that delta is just an empty placeholder.
-- A persisted replay payload must not rely on generated terrain unless a persistence anchor exists.
-- Normal saves persist an authoritative snapshot, not just ad hoc sparse live edits.
-- Restore-time writes must not be re-tracked as fresh player mutations.
+- Once Chunkis persists a chunk, vanilla `.mca` I/O is not the authoritative path for that chunk state.
+- `ChunkDelta` is the in-memory carrier for runtime state, persisted state, and restore metadata.
+- Save-time persistence uses an authoritative snapshot, not the raw live sparse mutation shape.
+- Sparse replay payloads without a usable anchor are rejected or repaired before persistence.
+- Restore-time writes must not be re-recorded as fresh player mutation.
 
-## Common debugging locations
+## Major Subsystems
 
-- Save path: `fabric/.../mixin/storage/ThreadedAnvilChunkStorageMixin.java`
-- Load path: `fabric/.../mixin/storage/ChunkSerializerMixin.java`
-- Restore path: `fabric/.../world/ChunkRestorer.java`
-- Tracking: `fabric/.../world/GlobalChunkTracker.java`
-- Storage: `core/.../storage/io/CisStorage.java`, `core/.../storage/io/RegionFile.java`
-
-## Failure modes to keep in mind
-
-- Save rejection because a sparse payload has no persisted base anchor.
-- Decode or decompression failure causing a stored entry to be cleared.
-- Dirty delta unloads or stale async completions creating durability suspicion.
-- Portal metadata drifting from restored chunk contents if follow-up resync fails.
-
-## See also
-
-- [Delta And Ownership Model](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Delta-And-Ownership-Model.md)
-- [Save Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Save-Pipeline.md)
-- [Load And Restore Pipeline](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Load-And-Restore-Pipeline.md)
-- [Storage Format](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Storage-Format.md)
+- [Startup And Lifecycle](Startup-And-Lifecycle.md)
+- [Delta And Ownership Model](Delta-And-Ownership-Model.md)
+- [Save Pipeline](Save-Pipeline.md)
+- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
+- [Storage Format](Storage-Format.md)
+- [Networking And Client Sync](Networking-And-Client-Sync.md)
+- [Migration And Versioning](Migration-And-Versioning.md)
+- [Observability And Debugging](Observability-And-Debugging.md)

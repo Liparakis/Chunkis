@@ -3,50 +3,56 @@ package io.liparakis.chunkis.api;
 import io.liparakis.chunkis.core.ChunkDelta;
 
 /**
- * Interface that allows accessing the {@link ChunkDelta} associated with a
- * world chunk.
+ * Duck-typed attachment point for Chunkis per-chunk runtime state.
+ *
+ * <p>This interface is implemented by mixins on chunk classes. It is an
+ * internal integration surface, not a stable external API.</p>
+ *
+ * <p><b>Ownership:</b> the attached {@link ChunkDelta} and restore flags are
+ * owned by Chunkis. Callers may inspect them, but they should not replace or
+ * mutate them casually outside the normal persistence pipeline.</p>
  */
 public interface ChunkisDeltaDuck {
 
     /**
-     * Retrieves the attached ChunkDelta.
+     * Returns the delta currently attached to the chunk.
      *
-     * @return the current block/entity chunk delta, or null
+     * @return live attached delta, or {@code null} when none has been installed
      */
     ChunkDelta<?, ?> chunkis$getDelta();
 
     /**
-     * Binds a new ChunkDelta instance to the chunk.
+     * Replaces the attached delta reference.
      *
-     * @param delta the delta instance to associate
+     * @param delta new delta reference, or {@code null} to clear it
      */
     void chunkis$setDelta(ChunkDelta<?, ?> delta);
 
     /**
-     * Resolves the active restore session operation ID.
+     * Returns the current restore operation id associated with this chunk.
      *
-     * @return active operation ID string, or null
+     * @return restore operation id, or {@code null} when no restore is active
      */
     String chunkis$getRestoreOperationId();
 
     /**
-     * Sets the active restore session operation ID.
+     * Stores the restore operation id currently associated with this chunk.
      *
-     * @param operationId active operation ID string
+     * @param operationId restore operation id, or {@code null} to clear it
      */
     void chunkis$setRestoreOperationId(String operationId);
 
     /**
-     * Checks if the active restore state loaded coordinates from storage.
+     * Returns whether the current restore state originated from persisted storage.
      *
-     * @return true if loaded from storage
+     * @return {@code true} when the attached restore state came from storage
      */
     boolean chunkis$wasRestoreLoadedFromStorage();
 
     /**
-     * Sets whether the active restore state loaded coordinates from storage.
+     * Records whether the current restore state originated from persisted storage.
      *
-     * @param restoreLoadedFromStorage true if loaded from storage
+     * @param restoreLoadedFromStorage {@code true} when storage was the restore source
      */
     void chunkis$setRestoreLoadedFromStorage(boolean restoreLoadedFromStorage);
 }

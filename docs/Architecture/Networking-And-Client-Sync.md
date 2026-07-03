@@ -1,77 +1,64 @@
 # Networking And Client Sync
 
-## Problem this subsystem solves
+## Purpose
 
-Server-side Chunkis state must be replayed on clients that receive vanilla chunk packets. Chunkis therefore sends a parallel delta payload to clients whenever chunk data is sent.
+Server-side Chunkis state is not part of vanilla chunk packets, so Chunkis sends a parallel delta payload whenever the server sends chunk data to clients.
 
-## Responsibilities
+## Main Classes
 
-- detect when a chunk has meaningful Chunkis delta state
-- encode a network-specific delta payload
-- send it alongside vanilla chunk data
-- decode and apply it on the client
-- trace top-level sync boundaries
-
-## What it does not do
-
-- It does not replace vanilla chunk packets.
-- It does not send empty placeholder deltas.
-- It does not keep a shared end-to-end cross-wire operation id yet.
-
-## Owning classes
-
-- `fabric/.../network/ChunkisNetworking`
-- `fabric/.../network/ChunkDeltaPayload`
-- `fabric/.../network/FabricNetworkCodecFactory`
-- `core/.../storage/codec/network/CisNetworkEncoder`
-- `core/.../storage/codec/network/CisNetworkDecoder`
-- `fabric/.../client/ClientDeltaNetworking`
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/network/ChunkHolderMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/network/ChunkisNetworking.java`
+- `fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java`
+- `fabric/src/main/java/io/liparakis/chunkis/network/FabricNetworkCodecFactory.java`
+- `core/src/main/java/io/liparakis/chunkis/storage/codec/network/CisNetworkEncoder.java`
+- `core/src/main/java/io/liparakis/chunkis/storage/codec/network/CisNetworkDecoder.java`
+- `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java`
+- `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaVisitor.java`
 
 ## Pipeline
 
 ```mermaid
 flowchart TD
-    A["Vanilla chunk packet about to send"] --> B["Extract chunk delta"]
-    B --> C["Encode network payload"]
-    C --> D["Optional packet compression"]
-    D --> E["Send ChunkDeltaPayload"]
-    E --> F["Client decode + apply"]
+    A["ChunkHolder sends vanilla ChunkDataS2CPacket"] --> B["ChunkHolderMixin invokes ChunkisNetworking"]
+    B --> C["Extract chunk delta"]
+    C --> D["Encode with CisNetworkEncoder"]
+    D --> E["Optional zlib compression inside ChunkDeltaPayload"]
+    E --> F["ClientDeltaNetworking decode"]
+    F --> G["ClientDeltaVisitor applies received delta"]
 ```
 
-## Entry points
+## Server-Side Rules
 
-- send side: `ChunkisNetworking.sendDelta(...)`
-- client apply side: `ClientDeltaNetworking`
-- packet registration: `ChunkisMod.registerPayloads()` and `ClientChunkisMod`
+- Chunkis does not replace vanilla chunk packets.
+- Empty deltas are skipped.
+- Oversized payloads are dropped.
+- One prepared payload can be fanned out to multiple players.
+- Bulk restore resends can pre-encode off-thread and send back on the server thread.
 
-## Key rules
+## Client-Side Rules
 
-- empty or absent deltas are skipped
-- oversized payloads are dropped
-- client sync is additive to vanilla chunk transfer, not a replacement
-- tracing is currently focused on top-level send/apply boundaries, not deep per-stage codec internals
+- Payload decode happens before client-world application.
+- Actual chunk mutation is scheduled onto the main client thread.
+- Missing `ChunkisDeltaDuck` support on the client chunk is treated as a traced failure.
 
-## Invariants
+## Wire Format
 
-- packet send must not happen for a null or empty delta
-- network payload shape uses the network codec, not the region-file codec directly
-- client decode failures must be surfaced as trace failures, not swallowed silently
+`ChunkDeltaPayload` carries:
 
-## Common debugging locations
+- chunk X
+- chunk Z
+- compression flag
+- data length
+- payload bytes
+- original uncompressed size when compressed
 
-- [ChunkisNetworking.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/network/ChunkisNetworking.java)
-- [ChunkDeltaPayload.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java)
-- [ClientDeltaNetworking.java](C:/Users/Liparakis/Desktop/Chunkis/fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java)
-- [CisNetworkEncoder.java](C:/Users/Liparakis/Desktop/Chunkis/core/src/main/java/io/liparakis/chunkis/storage/codec/network/CisNetworkEncoder.java)
-- [CisNetworkDecoder.java](C:/Users/Liparakis/Desktop/Chunkis/core/src/main/java/io/liparakis/chunkis/storage/codec/network/CisNetworkDecoder.java)
+Disk storage and network transport do not share the same compression layer:
 
-## Common failure modes
+- disk uses the CIS storage pipeline and Zstd
+- client sync uses the network codec and optional zlib compression inside the packet payload
 
-- payload too large and dropped
-- client decode failure due to malformed or incompatible payload
-- assuming network sync shares the exact same semantics as disk persistence
+## Related Docs
 
-## See also
-
-- [Storage Format](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Storage-Format.md)
-- [Observability And Debugging](C:/Users/Liparakis/Desktop/Chunkis/docs/Architecture/Observability-And-Debugging.md)
+- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
+- [Storage Format](Storage-Format.md)
+- [Observability And Debugging](Observability-And-Debugging.md)

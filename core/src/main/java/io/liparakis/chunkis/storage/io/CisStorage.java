@@ -43,7 +43,12 @@ import java.util.Objects;
  * <p><b>Threading:</b> region cache mutation is protected by a write lock. Cache
  * hits also take the write lock because LRU order updates are mutations.
  * Compression and codec objects are per-thread to avoid contention during
- * concurrent save/load calls.</p>
+ * concurrent save/load calls. Individual {@link RegionFile} instances serialize
+ * their own read/write operations.</p>
+ *
+ * <p><b>Ownership:</b> callers own the {@link ChunkDelta} instances they pass
+ * in, but the storage instance owns its region cache and must be closed exactly
+ * once by the layer that created it.</p>
  *
  * @param <B> block type
  * @param <S> block state type
@@ -519,7 +524,8 @@ public final class CisStorage<B, S, P, N> {
      *
      * <p>The cache is drained under the write lock and files are compacted and
      * closed outside it, keeping the lock held only for cache mutation and not
-     * for potentially slow file work.</p>
+     * for potentially slow file work. No further storage operations are valid
+     * after this method returns.</p>
      */
     public void close() {
         regionFiles.closeAll();
@@ -675,7 +681,9 @@ public final class CisStorage<B, S, P, N> {
         }
 
         /**
-         * Returns {@code true} when this operation clears rather than writes the chunk entry.
+         * Returns whether this prepared operation clears rather than writes the chunk entry.
+         *
+         * @return {@code true} for clear operations, {@code false} for write operations
          */
         public boolean clearChunk() {
             return clearChunk;
@@ -683,6 +691,8 @@ public final class CisStorage<B, S, P, N> {
 
         /**
          * Returns the uncompressed CIS payload for a write operation.
+         *
+         * @return raw encoded payload bytes, or {@code null} for clear operations
          */
         public byte[] rawData() {
             return rawData;
