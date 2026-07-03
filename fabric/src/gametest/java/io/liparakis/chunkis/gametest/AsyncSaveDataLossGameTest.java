@@ -27,6 +27,7 @@ import net.minecraft.test.TestContext;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.GameMode;
 import net.minecraft.world.chunk.Chunk;
 
 import java.util.List;
@@ -408,7 +409,7 @@ public final class AsyncSaveDataLossGameTest {
         world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
         world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
 
-        final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
+        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
         teleportPlayer(player, world, targets.nearArrival());
 
         for (int i = 0; i < ROUND_TRIPS; i++) {

@@ -40,6 +40,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.GameMode;
 import net.minecraft.world.chunk.WorldChunk;
 
 @SuppressWarnings("unused")
@@ -191,7 +192,7 @@ public final class PersistedBaseChunkReloadGameTest {
                 .setBlockState(scenario.primary(), Blocks.DIAMOND_BLOCK.getDefaultState());
         return new AirDeletionTestSetup(
                 scenario,
-                context.createMockCreativeServerPlayerInWorld()
+                (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE)
         );
     }
 
@@ -655,7 +656,7 @@ public final class PersistedBaseChunkReloadGameTest {
         }
         final UUID pigUuid = pig.getUuid();
         watchEntity(pigUuid);
-        final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
+        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
         context.assertTrue(world.spawnEntity(pig), Text.literal("Expected pig spawn to succeed."));
 
         context.runAtTick(60, () -> {
@@ -849,6 +850,7 @@ public final class PersistedBaseChunkReloadGameTest {
                 CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata()),
                 Text.literal("Expected persisted base chunk NBT after capture.")
         );
+
         context.assertTrue(
                 delta.getBlockInstructions()
                         .isEmpty(),
@@ -860,7 +862,7 @@ public final class PersistedBaseChunkReloadGameTest {
         storage.save(new CisChunkPos(targetChunk.x, targetChunk.z), delta);
         GlobalChunkTracker.forgetChunk(world, targetChunk);
 
-        final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
+        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
         teleportPlayer(player, world, targetArrival);
         world.getChunkManager()
                 .save(false);
@@ -917,7 +919,7 @@ public final class PersistedBaseChunkReloadGameTest {
         final UUID pigUuid = pig.getUuid();
         watchBlocks(primary, secondary);
         watchEntity(pigUuid);
-        final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
+        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
         context.assertTrue(world.spawnEntity(pig), Text.literal("Expected pig spawn to succeed."));
 
         context.runAtTick(5, () -> {
@@ -1050,22 +1052,27 @@ public final class PersistedBaseChunkReloadGameTest {
         GlobalChunkTracker.forgetChunk(world, leftChunkPos);
         GlobalChunkTracker.forgetChunk(world, rightChunkPos);
 
-        final ServerPlayerEntity player = context.createMockCreativeServerPlayerInWorld();
+        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
         teleportPlayer(player, world, leftArrival);
         world.setChunkForced(leftChunkPos.x, leftChunkPos.z, false);
         world.setChunkForced(rightChunkPos.x, rightChunkPos.z, false);
 
         context.runAtTick(20, () -> teleportPlayer(player, world, farArrival));
+
         context.runAtTick(50, () -> context.assertTrue(
-                world.getChunkManager().getWorldChunk(leftChunkPos.x, leftChunkPos.z, false) == null
-                        && world.getChunkManager().getWorldChunk(rightChunkPos.x, rightChunkPos.z, false) == null,
+                world.getChunkManager()
+                        .getWorldChunk(leftChunkPos.x, leftChunkPos.z, false) == null
+                        && world.getChunkManager()
+                        .getWorldChunk(rightChunkPos.x, rightChunkPos.z, false) == null,
                 Text.literal("Expected both border chunks to unload before reload.")
         ));
+
         context.runAtTick(70, () -> {
             world.setChunkForced(rightChunkPos.x, rightChunkPos.z, true);
             world.getChunk(rightChunkPos.x, rightChunkPos.z);
             world.scheduleBlockTick(rightLeafNear, Blocks.JUNGLE_LEAVES, 1);
         });
+
         context.runAtTick(90, () -> {
             final BlockState state = world.getBlockState(rightLeafNear);
             context.assertTrue(
@@ -1079,23 +1086,30 @@ public final class PersistedBaseChunkReloadGameTest {
         });
         context.runAtTick(110, () -> {
             context.assertTrue(
-                    world.getBlockState(leftLogBase).isOf(Blocks.JUNGLE_LOG)
-                            && world.getBlockState(leftLogTop).isOf(Blocks.JUNGLE_LOG)
-                            && world.getBlockState(leftLeaf).isOf(Blocks.JUNGLE_LEAVES)
-                            && world.getBlockState(rightLeafNear).isOf(Blocks.JUNGLE_LEAVES)
-                            && world.getBlockState(rightLeafFar).isOf(Blocks.JUNGLE_LEAVES),
+                    world.getBlockState(leftLogBase)
+                            .isOf(Blocks.JUNGLE_LOG)
+                            && world.getBlockState(leftLogTop)
+                            .isOf(Blocks.JUNGLE_LOG)
+                            && world.getBlockState(leftLeaf)
+                            .isOf(Blocks.JUNGLE_LEAVES)
+                            && world.getBlockState(rightLeafNear)
+                            .isOf(Blocks.JUNGLE_LEAVES)
+                            && world.getBlockState(rightLeafFar)
+                            .isOf(Blocks.JUNGLE_LEAVES),
                     Text.literal("Cross-chunk border fixture was cut at reload.")
             );
 
-            final WorldChunk reloadedLeft = world.getChunkManager().getWorldChunk(leftChunkPos.x, leftChunkPos.z, false);
-            final WorldChunk reloadedRight = world.getChunkManager().getWorldChunk(rightChunkPos.x, rightChunkPos.z, false);
+            final WorldChunk reloadedLeft = world.getChunkManager()
+                    .getWorldChunk(leftChunkPos.x, leftChunkPos.z, false);
+            final WorldChunk reloadedRight = world.getChunkManager()
+                    .getWorldChunk(rightChunkPos.x, rightChunkPos.z, false);
             context.assertTrue(
-                    reloadedLeft != null && hasAttachedRestorableDelta(reloadedLeft),
+                    hasAttachedRestorableDelta(reloadedLeft),
                     Text.literal("Reloaded left full-baseline chunk did not keep a live Chunkis delta attached: "
                             + describeAttachedDelta(reloadedLeft))
             );
             context.assertTrue(
-                    reloadedRight != null && hasAttachedRestorableDelta(reloadedRight),
+                    hasAttachedRestorableDelta(reloadedRight),
                     Text.literal("Reloaded right base-backed chunk did not keep a live Chunkis delta attached: "
                             + describeAttachedDelta(reloadedRight))
             );

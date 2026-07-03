@@ -1,9 +1,6 @@
 package io.liparakis.chunkis.migration;
 
 import java.util.concurrent.atomic.AtomicReference;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.MessageScreen;
-import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -11,10 +8,28 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class MigrationProgressTracker {
 
+    /**
+     * Listener interface to receive status updates for client screen rendering.
+     */
+    public interface StatusListener {
+
+        void onStatusUpdate(@Nullable String status);
+    }
+
     private static final AtomicReference<String> STATUS = new AtomicReference<>();
+    private static @Nullable StatusListener statusListener;
 
     private MigrationProgressTracker() {
         throw new AssertionError("Utility class");
+    }
+
+    /**
+     * Sets the status listener for migration updates.
+     *
+     * @param listener status listener, or null to clear
+     */
+    public static void setStatusListener(final @Nullable StatusListener listener) {
+        statusListener = listener;
     }
 
     public static void begin(final String worldId, final int totalRegions) {
@@ -58,11 +73,9 @@ public final class MigrationProgressTracker {
     private static void chunkis$updateStatus(final @Nullable String status) {
         STATUS.set(status);
 
-        final MinecraftClient client = MinecraftClient.getInstance();
-        if (status == null || client == null) {
-            return;
+        final StatusListener listener = statusListener;
+        if (listener != null) {
+            listener.onStatusUpdate(status);
         }
-
-        client.setScreenAndRender(new MessageScreen(Text.literal(status)));
     }
 }
