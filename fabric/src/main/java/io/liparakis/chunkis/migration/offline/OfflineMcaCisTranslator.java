@@ -39,6 +39,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.registry.DynamicRegistryManager;
 import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.state.property.Property;
 import net.minecraft.util.math.BlockPos;
@@ -97,19 +98,17 @@ public final class OfflineMcaCisTranslator {
      * Translates one dimension's MCA region files into authoritative CIS
      * snapshots.
      *
-     * @param saveRoot           world save root
-     * @param worldKey           dimension registry key
-     * @param registryManager    registry manager used to decode palette contents
-     * @param dimensionType      dimension height limits
-     * @param migrationReportDir directory where region reports should be written
+     * @param saveRoot        world save root
+     * @param worldKey        dimension registry key
+     * @param registryManager registry manager used to decode palette contents
+     * @param dimensionType   dimension height limits
      * @throws IOException if storage initialization or report writing fails
      */
     public static OfflineWorldMigrationReport translateWorld(
             final Path saveRoot,
             final RegistryKey<World> worldKey,
             final DynamicRegistryManager registryManager,
-            final RegistryEntry<DimensionType> dimensionType,
-            final Path migrationReportDir
+            final RegistryEntry<DimensionType> dimensionType
     ) throws IOException {
         final String worldId = worldKey.getValue()
                 .toString();
@@ -118,16 +117,12 @@ public final class OfflineMcaCisTranslator {
 
         if (!Files.exists(regionDir)) {
             LOGGER.info("No MCA region directory found at {}; skipping migration.", regionDir);
-            final OfflineWorldMigrationReport report = OfflineWorldMigrationReport.empty(worldKey);
-            writeWorldReport(migrationReportDir, report);
-            return report;
+            return OfflineWorldMigrationReport.empty(worldKey);
         }
 
         final List<RegionCoordinates> regions = collectRegions(regionDir);
         if (regions.isEmpty()) {
-            final OfflineWorldMigrationReport report = OfflineWorldMigrationReport.empty(worldKey);
-            writeWorldReport(migrationReportDir, report);
-            return report;
+            return OfflineWorldMigrationReport.empty(worldKey);
         }
 
         final Path storageDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, worldKey);
@@ -139,8 +134,6 @@ public final class OfflineMcaCisTranslator {
                         .height()
         );
         final PalettesFactory palettesFactory = PalettesFactory.fromRegistryManager(registryManager);
-
-        Files.createDirectories(migrationReportDir);
 
         int handledChunks = 0;
         int failedChunks = 0;
@@ -164,7 +157,6 @@ public final class OfflineMcaCisTranslator {
                         worldKey,
                         heightLimitView,
                         palettesFactory,
-                        migrationReportDir,
                         mcaPath,
                         region.regionX(),
                         region.regionZ()
@@ -187,15 +179,14 @@ public final class OfflineMcaCisTranslator {
                 failedChunks,
                 retiredRegions
         );
-        final OfflineWorldMigrationReport report = new OfflineWorldMigrationReport(
+
+        return new OfflineWorldMigrationReport(
                 worldKey,
                 regions.size(),
                 handledChunks,
                 failedChunks,
                 retiredRegions
         );
-        writeWorldReport(migrationReportDir, report);
-        return report;
     }
 
     /**
@@ -228,7 +219,6 @@ public final class OfflineMcaCisTranslator {
             final RegistryKey<World> worldKey,
             final HeightLimitView heightLimitView,
             final PalettesFactory palettesFactory,
-            final Path migrationReportDir,
             final Path mcaPath,
             final int regionX,
             final int regionZ
@@ -281,14 +271,14 @@ public final class OfflineMcaCisTranslator {
                             );
                             continue;
                         }
-                        if (!storage.save(new CisChunkPos(chunkPos.x, chunkPos.z), delta)) {
+                        if (!storage.replace(new CisChunkPos(chunkPos.x, chunkPos.z), delta)) {
                             failedChunks++;
                             LOGGER.error("Failed to save migrated chunk {} from {}", chunkPos, mcaPath.getFileName());
                             continue;
                         }
 
                         final MigrationValidationResult vr = validateMigratedChunk(storage, chunkPos, delta);
-                        if (!vr.success()) {
+                        if (!vr.valid()) {
                             failedChunks++;
                             LOGGER.error("Failed to validate migrated chunk {} from {}: code={} details={}",
                                     chunkPos, mcaPath.getFileName(), vr.failureCode(), vr.details());
@@ -338,7 +328,6 @@ public final class OfflineMcaCisTranslator {
                 retired,
                 TRANSLATOR_VERSION
         );
-        writeRegionReport(migrationReportDir, report);
         LOGGER.info(
                 "Finished {}. Handled {}, failed {}, coverage {}/{}.",
                 mcaPath.getFileName(),
@@ -516,13 +505,19 @@ public final class OfflineMcaCisTranslator {
         if (!CisNbtUtil.isMigratedAuthoritativeChunk(actual.getChunkMetadata())) {
             return MigrationValidationResult.failure("NOT_AUTHORITATIVE", "missing migrated authoritative marker");
         }
-        if (expected.getBlockChangesCount() != actual.getBlockChangesCount()) {
+        final Map<Long, String> expectedNonAir = canonicalNonAirBlockMap(expected);
+        final Map<Long, String> actualNonAir = canonicalNonAirBlockMap(actual);
+        if (expectedNonAir.size() != actualNonAir.size()) {
             return MigrationValidationResult.failure("BLOCK_COUNT_MISMATCH",
-                    "expected=" + expected.getBlockChangesCount() + ", actual=" + actual.getBlockChangesCount());
+                    "expectedNonAir=" + expectedNonAir.size() + ", actualNonAir=" + actualNonAir.size());
         }
-        if (expected.getBlockEntities().size() != actual.getBlockEntities().size()) {
+        if (expected.getBlockEntities()
+                .size() != actual.getBlockEntities()
+                .size()) {
             return MigrationValidationResult.failure("BE_COUNT_MISMATCH",
-                    "expected=" + expected.getBlockEntities().size() + ", actual=" + actual.getBlockEntities().size());
+                    "expected=" + expected.getBlockEntities()
+                            .size() + ", actual=" + actual.getBlockEntities()
+                            .size());
         }
         if (expected.countPendingEntities() != actual.countPendingEntities()) {
             return MigrationValidationResult.failure("ENTITY_COUNT_MISMATCH",
@@ -545,45 +540,49 @@ public final class OfflineMcaCisTranslator {
         }
 
         final MigrationValidationResult blocks = validateBlocks(expected, actual);
-        if (!blocks.success()) {
+        if (!blocks.valid()) {
             return blocks;
         }
         final MigrationValidationResult blockEntities = validateBlockEntities(expected, actual);
-        if (!blockEntities.success()) {
+        if (!blockEntities.valid()) {
             return blockEntities;
         }
         final MigrationValidationResult entities = validateEntities(expected, actual);
-        if (!entities.success()) {
+        if (!entities.valid()) {
             return entities;
         }
         return MigrationValidationResult.success();
     }
 
+    /**
+     * Compares canonicalized non-air block state payloads between expected and stored chunks.
+     *
+     * @param expected translated authoritative snapshot
+     * @param actual   stored CIS payload loaded back from disk
+     * @return validation result describing the first block-level mismatch class
+     */
     private static MigrationValidationResult validateBlocks(
             final ChunkDelta<BlockState, NbtCompound> expected,
             final ChunkDelta<BlockState, NbtCompound> actual
     ) {
-        final Map<Long, BlockState> expectedBlocks = new HashMap<>();
-        final Map<Long, BlockState> actualBlocks = new HashMap<>();
-        expected.forEachBlockInstruction((x, y, z, paletteId, state) ->
-                expectedBlocks.put(BlockPos.asLong(x, y, z), state));
-        actual.forEachBlockInstruction((x, y, z, paletteId, state) ->
-                actualBlocks.put(BlockPos.asLong(x, y, z), state));
+        final Map<Long, String> expectedNonAir = canonicalNonAirBlockMap(expected);
+        final Map<Long, String> actualNonAir = canonicalNonAirBlockMap(actual);
 
-        if (!expectedBlocks.keySet().equals(actualBlocks.keySet())) {
+        if (!expectedNonAir.keySet()
+                .equals(actualNonAir.keySet())) {
             return MigrationValidationResult.failure("BLOCK_POS_MISMATCH",
-                    "positions differ: expected=" + expectedBlocks.size() + ", actual=" + actualBlocks.size());
+                    "non-air positions differ: expected=" + expectedNonAir.size() + ", actual=" + actualNonAir.size());
         }
 
         int mismatchCount = 0;
-        for (final Map.Entry<Long, BlockState> entry : expectedBlocks.entrySet()) {
+        for (final Map.Entry<Long, String> entry : expectedNonAir.entrySet()) {
             final long pos = entry.getKey();
-            final BlockState exp = entry.getValue();
-            final BlockState act = actualBlocks.get(pos);
-            if (!canonicalBlockStateKey(exp).equals(canonicalBlockStateKey(act))) {
+            final String expKey = entry.getValue();
+            final String actKey = actualNonAir.get(pos);
+            if (!expKey.equals(actKey)) {
                 mismatchCount++;
                 if (mismatchCount <= 10) {
-                    LOGGER.warn("Block mismatch at {}: expected={} actual={}", BlockPos.fromLong(pos), exp, act);
+                    LOGGER.warn("Block mismatch at {}: expected={} actual={}", BlockPos.fromLong(pos), expKey, actKey);
                 }
             }
         }
@@ -596,41 +595,79 @@ public final class OfflineMcaCisTranslator {
         return MigrationValidationResult.success();
     }
 
+    /**
+     * Builds a stable string key for a block state so validation compares semantic state
+     * rather than palette order or object identity.
+     *
+     * @param state block state to canonicalize
+     * @return registry id plus sorted property assignments
+     */
     private static String canonicalBlockStateKey(final BlockState state) {
         if (state == null) {
             return "null";
         }
-        final StringBuilder sb = new StringBuilder(state.getBlock().getRegistryEntry().registryKey().getValue().toString());
+        final StringBuilder sb = new StringBuilder(Registries.BLOCK.getId(state.getBlock())
+                .toString());
         final Map<Property<?>, Comparable<?>> props = new TreeMap<>(
-                Comparator.comparing(p -> p.getName()));
+                Comparator.comparing(Property::getName));
         props.putAll(state.getEntries());
         if (!props.isEmpty()) {
             sb.append('[');
-            sb.append(props.entrySet().stream()
-                    .map(e -> e.getKey().getName() + "=" + e.getValue())
+            sb.append(props.entrySet()
+                    .stream()
+                    .map(e -> e.getKey()
+                            .getName() + "=" + e.getValue())
                     .collect(Collectors.joining(",")));
             sb.append(']');
         }
         return sb.toString();
     }
 
+    /**
+     * Builds a canonical map of non-air block states keyed by local position.
+     * AIR and null states are excluded because they are not authoritative
+     * semantic changes for migration validation.
+     */
+    private static Map<Long, String> canonicalNonAirBlockMap(
+            final ChunkDelta<BlockState, NbtCompound> delta
+    ) {
+        final Map<Long, String> result = new HashMap<>();
+        delta.forEachBlockInstruction((x, y, z, paletteId, state) -> {
+            if (state != null && !state.isAir()) {
+                result.put(BlockPos.asLong(x, y, z), canonicalBlockStateKey(state));
+            }
+        });
+        return result;
+    }
+
+    /**
+     * Compares block-entity payloads between expected and stored chunks using recursive NBT matching.
+     *
+     * @param expected translated authoritative snapshot
+     * @param actual   stored CIS payload loaded back from disk
+     * @return validation result describing any block-entity mismatch
+     */
     private static MigrationValidationResult validateBlockEntities(
             final ChunkDelta<BlockState, NbtCompound> expected,
             final ChunkDelta<BlockState, NbtCompound> actual
     ) {
         final Set<Long> keys = new HashSet<>();
-        keys.addAll(expected.getBlockEntities().keySet());
-        keys.addAll(actual.getBlockEntities().keySet());
+        keys.addAll(expected.getBlockEntities()
+                .keySet());
+        keys.addAll(actual.getBlockEntities()
+                .keySet());
         int mismatchCount = 0;
         for (final long key : keys) {
-            final NbtCompound exp = expected.getBlockEntities().get(key);
-            final NbtCompound act = actual.getBlockEntities().get(key);
+            final NbtCompound exp = expected.getBlockEntities()
+                    .get(key);
+            final NbtCompound act = actual.getBlockEntities()
+                    .get(key);
             if (!NbtHelper.matches(exp, act, true)) {
                 mismatchCount++;
                 final BlockPos pos = BlockPos.fromLong(key);
                 if (mismatchCount <= 10) {
                     LOGGER.warn("Block entity mismatch at {}: expected keys={} actual keys={}",
-                            pos, exp != null ? exp.getKeys() : "null", act != null ? act.getKeys() : "null");
+                            pos, exp.getKeys(), act != null ? act.getKeys() : "null");
                 }
             }
         }
@@ -638,11 +675,19 @@ public final class OfflineMcaCisTranslator {
             LOGGER.warn("... {} additional block-entity mismatches suppressed", mismatchCount - 10);
         }
         if (mismatchCount > 0) {
-            return MigrationValidationResult.failure("BLOCK_ENTITY_MISMATCH", mismatchCount + " block entity mismatches");
+            return MigrationValidationResult.failure("BLOCK_ENTITY_MISMATCH",
+                    mismatchCount + " block entity mismatches");
         }
         return MigrationValidationResult.success();
     }
 
+    /**
+     * Compares pending-entity lists after normalizing them to sorted string representations.
+     *
+     * @param expected translated authoritative snapshot
+     * @param actual   stored CIS payload loaded back from disk
+     * @return validation result describing any entity-list mismatch
+     */
     private static MigrationValidationResult validateEntities(
             final ChunkDelta<BlockState, NbtCompound> expected,
             final ChunkDelta<BlockState, NbtCompound> actual
@@ -680,49 +725,47 @@ public final class OfflineMcaCisTranslator {
     }
 
     /**
-     * Renames a fully migrated region to {@code .backup}.
+     * Safely retires a real MCA region file only after verified backup.
+     * 0KB placeholder files are never backed up or retired as real source.
      */
     static void retireRegionFile(final Path mcaPath) throws IOException {
+        if (!Files.exists(mcaPath)) {
+            LOGGER.warn("retireRegionFile called on non-existent path: {}", mcaPath);
+            return;
+        }
+        final long size = Files.size(mcaPath);
+        if (size == 0) {
+            LOGGER.info("Skipping retirement of 0KB placeholder: {}", mcaPath.getFileName());
+            // Delete the empty placeholder safely
+            Files.deleteIfExists(mcaPath);
+            return;
+        }
+
         final Path backupPath = mcaPath.resolveSibling(mcaPath.getFileName() + ".backup");
-        Files.move(mcaPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
-        LOGGER.info("Backed up {} -> {}", mcaPath.getFileName(), backupPath.getFileName());
-    }
 
-    /**
-     * Writes one region report line to the migration manifest directory.
-     */
-    private static void writeRegionReport(
-            final Path migrationReportDir,
-            final OfflineRegionMigrationReport report
-    ) throws IOException {
-        final Path reportFile = migrationReportDir.resolve(report.worldId()
-                .replace(':', '_') + ".jsonl");
-        final String json = report.toJsonLine() + System.lineSeparator();
-        Files.writeString(
-                reportFile,
-                json,
-                Files.exists(reportFile)
-                        ? java.nio.file.StandardOpenOption.APPEND
-                        : java.nio.file.StandardOpenOption.CREATE
-        );
-    }
+        // Do not overwrite existing backup without explicit versioning (safety)
+        if (Files.exists(backupPath)) {
+            LOGGER.warn("Backup already exists, skipping retirement to avoid data loss: {}", backupPath);
+            return;
+        }
 
-    /**
-     * Writes one world-summary line to the migration manifest directory.
-     */
-    private static void writeWorldReport(
-            final Path migrationReportDir,
-            final OfflineWorldMigrationReport report
-    ) throws IOException {
-        final Path reportFile = migrationReportDir.resolve("worlds.jsonl");
-        final String json = report.toJsonLine() + System.lineSeparator();
-        Files.writeString(
-                reportFile,
-                json,
-                Files.exists(reportFile)
-                        ? java.nio.file.StandardOpenOption.APPEND
-                        : java.nio.file.StandardOpenOption.CREATE
-        );
+        // Copy first (safer than move for verification)
+        Files.copy(mcaPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+
+        // Verify backup
+        final long backupSize = Files.size(backupPath);
+        if (backupSize != size) {
+            // Backup failed verification - remove partial backup and abort
+            Files.deleteIfExists(backupPath);
+            throw new IOException("Backup verification failed for " + mcaPath +
+                    " (source=" + size + ", backup=" + backupSize + ")");
+        }
+
+        // Only after successful verified backup, remove source
+        Files.delete(mcaPath);
+        LOGGER.info("Verified backup created and source retired: {} -> {}",
+                mcaPath.getFileName(),
+                backupPath.getFileName());
     }
 
     /**
@@ -746,9 +789,17 @@ public final class OfflineMcaCisTranslator {
 
     /**
      * Immutable region coordinates parsed from a region filename.
+     *
+     * @param regionX region X coordinate in 32x32 chunk units
+     * @param regionZ region Z coordinate in 32x32 chunk units
      */
     private record RegionCoordinates(int regionX, int regionZ) {
 
+        /**
+         * Reconstructs the vanilla MCA filename for these region coordinates.
+         *
+         * @return region filename in {@code r.<x>.<z>.mca} form
+         */
         private String fileName() {
             return "r." + regionX + "." + regionZ + ".mca";
         }

@@ -54,8 +54,19 @@ import java.util.Objects;
  */
 public final class CisStorage<B, S, P, N> {
 
+    /**
+     * Trace source label for normal save requests.
+     */
     private static final String SAVE_SOURCE = "CisStorage#save";
+
+    /**
+     * Trace source label for prepared-write flushes.
+     */
     private static final String WRITE_SOURCE = "CisStorage#writePrepared";
+
+    /**
+     * Trace source label for load requests.
+     */
     private static final String LOAD_SOURCE = "CisStorage#load";
 
     /**
@@ -140,6 +151,9 @@ public final class CisStorage<B, S, P, N> {
         return new ChunkDelta<>();
     }
 
+    /**
+     * Maps load/decode failures to the closest trace reason for diagnostics.
+     */
     private static ChunkTraceReason classifyLoadFailure(final Exception error) {
         final String message = error.getMessage();
         if (message == null) {
@@ -154,10 +168,16 @@ public final class CisStorage<B, S, P, N> {
         return ChunkTraceReason.DECODE_FAILED;
     }
 
+    /**
+     * Converts a storage position into the trace-model chunk key shape.
+     */
     private static DebugChunkKey toChunkKey(final CisChunkPos pos) {
         return new DebugChunkKey(pos.x(), pos.z());
     }
 
+    /**
+     * Converts a storage position into the trace-model region key shape.
+     */
     private static DebugRegionKey toRegionKey(final CisChunkPos pos) {
         final var regionKey = RegionFileCache.regionKey(pos);
         return new DebugRegionKey(regionKey.x(), regionKey.z());
@@ -216,6 +236,65 @@ public final class CisStorage<B, S, P, N> {
                     toChunkKey(pos), toRegionKey(pos), operationId, delta.isDirty(), null
             );
             Chunkis.LOGGER.error("Chunkis: Failed to save CIS chunk {}", pos, e);
+            return false;
+        }
+    }
+
+    /**
+     * Replaces any existing chunk payload with the given authoritative snapshot.
+     *
+     * <p>This is intended for offline migration only. It guarantees that the
+     * written delta is exactly the supplied one and does not merge with any
+     * previous data for the same chunk position.</p>
+     *
+     * @param pos   chunk position
+     * @param delta authoritative full snapshot
+     * @return true if replace succeeded
+     */
+    public boolean replace(final CisChunkPos pos, final ChunkDelta<S, N> delta) {
+        return replace(pos, delta, ChunkTraceStore.nextOperationId("replace"));
+    }
+
+    /**
+     * Replaces any existing chunk payload with the given authoritative snapshot.
+     *
+     * @param pos         chunk position
+     * @param delta       authoritative full snapshot
+     * @param operationId trace correlation id
+     * @return true if replace succeeded
+     */
+    public boolean replace(final CisChunkPos pos, final ChunkDelta<S, N> delta, final String operationId) {
+        Objects.requireNonNull(pos, "pos");
+        Objects.requireNonNull(delta, "delta");
+
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.SAVE_TX_START,
+                ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, SAVE_SOURCE,
+                "replace requested (authoritative)", null, toChunkKey(pos), toRegionKey(pos),
+                operationId, delta.isDirty(), null
+        );
+
+        try {
+            // First clear any stale entry so the new payload cannot merge with old data
+            clearChunk(pos);
+
+            final PreparedSave preparedSave = prepareSave(pos, delta);
+
+            if (!writePrepared(pos, preparedSave, operationId)) {
+                return false;
+            }
+
+            delta.setSourceVersion(CisConstants.VERSION);
+            delta.markSaved();
+            return true;
+        } catch (final IOException e) {
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.SAVE_FLUSH_FAILED,
+                    ChunkTraceSeverity.ERROR, ChunkTraceReason.IO_EXCEPTION, SAVE_SOURCE,
+                    "replace failed", null, toChunkKey(pos), toRegionKey(pos), operationId,
+                    delta.isDirty(), null
+            );
+            Chunkis.LOGGER.error("Chunkis: Failed to replace CIS chunk {}", pos, e);
             return false;
         }
     }
@@ -399,6 +478,15 @@ public final class CisStorage<B, S, P, N> {
         }
     }
 
+    /**
+     * Returns whether a region file currently contains a stored entry for the chunk.
+     *
+     * <p>I/O failures are treated as a negative answer so callers can use this as
+     * a lightweight existence probe.</p>
+     *
+     * @param pos chunk position
+     * @return {@code true} if an entry exists in storage
+     */
     public boolean contains(final CisChunkPos pos) {
         Objects.requireNonNull(pos, "pos");
         try {
@@ -524,6 +612,8 @@ public final class CisStorage<B, S, P, N> {
     /**
      * Drains and returns all cached region files.
      * Package-private for use by maintenance / test helpers.
+     *
+     * @return cached region files previously held open by this storage instance
      */
     List<RegionFile> drainRegionCache() {
         return regionFiles.drain();
@@ -531,6 +621,8 @@ public final class CisStorage<B, S, P, N> {
 
     /**
      * Returns the backing region directory for package-local maintenance helpers.
+     *
+     * @return root directory containing this storage instance's {@code .cis} files
      */
     Path storageDir() {
         return storageDir;
@@ -545,9 +637,22 @@ public final class CisStorage<B, S, P, N> {
      */
     public static final class PreparedSave {
 
+        /**
+         * Whether this prepared operation clears the chunk entry instead of writing bytes.
+         */
         private final boolean clearChunk;
+
+        /**
+         * Uncompressed encoded CIS payload for deferred compression and write.
+         */
         private final byte[] rawData;
 
+        /**
+         * Creates a prepared save operation.
+         *
+         * @param clearChunk whether the operation clears the chunk entry
+         * @param rawData    encoded uncompressed CIS bytes, or {@code null} for clear operations
+         */
         private PreparedSave(final boolean clearChunk, final byte[] rawData) {
             this.clearChunk = clearChunk;
             this.rawData = rawData;

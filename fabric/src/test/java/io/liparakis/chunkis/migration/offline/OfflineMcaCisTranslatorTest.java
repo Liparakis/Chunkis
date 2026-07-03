@@ -24,8 +24,10 @@ class OfflineMcaCisTranslatorTest {
         final ChunkDelta<BlockState, NbtCompound> matching = migratedDelta("minecraft:pig");
         final ChunkDelta<BlockState, NbtCompound> mismatched = migratedDelta("minecraft:cow");
 
-        assertTrue(OfflineMcaCisTranslator.matchesMigratedChunkShape(expected, matching));
-        assertFalse(OfflineMcaCisTranslator.matchesMigratedChunkShape(expected, mismatched));
+        assertTrue(OfflineMcaCisTranslator.matchesMigratedChunkShape(expected, matching)
+                .valid());
+        assertFalse(OfflineMcaCisTranslator.matchesMigratedChunkShape(expected, mismatched)
+                .valid());
     }
 
     @Test

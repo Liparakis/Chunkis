@@ -7,6 +7,7 @@
         "accessor.ChunkSectionAccessor",
         "network.ChunkHolderMixin",
         "storage.ChunkSerializerMixin",
+        "storage.RegionBasedStorageMixin",
         "storage.StoragePreventionMixin",
         "storage.ThreadedAnvilChunkStorageMixin",
         "world.ChunkRegionMixin",
@@ -21,8 +22,8 @@
         "world.server.ServerWorldMixin"
     ],
     "client": [
-        "client.storage.MinecraftClientMixin",
-        "client.screen.LevelLoadingScreenMixin"
+        "client.screen.SplashOverlayMixin",
+        "client.storage.MinecraftClientMixin"
     ],
     "injectors": {
         "defaultRequire": 1

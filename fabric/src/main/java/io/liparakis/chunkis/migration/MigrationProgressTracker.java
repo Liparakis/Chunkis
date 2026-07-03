@@ -1,6 +1,9 @@
 package io.liparakis.chunkis.migration;
 
 import java.util.concurrent.atomic.AtomicReference;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.MessageScreen;
+import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -15,7 +18,7 @@ public final class MigrationProgressTracker {
     }
 
     public static void begin(final String worldId, final int totalRegions) {
-        STATUS.set("Scanning MCA regions for " + worldId + " (" + totalRegions + " region(s))");
+        chunkis$updateStatus("Scanning MCA regions for " + worldId + " (" + totalRegions + " region(s))");
     }
 
     public static void region(
@@ -25,7 +28,7 @@ public final class MigrationProgressTracker {
             final int totalRegions
     ) {
         final String targetRegionFileName = sourceRegionFileName.replace(".mca", ".cis");
-        STATUS.set(
+        chunkis$updateStatus(
                 "Converting "
                         + sourceRegionFileName
                         + " region to "
@@ -41,7 +44,7 @@ public final class MigrationProgressTracker {
     }
 
     public static void finish(final String worldId) {
-        STATUS.set("Finished MCA -> CIS migration for " + worldId);
+        chunkis$updateStatus("Finished MCA -> CIS migration for " + worldId);
     }
 
     public static void clear() {
@@ -50,5 +53,16 @@ public final class MigrationProgressTracker {
 
     public static @Nullable String getStatus() {
         return STATUS.get();
+    }
+
+    private static void chunkis$updateStatus(final @Nullable String status) {
+        STATUS.set(status);
+
+        final MinecraftClient client = MinecraftClient.getInstance();
+        if (status == null || client == null) {
+            return;
+        }
+
+        client.setScreenAndRender(new MessageScreen(Text.literal(status)));
     }
 }
