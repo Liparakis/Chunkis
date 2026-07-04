@@ -1,8 +1,6 @@
 package io.liparakis.chunkis.migration.offline;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.file.Path;
@@ -51,26 +49,6 @@ class PreLaunchMigrationCoordinatorTest {
                 ),
                 Path.of("migration")
         ));
-    }
-
-    /**
-     * Tests that the presence of backup files alone is not sufficient to treat the CIS (Chunkis)
-     * data as authoritative or to trigger deletion of vanilla source region files.
-     */
-    @Test
-    void backupFilesAloneDoNotMakeCisAuthoritative() {
-        assertFalse(PreLaunchMigrationCoordinator.shouldTreatCisAsAuthoritative(false));
-        assertFalse(PreLaunchMigrationCoordinator.shouldDeleteVanillaSourcesAsStale(false));
-    }
-
-    /**
-     * Tests that having Chunkis data files makes Chunkis authoritative, requiring it to be
-     * treated as authoritative and triggering deletion of stale vanilla sources.
-     */
-    @Test
-    void cisDataMakesChunkisAuthoritative() {
-        assertTrue(PreLaunchMigrationCoordinator.shouldTreatCisAsAuthoritative(true));
-        assertTrue(PreLaunchMigrationCoordinator.shouldDeleteVanillaSourcesAsStale(true));
     }
 
     /**

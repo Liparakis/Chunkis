@@ -47,10 +47,9 @@ final class ThreadedAnvilChunkStorageMixinSavePathTest {
     /**
      * Tests that a null delta is handled gracefully, returning null without throwing.
      *
-     * @throws Exception if reflection or execution fails
      */
     @Test
-    void skippedEntityCaptureLeavesMissingDeltaNull() throws Exception {
+    void skippedEntityCaptureLeavesMissingDeltaNull() {
         assertDoesNotThrow(() -> assertNull(invokeClaimAfterEntityCapture(null)));
     }
 

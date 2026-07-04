@@ -34,11 +34,6 @@ import org.slf4j.LoggerFactory;
 class CisStorageMigratorTest {
 
     /**
-     * Shared inflate/deflate buffer size; large enough to avoid repeated grows.
-     */
-    private static final int IO_BUFFER_SIZE = 8192;
-
-    /**
      * Number of chunk slots per region file (32 × 32).
      */
     private static final int REGION_SLOTS = 1024;
@@ -103,8 +98,14 @@ class CisStorageMigratorTest {
         final CisMigrationReport report = migrator(harness).migrateStorage(harness.regionsDir());
 
         assertReport(report, REGION_SLOTS, 1, REGION_SLOTS - 1);
-        assertEquals(CURRENT_VERSION, harness.storage().load(legacyPos).getSourceVersion());
-        assertEquals(CURRENT_VERSION, harness.storage().load(currentPos).getSourceVersion());
+        assertEquals(CURRENT_VERSION,
+                harness.storage()
+                        .load(legacyPos)
+                        .getSourceVersion());
+        assertEquals(CURRENT_VERSION,
+                harness.storage()
+                        .load(currentPos)
+                        .getSourceVersion());
 
         harness.close();
     }
@@ -127,7 +128,8 @@ class CisStorageMigratorTest {
 
         assertReport(firstReport, REGION_SLOTS, 1, REGION_SLOTS - 1);
         assertReport(secondReport, 0, 0, 0);
-        assertTrue(Files.exists(harness.regionsDir().resolve(VERSION_MARKER_FILE)));
+        assertTrue(Files.exists(harness.regionsDir()
+                .resolve(VERSION_MARKER_FILE)));
 
         harness.close();
     }
@@ -144,14 +146,18 @@ class CisStorageMigratorTest {
         harness.saveChunk(legacyPos, "stone");
         harness.rewriteChunkVersionToLegacy(legacyPos);
         Files.writeString(
-                harness.regionsDir().resolve(VERSION_MARKER_FILE),
+                harness.regionsDir()
+                        .resolve(VERSION_MARKER_FILE),
                 Integer.toString(LEGACY_VERSION)
         );
 
         final CisMigrationReport report = migrator(harness).migrateStorage(harness.regionsDir());
 
         assertReport(report, REGION_SLOTS, 1, REGION_SLOTS - 1);
-        assertEquals(CURRENT_VERSION, harness.storage().load(legacyPos).getSourceVersion());
+        assertEquals(CURRENT_VERSION,
+                harness.storage()
+                        .load(legacyPos)
+                        .getSourceVersion());
 
         harness.close();
     }
@@ -163,7 +169,8 @@ class CisStorageMigratorTest {
     @Test
     void ignoresNonRegionFilesAndCountsOnlyRegionSlots() throws Exception {
         final TestStorageHarness harness = createHarness();
-        Files.createFile(harness.regionsDir().resolve("notes.txt"));
+        Files.createFile(harness.regionsDir()
+                .resolve("notes.txt"));
 
         final CisMigrationReport report = migrator(harness).migrateStorage(harness.regionsDir());
 
@@ -198,8 +205,9 @@ class CisStorageMigratorTest {
         assertTrue(
                 harness.chunkEntryExists(legacyPos),
                 "Migration must preserve the original chunk bytes when decode fails."
-                  );
-        assertFalse(Files.exists(harness.regionsDir().resolve(VERSION_MARKER_FILE)));
+        );
+        assertFalse(Files.exists(harness.regionsDir()
+                .resolve(VERSION_MARKER_FILE)));
 
         harness.close();
     }

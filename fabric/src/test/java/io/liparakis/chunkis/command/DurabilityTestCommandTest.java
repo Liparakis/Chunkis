@@ -33,6 +33,7 @@ class DurabilityTestCommandTest {
      * @param runId the run ID to set
      * @throws Exception if reflection access fails
      */
+    @SuppressWarnings("SameParameterValue")
     private static void setRunState(
             final ScheduledExecutorService executor,
             final String runId
