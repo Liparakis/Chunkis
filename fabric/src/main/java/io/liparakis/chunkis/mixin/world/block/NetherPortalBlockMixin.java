@@ -37,12 +37,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class NetherPortalBlockMixin {
 
     /**
-     * Default constructor for NetherPortalBlockMixin.
-     */
-    public NetherPortalBlockMixin() {
-    }
-
-    /**
      * Queries vanilla's portal forcer for an existing destination portal.
      *
      * <p>Returns the portal position if one is found, or empty if vanilla would

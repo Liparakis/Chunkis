@@ -7,7 +7,6 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.world.tracking.ownership.PendingVanillaSaveDecision;
 import java.lang.reflect.Method;
-import net.minecraft.util.math.ChunkPos;
 import org.junit.jupiter.api.Test;
 
 class StoragePreventionMixinTest {

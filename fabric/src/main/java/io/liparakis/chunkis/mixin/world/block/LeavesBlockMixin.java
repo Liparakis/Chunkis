@@ -34,22 +34,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(LeavesBlock.class)
 public class LeavesBlockMixin {
 
-    /**
-     * Default constructor for LeavesBlockMixin.
-     */
-    public LeavesBlockMixin() {
-    }
-
-    /**
-     * Enters the leaf tick context before the scheduled tick runs.
-     *
-     * @param state  the current block state of the leaves
-     * @param world  the server world in which the tick is occurring
-     * @param pos    the position of the leaves block
-     * @param random the random generator for this tick
-     * @param ci     the Mixin {@link CallbackInfo}; unused but required by the
-     *               injection contract
-     */
     @Inject(method = "scheduledTick", at = @At("HEAD"))
     private void chunkis$beforeLeafTick(
             final BlockState state,

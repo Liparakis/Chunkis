@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.command;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -93,7 +94,7 @@ class ChunkDebugCommandTest {
                                 true
                         )
                 )
-                                                                        );
+        );
 
         assertTrue(formatted.contains("chunk=7,-2"));
         assertTrue(formatted.contains("trackerDirty=true"));
@@ -109,8 +110,10 @@ class ChunkDebugCommandTest {
         final ChunkDebugCommand.ChatMessage chatMessage = ChunkDebugCommand.truncateForChat(oversized);
 
         assertTrue(chatMessage.truncated());
-        assertTrue(chatMessage.text().contains("[truncated; full trace written to log/file]"));
-        assertTrue(chatMessage.text().length() < oversized.length());
+        assertTrue(chatMessage.text()
+                .contains("[truncated; full trace written to log/file]"));
+        assertTrue(chatMessage.text()
+                .length() < oversized.length());
     }
 
     @Test
@@ -118,11 +121,28 @@ class ChunkDebugCommandTest {
         final ChunkDebugCommand.ChatMessage chatMessage = ChunkDebugCommand.truncateForChat("small");
 
         assertFalse(chatMessage.truncated());
-        assertTrue("small".equals(chatMessage.text()));
+        assertEquals("small", chatMessage.text());
     }
 
     @Test
     void formatsSuspectSummaryAndDetail() {
+        final ChunkTraceSuspect suspect = createSuspect();
+
+        final String summary = ChunkDebugCommand.formatSuspectSummary(suspect);
+        final String detail = ChunkDebugCommand.formatSuspectDetail(suspect);
+
+        assertTrue(summary.contains("id=2 chunk=7,-2"));
+        assertTrue(summary.contains("region=0,-1"));
+        assertTrue(summary.contains("reason=RESTORE_EMPTY_RESULT"));
+        assertTrue(summary.contains("latest=RESTORE_FAILED#21"));
+        assertTrue(detail.contains("original=RESTORE_COMPLETED#10"));
+        assertTrue(detail.contains("latest=RESTORE_FAILED#21"));
+        assertTrue(detail.contains("op=save-7--2-4"));
+        assertTrue(detail.contains("timeline=2"));
+        assertTrue(detail.contains("inspect=/chunkis debug suspect timeline 2"));
+    }
+
+    private static ChunkTraceSuspect createSuspect() {
         final ChunkTraceEvent originalFailure = new ChunkTraceEvent(
                 10L,
                 1_717_171_717_000L,
@@ -157,7 +177,7 @@ class ChunkDebugCommandTest {
                 null,
                 null
         );
-        final ChunkTraceSuspect suspect = new ChunkTraceSuspect(
+        return new ChunkTraceSuspect(
                 2L,
                 originalFailure,
                 latestEvent,
@@ -172,19 +192,6 @@ class ChunkDebugCommandTest {
                 List.of(originalFailure, latestEvent),
                 "write failed"
         );
-
-        final String summary = ChunkDebugCommand.formatSuspectSummary(suspect);
-        final String detail = ChunkDebugCommand.formatSuspectDetail(suspect);
-
-        assertTrue(summary.contains("id=2 chunk=7,-2"));
-        assertTrue(summary.contains("region=0,-1"));
-        assertTrue(summary.contains("reason=RESTORE_EMPTY_RESULT"));
-        assertTrue(summary.contains("latest=RESTORE_FAILED#21"));
-        assertTrue(detail.contains("original=RESTORE_COMPLETED#10"));
-        assertTrue(detail.contains("latest=RESTORE_FAILED#21"));
-        assertTrue(detail.contains("op=save-7--2-4"));
-        assertTrue(detail.contains("timeline=2"));
-        assertTrue(detail.contains("inspect=/chunkis debug suspect timeline 2"));
     }
 }
 

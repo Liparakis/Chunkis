@@ -31,12 +31,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class ChunkRegionMixin {
 
     /**
-     * Default constructor for ChunkRegionMixin.
-     */
-    public ChunkRegionMixin() {
-    }
-
-    /**
      * Cancels worldgen entity spawns for restored chunks so villages, mineshafts,
      * outposts, bastions, and similar structures do not redeploy entities that are
      * already represented in the persisted CIS delta.

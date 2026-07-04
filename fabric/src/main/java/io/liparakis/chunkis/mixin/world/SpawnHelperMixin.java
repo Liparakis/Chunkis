@@ -36,13 +36,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(SpawnHelper.class)
 public class SpawnHelperMixin {
-
-    /**
-     * Default constructor for SpawnHelperMixin.
-     */
-    public SpawnHelperMixin() {
-    }
-
     /**
      * Intercepts entity population to prevent duplicate spawning on restored chunks.
      * <p>

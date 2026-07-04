@@ -768,48 +768,48 @@ public final class PersistedBaseChunkReloadGameTest {
 
         final AirDeletionTestSetup setup = createAirDeletionTestSetup(context, 620);
         final AirDeletionScenario scenario = setup.scenario();
-        final ServerWorld world = scenario.world();
-        final ChunkPos targetChunk = scenario.targetChunk();
-        final BlockPos targetArrival = scenario.targetArrival();
-        final BlockPos farArrival = scenario.farArrival();
-        final BlockPos primary = scenario.primary();
-        final ServerPlayerEntity player = setup.player();
 
-        world.setBlockState(primary, Blocks.AIR.getDefaultState());
+        scenario.world()
+                .setBlockState(scenario.primary(), Blocks.AIR.getDefaultState());
 
         context.assertTrue(
-                world.getBlockState(primary)
+                scenario.world()
+                        .getBlockState(scenario.primary())
                         .isAir(),
                 Text.literal("Expected watched block to be air immediately after deletion.")
         );
 
-        teleportPlayer(player, world, targetArrival);
-        world.getChunkManager()
+        teleportPlayer(setup.player(), scenario.world(), scenario.targetArrival());
+        scenario.world()
+                .getChunkManager()
                 .save(false);
-        AsyncCisSaveManager.flushAndClose(world);
+        AsyncCisSaveManager.flushAndClose(scenario.world());
 
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
-                FabricCisStorageHelper.getStorage(world);
+                FabricCisStorageHelper.getStorage(scenario.world());
         final ChunkDelta<BlockState, NbtCompound> storedDelta =
-                storage.load(new CisChunkPos(targetChunk.x, targetChunk.z));
+                storage.load(new CisChunkPos(scenario.targetChunk().x, scenario.targetChunk().z));
 
         context.assertFalse(
                 CisNbtUtil.hasPersistedBaseChunkNbt(storedDelta.getChunkMetadata())
                         && CisNbtUtil.hasFullBlockBaseline(storedDelta.getChunkMetadata())
-                        && !containsBlockInstructionAt(storedDelta, primary),
+                        && !containsBlockInstructionAt(storedDelta, scenario.primary()),
                 Text.literal(
                         "Stored full-baseline delta kept base snapshot metadata while omitting the watched air deletion.")
         );
 
-        world.setChunkForced(targetChunk.x, targetChunk.z, false);
+        scenario.world()
+                .setChunkForced(scenario.targetChunk().x, scenario.targetChunk().z, false);
 
-        context.runAtTick(20, () -> teleportPlayer(player, world, farArrival));
-        context.runAtTick(50, () -> teleportPlayer(player, world, targetArrival));
+        context.runAtTick(20, () -> teleportPlayer(setup.player(), scenario.world(), scenario.farArrival()));
+        context.runAtTick(50, () -> teleportPlayer(setup.player(), scenario.world(), scenario.targetArrival()));
         context.runAtTick(60, () -> {
-            world.getChunk(targetChunk.x, targetChunk.z);
+            scenario.world()
+                    .getChunk(scenario.targetChunk().x, scenario.targetChunk().z);
 
             context.assertTrue(
-                    world.getBlockState(primary)
+                    scenario.world()
+                            .getBlockState(scenario.primary())
                             .isAir(),
                     Text.literal("Reloaded chunk resurrected a block that had been deleted to air.")
             );

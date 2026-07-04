@@ -61,12 +61,6 @@ public abstract class BlockEntityMixin {
     public abstract BlockPos getPos();
 
     /**
-     * Default constructor for BlockEntityMixin.
-     */
-    public BlockEntityMixin() {
-    }
-
-    /**
      * Injected at the head of {@link BlockEntity#markDirty()} to trigger Chunkis
      * delta and global dirty tracking.
      *

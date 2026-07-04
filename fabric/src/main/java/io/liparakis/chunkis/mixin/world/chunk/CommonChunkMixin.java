@@ -50,6 +50,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * Default constructor for CommonChunkMixin.
      */
     public CommonChunkMixin() {
+        throw new AssertionError("Utility class");
     }
 
     /**

@@ -277,21 +277,7 @@ public final class CisFixtureMigrationGameTest {
         context.assertTrue(!populatedChunks.isEmpty(),
                 Text.literal("Expected at least one populated V8 fixture chunk."));
 
-        final FabricBlockStateAdapter blockStateAdapter = new FabricBlockStateAdapter();
-        final PropertyPacker<Block, BlockState, Property<?>> packer = new PropertyPacker<>(blockStateAdapter);
-        final CisMapping<Block, BlockState, Property<?>> mapping = new CisMapping<>(
-                storageRoot.resolve("global_ids.json"),
-                new FabricBlockRegistryAdapter(),
-                blockStateAdapter,
-                packer
-        );
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = new CisStorage<>(
-                regionsDir,
-                mapping,
-                blockStateAdapter,
-                new FabricNbtAdapter(),
-                net.minecraft.block.Blocks.AIR.getDefaultState()
-        );
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = createStorage(storageRoot, regionsDir);
 
         try {
             final Map<CisChunkPos, ChunkSnapshot> before = snapshotChunks(storage, populatedChunks, 8);
@@ -323,6 +309,33 @@ public final class CisFixtureMigrationGameTest {
             storage.close();
             deleteRecursively(storageRoot);
         }
+    }
+
+    /**
+     * Initializes and configures a {@link CisStorage} instance using Fabric-specific adapters
+     * and mapping files located within the test storage directory.
+     *
+     * @param storageRoot the target Chunkis storage root directory
+     * @param regionsDir  the target regions subdirectory containing CIS region files
+     * @return the initialized CisStorage instance
+     * @throws IOException if the global mapping file cannot be read or initialized
+     */
+    private static CisStorage<Block, BlockState, Property<?>, NbtCompound> createStorage(final Path storageRoot, final Path regionsDir) throws IOException {
+        final FabricBlockStateAdapter blockStateAdapter = new FabricBlockStateAdapter();
+        final PropertyPacker<Block, BlockState, Property<?>> packer = new PropertyPacker<>(blockStateAdapter);
+        final CisMapping<Block, BlockState, Property<?>> mapping = new CisMapping<>(
+                storageRoot.resolve("global_ids.json"),
+                new FabricBlockRegistryAdapter(),
+                blockStateAdapter,
+                packer
+        );
+        return new CisStorage<>(
+                regionsDir,
+                mapping,
+                blockStateAdapter,
+                new FabricNbtAdapter(),
+                net.minecraft.block.Blocks.AIR.getDefaultState()
+        );
     }
 
     /**

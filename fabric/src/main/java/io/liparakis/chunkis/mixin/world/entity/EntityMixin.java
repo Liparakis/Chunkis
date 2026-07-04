@@ -39,12 +39,6 @@ public abstract class EntityMixin {
     private World world;
 
     /**
-     * Default constructor for EntityMixin.
-     */
-    public EntityMixin() {
-    }
-
-    /**
      * Decides if the entity payload should be kept when removal occurs.
      *
      * @param reason the removal reason

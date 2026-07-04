@@ -39,7 +39,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * to avoid repeated virtual dispatch.
  *
  * @see ChunkHolder
- * @see ChunkisNetworking#sendDelta(ServerPlayerEntity, WorldChunk)
  */
 @Mixin(ChunkHolder.class)
 public abstract class ChunkHolderMixin {

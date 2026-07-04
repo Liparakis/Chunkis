@@ -55,6 +55,18 @@ class ChunkRestorerTest {
 
     @Test
     void blockApplyFailureCountersDescribeEveryFailureReason() {
+        final String description = getFailureCountersDescription();
+
+        assertTrue(description.contains("visited=2"));
+        assertTrue(description.contains("applied=1"));
+        assertTrue(description.contains("nullState=1"));
+        assertTrue(description.contains("outOfBoundsY=1"));
+        assertTrue(description.contains("invalidSectionIndex=1"));
+        assertTrue(description.contains("nullSection=1"));
+        assertTrue(description.contains("exception=1"));
+    }
+
+    private String getFailureCountersDescription() {
         final ChunkRestorer.BlockApplyFailureCounters counters =
                 new ChunkRestorer.BlockApplyFailureCounters();
 
@@ -67,15 +79,7 @@ class ChunkRestorerTest {
         counters.recordNullSection();
         counters.recordException();
 
-        final String description = counters.describe();
-
-        assertTrue(description.contains("visited=2"));
-        assertTrue(description.contains("applied=1"));
-        assertTrue(description.contains("nullState=1"));
-        assertTrue(description.contains("outOfBoundsY=1"));
-        assertTrue(description.contains("invalidSectionIndex=1"));
-        assertTrue(description.contains("nullSection=1"));
-        assertTrue(description.contains("exception=1"));
+        return counters.describe();
     }
 
     @Test

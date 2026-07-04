@@ -6,7 +6,6 @@ import java.nio.file.Path;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
 import org.junit.jupiter.api.Test;
 
 class VanillaRegionPathResolverTest {

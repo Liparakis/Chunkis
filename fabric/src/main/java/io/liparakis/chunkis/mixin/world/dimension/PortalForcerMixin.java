@@ -63,12 +63,6 @@ public abstract class PortalForcerMixin {
     private ServerWorld world;
 
     /**
-     * Default constructor for PortalForcerMixin.
-     */
-    public PortalForcerMixin() {
-    }
-
-    /**
      * Returns the distinct chunks that contain portal POIs in vanilla's search
      * square.
      *

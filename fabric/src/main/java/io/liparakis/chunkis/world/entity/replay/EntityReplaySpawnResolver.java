@@ -107,7 +107,7 @@ final class EntityReplaySpawnResolver {
         /**
          * Spawn entity request was rejected.
          */
-        SPAWN_REJECTED(ChunkRestorer.ReplayStatus.SPAWN_REJECTED_TRANSIENT, false, true);
+        SPAWN_REJECTED(ChunkRestorer.ReplayStatus.SPAWN_REJECTED_TRANSIENT, false, true); //TODO: Implement functionality if needed
 
         /**
          * Replay status associated with the outcome.

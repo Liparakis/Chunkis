@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.mixin.world.chunk;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -148,16 +149,16 @@ class WorldChunkMixinTest {
         storageDuck.chunkis$setRestoreLoadedFromStorage(true);
 
         assertTrue(invokeShouldMarkRestoredDeltaSaved(storageDuck, dirtyDelta));
-        assertTrue(!invokeShouldMarkRestoredDeltaSaved(memoryDuck, dirtyDelta));
+        assertFalse(invokeShouldMarkRestoredDeltaSaved(memoryDuck, dirtyDelta));
     }
 
     @Test
     void seedsPostProcessingBlockEntitiesOnlyWhenVanillaHasNothingPendingYet() {
         assertTrue(invokeShouldSeedPostProcessingBlockEntities(false, false, true, true));
-        assertTrue(!invokeShouldSeedPostProcessingBlockEntities(true, false, true, true));
-        assertTrue(!invokeShouldSeedPostProcessingBlockEntities(false, true, true, true));
-        assertTrue(!invokeShouldSeedPostProcessingBlockEntities(false, false, false, true));
-        assertTrue(!invokeShouldSeedPostProcessingBlockEntities(false, false, true, false));
+        assertFalse(invokeShouldSeedPostProcessingBlockEntities(true, false, true, true));
+        assertFalse(invokeShouldSeedPostProcessingBlockEntities(false, true, true, true));
+        assertFalse(invokeShouldSeedPostProcessingBlockEntities(false, false, false, true));
+        assertFalse(invokeShouldSeedPostProcessingBlockEntities(false, false, true, false));
     }
 
     private static final class FakeChunkisDeltaDuck implements ChunkisDeltaDuck {

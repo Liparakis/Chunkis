@@ -38,12 +38,6 @@ public abstract class ServerWorldMixin {
     private static final String SOURCE = "ServerWorldMixin#chunkis$afterSpawnEntity";
 
     /**
-     * Default constructor for ServerWorldMixin.
-     */
-    public ServerWorldMixin() {
-    }
-
-    /**
      * Injected at the return of spawnEntity to register spawned entities into the chunk delta.
      *
      * @param entity target entity spawned
