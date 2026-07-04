@@ -1,0 +1,16 @@
+plugins {
+    id("java-library")
+}
+
+base {
+    archivesName = "${providers.gradleProperty('archives_base_name').get()}-compression"
+}
+
+dependencies {
+    api project(":core")
+    implementation 'com.github.luben:zstd-jni:1.5.7-11'
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    compileOnly 'org.jetbrains:annotations:24.1.0'
+
+    testImplementation 'org.assertj:assertj-core:3.27.7'
+}

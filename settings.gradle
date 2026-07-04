@@ -1,13 +1,27 @@
+pluginManagement {
+    repositories {
+        maven {
+            name = "Fabric"
+            url = "https://maven.fabricmc.net/"
+        }
+        maven { url = "https://packages.jetbrains.team/maven/p/ij/intellij-dependencies" }
+        gradlePluginPortal()
+    }
+    plugins {
+        id("fabric-loom").version("1.14-SNAPSHOT")
+    }
+}
+
 rootProject.name = "Chunkis"
 
-includeBuild("core") {
-    dependencySubstitution {
-        substitute module("io.liparakis.chunkis:chunkis-core") using project(":")
-    }
-}
-includeBuild("cismigrator") {
-    dependencySubstitution {
-        substitute module("io.liparakis.chunkis:chunkis-cismigrator") using project(":")
-    }
-}
-includeBuild("fabric")
+include("core")
+include("compression")
+include("serialization")
+include("storage-cis")
+include("migration")
+include("minecraft-adapter")
+include("networking")
+include("commands")
+include("client")
+include("services")
+include("mod-bootstrap")

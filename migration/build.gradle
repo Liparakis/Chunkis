@@ -3,16 +3,17 @@ plugins {
 }
 
 base {
-    archivesName = "${providers.gradleProperty('archives_base_name').get()}-core"
+    archivesName = "${providers.gradleProperty('archives_base_name').get()}-migration"
 }
 
 dependencies {
-    api 'it.unimi.dsi:fastutil:8.5.12'
-    api 'com.google.code.gson:gson:2.10.1'
+    api project(":core")
+    api project(":storage-cis")
     implementation 'org.slf4j:slf4j-api:2.0.9'
     compileOnly 'org.jetbrains:annotations:24.1.0'
 
+    testImplementation 'com.github.luben:zstd-jni:1.5.7-11'
+    testImplementation 'org.assertj:assertj-core:3.27.7'
     testImplementation 'org.mockito:mockito-core:5.7.0'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.7.0'
-    testImplementation 'org.assertj:assertj-core:3.27.7'
 }

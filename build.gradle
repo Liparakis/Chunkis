@@ -1,12 +1,36 @@
-tasks.register("build") {
-    dependsOn(gradle.includedBuilds.collect { includedBuild -> includedBuild.task(":build") })
-}
+subprojects {
+    apply plugin: 'maven-publish'
 
-tasks.register("compileJava") {
-    dependsOn(gradle.includedBuilds.collect { includedBuild -> includedBuild.task(":compileJava") })
-}
+    group = providers.gradleProperty("maven_group").get()
+    version = providers.gradleProperty("mod_version").get()
 
-tasks.register("test") {
-    dependsOn(gradle.includedBuilds.collect { includedBuild -> includedBuild.task(":test") })
-}
+    repositories {
+        mavenCentral()
+        maven {
+            name = 'Fabric'
+            url = 'https://maven.fabricmc.net/'
+        }
+    }
 
+    plugins.withType(JavaPlugin).configureEach {
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(21)
+            }
+            withSourcesJar()
+        }
+
+        tasks.withType(JavaCompile).configureEach {
+            options.release = 21
+        }
+
+        dependencies {
+            testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+            testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+        }
+
+        test {
+            useJUnitPlatform()
+        }
+    }
+}
