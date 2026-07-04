@@ -30,6 +30,7 @@ final class RegionFooterIO {
      * @return start offset of the footer payload, or {@code noFooter}
      * @throws IOException if the footer bytes cannot be read
      */
+    @SuppressWarnings("SameParameterValue")
     static int discoverFooterStart(
             final FileChannel channel,
             final int headerSize,

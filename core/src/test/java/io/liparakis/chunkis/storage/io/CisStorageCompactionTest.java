@@ -54,6 +54,7 @@ class CisStorageCompactionTest {
     /**
      * Writes a big-endian integer into a raw byte array.
      */
+    @SuppressWarnings("SameParameterValue")
     private static void writeInt(final byte[] data, final int offset, final int value) {
         data[offset] = (byte) (value >>> 24);
         data[offset + 1] = (byte) (value >>> 16);

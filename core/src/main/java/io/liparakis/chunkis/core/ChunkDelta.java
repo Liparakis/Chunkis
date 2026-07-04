@@ -166,22 +166,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
-     * Private constructor used by snapshot creation to initialize final fields.
-     */
-    private ChunkDelta(
-            final Palette<S> blockPalette,
-            final Predicate<S> isEmptyState
-    ) {
-        this.blockPalette = blockPalette;
-        this.isEmptyState = isEmptyState;
-        this.instructions = new BlockInstructionStorage();
-        this.ownershipState = new DeltaOwnershipState();
-        this.pendingEntities = Collections.emptyList();
-        this.sourceVersion = CisConstants.VERSION;
-        this.blockEntitySectionCounts = new short[SECTION_COUNT];
-    }
-
-    /**
      * Packs a palette id and position key into one block instruction.
      *
      * @param paletteId palette id

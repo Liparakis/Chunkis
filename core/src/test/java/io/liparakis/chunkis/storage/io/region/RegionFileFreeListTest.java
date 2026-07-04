@@ -31,6 +31,7 @@ class RegionFileFreeListTest {
      * Creates a legacy region file with no footer metadata so the new reader can
      * infer reusable gaps from indexed live payloads alone.
      */
+    @SuppressWarnings("ResultOfMethodCallIgnored")
     private static void writeLegacyRegion(
             final Path regionPath,
             final CisChunkPos first,
