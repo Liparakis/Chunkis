@@ -14,14 +14,8 @@ pluginManagement {
 
 rootProject.name = "Chunkis"
 
-include("core")
-include("compression")
-include("serialization")
-include("storage-cis")
-include("migration")
-include("minecraft-adapter")
-include("networking")
-include("commands")
-include("client")
-include("services")
-include("mod-bootstrap")
+include 'core'
+include 'storage'
+include 'migration'
+include 'fabric'
+include 'client'

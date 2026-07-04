@@ -2,6 +2,8 @@ plugins {
     id("fabric-loom")
 }
 
+evaluationDependsOn(":fabric")
+
 base {
     archivesName = "${providers.gradleProperty('archives_base_name').get()}-client"
 }
@@ -14,8 +16,5 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty('fabric_version').get()}"
 
     implementation project(":core")
-    implementation project(":serialization")
-    implementation project(path: ":networking", configuration: "namedElements")
-    implementation project(path: ":minecraft-adapter", configuration: "namedElements")
-    implementation project(path: ":services", configuration: "namedElements")
+    implementation project(":fabric").sourceSets.main.output
 }

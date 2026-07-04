@@ -1,0 +1,78 @@
+plugins {
+    id("fabric-loom")
+}
+
+base {
+    archivesName = providers.gradleProperty('archives_base_name').get()
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${providers.gradleProperty('minecraft_version').get()}"
+    mappings "net.fabricmc:yarn:${providers.gradleProperty('yarn_mappings').get()}:v2"
+
+    modImplementation "net.fabricmc:fabric-loader:${providers.gradleProperty('loader_version').get()}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty('fabric_version').get()}"
+
+    implementation project(":core")
+    implementation project(":storage")
+    implementation project(":migration")
+}
+
+jar {
+    from {
+        [
+            project(":core").sourceSets.main.output,
+            project(":storage").sourceSets.main.output,
+            project(":migration").sourceSets.main.output,
+            project(":client").sourceSets.main.output
+        ]
+    }
+}
+
+sourcesJar {
+    from {
+        [
+            project(":core").sourceSets.main.allSource,
+            project(":storage").sourceSets.main.allSource,
+            project(":migration").sourceSets.main.allSource,
+            project(":client").sourceSets.main.allSource
+        ]
+    }
+}
+
+processResources {
+    inputs.property("version", project.version)
+    inputs.property("minecraft_version", providers.gradleProperty('minecraft_version').get())
+    inputs.property("loader_version", providers.gradleProperty('loader_version').get())
+    filteringCharset = "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand([
+                version          : project.version,
+                minecraft_version: providers.gradleProperty('minecraft_version').get(),
+                loader_version   : providers.gradleProperty('loader_version').get(),
+        ])
+    }
+}
+
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "chunkis-gametest"
+        enableGameTests = true
+        enableClientGameTests = false
+    }
+}
+
+sourceSets {
+    gametest {
+        resources.srcDir(file("../migration/src/test/resources"))
+    }
+}
+
+tasks.named("runGameTest") {
+    def filter = providers.gradleProperty("gametestFilter").orNull
+    if (filter != null && !filter.isBlank()) {
+        systemProperty("fabric-api.gametest.filter", filter)
+    }
+}
