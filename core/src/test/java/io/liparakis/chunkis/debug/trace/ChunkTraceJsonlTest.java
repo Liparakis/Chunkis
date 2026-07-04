@@ -90,7 +90,7 @@ class ChunkTraceJsonlTest {
                         "B", "second",
                         null, null, null, null, null, null
                 )
-                                                    );
+        );
 
         ChunkTraceJsonl.write(output, events);
 

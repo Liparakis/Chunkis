@@ -44,7 +44,8 @@ public final class CisRegionPaths {
      * @return parsed region key, or {@code null} when the name is invalid
      */
     public static RegionKey parseRegionKey(final Path path) {
-        final Matcher matcher = REGION_FILE_PATTERN.matcher(path.getFileName().toString());
+        final Matcher matcher = REGION_FILE_PATTERN.matcher(path.getFileName()
+                .toString());
         if (!matcher.matches()) {
             return null;
         }

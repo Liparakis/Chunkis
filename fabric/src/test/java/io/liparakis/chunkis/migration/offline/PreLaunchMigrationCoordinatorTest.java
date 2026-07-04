@@ -16,6 +16,15 @@ import org.junit.jupiter.api.Test;
 class PreLaunchMigrationCoordinatorTest {
 
     /**
+     * Utility method to create a registry key representing the vanilla overworld.
+     *
+     * @return the {@link RegistryKey} for the overworld
+     */
+    private static RegistryKey<World> overworldKey() {
+        return RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla("overworld"));
+    }
+
+    /**
      * Tests that {@link PreLaunchMigrationCoordinator#verifyMigrationSucceeded(OfflineWorldMigrationReport, Path)}
      * does not throw any exception when provided with a clean migration report (i.e., with zero failed chunks).
      */
@@ -49,14 +58,5 @@ class PreLaunchMigrationCoordinatorTest {
                 ),
                 Path.of("migration")
         ));
-    }
-
-    /**
-     * Utility method to create a registry key representing the vanilla overworld.
-     *
-     * @return the {@link RegistryKey} for the overworld
-     */
-    private static RegistryKey<World> overworldKey() {
-        return RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla("overworld"));
     }
 }

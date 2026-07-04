@@ -21,9 +21,17 @@ class CisVersionMapTest {
     void plansSequentialUpgradePath() {
         final CisVersionPath path = CisVersionMap.plan(7, 9);
 
-        assertEquals(2, path.steps().size());
-        assertEquals(7, path.steps().getFirst().fromVersion());
-        assertEquals(9, path.steps().getLast().toVersion());
+        assertEquals(2,
+                path.steps()
+                        .size());
+        assertEquals(7,
+                path.steps()
+                        .getFirst()
+                        .fromVersion());
+        assertEquals(9,
+                path.steps()
+                        .getLast()
+                        .toVersion());
     }
 
     /**
@@ -34,7 +42,9 @@ class CisVersionMapTest {
         final CisVersionPath path = CisVersionMap.plan(9, 9);
 
         assertTrue(path.isNoOp());
-        assertEquals(0, path.steps().size());
+        assertEquals(0,
+                path.steps()
+                        .size());
     }
 
     /**

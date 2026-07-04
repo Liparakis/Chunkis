@@ -75,9 +75,9 @@ class ChunkTraceStoreTest {
 
         final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(10);
         assertThat(latest).extracting(ChunkTraceEvent::message)
-                          .containsExactly("fourth", "third", "second");
+                .containsExactly("fourth", "third", "second");
         assertThat(latest).extracting(ChunkTraceEvent::eventId)
-                          .containsExactly(4L, 3L, 2L);
+                .containsExactly(4L, 3L, 2L);
     }
 
     @Test
@@ -114,7 +114,7 @@ class ChunkTraceStoreTest {
         ));
 
         assertThat(ChunkTraceStore.snapshot()).extracting(ChunkTraceEvent::message)
-                                              .containsExactly("first", "second");
+                .containsExactly("first", "second");
     }
 
     @Test
@@ -139,8 +139,10 @@ class ChunkTraceStoreTest {
                 .containsExactly(
                         ChunkTraceEventType.ASSERTION_FAILED,
                         ChunkTraceEventType.SAVE_REJECTED
-                                );
-        assertThat(ChunkTraceStore.latest(1).getFirst().message())
+                );
+        assertThat(ChunkTraceStore.latest(1)
+                .getFirst()
+                .message())
                 .contains("save rejected without a machine-readable reason");
     }
 
@@ -177,7 +179,8 @@ class ChunkTraceStoreTest {
                 null,
                 null
         ));
-        final long savedThenMissingId = ChunkTraceStore.suspect(savedThenMissing).suspectId();
+        final long savedThenMissingId = ChunkTraceStore.suspect(savedThenMissing)
+                .suspectId();
         ChunkTraceStore.record(new ChunkTraceEvent(
                 0L, 3L, "main",
                 ChunkisDebugDomain.DIRTY_TRACKING,
@@ -206,14 +209,17 @@ class ChunkTraceStoreTest {
                 true,
                 null
         ));
-        final long dirtyUnloadId = ChunkTraceStore.suspect(dirtyUnload).suspectId();
+        final long dirtyUnloadId = ChunkTraceStore.suspect(dirtyUnload)
+                .suspectId();
 
         assertThat(ChunkTraceStore.suspects())
                 .extracting(ChunkTraceSuspect::chunkKey)
                 .containsExactly(dirtyUnload, savedThenMissing);
-        assertThat(ChunkTraceStore.suspect(savedThenMissingId).latestMessage())
+        assertThat(ChunkTraceStore.suspect(savedThenMissingId)
+                .latestMessage())
                 .contains("prior stored payload");
-        assertThat(ChunkTraceStore.suspect(dirtyUnloadId).latestMessage())
+        assertThat(ChunkTraceStore.suspect(dirtyUnloadId)
+                .latestMessage())
                 .contains("without queued or flushed save evidence");
     }
 
@@ -282,8 +288,11 @@ class ChunkTraceStoreTest {
                 null, null, null, null, null, null
         ));
 
-        assertThat(ChunkTraceStore.findEvent(suspect.originalFailureEvent().eventId())).isNull();
-        assertThat(ChunkTraceStore.suspect(suspect.suspectId()).originalFailureEvent().message())
+        assertThat(ChunkTraceStore.findEvent(suspect.originalFailureEvent()
+                .eventId())).isNull();
+        assertThat(ChunkTraceStore.suspect(suspect.suspectId())
+                .originalFailureEvent()
+                .message())
                 .contains("restore applied zero blocks");
         assertThat(ChunkTraceStore.suspectTimeline(suspect.suspectId()))
                 .extracting(ChunkTraceEvent::message)

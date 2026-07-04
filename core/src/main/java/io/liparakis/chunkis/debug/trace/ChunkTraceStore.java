@@ -151,12 +151,12 @@ public final class ChunkTraceStore {
             final String operationId,
             final Boolean dirtyState,
             final Integer byteSize
-                            ) {
+    ) {
         trace(
                 domain, eventType, severity, reason,
                 source, message, worldId, chunkKey, regionKey, operationId,
                 dirtyState, byteSize, null, null, null
-             );
+        );
     }
 
     /**
@@ -199,7 +199,7 @@ public final class ChunkTraceStore {
             final PayloadWatchTarget payloadWatchTarget,
             final String payloadWatchStage,
             final String payloadWatchSummary
-                            ) {
+    ) {
         // Payload-watch events bypass the level gate; all others are filtered.
         if (payloadWatchTarget == null && !ChunkisDebugConfig.allows(domain, severity)) {
             return;
@@ -208,7 +208,8 @@ public final class ChunkTraceStore {
         record(new ChunkTraceEvent(
                 0L,
                 System.currentTimeMillis(),
-                Thread.currentThread().getName(),
+                Thread.currentThread()
+                        .getName(),
                 domain, eventType, severity, reason,
                 source, message,
                 worldId, chunkKey, regionKey, operationId,
@@ -261,7 +262,7 @@ public final class ChunkTraceStore {
     public static List<ChunkTraceEvent> latestMatching(
             final int count,
             final Predicate<ChunkTraceEvent> predicate
-                                                      ) {
+    ) {
         if (count <= 0) {
             return List.of();
         }
@@ -432,7 +433,8 @@ public final class ChunkTraceStore {
         return append(new ChunkTraceEvent(
                 0L,
                 System.currentTimeMillis(),
-                Thread.currentThread().getName(),
+                Thread.currentThread()
+                        .getName(),
                 ChunkisDebugDomain.ASSERTIONS,
                 ChunkTraceEventType.ASSERTION_FAILED,
                 ChunkTraceSeverity.ERROR,
@@ -534,7 +536,7 @@ public final class ChunkTraceStore {
             final DebugChunkKey chunkKey,
             final String operationId,
             final long beforeEventId
-                                    ) {
+    ) {
         synchronized (MONITOR) {
             for (int i = size - 1; i >= 0; i--) {
                 final ChunkTraceEvent event = ringAt(i);

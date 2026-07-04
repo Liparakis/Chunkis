@@ -22,7 +22,7 @@ class ClientDeltaNetworkingTest {
                 ChunkTraceReason.MAPPING_LOOKUP_FAILED,
                 ClientDeltaNetworking.classifyClientSyncFailure(
                         new IOException("Unknown Block ID 42 - stream desync detected"))
-                    );
+        );
     }
 
     /**
@@ -34,7 +34,7 @@ class ClientDeltaNetworkingTest {
                 ChunkTraceReason.DECODE_FAILED,
                 ClientDeltaNetworking.classifyClientSyncFailure(
                         new IOException("Invalid property data length: -1"))
-                    );
+        );
     }
 
     /**
@@ -45,7 +45,7 @@ class ClientDeltaNetworkingTest {
         assertEquals(
                 ChunkTraceReason.IO_EXCEPTION,
                 ClientDeltaNetworking.classifyClientSyncFailure(new IllegalStateException("boom"))
-                    );
+        );
     }
 
     /**
@@ -58,6 +58,6 @@ class ClientDeltaNetworkingTest {
         assertEquals(
                 "completed client delta apply compressedOnWire=true decodedBytes=512",
                 ClientDeltaNetworking.describeIncomingPayload(payload, "completed client delta apply")
-                    );
+        );
     }
 }

@@ -69,7 +69,8 @@ final class BlockIdRegistry<B> {
      */
     private static Map<String, Integer> sortByNumericId(Map<String, Integer> snapshot) {
         Map<String, Integer> sorted = new LinkedHashMap<>();
-        snapshot.entrySet().stream()
+        snapshot.entrySet()
+                .stream()
                 .sorted(Comparator.comparingInt(Map.Entry::getValue))
                 .forEach(entry -> sorted.put(entry.getKey(), entry.getValue()));
         return sorted;

@@ -214,6 +214,50 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     }
 
     /**
+     * Claims ownership for a delta created by save-time live entity capture.
+     *
+     * <p>Entity capture is allowed to return {@code null} when snapshot safety
+     * vetoes the capture and there was no pre-existing delta to preserve. The save
+     * path must keep that bypass shape instead of dereferencing {@code null}.</p>
+     *
+     * @param delta  captured delta, or {@code null} when capture was skipped
+     * @param reason ownership reason to record
+     * @param source source label to record alongside the claim
+     * @return the same delta instance, or {@code null} when no delta exists
+     */
+    @SuppressWarnings("SameParameterValue")
+    @Unique
+    private static ChunkDelta<BlockState, NbtCompound> chunkis$claimEntityCapturedDelta(
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String reason,
+            final String source
+    ) {
+        if (delta == null) {
+            return null;
+        }
+        delta.claimOwnership(reason, source);
+        return delta;
+    }
+
+    /**
+     * Returns the live {@link WorldChunk} instance to use for base recovery.
+     *
+     * <p>If the supplied {@link Chunk} is already a {@link WorldChunk}, it is preferred.
+     * Otherwise, the previously looked-up chunk is used as the fallback.</p>
+     *
+     * @param chunk         the chunk instance being recovered
+     * @param lookedUpChunk the fallback live world chunk
+     * @return the live world chunk to use for recovery
+     */
+    @Unique
+    private static WorldChunk chunkis$chooseLiveChunkForBaseRecovery(
+            final Chunk chunk,
+            final WorldChunk lookedUpChunk
+    ) {
+        return chunk instanceof WorldChunk ? (WorldChunk) chunk : lookedUpChunk;
+    }
+
+    /**
      * Returns the string representation of the world registry path.
      *
      * @return registry path string
@@ -914,32 +958,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     }
 
     /**
-     * Claims ownership for a delta created by save-time live entity capture.
-     *
-     * <p>Entity capture is allowed to return {@code null} when snapshot safety
-     * vetoes the capture and there was no pre-existing delta to preserve. The save
-     * path must keep that bypass shape instead of dereferencing {@code null}.</p>
-     *
-     * @param delta  captured delta, or {@code null} when capture was skipped
-     * @param reason ownership reason to record
-     * @param source source label to record alongside the claim
-     * @return the same delta instance, or {@code null} when no delta exists
-     */
-    @SuppressWarnings("SameParameterValue")
-    @Unique
-    private static ChunkDelta<BlockState, NbtCompound> chunkis$claimEntityCapturedDelta(
-            final ChunkDelta<BlockState, NbtCompound> delta,
-            final String reason,
-            final String source
-    ) {
-        if (delta == null) {
-            return null;
-        }
-        delta.claimOwnership(reason, source);
-        return delta;
-    }
-
-    /**
      * Records the reason a save stayed on the vanilla-bypassed path and stops the
      * hook without queueing a Chunkis save.
      *
@@ -1461,24 +1479,6 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 null
         );
         return recoveredDelta;
-    }
-
-    /**
-     * Returns the live {@link WorldChunk} instance to use for base recovery.
-     *
-     * <p>If the supplied {@link Chunk} is already a {@link WorldChunk}, it is preferred.
-     * Otherwise, the previously looked-up chunk is used as the fallback.</p>
-     *
-     * @param chunk         the chunk instance being recovered
-     * @param lookedUpChunk the fallback live world chunk
-     * @return the live world chunk to use for recovery
-     */
-    @Unique
-    private static WorldChunk chunkis$chooseLiveChunkForBaseRecovery(
-            final Chunk chunk,
-            final WorldChunk lookedUpChunk
-    ) {
-        return chunk instanceof WorldChunk ? (WorldChunk) chunk : lookedUpChunk;
     }
 
     /**

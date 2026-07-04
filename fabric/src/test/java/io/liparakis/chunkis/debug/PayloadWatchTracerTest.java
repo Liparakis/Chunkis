@@ -56,12 +56,13 @@ class PayloadWatchTracerTest {
                 "test",
                 "delta entered dirty tracker",
                 null
-                                          );
+        );
 
         final List<ChunkTraceEvent> events = ChunkTraceStore.latest(2);
-        assertTrue(events.stream().anyMatch(event ->
-                                                    event.eventType() == ChunkTraceEventType.WATCH_FAILED
-                                                            && "dirty-tracker".equals(event.payloadWatchStage())
-                                                            && "missing during dirty-tracker".equals(event.message())));
+        assertTrue(events.stream()
+                .anyMatch(event ->
+                        event.eventType() == ChunkTraceEventType.WATCH_FAILED
+                                && "dirty-tracker".equals(event.payloadWatchStage())
+                                && "missing during dirty-tracker".equals(event.message())));
     }
 }

@@ -46,6 +46,18 @@ public class StoragePreventionMixin {
     }
 
     /**
+     * Returns whether the current vanilla write should be cancelled in favor of
+     * Chunkis persistence.
+     *
+     * @param snapshot pending save decision carried from the higher-level save path
+     * @return {@code true} only when Chunkis explicitly owns the write
+     */
+    @Unique
+    private static boolean chunkis$shouldBlockVanillaWrite(final PendingVanillaSaveDecision.Snapshot snapshot) {
+        return snapshot != null && snapshot.reason() != ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
+    }
+
+    /**
      * Injects at head of RegionBasedStorage#write to cancel only Chunkis-owned
      * vanilla saves.
      *
@@ -116,17 +128,5 @@ public class StoragePreventionMixin {
         if (LOGGER.isTraceEnabled()) {
             LOGGER.trace("Allowing vanilla storage sync");
         }
-    }
-
-    /**
-     * Returns whether the current vanilla write should be cancelled in favor of
-     * Chunkis persistence.
-     *
-     * @param snapshot pending save decision carried from the higher-level save path
-     * @return {@code true} only when Chunkis explicitly owns the write
-     */
-    @Unique
-    private static boolean chunkis$shouldBlockVanillaWrite(final PendingVanillaSaveDecision.Snapshot snapshot) {
-        return snapshot != null && snapshot.reason() != ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED;
     }
 }

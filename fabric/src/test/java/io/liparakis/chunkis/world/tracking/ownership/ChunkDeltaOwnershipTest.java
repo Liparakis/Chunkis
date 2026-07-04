@@ -65,9 +65,9 @@ class ChunkDeltaOwnershipTest {
                         true,
                         false,
                         baseChunk
-                                                             ),
+                ),
                 false
-                              );
+        );
 
         assertFalse(ChunkDeltaOwnership.hasChunkisOwnedState(delta));
         assertFalse(ChunkDeltaOwnership.shouldMirrorVanillaDirtyState(delta));
@@ -88,9 +88,9 @@ class ChunkDeltaOwnershipTest {
                         true,
                         false,
                         baseChunk
-                                                             ),
+                ),
                 false
-                              );
+        );
 
         assertTrue(ChunkDeltaOwnership.hasRestorableChunkisState(delta));
     }

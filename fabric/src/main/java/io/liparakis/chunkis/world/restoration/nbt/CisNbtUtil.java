@@ -1,10 +1,10 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import java.util.ArrayList;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -118,12 +118,56 @@ public final class CisNbtUtil {
      * snapshot.
      */
     public static final String MIGRATED_AUTHORITATIVE_CHUNK_KEY = "migrated_authoritative_chunk";
+    /**
+     * Chunkis metadata key holding preserved auxiliary vanilla chunk NBT that is
+     * not modeled explicitly by Chunkis.
+     */
+    public static final String PRESERVED_AUXILIARY_CHUNK_NBT_KEY = "preserved_auxiliary_chunk_nbt";
+    /**
+     * Chunkis metadata key for a vanilla-compatible serialized base chunk.
+     */
+    public static final String BASE_CHUNK_NBT_KEY = "base_chunk_nbt";
+    /**
+     * Chunkis metadata key for an opaque raw-serialized base chunk payload.
+     *
+     * <p>This stores the same logical base chunk as {@link #BASE_CHUNK_NBT_KEY}
+     * without forcing CIS metadata decode to recursively parse a second full chunk
+     * tree on every load. Legacy worlds may still carry the compound form.</p>
+     */
+    public static final String BASE_CHUNK_PAYLOAD_KEY = "base_chunk_payload";
+    /**
+     * Synthetic NBT marker indicating that a chunk has CIS delta data stored
+     * outside vanilla chunk NBT.
+     */
+    public static final String HAS_DELTA_KEY = "HasDelta";
+    /**
+     * Synthetic load-path marker describing whether persisted base chunk NBT was
+     * used to build the temporary chunk NBT passed into vanilla deserialization.
+     */
+    public static final String LOAD_BASE_CHUNK_USAGE_KEY = "LoadBaseChunkUsage";
+    /**
+     * NBT key required by Minecraft's entity deserializer.
+     */
+    private static final String ENTITY_ID_KEY = "id";
+    /**
+     * Initial buffer size for small metadata serialization.
+     */
+    private static final int RAW_METADATA_INITIAL_CAPACITY = 256;
+
+    /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
+    private CisNbtUtil() {
+        throw new AssertionError("Utility class");
+    }
 
     /**
      * Extracts compound entries from a named list if present.
      *
      * @param root source NBT root
-     * @param key list key to inspect
+     * @param key  list key to inspect
      * @return copied view of compound entries, or an empty list
      */
     public static List<NbtCompound> extractCompoundList(final NbtCompound root, final String key) {
@@ -143,57 +187,6 @@ public final class CisNbtUtil {
             }
         });
         return compounds;
-    }
-
-    /**
-     * Chunkis metadata key holding preserved auxiliary vanilla chunk NBT that is
-     * not modeled explicitly by Chunkis.
-     */
-    public static final String PRESERVED_AUXILIARY_CHUNK_NBT_KEY = "preserved_auxiliary_chunk_nbt";
-
-    /**
-     * Chunkis metadata key for a vanilla-compatible serialized base chunk.
-     */
-    public static final String BASE_CHUNK_NBT_KEY = "base_chunk_nbt";
-
-    /**
-     * Chunkis metadata key for an opaque raw-serialized base chunk payload.
-     *
-     * <p>This stores the same logical base chunk as {@link #BASE_CHUNK_NBT_KEY}
-     * without forcing CIS metadata decode to recursively parse a second full chunk
-     * tree on every load. Legacy worlds may still carry the compound form.</p>
-     */
-    public static final String BASE_CHUNK_PAYLOAD_KEY = "base_chunk_payload";
-
-    /**
-     * Synthetic NBT marker indicating that a chunk has CIS delta data stored
-     * outside vanilla chunk NBT.
-     */
-    public static final String HAS_DELTA_KEY = "HasDelta";
-
-    /**
-     * Synthetic load-path marker describing whether persisted base chunk NBT was
-     * used to build the temporary chunk NBT passed into vanilla deserialization.
-     */
-    public static final String LOAD_BASE_CHUNK_USAGE_KEY = "LoadBaseChunkUsage";
-
-    /**
-     * NBT key required by Minecraft's entity deserializer.
-     */
-    private static final String ENTITY_ID_KEY = "id";
-
-    /**
-     * Initial buffer size for small metadata serialization.
-     */
-    private static final int RAW_METADATA_INITIAL_CAPACITY = 256;
-
-    /**
-     * Private constructor to prevent utility class instantiation.
-     *
-     * @throws AssertionError always
-     */
-    private CisNbtUtil() {
-        throw new AssertionError("Utility class");
     }
 
     /**
@@ -525,7 +518,8 @@ public final class CisNbtUtil {
     static NbtCompound packPersistedBaseChunkPayload(final NbtCompound metadata) throws IOException {
         Objects.requireNonNull(metadata, "metadata");
 
-        if (metadata.getByteArray(BASE_CHUNK_PAYLOAD_KEY).isPresent()) {
+        if (metadata.getByteArray(BASE_CHUNK_PAYLOAD_KEY)
+                .isPresent()) {
             return metadata;
         }
 
@@ -655,7 +649,8 @@ public final class CisNbtUtil {
 
         final NbtCompound chunkisMetadata = getCompoundOrNull(metadata, CHUNKIS_METADATA_KEY);
         return chunkisMetadata != null
-                && chunkisMetadata.getBoolean(MIGRATED_AUTHORITATIVE_CHUNK_KEY).orElse(false);
+                && chunkisMetadata.getBoolean(MIGRATED_AUTHORITATIVE_CHUNK_KEY)
+                .orElse(false);
     }
 
     /**

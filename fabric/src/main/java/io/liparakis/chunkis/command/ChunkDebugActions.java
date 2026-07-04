@@ -2,6 +2,7 @@ package io.liparakis.chunkis.command;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
+import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
@@ -14,14 +15,13 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceJsonl;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.migration.offline.OfflineMcaCisTranslator;
-import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.storage.io.CisStorage;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
-import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
+import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -36,14 +36,14 @@ import java.util.List;
 import java.util.Objects;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtHelper;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtHelper;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.registry.Registries;
+import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
-import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import net.minecraft.util.WorldSavePath;
 import net.minecraft.util.math.BlockPos;
@@ -1200,6 +1200,19 @@ public final class ChunkDebugActions {
         return nbt.getString("id", "<missing>") + nbt.getKeys();
     }
 
+    @SuppressWarnings("unchecked")
+    private static ChunkDeltas getChunkDeltas(final ServerWorld world, final ChunkPos pos) {
+        final WorldChunk liveChunk = world.getChunkManager()
+                .getWorldChunk(pos.x, pos.z, false);
+        final ChunkDelta<BlockState, NbtCompound> attachedDelta =
+                liveChunk instanceof ChunkisDeltaDuck duck && duck.chunkis$getDelta() instanceof ChunkDelta<?, ?> delta
+                        ? (ChunkDelta<BlockState, NbtCompound>) delta : null;
+        final ChunkDelta<BlockState, NbtCompound> trackedDelta = (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(
+                world,
+                pos);
+        return new ChunkDeltas(liveChunk, attachedDelta, trackedDelta);
+    }
+
     /**
      * Comparison summary for one MCA-vs-CIS chunk diff.
      *
@@ -1245,18 +1258,5 @@ public final class ChunkDebugActions {
     private record ChunkDeltas(WorldChunk liveChunk, ChunkDelta<BlockState, NbtCompound> attachedDelta,
                                ChunkDelta<BlockState, NbtCompound> trackedDelta) {
 
-    }
-
-    @SuppressWarnings("unchecked")
-    private static ChunkDeltas getChunkDeltas(final ServerWorld world, final ChunkPos pos) {
-        final WorldChunk liveChunk = world.getChunkManager()
-                .getWorldChunk(pos.x, pos.z, false);
-        final ChunkDelta<BlockState, NbtCompound> attachedDelta =
-                liveChunk instanceof ChunkisDeltaDuck duck && duck.chunkis$getDelta() instanceof ChunkDelta<?, ?> delta
-                        ? (ChunkDelta<BlockState, NbtCompound>) delta : null;
-        final ChunkDelta<BlockState, NbtCompound> trackedDelta = (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(
-                world,
-                pos);
-        return new ChunkDeltas(liveChunk, attachedDelta, trackedDelta);
     }
 }

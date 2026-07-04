@@ -25,6 +25,17 @@ public abstract class RegionBasedStorageMixin {
     private Path chunkis$directory;
 
     /**
+     * Derives the owning MCA filename for a chunk position.
+     *
+     * @param pos chunk position
+     * @return region filename in {@code r.<x>.<z>.mca} form
+     */
+    @Unique
+    private static String chunkis$regionFileName(final net.minecraft.util.math.ChunkPos pos) {
+        return "r." + (pos.x >> 5) + "." + (pos.z >> 5) + ".mca";
+    }
+
+    /**
      * Captures the storage directory so later read/write guards can infer which dimension
      * the vanilla storage instance belongs to.
      *
@@ -83,17 +94,6 @@ public abstract class RegionBasedStorageMixin {
             );
             ci.cancel();
         }
-    }
-
-    /**
-     * Derives the owning MCA filename for a chunk position.
-     *
-     * @param pos chunk position
-     * @return region filename in {@code r.<x>.<z>.mca} form
-     */
-    @Unique
-    private static String chunkis$regionFileName(final net.minecraft.util.math.ChunkPos pos) {
-        return "r." + (pos.x >> 5) + "." + (pos.z >> 5) + ".mca";
     }
 
     /**

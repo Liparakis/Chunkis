@@ -65,6 +65,20 @@ final class AsyncCisSaveWorker implements Runnable {
         this.thread.start();
     }
 
+    private static void cacheEncodedChunkMetadata(final ChunkDeltaView<BlockState, NbtCompound> snapshot)
+            throws IOException {
+        if (snapshot.getEncodedChunkMetadata() != null) {
+            return;
+        }
+
+        final NbtCompound metadata = snapshot.getChunkMetadata();
+        if (metadata == null) {
+            return;
+        }
+
+        snapshot.cacheEncodedChunkMetadata(CisNbtUtil.serializeChunkMetadataForStorage(metadata));
+    }
+
     /**
      * Adds a pending save to the queue.
      *
@@ -285,20 +299,6 @@ final class AsyncCisSaveWorker implements Runnable {
                         .isDirty(),
                 null
         );
-    }
-
-    private static void cacheEncodedChunkMetadata(final ChunkDeltaView<BlockState, NbtCompound> snapshot)
-            throws IOException {
-        if (snapshot.getEncodedChunkMetadata() != null) {
-            return;
-        }
-
-        final NbtCompound metadata = snapshot.getChunkMetadata();
-        if (metadata == null) {
-            return;
-        }
-
-        snapshot.cacheEncodedChunkMetadata(CisNbtUtil.serializeChunkMetadataForStorage(metadata));
     }
 
     /**

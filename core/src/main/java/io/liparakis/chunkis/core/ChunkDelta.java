@@ -79,6 +79,10 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     private final Predicate<S> isEmptyState;
     /**
+     * Per-section block entity counts used to clear mask bits on removal.
+     */
+    private final short[] blockEntitySectionCounts;
+    /**
      * Lazily allocated block entity payloads keyed by packed position.
      */
     private Long2ObjectOpenHashMap<N> blockEntities;
@@ -126,10 +130,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * Bitset of sections containing block entity payloads.
      */
     private int blockEntitySectionMask;
-    /**
-     * Per-section block entity counts used to clear mask bits on removal.
-     */
-    private final short[] blockEntitySectionCounts;
 
     /**
      * Creates an empty delta with an explicit empty-state predicate.
@@ -207,6 +207,33 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
+     * Maps an absolute block Y coordinate to this delta's touched-section bitset.
+     *
+     * <p>Out-of-range coordinates return {@code 0} so corrupted or legacy payloads
+     * do not poison the cached section-count state.</p>
+     *
+     * @param y absolute block Y coordinate
+     * @return one-hot section bit, or {@code 0} when outside the legal chunk range
+     */
+    private static int sectionBit(final int y) {
+        final int sectionY = y >> 4;
+        if (sectionY < CisConstants.MIN_SECTION_Y || sectionY > CisConstants.MAX_SECTION_Y) {
+            return 0;
+        }
+        return 1 << (sectionY - CisConstants.MIN_SECTION_Y);
+    }
+
+    /**
+     * Resolves the touched-section bit for a packed block position key.
+     *
+     * @param posKey packed local block position
+     * @return one-hot section bit, or {@code 0} when outside the legal chunk range
+     */
+    private static int blockSectionBit(final long posKey) {
+        return sectionBit(BlockInstruction.unpackY(posKey));
+    }
+
+    /**
      * Creates a detached read-only snapshot tailored for async encode/save work.
      *
      * @param payloadCopier copies each stored payload value
@@ -243,33 +270,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     public void copyBlockPaletteFrom(final ChunkDelta<S, ?> source) {
         Objects.requireNonNull(source, "source");
         blockPalette.replaceWith(source.blockPalette);
-    }
-
-    /**
-     * Maps an absolute block Y coordinate to this delta's touched-section bitset.
-     *
-     * <p>Out-of-range coordinates return {@code 0} so corrupted or legacy payloads
-     * do not poison the cached section-count state.</p>
-     *
-     * @param y absolute block Y coordinate
-     * @return one-hot section bit, or {@code 0} when outside the legal chunk range
-     */
-    private static int sectionBit(final int y) {
-        final int sectionY = y >> 4;
-        if (sectionY < CisConstants.MIN_SECTION_Y || sectionY > CisConstants.MAX_SECTION_Y) {
-            return 0;
-        }
-        return 1 << (sectionY - CisConstants.MIN_SECTION_Y);
-    }
-
-    /**
-     * Resolves the touched-section bit for a packed block position key.
-     *
-     * @param posKey packed local block position
-     * @return one-hot section bit, or {@code 0} when outside the legal chunk range
-     */
-    private static int blockSectionBit(final long posKey) {
-        return sectionBit(BlockInstruction.unpackY(posKey));
     }
 
     /**

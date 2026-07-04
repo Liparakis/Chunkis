@@ -33,7 +33,7 @@ final class RegionAllocationMetadata {
      * live payload span, and disjoint from every live chunk entry.
      */
     private static boolean validateFreeBlocks(final List<RegionFreeBlock> blocks, final int metadataOffset,
-                                              final int[] offsets, final int[] lengths) {
+            final int[] offsets, final int[] lengths) {
         final List<RegionFreeBlock> sorted = new ArrayList<>(blocks);
         sorted.sort(Comparator.comparingInt(RegionFreeBlock::offset));
         int previousEnd = RegionFile.HEADER_SIZE;
@@ -59,7 +59,7 @@ final class RegionAllocationMetadata {
      * Returns whether a candidate reusable range intersects a live chunk span.
      */
     private static boolean overlapsLiveBlock(final int freeOffset, final int freeEnd, final int[] offsets,
-                                             final int[] lengths) {
+            final int[] lengths) {
         for (int i = 0; i < RegionFile.CHUNKS_PER_REGION; i++) {
             if (offsets[i] == 0 || lengths[i] == 0) {
                 continue;
@@ -94,7 +94,7 @@ final class RegionAllocationMetadata {
             final int currentEnd = current.offset() + current.length();
             if (next.offset() <= currentEnd) {
                 current = new RegionFreeBlock(current.offset(),
-                                              Math.max(currentEnd, next.offset() + next.length()) - current.offset());
+                        Math.max(currentEnd, next.offset() + next.length()) - current.offset());
             } else {
                 merged.add(current);
                 current = next;
@@ -121,8 +121,8 @@ final class RegionAllocationMetadata {
      * counts, or free-block ranges are inconsistent with the live region header.</p>
      */
     boolean loadFromFooter(final ByteBuffer payload, final int metadataOffset, final int[] offsets,
-                           final int[] lengths, final int headerEntrySize, final int metadataMagic,
-                           final int metadataVersion) {
+            final int[] lengths, final int headerEntrySize, final int metadataMagic,
+            final int metadataVersion) {
         if (payload.remaining() < Integer.BYTES * 3 + Long.BYTES * 2) {
             return false;
         }

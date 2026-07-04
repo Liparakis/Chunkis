@@ -4,6 +4,10 @@ import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.restoration.nbt.StructureMetadataExtractor;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registry;
@@ -19,11 +23,6 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.SerializedChunk;
 import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.gen.structure.Structure;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
 /**
  * Verifies that direct structure metadata extraction matches vanilla's

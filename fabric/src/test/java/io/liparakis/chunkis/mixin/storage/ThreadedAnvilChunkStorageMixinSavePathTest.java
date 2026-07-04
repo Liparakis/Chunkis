@@ -17,7 +17,8 @@ import org.junit.jupiter.api.Test;
 final class ThreadedAnvilChunkStorageMixinSavePathTest {
 
     /**
-     * Helper method to invoke the private static method {@code chunkis$claimEntityCapturedDelta} in {@code ThreadedAnvilChunkStorageMixin} via reflection.
+     * Helper method to invoke the private static method {@code chunkis$claimEntityCapturedDelta} in
+     * {@code ThreadedAnvilChunkStorageMixin} via reflection.
      *
      * @param delta the {@link ChunkDelta} to claim ownership of
      * @return the claimed {@link ChunkDelta}
@@ -33,8 +34,7 @@ final class ThreadedAnvilChunkStorageMixinSavePathTest {
                 String.class
         );
         method.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        final ChunkDelta<BlockState, NbtCompound> claimed =
+        @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> claimed =
                 (ChunkDelta<BlockState, NbtCompound>) method.invoke(
                         null,
                         delta,

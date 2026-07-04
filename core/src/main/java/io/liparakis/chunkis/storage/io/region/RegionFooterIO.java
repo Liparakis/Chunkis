@@ -35,7 +35,7 @@ final class RegionFooterIO {
             final int headerSize,
             final int footerMagic,
             final int noFooter
-                                  ) throws IOException {
+    ) throws IOException {
         final long size = channel.size();
         if (size < headerSize + (Integer.BYTES * 2L)) {
             return noFooter;

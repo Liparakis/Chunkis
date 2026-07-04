@@ -81,14 +81,15 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
      * @throws IOException if loading fails
      */
     public CisMapping(Path mappingFile, BlockRegistryAdapter<B> registry, BlockStateAdapter<B, S, P> stateAdapter,
-                      PropertyPacker<B, S, P> packer) throws IOException {
+            PropertyPacker<B, S, P> packer) throws IOException {
         this.mappingFilePath = mappingFile;
         this.registry = registry;
         this.stateAdapter = stateAdapter;
         this.packer = packer;
         this.mappingsDirty = false;
 
-        if (mappingFile.toFile().exists()) {
+        if (mappingFile.toFile()
+                .exists()) {
             loadMappings();
         }
 
@@ -144,7 +145,8 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
      * persisted ID.
      */
     private void populateRegisteredBlocks() {
-        rwLock.writeLock().lock();
+        rwLock.writeLock()
+                .lock();
         try {
             for (B block : registry.getRegisteredBlocks()) {
                 if (blockIds.getId(block) == -1) {
@@ -153,7 +155,8 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
                 }
             }
         } finally {
-            rwLock.writeLock().unlock();
+            rwLock.writeLock()
+                    .unlock();
         }
     }
 
@@ -186,7 +189,8 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
             return cachedId;
         }
 
-        rwLock.writeLock().lock();
+        rwLock.writeLock()
+                .lock();
         try {
             final int id = blockIds.getId(block);
             if (id != -1) {
@@ -195,7 +199,8 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
 
             return registerNewBlock(block);
         } finally {
-            rwLock.writeLock().unlock();
+            rwLock.writeLock()
+                    .unlock();
         }
     }
 
@@ -246,11 +251,13 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
      * @return a map of block identifier strings to their allocated IDs
      */
     private Map<String, Integer> createMappingSnapshot() {
-        rwLock.readLock().lock();
+        rwLock.readLock()
+                .lock();
         try {
             return blockIds.snapshot(registry);
         } finally {
-            rwLock.readLock().unlock();
+            rwLock.readLock()
+                    .unlock();
         }
     }
 

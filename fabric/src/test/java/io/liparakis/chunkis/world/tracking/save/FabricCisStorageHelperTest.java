@@ -30,10 +30,12 @@ class FabricCisStorageHelperTest {
                 Identifier.of("minecraft", "overworld"));
 
         assertEquals(
-                SAVE_ROOT.resolve("chunkis").resolve("regions"),
+                SAVE_ROOT.resolve("chunkis")
+                        .resolve("regions"),
                 ChunkisStoragePaths.computeRegionsDirectory(SAVE_ROOT, overworld));
         assertEquals(
-                SAVE_ROOT.resolve("chunkis").resolve("global_ids.json"),
+                SAVE_ROOT.resolve("chunkis")
+                        .resolve("global_ids.json"),
                 ChunkisStoragePaths.computeMappingFile(SAVE_ROOT, overworld));
         assertEquals(
                 SAVE_ROOT.resolve("region"),
@@ -50,9 +52,9 @@ class FabricCisStorageHelperTest {
                 RegistryKeys.WORLD,
                 Identifier.of("minecraft", "the_nether"));
         final Path dimensionChunkisDir = SAVE_ROOT.resolve("dimensions")
-                                                   .resolve("minecraft")
-                                                   .resolve("the_nether")
-                                                   .resolve("chunkis");
+                .resolve("minecraft")
+                .resolve("the_nether")
+                .resolve("chunkis");
 
         assertEquals(
                 dimensionChunkisDir.resolve("regions"),
@@ -62,9 +64,9 @@ class FabricCisStorageHelperTest {
                 ChunkisStoragePaths.computeMappingFile(SAVE_ROOT, nether));
         assertEquals(
                 SAVE_ROOT.resolve("dimensions")
-                         .resolve("minecraft")
-                         .resolve("the_nether")
-                         .resolve("region"),
+                        .resolve("minecraft")
+                        .resolve("the_nether")
+                        .resolve("region"),
                 ChunkisStoragePaths.computeVanillaRegionDirectory(SAVE_ROOT, nether));
     }
 
@@ -78,11 +80,12 @@ class FabricCisStorageHelperTest {
                 RegistryKeys.WORLD,
                 Identifier.of("example", "overworld"));
         final Path dimensionBase = SAVE_ROOT.resolve("dimensions")
-                                            .resolve("example")
-                                            .resolve("overworld");
+                .resolve("example")
+                .resolve("overworld");
 
         assertEquals(
-                dimensionBase.resolve("chunkis").resolve("regions"),
+                dimensionBase.resolve("chunkis")
+                        .resolve("regions"),
                 ChunkisStoragePaths.computeRegionsDirectory(SAVE_ROOT, customOverworld));
         assertEquals(
                 dimensionBase.resolve("region"),

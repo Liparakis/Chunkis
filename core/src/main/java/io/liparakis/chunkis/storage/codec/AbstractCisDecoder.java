@@ -157,6 +157,19 @@ public abstract class AbstractCisDecoder<S, N> {
     }
 
     /**
+     * Returns a cheap per-section reserve for decoded block instructions.
+     *
+     * <p>This intentionally over-allocates compared to exact sizing so decode does not have to
+     * parse the section payload twice.</p>
+     */
+    static int coarseBlockCapacityReserve(final int sectionCount) {
+        if (sectionCount <= 0) {
+            return 0;
+        }
+        return sectionCount * SECTION_VOLUME;
+    }
+
+    /**
      * Decodes the global block palette from the CIS data.
      *
      * @return the offset immediately after the palette payload.
@@ -231,19 +244,6 @@ public abstract class AbstractCisDecoder<S, N> {
         }
 
         return offset + sectionDataLength;
-    }
-
-    /**
-     * Returns a cheap per-section reserve for decoded block instructions.
-     *
-     * <p>This intentionally over-allocates compared to exact sizing so decode does not have to
-     * parse the section payload twice.</p>
-     */
-    static int coarseBlockCapacityReserve(final int sectionCount) {
-        if (sectionCount <= 0) {
-            return 0;
-        }
-        return sectionCount * SECTION_VOLUME;
     }
 
     /**

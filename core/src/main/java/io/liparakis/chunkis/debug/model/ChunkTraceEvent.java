@@ -85,7 +85,7 @@ public record ChunkTraceEvent(
             final String operationId,
             final Boolean dirtyState,
             final Integer byteSize
-                          ) {
+    ) {
         this(
                 eventId, timestampMillis, threadName,
                 domain, eventType, severity, reason,
@@ -93,7 +93,7 @@ public record ChunkTraceEvent(
                 worldId, chunkKey, regionKey, operationId,
                 dirtyState, byteSize,
                 null, null, null
-            );
+        );
     }
 
     /**

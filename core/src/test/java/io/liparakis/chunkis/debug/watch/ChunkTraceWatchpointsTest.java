@@ -105,7 +105,7 @@ class ChunkTraceWatchpointsTest {
         final PayloadWatchTarget entityTarget = PayloadWatchTarget.entity(
                 "minecraft:overworld",
                 "123e4567-e89b-12d3-a456-426614174000"
-                                                                         );
+        );
         ChunkTraceWatchpoints.watchPayload(blockTarget);
         ChunkTraceWatchpoints.watchPayload(entityTarget);
 
@@ -131,7 +131,7 @@ class ChunkTraceWatchpointsTest {
         assertThat(ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 "minecraft:overworld",
                 new DebugChunkKey(0, -1)
-                                                                )).containsExactly(blockTarget);
+        )).containsExactly(blockTarget);
         assertThat(ChunkTraceWatchpoints.watchedPayloads()).containsExactly(blockTarget, entityTarget);
     }
 }

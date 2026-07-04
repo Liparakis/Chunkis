@@ -27,8 +27,11 @@ class OfflineWorldMigrationReportTest {
                 1
         );
 
-        assertTrue(report.toJsonLine().contains("\"worldId\":\"minecraft:overworld\""));
-        assertTrue(report.toJsonLine().contains("\"handledChunks\":512"));
-        assertTrue(report.toJsonLine().contains("\"retiredRegions\":1"));
+        assertTrue(report.toJsonLine()
+                .contains("\"worldId\":\"minecraft:overworld\""));
+        assertTrue(report.toJsonLine()
+                .contains("\"handledChunks\":512"));
+        assertTrue(report.toJsonLine()
+                .contains("\"retiredRegions\":1"));
     }
 }

@@ -30,9 +30,9 @@ class ChunkDeltaTraceTest {
 
         final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(10);
         assertThat(latest).extracting(ChunkTraceEvent::eventType)
-                          .containsExactly(
-                                  ChunkTraceEventType.DELTA_MARKED_CLEAN,
-                                  ChunkTraceEventType.DELTA_MARKED_DIRTY
-                                          );
+                .containsExactly(
+                        ChunkTraceEventType.DELTA_MARKED_CLEAN,
+                        ChunkTraceEventType.DELTA_MARKED_DIRTY
+                );
     }
 }

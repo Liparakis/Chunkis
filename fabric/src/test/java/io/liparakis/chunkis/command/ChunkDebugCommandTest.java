@@ -26,6 +26,63 @@ import org.junit.jupiter.api.Test;
 class ChunkDebugCommandTest {
 
     /**
+     * Creates a mock {@link ChunkTraceSuspect} instance for test purposes.
+     *
+     * @return a new ChunkTraceSuspect instance with pre-configured events
+     */
+    private static ChunkTraceSuspect createSuspect() {
+        final ChunkTraceEvent originalFailure = new ChunkTraceEvent(
+                10L,
+                1_717_171_717_000L,
+                "Server thread",
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.RESTORE_COMPLETED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.RESTORE_EMPTY_RESULT,
+                "ChunkRestorer",
+                "restore applied zero blocks",
+                "minecraft:overworld",
+                new DebugChunkKey(7, -2),
+                new DebugRegionKey(0, -1),
+                "save-7--2-4",
+                null,
+                null
+        );
+        final ChunkTraceEvent latestEvent = new ChunkTraceEvent(
+                21L,
+                1_717_171_718_000L,
+                "Server thread",
+                ChunkisDebugDomain.CHUNK_LIFECYCLE,
+                ChunkTraceEventType.RESTORE_FAILED,
+                ChunkTraceSeverity.ERROR,
+                ChunkTraceReason.RESTORE_EXCEPTION,
+                "ChunkRestorer",
+                "write failed",
+                "minecraft:overworld",
+                new DebugChunkKey(7, -2),
+                new DebugRegionKey(0, -1),
+                "save-7--2-4",
+                null,
+                null
+        );
+        return new ChunkTraceSuspect(
+                2L,
+                originalFailure,
+                latestEvent,
+                new DebugChunkKey(7, -2),
+                new DebugRegionKey(0, -1),
+                "save-7--2-4",
+                ChunkTraceReason.RESTORE_EMPTY_RESULT,
+                ChunkTraceSeverity.ERROR,
+                1_717_171_717_000L,
+                1_717_171_718_000L,
+                6,
+                List.of(originalFailure, latestEvent),
+                "write failed"
+        );
+    }
+
+    /**
      * Clears all chunk trace watchpoints after each test to ensure test isolation.
      */
     @AfterEach
@@ -165,63 +222,6 @@ class ChunkDebugCommandTest {
         assertTrue(detail.contains("op=save-7--2-4"));
         assertTrue(detail.contains("timeline=2"));
         assertTrue(detail.contains("inspect=/chunkis debug suspect timeline 2"));
-    }
-
-    /**
-     * Creates a mock {@link ChunkTraceSuspect} instance for test purposes.
-     *
-     * @return a new ChunkTraceSuspect instance with pre-configured events
-     */
-    private static ChunkTraceSuspect createSuspect() {
-        final ChunkTraceEvent originalFailure = new ChunkTraceEvent(
-                10L,
-                1_717_171_717_000L,
-                "Server thread",
-                ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.RESTORE_COMPLETED,
-                ChunkTraceSeverity.ERROR,
-                ChunkTraceReason.RESTORE_EMPTY_RESULT,
-                "ChunkRestorer",
-                "restore applied zero blocks",
-                "minecraft:overworld",
-                new DebugChunkKey(7, -2),
-                new DebugRegionKey(0, -1),
-                "save-7--2-4",
-                null,
-                null
-        );
-        final ChunkTraceEvent latestEvent = new ChunkTraceEvent(
-                21L,
-                1_717_171_718_000L,
-                "Server thread",
-                ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.RESTORE_FAILED,
-                ChunkTraceSeverity.ERROR,
-                ChunkTraceReason.RESTORE_EXCEPTION,
-                "ChunkRestorer",
-                "write failed",
-                "minecraft:overworld",
-                new DebugChunkKey(7, -2),
-                new DebugRegionKey(0, -1),
-                "save-7--2-4",
-                null,
-                null
-        );
-        return new ChunkTraceSuspect(
-                2L,
-                originalFailure,
-                latestEvent,
-                new DebugChunkKey(7, -2),
-                new DebugRegionKey(0, -1),
-                "save-7--2-4",
-                ChunkTraceReason.RESTORE_EMPTY_RESULT,
-                ChunkTraceSeverity.ERROR,
-                1_717_171_717_000L,
-                1_717_171_718_000L,
-                6,
-                List.of(originalFailure, latestEvent),
-                "write failed"
-        );
     }
 }
 

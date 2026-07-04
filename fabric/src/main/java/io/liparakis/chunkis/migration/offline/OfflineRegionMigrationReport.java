@@ -13,6 +13,11 @@ public record OfflineRegionMigrationReport(
         String translatorVersion
 ) {
 
+    private static String escape(final String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"");
+    }
+
     /**
      * Returns whether the region met the retirement criteria.
      */
@@ -34,9 +39,5 @@ public record OfflineRegionMigrationReport(
                 + "\"retired\":" + retired + ","
                 + "\"translatorVersion\":\"" + escape(translatorVersion) + "\""
                 + "}";
-    }
-
-    private static String escape(final String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

@@ -38,7 +38,7 @@ class RegionFileFreeListTest {
             final CisChunkPos second,
             final byte[] secondBytes,
             final int secondOffset
-                                         ) throws IOException {
+    ) throws IOException {
         final ByteBuffer header = ByteBuffer.allocate(RegionFile.HEADER_SIZE);
         writeHeaderEntry(header, first, RegionFile.HEADER_SIZE, firstBytes.length);
         writeHeaderEntry(header, second, secondOffset, secondBytes.length);
@@ -49,7 +49,7 @@ class RegionFileFreeListTest {
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING,
                 StandardOpenOption.WRITE
-                                                   )) {
+        )) {
             channel.write(header, 0L);
             channel.write(ByteBuffer.wrap(firstBytes), RegionFile.HEADER_SIZE);
             channel.write(ByteBuffer.wrap(secondBytes), secondOffset);
@@ -86,7 +86,7 @@ class RegionFileFreeListTest {
             final CisChunkPos pos,
             final int offset,
             final int length
-                                        ) {
+    ) {
         final int index = indexOf(pos);
         header.putInt(index * 8, offset);
         header.putInt(index * 8 + 4, length);

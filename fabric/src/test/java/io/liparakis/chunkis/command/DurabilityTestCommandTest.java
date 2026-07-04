@@ -30,14 +30,14 @@ class DurabilityTestCommandTest {
      * Sets the active runner executor and run ID in the {@link DurabilityTestCommand} class.
      *
      * @param executor the scheduled executor service to set
-     * @param runId the run ID to set
+     * @param runId    the run ID to set
      * @throws Exception if reflection access fails
      */
     @SuppressWarnings("SameParameterValue")
     private static void setRunState(
             final ScheduledExecutorService executor,
             final String runId
-                                   ) throws Exception {
+    ) throws Exception {
         executorRef().set(executor);
         runIdRef().set(runId);
     }
@@ -120,8 +120,12 @@ class DurabilityTestCommandTest {
      */
     @Test
     void mapsTeleportTargetToChunkCoordinates() {
-        assertEquals(-1, DurabilityTestCommand.toChunkKey(new Vec3d(-0.5, 64.0, 31.9)).x());
-        assertEquals(1, DurabilityTestCommand.toChunkKey(new Vec3d(-0.5, 64.0, 31.9)).z());
+        assertEquals(-1,
+                DurabilityTestCommand.toChunkKey(new Vec3d(-0.5, 64.0, 31.9))
+                        .x());
+        assertEquals(1,
+                DurabilityTestCommand.toChunkKey(new Vec3d(-0.5, 64.0, 31.9))
+                        .z());
     }
 
     /**
@@ -147,10 +151,11 @@ class DurabilityTestCommandTest {
         assertNull(currentExecutor());
 
         final List<ChunkTraceEvent> events = ChunkTraceStore.latest(5);
-        assertTrue(events.stream().anyMatch(event ->
-                                                    event.eventType() == ChunkTraceEventType.DURABILITY_TEST_STOPPED
-                                                            && "durability-7".equals(event.operationId())
-                                                            && "stopped manually".equals(event.message())));
+        assertTrue(events.stream()
+                .anyMatch(event ->
+                        event.eventType() == ChunkTraceEventType.DURABILITY_TEST_STOPPED
+                                && "durability-7".equals(event.operationId())
+                                && "stopped manually".equals(event.message())));
     }
 
     /**
@@ -164,15 +169,19 @@ class DurabilityTestCommandTest {
         DurabilityTestCommand.traceFailed("boom", "minecraft:overworld", "durability-9");
 
         final List<ChunkTraceEvent> events = ChunkTraceStore.latest(5);
-        assertTrue(events.stream().anyMatch(event ->
-                                                    event.eventType() == ChunkTraceEventType.DURABILITY_TEST_STARTED
-                                                            && "durability-9".equals(event.operationId())
-                                                            && event.message().contains("count=12")
-                                                            && event.message().contains("delayMs=25")));
-        assertTrue(events.stream().anyMatch(event ->
-                                                    event.eventType() == ChunkTraceEventType.DURABILITY_TEST_FAILED
-                                                            && event.reason() == ChunkTraceReason.IO_EXCEPTION
-                                                            && "durability-9".equals(event.operationId())
-                                                            && "durability test failed: boom".equals(event.message())));
+        assertTrue(events.stream()
+                .anyMatch(event ->
+                        event.eventType() == ChunkTraceEventType.DURABILITY_TEST_STARTED
+                                && "durability-9".equals(event.operationId())
+                                && event.message()
+                                .contains("count=12")
+                                && event.message()
+                                .contains("delayMs=25")));
+        assertTrue(events.stream()
+                .anyMatch(event ->
+                        event.eventType() == ChunkTraceEventType.DURABILITY_TEST_FAILED
+                                && event.reason() == ChunkTraceReason.IO_EXCEPTION
+                                && "durability-9".equals(event.operationId())
+                                && "durability test failed: boom".equals(event.message())));
     }
 }

@@ -201,9 +201,11 @@ final class ChunkDebugOutput {
     static String formatChunkInspectSnapshot(final ChunkDebugCommand.ChunkInspectSnapshot snapshot) {
         final StringBuilder sb = new StringBuilder(256);
         sb.append("chunk=")
-                .append(snapshot.chunkKey().x())
+                .append(snapshot.chunkKey()
+                        .x())
                 .append(',')
-                .append(snapshot.chunkKey().z())
+                .append(snapshot.chunkKey()
+                        .z())
                 .append(" loaded=")
                 .append(snapshot.loaded())
                 .append(" diskPresent=")

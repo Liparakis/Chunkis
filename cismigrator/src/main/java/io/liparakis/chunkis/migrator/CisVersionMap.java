@@ -33,7 +33,7 @@ public final class CisVersionMap {
                     "the outer CIS compression stream."),
             new CisVersionEdge(10, 11, "Promoted CIS payloads to authoritative compact chunk snapshots and finalized " +
                     "the unreleased v11 section codec.")
-                                                             );
+    );
 
     private CisVersionMap() {
         throw new AssertionError("Utility class");

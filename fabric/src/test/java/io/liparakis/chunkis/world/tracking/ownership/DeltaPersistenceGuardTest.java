@@ -42,9 +42,9 @@ class DeltaPersistenceGuardTest {
                         true,
                         false,
                         CisNbtUtil.createBaseNbt(1, 1, 1)
-                                                             ),
+                ),
                 false
-                              );
+        );
 
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
         assertFalse(DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta));
@@ -64,9 +64,9 @@ class DeltaPersistenceGuardTest {
                         true,
                         true,
                         null
-                                                             ),
+                ),
                 false
-                              );
+        );
 
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
     }
@@ -111,9 +111,9 @@ class DeltaPersistenceGuardTest {
                         true,
                         false,
                         CisNbtUtil.createBaseNbt(1, 1, 1)
-                                                             ),
+                ),
                 false
-                              );
+        );
 
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
     }

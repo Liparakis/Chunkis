@@ -255,16 +255,24 @@ public final class ChunkMutationTrackingScope {
      * is not active.
      */
     public enum Cause {
-        /** No active mutation tracking suppression. */
+        /**
+         * No active mutation tracking suppression.
+         */
         NONE,
 
-        /** Mutation tracking suppressed due to passive chunk loading. */
+        /**
+         * Mutation tracking suppressed due to passive chunk loading.
+         */
         PASSIVE_LOAD,
 
-        /** Mutation tracking suppressed due to baseline block applications. */
+        /**
+         * Mutation tracking suppressed due to baseline block applications.
+         */
         BASE_APPLY,
 
-        /** Mutation tracking suppressed due to restoration operations. */
+        /**
+         * Mutation tracking suppressed due to restoration operations.
+         */
         RESTORE
     }
 
@@ -273,13 +281,19 @@ public final class ChunkMutationTrackingScope {
      * a boolean parameter whose meaning is implicit at the call site.
      */
     private enum TracedFlag {
-        /** Mapped traced flag selector for passive loads. */
+        /**
+         * Mapped traced flag selector for passive loads.
+         */
         PASSIVE_LOAD,
 
-        /** Mapped traced flag selector for base apply. */
+        /**
+         * Mapped traced flag selector for base apply.
+         */
         BASE_APPLY,
 
-        /** Mapped traced flag selector for restore. */
+        /**
+         * Mapped traced flag selector for restore.
+         */
         RESTORE
     }
 }

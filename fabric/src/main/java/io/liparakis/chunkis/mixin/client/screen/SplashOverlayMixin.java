@@ -2,9 +2,9 @@ package io.liparakis.chunkis.mixin.client.screen;
 
 import java.lang.reflect.Method;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.SplashOverlay;
-import net.minecraft.client.font.TextRenderer;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -30,8 +30,29 @@ public abstract class SplashOverlayMixin {
     /**
      * Active client instance that owns the current splash overlay render pass.
      */
-    @Shadow @Final
+    @Shadow
+    @Final
     private MinecraftClient client;
+
+    /**
+     * Reads the latest startup migration status via reflection.
+     *
+     * <p>This mixin stays defensive here because the progress tracker lives outside
+     * the immediate client mixin package and startup UI should fail soft if that
+     * helper is absent or renamed.</p>
+     *
+     * @return current migration status text, or {@code null} when unavailable
+     */
+    @Unique
+    private static String chunkis$getMigrationStatus() {
+        try {
+            final Class<?> trackerClass = Class.forName(TRACKER_CLASS);
+            final Method getStatus = trackerClass.getMethod("getStatus");
+            return (String) getStatus.invoke(null);
+        } catch (final ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
 
     /**
      * Paints the current MCA-to-CIS migration status over the vanilla splash overlay
@@ -82,25 +103,5 @@ public abstract class SplashOverlayMixin {
                 textY,
                 0xFFFFFF
         );
-    }
-
-    /**
-     * Reads the latest startup migration status via reflection.
-     *
-     * <p>This mixin stays defensive here because the progress tracker lives outside
-     * the immediate client mixin package and startup UI should fail soft if that
-     * helper is absent or renamed.</p>
-     *
-     * @return current migration status text, or {@code null} when unavailable
-     */
-    @Unique
-    private static String chunkis$getMigrationStatus() {
-        try {
-            final Class<?> trackerClass = Class.forName(TRACKER_CLASS);
-            final Method getStatus = trackerClass.getMethod("getStatus");
-            return (String) getStatus.invoke(null);
-        } catch (final ReflectiveOperationException ignored) {
-            return null;
-        }
     }
 }

@@ -1,5 +1,8 @@
 package io.liparakis.chunkis.gametest;
 
+import io.liparakis.chunkis.adapter.FabricBlockRegistryAdapter;
+import io.liparakis.chunkis.adapter.FabricBlockStateAdapter;
+import io.liparakis.chunkis.adapter.FabricNbtAdapter;
 import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
@@ -8,24 +11,10 @@ import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.migrator.CisMigrationReport;
 import io.liparakis.chunkis.migrator.CisStorageMigrator;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.storage.model.CisConstants;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import io.liparakis.chunkis.adapter.FabricBlockRegistryAdapter;
-import io.liparakis.chunkis.adapter.FabricBlockStateAdapter;
-import io.liparakis.chunkis.adapter.FabricNbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
 import io.liparakis.chunkis.storage.mapping.PropertyPacker;
-import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.WorldSavePath;
-import org.slf4j.helpers.NOPLogger;
-
+import io.liparakis.chunkis.storage.model.CisConstants;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -38,6 +27,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeSet;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.state.property.Property;
+import net.minecraft.test.TestContext;
+import net.minecraft.text.Text;
+import net.minecraft.util.WorldSavePath;
+import org.slf4j.helpers.NOPLogger;
 
 /**
  * End-to-end GameTest coverage for migrating real V8 CIS fixtures through the
@@ -255,6 +254,34 @@ public final class CisFixtureMigrationGameTest {
     }
 
     /**
+     * Initializes and configures a {@link CisStorage} instance using Fabric-specific adapters
+     * and mapping files located within the test storage directory.
+     *
+     * @param storageRoot the target Chunkis storage root directory
+     * @param regionsDir  the target regions subdirectory containing CIS region files
+     * @return the initialized CisStorage instance
+     * @throws IOException if the global mapping file cannot be read or initialized
+     */
+    private static CisStorage<Block, BlockState, Property<?>, NbtCompound> createStorage(final Path storageRoot,
+            final Path regionsDir) throws IOException {
+        final FabricBlockStateAdapter blockStateAdapter = new FabricBlockStateAdapter();
+        final PropertyPacker<Block, BlockState, Property<?>> packer = new PropertyPacker<>(blockStateAdapter);
+        final CisMapping<Block, BlockState, Property<?>> mapping = new CisMapping<>(
+                storageRoot.resolve("global_ids.json"),
+                new FabricBlockRegistryAdapter(),
+                blockStateAdapter,
+                packer
+        );
+        return new CisStorage<>(
+                regionsDir,
+                mapping,
+                blockStateAdapter,
+                new FabricNbtAdapter(),
+                net.minecraft.block.Blocks.AIR.getDefaultState()
+        );
+    }
+
+    /**
      * Verifies that the real V8 fixture set migrates losslessly to the current
      * CIS version when processed through the Fabric runtime adapters.
      *
@@ -309,33 +336,6 @@ public final class CisFixtureMigrationGameTest {
             storage.close();
             deleteRecursively(storageRoot);
         }
-    }
-
-    /**
-     * Initializes and configures a {@link CisStorage} instance using Fabric-specific adapters
-     * and mapping files located within the test storage directory.
-     *
-     * @param storageRoot the target Chunkis storage root directory
-     * @param regionsDir  the target regions subdirectory containing CIS region files
-     * @return the initialized CisStorage instance
-     * @throws IOException if the global mapping file cannot be read or initialized
-     */
-    private static CisStorage<Block, BlockState, Property<?>, NbtCompound> createStorage(final Path storageRoot, final Path regionsDir) throws IOException {
-        final FabricBlockStateAdapter blockStateAdapter = new FabricBlockStateAdapter();
-        final PropertyPacker<Block, BlockState, Property<?>> packer = new PropertyPacker<>(blockStateAdapter);
-        final CisMapping<Block, BlockState, Property<?>> mapping = new CisMapping<>(
-                storageRoot.resolve("global_ids.json"),
-                new FabricBlockRegistryAdapter(),
-                blockStateAdapter,
-                packer
-        );
-        return new CisStorage<>(
-                regionsDir,
-                mapping,
-                blockStateAdapter,
-                new FabricNbtAdapter(),
-                net.minecraft.block.Blocks.AIR.getDefaultState()
-        );
     }
 
     /**

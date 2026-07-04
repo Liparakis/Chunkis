@@ -56,7 +56,7 @@ public final class CisRegionCompactor {
             final List<RegionFile> cachedFiles,
             final List<RegionCompaction> regions,
             final Set<Path> processedPaths
-                                            ) {
+    ) {
         for (final RegionFile regionFile : cachedFiles) {
             final RegionCompaction result = compactAndCloseRegion(regionFile);
             regions.add(result);
@@ -73,7 +73,7 @@ public final class CisRegionCompactor {
             final Path storageDir,
             final List<RegionCompaction> regions,
             final Set<Path> processedPaths
-                                                 ) {
+    ) {
         if (!Files.isDirectory(storageDir)) {
             return 0;
         }
@@ -153,7 +153,8 @@ public final class CisRegionCompactor {
     }
 
     private static Path compactTempPath(final Path regionPath) {
-        return regionPath.resolveSibling(regionPath.getFileName().toString() + COMPACT_TEMP_SUFFIX);
+        return regionPath.resolveSibling(regionPath.getFileName()
+                .toString() + COMPACT_TEMP_SUFFIX);
     }
 
     /**
@@ -173,7 +174,7 @@ public final class CisRegionCompactor {
     private static CompactionReport summarizeCompaction(
             final List<RegionCompaction> regions,
             final int extraFailures
-                                                       ) {
+    ) {
         long before = 0L;
         long after = 0L;
         long live = 0L;
@@ -206,7 +207,8 @@ public final class CisRegionCompactor {
      * Uses a normalized absolute path for deduplication only. The reported path remains unchanged.
      */
     private static Path dedupKey(final Path path) {
-        return path.toAbsolutePath().normalize();
+        return path.toAbsolutePath()
+                .normalize();
     }
 
     /**

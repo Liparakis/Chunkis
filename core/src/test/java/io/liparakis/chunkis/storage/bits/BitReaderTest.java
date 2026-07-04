@@ -1,7 +1,8 @@
 package io.liparakis.chunkis.storage.bits;
 
-import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 public class BitReaderTest {
 
@@ -42,7 +43,7 @@ public class BitReaderTest {
     @Test
     public void testReadBatchMixed() {
         byte[] data = {(byte) 0xFF, (byte) 0x00, (byte) 0xAA, (byte) 0x55, (byte) 0x12, (byte) 0x34};
-        
+
         for (int bits = 1; bits <= 16; bits++) {
             BitReader reader1 = new BitReader(data);
             BitReader reader2 = new BitReader(data);
@@ -61,8 +62,8 @@ public class BitReaderTest {
             }
 
             assertThat(batch)
-                .as("Mismatch at bits=" + bits)
-                .containsExactly(expected);
+                    .as("Mismatch at bits=" + bits)
+                    .containsExactly(expected);
         }
     }
 

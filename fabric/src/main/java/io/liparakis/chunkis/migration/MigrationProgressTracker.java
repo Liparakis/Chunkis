@@ -8,17 +8,8 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class MigrationProgressTracker {
 
-    /**
-     * Listener interface to receive status updates for client screen rendering.
-     */
-    public interface StatusListener {
-
-        void onStatusUpdate(@Nullable String status);
-    }
-
     private static final AtomicReference<String> STATUS = new AtomicReference<>();
     private static @Nullable StatusListener statusListener;
-
     private MigrationProgressTracker() {
         throw new AssertionError("Utility class");
     }
@@ -77,5 +68,13 @@ public final class MigrationProgressTracker {
         if (listener != null) {
             listener.onStatusUpdate(status);
         }
+    }
+
+    /**
+     * Listener interface to receive status updates for client screen rendering.
+     */
+    public interface StatusListener {
+
+        void onStatusUpdate(@Nullable String status);
     }
 }

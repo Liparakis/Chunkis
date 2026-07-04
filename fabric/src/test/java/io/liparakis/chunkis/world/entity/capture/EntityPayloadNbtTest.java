@@ -26,9 +26,13 @@ class EntityPayloadNbtTest {
         final NbtCompound nbt = new NbtCompound();
         nbt.putIntArray("UUID", Uuids.toIntArray(uuid));
 
-        assertEquals(uuid, EntityPayloadNbt.findUuid(nbt).orElseThrow());
+        assertEquals(uuid,
+                EntityPayloadNbt.findUuid(nbt)
+                        .orElseThrow());
         assertTrue(EntityPayloadNbt.hasUuid(nbt, uuid.toString()));
-        assertFalse(EntityPayloadNbt.hasUuid(nbt, UUID.randomUUID().toString()));
+        assertFalse(EntityPayloadNbt.hasUuid(nbt,
+                UUID.randomUUID()
+                        .toString()));
     }
 
     /**
@@ -44,6 +48,8 @@ class EntityPayloadNbtTest {
         pos.add(NbtDouble.of(-3.2D));
         nbt.put("Pos", pos);
 
-        assertEquals(new BlockPos(1, 64, -4), EntityPayloadNbt.findBlockPos(nbt).orElseThrow());
+        assertEquals(new BlockPos(1, 64, -4),
+                EntityPayloadNbt.findBlockPos(nbt)
+                        .orElseThrow());
     }
 }

@@ -98,11 +98,12 @@ class WorldChunkMixinTest {
     }
 
     /**
-     * Helper method to invoke the private static method {@code chunkis$shouldSeedPostProcessingBlockEntities} via reflection.
+     * Helper method to invoke the private static method {@code chunkis$shouldSeedPostProcessingBlockEntities} via
+     * reflection.
      *
-     * @param hasLiveBlockEntities       whether the chunk has live block entities
-     * @param hasPendingBlockEntityNbts  whether the chunk has pending block entity NBTs
-     * @param hasDelta                   whether the chunk has a delta
+     * @param hasLiveBlockEntities      whether the chunk has live block entities
+     * @param hasPendingBlockEntityNbts whether the chunk has pending block entity NBTs
+     * @param hasDelta                  whether the chunk has a delta
      * @param hasDeltaBlockEntities     whether the delta has block entities
      * @return true if post processing block entities should be seeded, false otherwise
      */

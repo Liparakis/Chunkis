@@ -88,7 +88,7 @@ class CisMappingTest {
     private CisMapping<String, String, String> newMapping(Path mappingFile) throws IOException {
         BlockStateAdapter<String, String, String> stateAdapter = new TestBlockStateAdapter();
         return new CisMapping<>(mappingFile, new TestBlockRegistryAdapter(), stateAdapter,
-                                new PropertyPacker<>(stateAdapter));
+                new PropertyPacker<>(stateAdapter));
     }
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {

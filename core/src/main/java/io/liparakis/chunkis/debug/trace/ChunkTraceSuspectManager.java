@@ -35,8 +35,8 @@ public final class ChunkTraceSuspectManager {
         synchronized (MONITOR) {
             final List<ChunkTraceSuspect> result = new ArrayList<>(SUSPECTS_BY_ID.values());
             result.sort(Comparator.comparingLong(ChunkTraceSuspect::lastSeenTimestampMillis)
-                                  .thenComparingLong(ChunkTraceSuspect::suspectId)
-                                  .reversed());
+                    .thenComparingLong(ChunkTraceSuspect::suspectId)
+                    .reversed());
             return result;
         }
     }
@@ -130,7 +130,7 @@ public final class ChunkTraceSuspectManager {
             final ChunkTraceEvent event,
             final Suspicion suspicion,
             final List<ChunkTraceEvent> capturedTimeline
-                                     ) {
+    ) {
         synchronized (MONITOR) {
             final SuspectKey key = new SuspectKey(event.chunkKey(), suspicion.reason());
             final Long existingId = SUSPECT_IDS_BY_KEY.get(key);
@@ -146,7 +146,7 @@ public final class ChunkTraceSuspectManager {
                                 event.timestampMillis(), event.timestampMillis(),
                                 1, capturedTimeline, suspicion.message()
                         )
-                                  );
+                );
                 evictOldestSuspectIfNeeded();
                 return;
             }
@@ -174,7 +174,7 @@ public final class ChunkTraceSuspectManager {
                             mergeTimeline(existing.copiedTimeline(), capturedTimeline),
                             suspicion.message()
                     )
-                              );
+            );
         }
     }
 
@@ -202,7 +202,7 @@ public final class ChunkTraceSuspectManager {
     private static List<ChunkTraceEvent> mergeTimeline(
             final List<ChunkTraceEvent> existing,
             final List<ChunkTraceEvent> captured
-                                                      ) {
+    ) {
         final Map<Long, ChunkTraceEvent> merged = new LinkedHashMap<>();
         for (final ChunkTraceEvent e : existing) {
             merged.put(e.eventId(), e);
@@ -219,7 +219,7 @@ public final class ChunkTraceSuspectManager {
     private static ChunkTraceSeverity moreSevere(
             final ChunkTraceSeverity left,
             final ChunkTraceSeverity right
-                                                ) {
+    ) {
         return left.ordinal() >= right.ordinal() ? left : right;
     }
 

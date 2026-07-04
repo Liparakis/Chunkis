@@ -75,7 +75,8 @@ final class RegionFileCache {
     RegionFile get(final CisChunkPos pos, final boolean create) throws IOException {
         final RegionKey key = regionKey(pos);
 
-        cacheLock.writeLock().lock();
+        cacheLock.writeLock()
+                .lock();
         try {
             final RegionFile existing = regionCache.getAndMoveToFirst(key);
             if (existing != null) {
@@ -94,7 +95,8 @@ final class RegionFileCache {
             regionCache.putAndMoveToFirst(key, newFile);
             return newFile;
         } finally {
-            cacheLock.writeLock().unlock();
+            cacheLock.writeLock()
+                    .unlock();
         }
     }
 
@@ -102,13 +104,15 @@ final class RegionFileCache {
      * Drains the cache and returns the previously cached files in recency order.
      */
     List<RegionFile> drain() {
-        cacheLock.writeLock().lock();
+        cacheLock.writeLock()
+                .lock();
         try {
             final List<RegionFile> filesToClose = new ArrayList<>(regionCache.values());
             regionCache.clear();
             return filesToClose;
         } finally {
-            cacheLock.writeLock().unlock();
+            cacheLock.writeLock()
+                    .unlock();
         }
     }
 

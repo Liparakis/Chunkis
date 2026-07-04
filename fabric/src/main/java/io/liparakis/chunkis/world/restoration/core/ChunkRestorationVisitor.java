@@ -1,9 +1,9 @@
 package io.liparakis.chunkis.world.restoration.core;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
+import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
@@ -146,14 +146,13 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      */
     private final boolean[] touchedColumns = new boolean[16 * 16];
     /**
-     * Number of touched chunk-local columns.
-     */
-    private int touchedColumnCount;
-    /**
      * Cached block-entity type ids for exact-type in-place refresh.
      */
     private final Map<BlockEntityType<?>, String> blockEntityTypeIds = new HashMap<>();
-
+    /**
+     * Number of touched chunk-local columns.
+     */
+    private int touchedColumnCount;
     /**
      * Cumulative count of successfully restored block coordinates.
      */
@@ -234,6 +233,21 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             }
         });
         return uuids;
+    }
+
+    /**
+     * Returns the registry id of a block state's block for restore diagnostics.
+     */
+    private static String blockStateId(final BlockState state) {
+        return state == null ? "<null>" : String.valueOf(Registries.BLOCK.getId(state.getBlock()));
+    }
+
+    /**
+     * Returns the serialized block entity type id from NBT for restore diagnostics.
+     */
+    private static String blockEntityTypeId(@Nullable final NbtCompound nbt) {
+        return nbt == null ? "<null>" : nbt.getString("id")
+                                        .orElse("<missing>");
     }
 
     /**
@@ -734,21 +748,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 blockEntity.getType(),
                 type -> String.valueOf(BlockEntityType.getId(type))
         );
-    }
-
-    /**
-     * Returns the registry id of a block state's block for restore diagnostics.
-     */
-    private static String blockStateId(final BlockState state) {
-        return state == null ? "<null>" : String.valueOf(Registries.BLOCK.getId(state.getBlock()));
-    }
-
-    /**
-     * Returns the serialized block entity type id from NBT for restore diagnostics.
-     */
-    private static String blockEntityTypeId(@Nullable final NbtCompound nbt) {
-        return nbt == null ? "<null>" : nbt.getString("id")
-                                        .orElse("<missing>");
     }
 
     /**

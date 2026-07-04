@@ -15,6 +15,25 @@ import org.junit.jupiter.api.Test;
 class StoragePreventionMixinTest {
 
     /**
+     * Helper method to invoke the private static method {@code chunkis$shouldBlockVanillaWrite} in
+     * {@code StoragePreventionMixin} via reflection.
+     *
+     * @param snapshot the pending vanilla save decision snapshot
+     * @return true if the vanilla write should be blocked, false otherwise
+     * @throws ReflectiveOperationException if reflection fails
+     */
+    private static boolean shouldBlockWrite(final PendingVanillaSaveDecision.Snapshot snapshot)
+            throws ReflectiveOperationException {
+        final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.mixin.storage.StoragePreventionMixin");
+        final Method method = mixinClass.getDeclaredMethod(
+                "chunkis$shouldBlockVanillaWrite",
+                PendingVanillaSaveDecision.Snapshot.class
+        );
+        method.setAccessible(true);
+        return (boolean) method.invoke(null, snapshot);
+    }
+
+    /**
      * Tests that an untouched vanilla save (either an untouched autosave or a null snapshot)
      * is allowed to write and not blocked.
      *
@@ -40,23 +59,5 @@ class StoragePreventionMixinTest {
                 new ChunkDelta<>(),
                 ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE
         )));
-    }
-
-    /**
-     * Helper method to invoke the private static method {@code chunkis$shouldBlockVanillaWrite} in {@code StoragePreventionMixin} via reflection.
-     *
-     * @param snapshot the pending vanilla save decision snapshot
-     * @return true if the vanilla write should be blocked, false otherwise
-     * @throws ReflectiveOperationException if reflection fails
-     */
-    private static boolean shouldBlockWrite(final PendingVanillaSaveDecision.Snapshot snapshot)
-            throws ReflectiveOperationException {
-        final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.mixin.storage.StoragePreventionMixin");
-        final Method method = mixinClass.getDeclaredMethod(
-                "chunkis$shouldBlockVanillaWrite",
-                PendingVanillaSaveDecision.Snapshot.class
-        );
-        method.setAccessible(true);
-        return (boolean) method.invoke(null, snapshot);
     }
 }

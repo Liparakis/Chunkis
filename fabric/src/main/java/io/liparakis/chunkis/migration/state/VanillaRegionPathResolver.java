@@ -30,17 +30,6 @@ public final class VanillaRegionPathResolver {
     }
 
     /**
-     * Classifies a storage path.
-     */
-    public enum Classification {
-        VANILLA_CHUNK_REGION,
-        VANILLA_POI_REGION,
-        VANILLA_ENTITY_REGION,
-        CHUNKIS_INTERNAL,
-        UNKNOWN
-    }
-
-    /**
      * Classifies a storage directory by its role in the world save layout.
      *
      * @param path storage path to classify
@@ -116,5 +105,16 @@ public final class VanillaRegionPathResolver {
         }
 
         return Optional.of(RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla("overworld")));
+    }
+
+    /**
+     * Classifies a storage path.
+     */
+    public enum Classification {
+        VANILLA_CHUNK_REGION,
+        VANILLA_POI_REGION,
+        VANILLA_ENTITY_REGION,
+        CHUNKIS_INTERNAL,
+        UNKNOWN
     }
 }

@@ -105,7 +105,8 @@ class CisStorageCompactionTest {
         assertEquals(1, report.failedRegions());
         assertEquals(Files.size(regionFile), report.physicalBytesBefore());
         assertEquals(corruptedOffset, harness.headerOffset(pos));
-        assertTrue(Files.notExists(regionFile.resolveSibling(regionFile.getFileName().toString() + ".tmp")));
+        assertTrue(Files.notExists(regionFile.resolveSibling(regionFile.getFileName()
+                .toString() + ".tmp")));
 
         harness.close();
     }
@@ -127,7 +128,7 @@ class CisStorageCompactionTest {
     private CisStorage<String, String, String, String> openStorage(
             final Path storageRoot,
             final Path regionsDir
-                                                                  ) throws Exception {
+    ) throws Exception {
         final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
         final CisMapping<String, String, String> mapping = new CisMapping<>(
                 storageRoot.resolve("global_ids.json"),
@@ -244,7 +245,7 @@ class CisStorageCompactionTest {
                 final Path storageRoot,
                 final Path regionsDir,
                 final CisStorage<String, String, String, String> storage
-                                  ) {
+        ) {
             this.storageRoot = storageRoot;
             this.regionsDir = regionsDir;
             this.storage = storage;
@@ -313,7 +314,8 @@ class CisStorageCompactionTest {
          */
         private String loadSingleState(final CisChunkPos pos) {
             final String[] state = new String[1];
-            storage.load(pos).forEachBlock((x, y, z, value) -> state[0] = value);
+            storage.load(pos)
+                    .forEachBlock((x, y, z, value) -> state[0] = value);
             return state[0];
         }
 

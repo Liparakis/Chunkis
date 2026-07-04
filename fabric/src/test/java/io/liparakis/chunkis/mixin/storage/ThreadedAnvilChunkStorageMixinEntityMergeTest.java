@@ -18,30 +18,31 @@ import org.junit.jupiter.api.Test;
 final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
 
     /**
-     * Helper method to invoke the private static method {@code copyUnresolvedPendingEntities} in {@link LiveEntitySnapshotCapture} via reflection.
+     * Helper method to invoke the private static method {@code copyUnresolvedPendingEntities} in
+     * {@link LiveEntitySnapshotCapture} via reflection.
      *
      * @param existingDelta the existing {@link ChunkDelta} containing previous entity snapshots
-     * @param liveEntities the list of live entity snapshots
+     * @param liveEntities  the list of live entity snapshots
      * @return the list of merged entities
      * @throws Exception if reflection or execution fails
      */
     private static List<NbtCompound> invokeMerge(
             final ChunkDelta<Object, NbtCompound> existingDelta,
             final List<NbtCompound> liveEntities
-                                                ) throws Exception {
+    ) throws Exception {
         final ChunkDelta<Object, NbtCompound> targetDelta = new ChunkDelta<>();
         targetDelta.setEntities(liveEntities, false);
         final Set<String> liveEntityUuids = liveEntities.stream()
-                                                        .map(ThreadedAnvilChunkStorageMixinEntityMergeTest::uuidOf)
-                                                        .map(UUID::toString)
-                                                        .collect(java.util.stream.Collectors.toSet());
+                .map(ThreadedAnvilChunkStorageMixinEntityMergeTest::uuidOf)
+                .map(UUID::toString)
+                .collect(java.util.stream.Collectors.toSet());
 
         final Method method = LiveEntitySnapshotCapture.class.getDeclaredMethod(
                 "copyUnresolvedPendingEntities",
                 ChunkDelta.class,
                 Set.class,
                 ChunkDelta.class
-                                                                               );
+        );
         method.setAccessible(true);
         method.invoke(null, existingDelta, liveEntityUuids, targetDelta);
         return targetDelta.getEntitiesList();
@@ -67,7 +68,9 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
      * @throws java.util.NoSuchElementException if the UUID is missing or invalid
      */
     private static UUID uuidOf(final NbtCompound nbt) {
-        return nbt.getIntArray("UUID").map(Uuids::toUuid).orElseThrow();
+        return nbt.getIntArray("UUID")
+                .map(Uuids::toUuid)
+                .orElseThrow();
     }
 
     /**
@@ -85,8 +88,8 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
                 List.of(
                         entityNbt(restoredLiveUuid),
                         entityNbt(unresolvedPendingUuid)
-                       ), false
-                                 );
+                ), false
+        );
 
         final List<NbtCompound> merged = invokeMerge(existingDelta, List.of(entityNbt(restoredLiveUuid)));
 

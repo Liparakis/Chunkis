@@ -82,7 +82,9 @@ class OfflineRegionMigrationReportTest {
                 OfflineMcaCisTranslator.TRANSLATOR_VERSION
         );
 
-        assertTrue(report.toJsonLine().contains("\"handledChunks\":900"));
-        assertFalse(report.toJsonLine().contains("convertedChunks"));
+        assertTrue(report.toJsonLine()
+                .contains("\"handledChunks\":900"));
+        assertFalse(report.toJsonLine()
+                .contains("convertedChunks"));
     }
 }

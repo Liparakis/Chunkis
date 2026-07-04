@@ -57,7 +57,7 @@ public final class CisRegionInspector {
      * Parses and inspects one canonical region path.
      */
     private static void inspectRegionPath(final Path storageDir, final Path path,
-                                          final List<RegionSpaceUsage> regions) {
+            final List<RegionSpaceUsage> regions) {
         final RegionKey regionKey = CisRegionPaths.parseRegionKey(path);
         if (regionKey == null) {
             return;
@@ -74,9 +74,10 @@ public final class CisRegionInspector {
      * Converts RegionFile's authoritative accounting into the public inspector model.
      */
     private static RegionSpaceUsage toRegionSpaceUsage(final Path path, final RegionFile.RegionSpaceStats stats) {
-        return new RegionSpaceUsage(path.getFileName().toString(), stats.physicalBytes(), stats.liveBytes(),
-                                    stats.reusableBytes(), stats.metadataBytes(), stats.freeBlockCount(), stats.largestFreeBlock(),
-                                    stats.reuseHits(), stats.reuseMisses());
+        return new RegionSpaceUsage(path.getFileName()
+                .toString(), stats.physicalBytes(), stats.liveBytes(),
+                stats.reusableBytes(), stats.metadataBytes(), stats.freeBlockCount(), stats.largestFreeBlock(),
+                stats.reuseHits(), stats.reuseMisses());
     }
 
     /**

@@ -194,7 +194,7 @@ public final class ChunkTraceWatchpoints {
     public static List<PayloadWatchTarget> watchedPayloadsForChunk(
             final String worldId,
             final DebugChunkKey chunkKey
-                                                                  ) {
+    ) {
         synchronized (MONITOR) {
             final List<PayloadWatchTarget> matches = new ArrayList<>();
             for (final PayloadWatchTarget target : PAYLOAD_TARGETS) {
@@ -220,7 +220,7 @@ public final class ChunkTraceWatchpoints {
             final int blockX,
             final int blockY,
             final int blockZ
-                                                 ) {
+    ) {
         return findBlockPayload(worldId, PayloadWatchType.BLOCK, blockX, blockY, blockZ);
     }
 
@@ -238,7 +238,7 @@ public final class ChunkTraceWatchpoints {
             final int blockX,
             final int blockY,
             final int blockZ
-                                                       ) {
+    ) {
         return findBlockPayload(worldId, PayloadWatchType.BLOCK_ENTITY, blockX, blockY, blockZ);
     }
 
@@ -252,7 +252,7 @@ public final class ChunkTraceWatchpoints {
     public static PayloadWatchTarget watchedEntity(
             final String worldId,
             final String entityUuid
-                                                  ) {
+    ) {
         synchronized (MONITOR) {
             for (final PayloadWatchTarget target : PAYLOAD_TARGETS) {
                 if (target.matchesEntity(worldId, entityUuid)) {
@@ -299,7 +299,7 @@ public final class ChunkTraceWatchpoints {
             final int blockX,
             final int blockY,
             final int blockZ
-                                                      ) {
+    ) {
         synchronized (MONITOR) {
             for (final PayloadWatchTarget target : PAYLOAD_TARGETS) {
                 if (target.matchesBlock(worldId, type, blockX, blockY, blockZ)) {

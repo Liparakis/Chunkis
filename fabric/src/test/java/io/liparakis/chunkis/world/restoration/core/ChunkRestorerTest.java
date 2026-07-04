@@ -6,11 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import java.util.List;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 /**
  * Test class for verifying chunk restorer and restore block operations logic in {@link ChunkRestorer}

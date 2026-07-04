@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.migration.offline;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
@@ -9,9 +9,9 @@ import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import net.minecraft.nbt.NbtList;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -26,6 +26,35 @@ class OfflineMcaCisTranslatorTest {
      */
     @TempDir
     Path tempDir;
+
+    /**
+     * Helper method to construct a mock {@link ChunkDelta} representing a migrated chunk.
+     *
+     * @param entityId the entity ID to add to the delta
+     * @return a new ChunkDelta populated with mock data
+     */
+    private static ChunkDelta<BlockState, NbtCompound> migratedDelta(final String entityId) {
+        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>(BlockState::isAir);
+
+        final NbtCompound blockEntity = new NbtCompound();
+        blockEntity.putString("id", "minecraft:chest");
+        delta.addBlockEntityData(1, 70, 2, blockEntity);
+
+        final NbtCompound entity = new NbtCompound();
+        entity.putString("id", entityId);
+        delta.addPendingEntity(entity);
+
+        final NbtCompound auxiliary = new NbtCompound();
+        auxiliary.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
+        final NbtCompound metadata = OfflineMcaCisTranslator.createMigratedChunkMetadata(
+                null,
+                auxiliary,
+                false
+        );
+        delta.setChunkMetadata(metadata, false);
+        delta.setSuppressInitialRepopulation(true);
+        return delta;
+    }
 
     /**
      * Tests that a migrated chunk shape match requires a matching payload, not just markers.
@@ -109,34 +138,5 @@ class OfflineMcaCisTranslatorTest {
                 OfflineMcaCisTranslator.chunkPayloadRoot(root)
                         .getString("marker")
                         .orElseThrow());
-    }
-
-    /**
-     * Helper method to construct a mock {@link ChunkDelta} representing a migrated chunk.
-     *
-     * @param entityId the entity ID to add to the delta
-     * @return a new ChunkDelta populated with mock data
-     */
-    private static ChunkDelta<BlockState, NbtCompound> migratedDelta(final String entityId) {
-        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>(BlockState::isAir);
-
-        final NbtCompound blockEntity = new NbtCompound();
-        blockEntity.putString("id", "minecraft:chest");
-        delta.addBlockEntityData(1, 70, 2, blockEntity);
-
-        final NbtCompound entity = new NbtCompound();
-        entity.putString("id", entityId);
-        delta.addPendingEntity(entity);
-
-        final NbtCompound auxiliary = new NbtCompound();
-        auxiliary.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
-        final NbtCompound metadata = OfflineMcaCisTranslator.createMigratedChunkMetadata(
-                null,
-                auxiliary,
-                false
-        );
-        delta.setChunkMetadata(metadata, false);
-        delta.setSuppressInitialRepopulation(true);
-        return delta;
     }
 }

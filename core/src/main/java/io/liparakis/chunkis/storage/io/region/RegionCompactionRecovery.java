@@ -60,6 +60,6 @@ final class RegionCompactionRecovery {
      */
     private static FileChannel openChannel(final Path regionPath) throws IOException {
         return FileChannel.open(regionPath, StandardOpenOption.READ, StandardOpenOption.WRITE,
-                                StandardOpenOption.CREATE);
+                StandardOpenOption.CREATE);
     }
 }

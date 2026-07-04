@@ -29,12 +29,12 @@ class ChunkMutationTrackingScopeTest {
                 true,
                 null,
                 false
-                                                                            ), false);
+        ), false);
 
         assertEquals(
                 ChunkMutationTrackingScope.Cause.BASE_APPLY,
                 ChunkMutationTrackingScope.initialCauseForLoad(delta)
-                    );
+        );
     }
 
     /**
@@ -46,7 +46,7 @@ class ChunkMutationTrackingScopeTest {
         assertEquals(
                 ChunkMutationTrackingScope.Cause.PASSIVE_LOAD,
                 ChunkMutationTrackingScope.initialCauseForLoad(new ChunkDelta<>())
-                    );
+        );
     }
 
     /**
@@ -84,14 +84,14 @@ class ChunkMutationTrackingScopeTest {
         assertEquals(
                 ChunkTraceEventType.MUTATION_SUPPRESSED_RESTORE,
                 ChunkMutationTrackingScope.suppressionEventType(ChunkMutationTrackingScope.Cause.RESTORE)
-                    );
+        );
         assertEquals(
                 ChunkTraceEventType.MUTATION_SUPPRESSED_BASE_APPLY,
                 ChunkMutationTrackingScope.suppressionEventType(ChunkMutationTrackingScope.Cause.BASE_APPLY)
-                    );
+        );
         assertEquals(
                 ChunkTraceEventType.MUTATION_SUPPRESSED_PASSIVE_LOAD,
                 ChunkMutationTrackingScope.suppressionEventType(ChunkMutationTrackingScope.Cause.PASSIVE_LOAD)
-                    );
+        );
     }
 }

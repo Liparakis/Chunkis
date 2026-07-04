@@ -10,13 +10,19 @@ import java.util.function.Consumer;
  */
 final class GlobalChunkUnloadCache {
 
-    /** Maximum capacity allowed inside the cache layout before eviction triggers. */
+    /**
+     * Maximum capacity allowed inside the cache layout before eviction triggers.
+     */
     private static final int MAX_CACHE_SIZE = 10_000;
 
-    /** Eviction listener callback invoked when items overflow MAX_CACHE_SIZE. */
+    /**
+     * Eviction listener callback invoked when items overflow MAX_CACHE_SIZE.
+     */
     private final Consumer<DimensionChunkKey> onEvict;
 
-    /** Backing LRU LinkedHashMap containing cache entries. */
+    /**
+     * Backing LRU LinkedHashMap containing cache entries.
+     */
     private final Map<DimensionChunkKey, ChunkDelta<?, ?>> entries;
 
     /**
@@ -30,7 +36,7 @@ final class GlobalChunkUnloadCache {
             @Override
             protected boolean removeEldestEntry(
                     final Map.Entry<DimensionChunkKey, ChunkDelta<?, ?>> eldest
-                                               ) {
+            ) {
                 final boolean evict = size() > MAX_CACHE_SIZE;
                 if (evict) {
                     GlobalChunkUnloadCache.this.onEvict.accept(eldest.getKey());

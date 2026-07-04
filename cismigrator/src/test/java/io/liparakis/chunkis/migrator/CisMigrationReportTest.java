@@ -18,9 +18,9 @@ class CisMigrationReportTest {
     @Test
     void accumulatesCountersImmutably() {
         final CisMigrationReport report = CisMigrationReport.empty()
-                                                            .addMigrated()
-                                                            .addSkipped()
-                                                            .addFailure();
+                .addMigrated()
+                .addSkipped()
+                .addFailure();
 
         assertEquals(3, report.scannedChunks());
         assertEquals(1, report.migratedChunks());

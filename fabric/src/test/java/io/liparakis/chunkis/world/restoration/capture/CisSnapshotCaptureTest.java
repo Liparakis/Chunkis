@@ -2,9 +2,9 @@ package io.liparakis.chunkis.world.restoration.capture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -85,8 +85,12 @@ class CisSnapshotCaptureTest {
         assertTrue(CisNbtUtil.isMigratedAuthoritativeChunk(metadata));
         final NbtCompound preservedAuxiliary = CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
         assertNotNull(preservedAuxiliary);
-        assertEquals("minecraft:full", preservedAuxiliary.getString(CisNbtUtil.STATUS_KEY).orElseThrow());
-        assertEquals("kept", preservedAuxiliary.getString("PostProcessing").orElseThrow());
+        assertEquals("minecraft:full",
+                preservedAuxiliary.getString(CisNbtUtil.STATUS_KEY)
+                        .orElseThrow());
+        assertEquals("kept",
+                preservedAuxiliary.getString("PostProcessing")
+                        .orElseThrow());
     }
 
     /**
@@ -139,7 +143,9 @@ class CisSnapshotCaptureTest {
         delta.clearBlockPayloads(false);
         CisSnapshotCapture.restoreBlockEntities(delta, preserved);
 
-        assertEquals(1, delta.getBlockEntities().size());
+        assertEquals(1,
+                delta.getBlockEntities()
+                        .size());
         assertEquals("minecraft:chest", delta.getBlockEntities()
                 .get(io.liparakis.chunkis.core.BlockInstruction.packPos(1, 70, 2))
                 .getString("id")

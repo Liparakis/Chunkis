@@ -3,17 +3,17 @@ package io.liparakis.chunkis.world.restoration.core;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
+import java.lang.reflect.Field;
 import java.util.IdentityHashMap;
 import java.util.Set;
-import java.lang.reflect.Field;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.util.collection.PaletteStorage;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PaletteProvider;
 import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
@@ -371,6 +371,10 @@ final class ChunkRestoreBlockOperations {
     static final class SectionWriteCursor {
 
         /**
+         * Per-section cache from block-state identity to resolved raw palette id.
+         */
+        private final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
+        /**
          * Currently bound section index, or {@link Integer#MIN_VALUE} before the first bind.
          */
         private int sectionIndex = Integer.MIN_VALUE;
@@ -390,10 +394,6 @@ final class ChunkRestoreBlockOperations {
          * Identity of the currently bound nested data holder used to detect palette/storage replacement.
          */
         private Object dataRef;
-        /**
-         * Per-section cache from block-state identity to resolved raw palette id.
-         */
-        private final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
         /**
          * Last state written in the currently bound section.
          */
@@ -552,7 +552,8 @@ final class ChunkRestoreBlockOperations {
          * Tracks which vanilla palette implementation handled the lookup.
          */
         private void recordPaletteLookupKind() {
-            final String paletteType = palette.getClass().getSimpleName();
+            final String paletteType = palette.getClass()
+                    .getSimpleName();
             switch (paletteType) {
                 case "ArrayPalette" -> arrayPaletteLookups++;
                 case "BiMapPalette" -> biMapPaletteLookups++;

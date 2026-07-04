@@ -80,7 +80,9 @@ public final class PropertyPacker<B, S, P> {
                 ? castValueAdapter(valueAdapter)
                 : null;
         // Use available processors for concurrency level to reduce thread contention
-        int concurrencyLevel = Math.max(4, Runtime.getRuntime().availableProcessors());
+        int concurrencyLevel = Math.max(4,
+                Runtime.getRuntime()
+                        .availableProcessors());
         this.cache = new ConcurrentHashMap<>(cacheCapacity, CACHE_LOAD_FACTOR, concurrencyLevel);
     }
 
@@ -223,7 +225,8 @@ public final class PropertyPacker<B, S, P> {
             S defaultState = adapter.getDefaultState(block);
             for (int i = 0; i < mutableProps.size(); i++) {
                 P prop = mutableProps.get(i);
-                int valueCount = adapter.getPropertyValues(prop).size();
+                int valueCount = adapter.getPropertyValues(prop)
+                        .size();
                 int defaultValueIndex = adapter.getValueIndex(defaultState, prop);
                 metas[i] = new PropertyMeta<>(prop, valueCount, buildValueIndexMap(adapter, prop), defaultValueIndex);
             }

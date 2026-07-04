@@ -41,6 +41,15 @@ import org.jetbrains.annotations.Nullable;
 public final class PayloadWatchTracer {
 
     /**
+     * Private constructor to prevent utility class instantiation.
+     *
+     * @throws AssertionError always
+     */
+    private PayloadWatchTracer() {
+        throw new AssertionError("Utility class");
+    }
+
+    /**
      * Returns whether payload watch tracing is currently enabled.
      *
      * @return true when at least one payload watch is active
@@ -48,15 +57,6 @@ public final class PayloadWatchTracer {
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private static boolean hasPayloadWatches() {
         return ChunkTraceWatchpoints.hasPayloadWatches();
-    }
-
-    /**
-     * Private constructor to prevent utility class instantiation.
-     *
-     * @throws AssertionError always
-     */
-    private PayloadWatchTracer() {
-        throw new AssertionError("Utility class");
     }
 
     /**
@@ -838,7 +838,8 @@ public final class PayloadWatchTracer {
      * @return matching entity NBT compound if found, or null
      */
     @Nullable
-    static NbtCompound findWatchedEntityNbt(final ChunkDeltaView<BlockState, NbtCompound> delta, final String entityUuid) {
+    static NbtCompound findWatchedEntityNbt(final ChunkDeltaView<BlockState, NbtCompound> delta,
+            final String entityUuid) {
         final NbtCompound[] found = {null};
         delta.forEachEntity(entityNbt -> {
             if (found[0] != null || entityNbt == null) {

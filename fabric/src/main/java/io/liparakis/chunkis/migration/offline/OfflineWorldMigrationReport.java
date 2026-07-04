@@ -21,20 +21,22 @@ public record OfflineWorldMigrationReport(
         return new OfflineWorldMigrationReport(worldKey, 0, 0, 0, 0);
     }
 
+    private static String escape(final String value) {
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"");
+    }
+
     /**
      * Returns a one-line JSON representation suitable for append-only manifests.
      */
     public String toJsonLine() {
         return "{"
-                + "\"worldId\":\"" + escape(worldKey.getValue().toString()) + "\","
+                + "\"worldId\":\"" + escape(worldKey.getValue()
+                .toString()) + "\","
                 + "\"scannedRegions\":" + scannedRegions + ","
                 + "\"handledChunks\":" + handledChunks + ","
                 + "\"failedChunks\":" + failedChunks + ","
                 + "\"retiredRegions\":" + retiredRegions
                 + "}";
-    }
-
-    private static String escape(final String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

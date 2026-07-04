@@ -45,10 +45,18 @@ public final class ChunkTraceJsonl {
         root.addProperty("eventId", event.eventId());
         root.addProperty("timestampMillis", event.timestampMillis());
         root.addProperty("threadName", event.threadName());
-        root.addProperty("domain", event.domain().name());
-        root.addProperty("eventType", event.eventType().name());
-        root.addProperty("severity", event.severity().name());
-        root.addProperty("reason", event.reason().name());
+        root.addProperty("domain",
+                event.domain()
+                        .name());
+        root.addProperty("eventType",
+                event.eventType()
+                        .name());
+        root.addProperty("severity",
+                event.severity()
+                        .name());
+        root.addProperty("reason",
+                event.reason()
+                        .name());
         root.addProperty("source", event.source());
         root.addProperty("message", event.message());
 
@@ -56,12 +64,20 @@ public final class ChunkTraceJsonl {
             root.addProperty("worldId", event.worldId());
         }
         if (event.chunkKey() != null) {
-            root.addProperty("chunkX", event.chunkKey().x());
-            root.addProperty("chunkZ", event.chunkKey().z());
+            root.addProperty("chunkX",
+                    event.chunkKey()
+                            .x());
+            root.addProperty("chunkZ",
+                    event.chunkKey()
+                            .z());
         }
         if (event.regionKey() != null) {
-            root.addProperty("regionX", event.regionKey().x());
-            root.addProperty("regionZ", event.regionKey().z());
+            root.addProperty("regionX",
+                    event.regionKey()
+                            .x());
+            root.addProperty("regionZ",
+                    event.regionKey()
+                            .z());
         }
         if (event.operationId() != null) {
             root.addProperty("operationId", event.operationId());
@@ -108,7 +124,8 @@ public final class ChunkTraceJsonl {
 
         final StringBuilder sb = new StringBuilder(events.size() * ESTIMATED_LINE_BYTES);
         for (final ChunkTraceEvent event : events) {
-            sb.append(toJsonLine(event)).append('\n');
+            sb.append(toJsonLine(event))
+                    .append('\n');
         }
         Files.writeString(path, sb, StandardCharsets.UTF_8);
     }
@@ -126,7 +143,9 @@ public final class ChunkTraceJsonl {
      */
     private static void addPayloadWatchFields(final JsonObject root, final ChunkTraceEvent event) {
         final var target = event.payloadWatchTarget();
-        root.addProperty("payloadType", target.type().name());
+        root.addProperty("payloadType",
+                target.type()
+                        .name());
         root.addProperty("payloadWorldId", target.worldId());
         if (target.blockX() != null) {
             root.addProperty("payloadX", target.blockX());

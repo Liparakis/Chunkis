@@ -30,10 +30,10 @@ final class ChunkDeltaViews {
      * Decodes and visits packed sparse block instructions.
      *
      * @param packedInstructions dense instruction buffer
-     * @param instructionCount number of valid entries in {@code packedInstructions}
-     * @param blockPalette palette used to resolve state ids
-     * @param visitor block visitor
-     * @param <S> block state type
+     * @param instructionCount   number of valid entries in {@code packedInstructions}
+     * @param blockPalette       palette used to resolve state ids
+     * @param visitor            block visitor
+     * @param <S>                block state type
      */
     static <S> void forEachPackedBlock(
             final long[] packedInstructions,
@@ -65,10 +65,10 @@ final class ChunkDeltaViews {
     /**
      * Visits active entities first, then pending entities.
      *
-     * @param activeEntities active entity payloads keyed by runtime id
+     * @param activeEntities  active entity payloads keyed by runtime id
      * @param pendingEntities pending entity payloads
-     * @param consumer entity payload consumer
-     * @param <N> payload type
+     * @param consumer        entity payload consumer
+     * @param <N>             payload type
      */
     static <N> void forEachEntity(
             final Int2ObjectOpenHashMap<N> activeEntities,
@@ -91,9 +91,9 @@ final class ChunkDeltaViews {
     /**
      * Counts non-null entity payloads across active and pending collections.
      *
-     * @param activeEntities active entity payloads keyed by runtime id
+     * @param activeEntities  active entity payloads keyed by runtime id
      * @param pendingEntities pending entity payloads
-     * @param <N> payload type
+     * @param <N>             payload type
      * @return number of non-null entity payloads
      */
     static <N> int countNonNullEntities(final Int2ObjectOpenHashMap<N> activeEntities, final List<N> pendingEntities) {
@@ -120,11 +120,11 @@ final class ChunkDeltaViews {
      * Returns whether a delta/view carries no block, entity, or metadata payload.
      *
      * @param blockChangesCount number of sparse block changes
-     * @param blockEntities block entity payloads keyed by packed position
-     * @param activeEntities active entity payloads keyed by runtime id
-     * @param pendingEntities pending entity payloads
-     * @param chunkMetadata chunk-level metadata payload
-     * @param <N> payload type
+     * @param blockEntities     block entity payloads keyed by packed position
+     * @param activeEntities    active entity payloads keyed by runtime id
+     * @param pendingEntities   pending entity payloads
+     * @param chunkMetadata     chunk-level metadata payload
+     * @param <N>               payload type
      * @return {@code true} if no payload is present
      */
     static <N> boolean isEmpty(

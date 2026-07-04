@@ -29,14 +29,14 @@ final class RegionCompactionIO {
      * list because all holes have been eliminated by compaction.</p>
      */
     static Path writeCompactedTempFile(final Path regionPath, final FileChannel source, final int[] offsets,
-                                       final int[] lengths, final long liveBytes, final long reuseHits,
-                                       final long reuseMisses) throws IOException {
+            final int[] lengths, final long liveBytes, final long reuseHits,
+            final long reuseMisses) throws IOException {
         final Path tempPath = regionPath.resolveSibling(regionPath.getFileName() + ".tmp");
         final int maxChunkLen = maxLiveChunkLength(offsets, lengths);
 
         Files.deleteIfExists(tempPath);
         try (FileChannel dest = FileChannel.open(tempPath, StandardOpenOption.CREATE,
-                                                 StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
             RegionFile.writeFully(dest, ByteBuffer.allocate(RegionFile.HEADER_SIZE), 0);
             final ByteBuffer newHeader = writeLiveChunks(dest, source, offsets, lengths, maxChunkLen);
             RegionFile.writeFully(dest, newHeader.flip(), 0);
@@ -52,7 +52,7 @@ final class RegionCompactionIO {
      * and keeps all header offsets within the compacted payload span.
      */
     static void validateCompactedFile(final Path tempPath, final FileChannel source, final int[] offsets,
-                                      final int[] lengths, final long liveBytes) throws IOException {
+            final int[] lengths, final long liveBytes) throws IOException {
         final int compactedDataEnd = RegionFile.HEADER_SIZE + (int) liveBytes;
         final int maxChunkLen = maxLiveChunkLength(offsets, lengths);
 
@@ -95,7 +95,7 @@ final class RegionCompactionIO {
      * replacement header in memory.
      */
     private static ByteBuffer writeLiveChunks(final FileChannel dest, final FileChannel source, final int[] offsets,
-                                              final int[] lengths, final int maxChunkLen) throws IOException {
+            final int[] lengths, final int maxChunkLen) throws IOException {
         int currentOffset = RegionFile.HEADER_SIZE;
         final ByteBuffer newHeader = ByteBuffer.allocate(RegionFile.HEADER_SIZE);
         final ByteBuffer chunkData = ByteBuffer.allocate(maxChunkLen);
@@ -115,8 +115,8 @@ final class RegionCompactionIO {
      * Copies one live chunk payload and appends its updated header entry.
      */
     private static int copyLiveChunk(final FileChannel dest, final FileChannel source, final ByteBuffer newHeader,
-                                     final ByteBuffer chunkData, final int[] offsets, final int[] lengths,
-                                     final int index, final int currentOffset) throws IOException {
+            final ByteBuffer chunkData, final int[] offsets, final int[] lengths,
+            final int index, final int currentOffset) throws IOException {
         chunkData.clear();
         chunkData.limit(lengths[index]);
         RegionFile.readFully(source, chunkData, offsets[index]);

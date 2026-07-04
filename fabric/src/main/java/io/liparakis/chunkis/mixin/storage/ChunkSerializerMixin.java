@@ -33,8 +33,8 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.ProtoChunk;
 import net.minecraft.world.chunk.SerializedChunk;
-import net.minecraft.world.chunk.WrapperProtoChunk;
 import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.chunk.WrapperProtoChunk;
 import net.minecraft.world.poi.PointOfInterestStorage;
 import net.minecraft.world.storage.StorageKey;
 import org.spongepowered.asm.mixin.Mixin;
@@ -372,8 +372,8 @@ public class ChunkSerializerMixin {
                 resetProtoChunkToEmpty
                         ? "attached delta to proto chunk and reset status to EMPTY"
                         : usePersistedBaseChunkForBlocks
-                        ? "attached delta to proto chunk and kept persisted base baseline"
-                        : "attached authoritative full CIS baseline to proto chunk",
+                          ? "attached delta to proto chunk and kept persisted base baseline"
+                                : "attached authoritative full CIS baseline to proto chunk",
                 world.getRegistryKey()
                         .getValue()
                         .toString(),

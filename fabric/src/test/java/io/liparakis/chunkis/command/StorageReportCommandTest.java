@@ -108,8 +108,11 @@ class StorageReportCommandTest {
         assertEquals(8209, diagnostics.denseSectionBits());
         assertEquals(57, diagnostics.defaultSparseSectionBits());
         assertEquals(2, diagnostics.globalBits());
-        assertEquals(4, diagnostics.sections().size());
-        final SectionPayloadDiagnostics denseSection = diagnostics.sections().get(3);
+        assertEquals(4,
+                diagnostics.sections()
+                        .size());
+        final SectionPayloadDiagnostics denseSection = diagnostics.sections()
+                .get(3);
         assertEquals(7, denseSection.sectionY());
         assertEquals(2, denseSection.localPaletteSize());
         assertEquals(2, denseSection.bitsPerBlock());

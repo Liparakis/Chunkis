@@ -64,7 +64,9 @@ class CisStorageTraceTest {
         storage.close();
 
         final List<ChunkTraceEvent> events = ChunkTraceStore.latest(20);
-        final List<ChunkTraceEventType> eventTypes = events.stream().map(ChunkTraceEvent::eventType).toList();
+        final List<ChunkTraceEventType> eventTypes = events.stream()
+                .map(ChunkTraceEvent::eventType)
+                .toList();
 
         assertThat(eventTypes).contains(
                 ChunkTraceEventType.SAVE_FLUSH_STARTED,
@@ -73,7 +75,7 @@ class CisStorageTraceTest {
                 ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
                 ChunkTraceEventType.REGION_READ_TX_START,
                 ChunkTraceEventType.REGION_READ_TX_END
-                                       );
+        );
         assertThat(events)
                 .filteredOn(event -> saveOperationId.equals(event.operationId()))
                 .extracting(ChunkTraceEvent::eventType)
@@ -83,7 +85,7 @@ class CisStorageTraceTest {
                         ChunkTraceEventType.REGION_WRITE_TX_START,
                         ChunkTraceEventType.REGION_WRITE_TX_END,
                         ChunkTraceEventType.SAVE_FLUSH_COMPLETED
-                         );
+                );
         assertThat(events)
                 .filteredOn(event -> loadOperationId.equals(event.operationId()))
                 .extracting(ChunkTraceEvent::eventType)
@@ -92,7 +94,7 @@ class CisStorageTraceTest {
                         ChunkTraceEventType.REGION_READ_TX_START,
                         ChunkTraceEventType.REGION_READ_TX_END,
                         ChunkTraceEventType.LOAD_TX_END
-                         );
+                );
     }
 
     @Test
@@ -177,7 +179,7 @@ class CisStorageTraceTest {
                 .contains(
                         ChunkTraceEventType.REGION_READ_TX_START,
                         ChunkTraceEventType.REGION_READ_TX_END
-                         );
+                );
         assertThat(ChunkTraceStore.latest(20))
                 .filteredOn(event -> "save-op-paranoid".equals(event.operationId()))
                 .filteredOn(event -> event.eventType() == ChunkTraceEventType.ASSERTION_FAILED)
