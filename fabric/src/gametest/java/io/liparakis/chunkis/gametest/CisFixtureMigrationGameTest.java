@@ -275,7 +275,6 @@ public final class CisFixtureMigrationGameTest {
         return new CisStorage<>(
                 regionsDir,
                 mapping,
-                blockStateAdapter,
                 new FabricNbtAdapter(),
                 net.minecraft.block.Blocks.AIR.getDefaultState()
         );

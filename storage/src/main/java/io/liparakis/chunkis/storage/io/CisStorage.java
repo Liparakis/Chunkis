@@ -13,7 +13,6 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
-import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.codec.CisDecoder;
 import io.liparakis.chunkis.storage.codec.CisEncoder;
@@ -115,15 +114,14 @@ public final class CisStorage<B, S, P, N> {
     /**
      * Creates a new CIS storage instance.
      *
-     * @param storageDir   root storage directory
-     * @param mapping      global block/state mapping
-     * @param stateAdapter block state adapter
-     * @param nbtAdapter   NBT adapter
-     * @param airState     canonical air state
+     * @param storageDir root storage directory
+     * @param mapping    global block/state mapping
+     * @param nbtAdapter NBT adapter
+     * @param airState   canonical air state
      */
     public CisStorage(
             final Path storageDir, final CisMapping<B, S, P> mapping,
-            final BlockStateAdapter<B, S, P> stateAdapter, final NbtAdapter<N> nbtAdapter, final S airState) {
+            final NbtAdapter<N> nbtAdapter, final S airState) {
         this.storageDir = Objects.requireNonNull(storageDir, "storageDir");
         this.mapping = Objects.requireNonNull(mapping, "mapping");
 

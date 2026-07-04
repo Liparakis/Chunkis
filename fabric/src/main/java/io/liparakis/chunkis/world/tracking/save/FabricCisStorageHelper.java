@@ -288,7 +288,7 @@ public final class FabricCisStorageHelper {
         final CisMapping<Block, BlockState, Property<?>> mapping =
                 new CisMapping<>(mappingFile, REGISTRY_ADAPTER, STATE_ADAPTER, packer);
 
-        return new CisStorage<>(storageDir, mapping, STATE_ADAPTER, NBT_ADAPTER, DEFAULT_BLOCK_STATE);
+        return new CisStorage<>(storageDir, mapping, NBT_ADAPTER, DEFAULT_BLOCK_STATE);
     }
 
     /**

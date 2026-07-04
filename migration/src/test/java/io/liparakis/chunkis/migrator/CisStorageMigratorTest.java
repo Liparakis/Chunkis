@@ -250,7 +250,7 @@ class CisStorageMigratorTest {
                 new PropertyPacker<>(stateAdapter)
         );
 
-        return new CisStorage<>(regionsDir, mapping, stateAdapter, new TestNbtAdapter(), "air");
+        return new CisStorage<>(regionsDir, mapping, new TestNbtAdapter(), "air");
     }
 
     /**

@@ -898,7 +898,7 @@ public final class OfflineMcaCisTranslator {
         final PropertyPacker<Block, BlockState, Property<?>> packer = new PropertyPacker<>(stateAdapter);
         final CisMapping<Block, BlockState, Property<?>> mapping =
                 new CisMapping<>(mappingFile, registryAdapter, stateAdapter, packer);
-        return new CisStorage<>(storageDir, mapping, stateAdapter, nbtAdapter, Blocks.AIR.getDefaultState());
+        return new CisStorage<>(storageDir, mapping, nbtAdapter, Blocks.AIR.getDefaultState());
     }
 
     /**

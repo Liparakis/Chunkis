@@ -51,7 +51,7 @@ class CisStorageTraceTest {
         Files.createDirectories(tempDir.resolve("regions"));
 
         final CisStorage<String, String, String, String> storage =
-                new CisStorage<>(tempDir.resolve("regions"), mapping, stateAdapter, new TestNbtAdapter(), "air");
+                new CisStorage<>(tempDir.resolve("regions"), mapping, new TestNbtAdapter(), "air");
 
         final CisChunkPos pos = new CisChunkPos(3, -2);
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
@@ -113,7 +113,6 @@ class CisStorageTraceTest {
                                 stateAdapter,
                                 new PropertyPacker<>(stateAdapter)
                         ),
-                        stateAdapter,
                         new TestNbtAdapter(),
                         "air"
                 );
@@ -135,7 +134,6 @@ class CisStorageTraceTest {
                                 stateAdapter,
                                 new PropertyPacker<>(stateAdapter)
                         ),
-                        stateAdapter,
                         new TestNbtAdapter(),
                         "air"
                 );
@@ -164,7 +162,7 @@ class CisStorageTraceTest {
         Files.createDirectories(tempDir.resolve("regions"));
 
         final CisStorage<String, String, String, String> storage =
-                new CisStorage<>(tempDir.resolve("regions"), mapping, stateAdapter, new TestNbtAdapter(), "air");
+                new CisStorage<>(tempDir.resolve("regions"), mapping, new TestNbtAdapter(), "air");
 
         final CisChunkPos pos = new CisChunkPos(2, 5);
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);

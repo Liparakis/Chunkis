@@ -23,6 +23,7 @@ import net.minecraft.text.Text;
  * </ul>
  */
 @Environment(EnvType.CLIENT)
+@SuppressWarnings("unused")
 public final class ClientChunkisMod implements ClientModInitializer {
 
     /**
