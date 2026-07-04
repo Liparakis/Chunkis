@@ -14,8 +14,7 @@ pluginManagement {
 
 rootProject.name = "Chunkis"
 
-include 'core'
+include 'common'
 include 'storage'
 include 'migration'
 include 'fabric'
-include 'client'

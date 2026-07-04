@@ -14,7 +14,7 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
-import io.liparakis.chunkis.storage.model.CisConstants;
+import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityNbtCapture;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.restoration.capture.ChunkBlockEntityCapture;

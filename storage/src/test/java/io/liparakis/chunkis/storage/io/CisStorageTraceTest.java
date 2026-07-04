@@ -14,7 +14,7 @@ import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.storage.mapping.PropertyPacker;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;

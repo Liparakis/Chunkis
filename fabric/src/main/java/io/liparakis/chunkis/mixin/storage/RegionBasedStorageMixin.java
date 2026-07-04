@@ -50,17 +50,17 @@ public abstract class RegionBasedStorageMixin {
             final boolean sync,
             final CallbackInfo ci) {
         this.chunkis$directory = directory;
-        final var cls = io.liparakis.chunkis.migration.state.VanillaRegionPathResolver.classify(directory);
-        final var dimOpt = io.liparakis.chunkis.migration.state.VanillaRegionPathResolver.resolveDimension(directory);
+        final var cls = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.classify(directory);
+        final var dimOpt = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(directory);
         final boolean auth = dimOpt.isPresent()
-                && io.liparakis.chunkis.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
+                && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
         Chunkis.LOGGER.info(
                 "REGION_BASED_STORAGE_INIT path={} classifiedAs={} resolvedDimension={} state={} authoritative={}",
                 directory, cls,
                 dimOpt.map(k -> k.getValue()
                                 .toString())
                         .orElse("unknown"),
-                dimOpt.map(k -> io.liparakis.chunkis.migration.state.MigrationStateServiceHolder.isAuthoritative(k)
+                dimOpt.map(k -> io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(k)
                                 ? "CIS_AUTHORITATIVE" : "NOT")
                         .orElse("unknown"),
                 auth
@@ -145,17 +145,17 @@ public abstract class RegionBasedStorageMixin {
         if (chunkis$directory == null) {
             return false;
         }
-        final io.liparakis.chunkis.migration.state.VanillaRegionPathResolver.Classification classification =
-                io.liparakis.chunkis.migration.state.VanillaRegionPathResolver.classify(chunkis$directory);
+        final io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification classification =
+                io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.classify(chunkis$directory);
         if (classification
-                != io.liparakis.chunkis.migration.state.VanillaRegionPathResolver.Classification.VANILLA_CHUNK_REGION
+                != io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification.VANILLA_CHUNK_REGION
                 && classification
-                != io.liparakis.chunkis.migration.state.VanillaRegionPathResolver.Classification.VANILLA_ENTITY_REGION) {
+                != io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification.VANILLA_ENTITY_REGION) {
             return false;
         }
         final java.util.Optional<net.minecraft.registry.RegistryKey<net.minecraft.world.World>> dimOpt =
-                io.liparakis.chunkis.migration.state.VanillaRegionPathResolver.resolveDimension(chunkis$directory);
+                io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(chunkis$directory);
         return dimOpt.isPresent()
-                && io.liparakis.chunkis.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
+                && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
     }
 }

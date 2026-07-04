@@ -1,4 +1,5 @@
 package io.liparakis.chunkis.storage.io;
+import io.liparakis.chunkis.core.compression.CompressionContext;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
@@ -14,11 +15,11 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.spi.NbtAdapter;
-import io.liparakis.chunkis.storage.codec.CisDecoder;
-import io.liparakis.chunkis.storage.codec.CisEncoder;
+import io.liparakis.chunkis.core.codec.CisDecoder;
+import io.liparakis.chunkis.core.codec.CisEncoder;
 import io.liparakis.chunkis.storage.io.region.RegionFile;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.storage.model.CisConstants;
+import io.liparakis.chunkis.core.model.CisConstants;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;

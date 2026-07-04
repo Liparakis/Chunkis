@@ -170,7 +170,7 @@ public final class DeltaPersistenceGuard {
      */
     public static boolean hasAuthoritativeV11SnapshotPayload(final ChunkDeltaView<?, ?> delta) {
         return delta != null
-                && delta.getSourceVersion() >= io.liparakis.chunkis.storage.model.CisConstants.VERSION
+                && delta.getSourceVersion() >= io.liparakis.chunkis.core.model.CisConstants.VERSION
                 && delta.getBlockChangesCount() > 0;
     }
 

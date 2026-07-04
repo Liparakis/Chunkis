@@ -1,12 +1,14 @@
 package io.liparakis.chunkis.storage.mapping;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
+import io.liparakis.chunkis.core.mapping.CisAdapter;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
-import io.liparakis.chunkis.storage.bits.BitReader;
-import io.liparakis.chunkis.storage.bits.BitWriter;
-import io.liparakis.chunkis.storage.mapping.PropertyPacker.PropertyMeta;
+import io.liparakis.chunkis.core.bits.BitReader;
+import io.liparakis.chunkis.core.bits.BitWriter;
+import io.liparakis.chunkis.core.mapping.PropertyPacker.PropertyMeta;
 
 import java.io.FileReader;
 import java.io.FileWriter;

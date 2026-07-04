@@ -12,7 +12,7 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
-import io.liparakis.chunkis.storage.codec.network.CisNetworkEncoder;
+import io.liparakis.chunkis.core.codec.network.CisNetworkEncoder;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;

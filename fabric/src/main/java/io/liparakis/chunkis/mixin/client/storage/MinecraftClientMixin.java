@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.mixin.client.storage;
 
-import io.liparakis.chunkis.migration.offline.PreLaunchMigrationCoordinator;
+import io.liparakis.chunkis.integration.migration.offline.PreLaunchMigrationCoordinator;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.resource.ResourcePackManager;
 import net.minecraft.server.SaveLoader;

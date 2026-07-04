@@ -5,9 +5,9 @@ import io.liparakis.chunkis.command.report.StorageReportModels.ChunkPayloadDiagn
 import io.liparakis.chunkis.command.report.StorageReportModels.RegionCoordinates;
 import io.liparakis.chunkis.command.report.StorageReportModels.SectionEncodingKind;
 import io.liparakis.chunkis.command.report.StorageReportModels.SectionPayloadDiagnostics;
-import io.liparakis.chunkis.storage.bits.BitReader;
-import io.liparakis.chunkis.storage.io.CisCompression;
-import io.liparakis.chunkis.storage.model.CisConstants;
+import io.liparakis.chunkis.core.bits.BitReader;
+import io.liparakis.chunkis.core.compression.CisCompression;
+import io.liparakis.chunkis.core.model.CisConstants;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;

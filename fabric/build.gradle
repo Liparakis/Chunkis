@@ -13,7 +13,7 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${providers.gradleProperty('loader_version').get()}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty('fabric_version').get()}"
 
-    implementation project(":core")
+    implementation project(":common")
     implementation project(":storage")
     implementation project(":migration")
 }
@@ -21,10 +21,9 @@ dependencies {
 jar {
     from {
         [
-            project(":core").sourceSets.main.output,
+            project(":common").sourceSets.main.output,
             project(":storage").sourceSets.main.output,
-            project(":migration").sourceSets.main.output,
-            project(":client").sourceSets.main.output
+            project(":migration").sourceSets.main.output
         ]
     }
 }
@@ -32,10 +31,9 @@ jar {
 sourcesJar {
     from {
         [
-            project(":core").sourceSets.main.allSource,
+            project(":common").sourceSets.main.allSource,
             project(":storage").sourceSets.main.allSource,
-            project(":migration").sourceSets.main.allSource,
-            project(":client").sourceSets.main.allSource
+            project(":migration").sourceSets.main.allSource
         ]
     }
 }

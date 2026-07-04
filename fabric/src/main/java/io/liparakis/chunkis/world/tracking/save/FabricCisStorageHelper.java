@@ -10,7 +10,7 @@ import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.storage.mapping.PropertyPacker;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.io.IOException;
 import java.nio.file.Files;

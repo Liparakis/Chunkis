@@ -14,7 +14,7 @@ import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceJsonl;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
-import io.liparakis.chunkis.migration.offline.OfflineMcaCisTranslator;
+import io.liparakis.chunkis.integration.migration.offline.OfflineMcaCisTranslator;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;

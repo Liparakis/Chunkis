@@ -1,4 +1,5 @@
 package io.liparakis.chunkis.storage.mapping;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -7,7 +8,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
-import io.liparakis.chunkis.storage.bits.BitReader;
+import io.liparakis.chunkis.core.bits.BitReader;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.Files;

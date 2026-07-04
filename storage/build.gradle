@@ -7,7 +7,7 @@ base {
 }
 
 dependencies {
-    api project(":core")
+    api project(":common")
     implementation 'org.slf4j:slf4j-api:2.0.9'
     compileOnly 'org.jetbrains:annotations:24.1.0'
 

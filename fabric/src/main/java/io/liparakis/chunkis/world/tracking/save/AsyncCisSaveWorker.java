@@ -13,7 +13,7 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.storage.model.CisConstants;
+import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;

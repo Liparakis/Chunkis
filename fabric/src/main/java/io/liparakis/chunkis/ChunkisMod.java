@@ -6,7 +6,7 @@ import io.liparakis.chunkis.command.StorageReportCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
-import io.liparakis.chunkis.migration.MigrationProgressTracker;
+import io.liparakis.chunkis.integration.migration.MigrationProgressTracker;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.portal.PortalChunkIndexManager;
 import io.liparakis.chunkis.portal.PortalLinkManager;

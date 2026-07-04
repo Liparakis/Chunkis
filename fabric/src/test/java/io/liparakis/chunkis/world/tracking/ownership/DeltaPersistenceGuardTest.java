@@ -21,7 +21,7 @@ class DeltaPersistenceGuardTest {
     @Test
     void rejectsCurrentVersionBlockEntityOnlyPayloadWithoutBase() {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
-        delta.setSourceVersion(io.liparakis.chunkis.storage.model.CisConstants.VERSION);
+        delta.setSourceVersion(io.liparakis.chunkis.core.model.CisConstants.VERSION);
         delta.addBlockEntityData(1, 64, 1, new NbtCompound());
 
         assertTrue(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
@@ -78,7 +78,7 @@ class DeltaPersistenceGuardTest {
     @Test
     void allowsV11AuthoritativeSnapshotPayloadWithoutBaseMetadata() {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
-        delta.setSourceVersion(io.liparakis.chunkis.storage.model.CisConstants.VERSION);
+        delta.setSourceVersion(io.liparakis.chunkis.core.model.CisConstants.VERSION);
         delta.addBlockChange(1, 64, 1, "stone");
 
         assertFalse(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true));

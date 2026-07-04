@@ -4,7 +4,7 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.storage.io.region.RegionFile;
 import io.liparakis.chunkis.storage.io.region.RegionKey;
-import io.liparakis.chunkis.storage.model.CisConstants;
+import io.liparakis.chunkis.core.model.CisConstants;
 import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
 
 import java.io.IOException;

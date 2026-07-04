@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.migrator;
 
-import io.liparakis.chunkis.storage.model.CisConstants;
+import io.liparakis.chunkis.core.model.CisConstants;
 
 import java.util.ArrayList;
 import java.util.List;

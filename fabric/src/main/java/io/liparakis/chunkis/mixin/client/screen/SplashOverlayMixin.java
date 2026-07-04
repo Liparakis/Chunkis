@@ -25,7 +25,7 @@ public abstract class SplashOverlayMixin {
      * can read startup migration status without introducing a direct linkage issue.
      */
     @Unique
-    private static final String TRACKER_CLASS = "io.liparakis.chunkis.migration.MigrationProgressTracker";
+    private static final String TRACKER_CLASS = "io.liparakis.chunkis.integration.migration.MigrationProgressTracker";
 
     /**
      * Active client instance that owns the current splash overlay render pass.
