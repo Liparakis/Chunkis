@@ -21,6 +21,7 @@ import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.storage.NbtReadView;
 import net.minecraft.storage.ReadView;
@@ -637,7 +638,8 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                         chunkPosition,
                         mutableWorldPos,
                         operationId,
-                        "restore skipped: missing block state"
+                        "restore skipped: state=" + blockStateId(currentState)
+                                + " hasBlockEntity=false nbtId=" + blockEntityTypeId(nbt)
                 );
             }
             return;
@@ -675,14 +677,17 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                         chunkPosition,
                         mutableWorldPos,
                         operationId,
-                        "restore skipped: block entity type incompatible with current block state or could not be created from NBT"
+                        "restore skipped: state=" + blockStateId(currentState)
+                                + " existingType=" + blockEntityTypeId(existingBlockEntity)
+                                + " nbtId=" + blockEntityTypeId(nbt)
+                                + " nbtKeys=" + nbt.getKeys()
                 );
             }
             return;
         }
 
         chunk.removeBlockEntity(mutableWorldPos);
-        chunk.addBlockEntity(blockEntity);
+        chunk.setBlockEntity(blockEntity);
         if (runtimeDelta != null) {
             runtimeDelta.addBlockEntityData(localX, localY, localZ, nbt, false);
         }
@@ -705,7 +710,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         }
         final String expectedTypeId = nbt.getString("id")
                 .orElse(null);
-        if (expectedTypeId == null || !expectedTypeId.equals(blockEntityTypeId(existingBlockEntity))) {
+        if (expectedTypeId == null || !expectedTypeId.equals(liveBlockEntityTypeId(existingBlockEntity))) {
             return false;
         }
         try (final ErrorReporter.Logging logging = new ErrorReporter.Logging(
@@ -724,10 +729,32 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     /**
      * Resolves and caches the registry id string for a live block entity type.
      */
-    private String blockEntityTypeId(final BlockEntity blockEntity) {
+    private String liveBlockEntityTypeId(final BlockEntity blockEntity) {
         return blockEntityTypeIds.computeIfAbsent(
                 blockEntity.getType(),
                 type -> String.valueOf(BlockEntityType.getId(type))
         );
+    }
+
+    /**
+     * Returns the registry id of a block state's block for restore diagnostics.
+     */
+    private static String blockStateId(final BlockState state) {
+        return state == null ? "<null>" : String.valueOf(Registries.BLOCK.getId(state.getBlock()));
+    }
+
+    /**
+     * Returns the serialized block entity type id from NBT for restore diagnostics.
+     */
+    private static String blockEntityTypeId(@Nullable final NbtCompound nbt) {
+        return nbt == null ? "<null>" : nbt.getString("id")
+                                        .orElse("<missing>");
+    }
+
+    /**
+     * Returns the live block entity type id for restore diagnostics.
+     */
+    private String blockEntityTypeId(@Nullable final BlockEntity blockEntity) {
+        return blockEntity == null ? "<null>" : liveBlockEntityTypeId(blockEntity);
     }
 }

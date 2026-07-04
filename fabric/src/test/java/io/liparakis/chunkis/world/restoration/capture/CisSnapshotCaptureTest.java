@@ -2,11 +2,12 @@ package io.liparakis.chunkis.world.restoration.capture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
 
@@ -75,5 +76,47 @@ class CisSnapshotCaptureTest {
     void snapshotKeepsPersistedBaseForChunksWithBlockEntities() {
         assertTrue(CisSnapshotCapture.shouldPersistBaseChunkForSnapshot(1));
         assertFalse(CisSnapshotCapture.shouldPersistBaseChunkForSnapshot(0));
+    }
+
+    @Test
+    void preservesMigratedBlockEntitiesWhenLiveChunkHasNotInstantiatedAnyYet() {
+        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+                null,
+                true,
+                true,
+                null,
+                false
+        );
+        CisNbtUtil.markMigratedAuthoritativeChunk(metadata);
+
+        final io.liparakis.chunkis.core.ChunkDelta<net.minecraft.block.BlockState, NbtCompound> delta =
+                new io.liparakis.chunkis.core.ChunkDelta<>(net.minecraft.block.BlockState::isAir);
+        delta.setChunkMetadata(metadata, false);
+        final NbtCompound chest = new NbtCompound();
+        chest.putString("id", "minecraft:chest");
+        delta.addBlockEntityData(1, 70, 2, chest, false);
+
+        assertTrue(CisSnapshotCapture.shouldPreserveMigratedBlockEntities(delta, true));
+        assertFalse(CisSnapshotCapture.shouldPreserveMigratedBlockEntities(delta, false));
+    }
+
+    @Test
+    void restoreBlockEntitiesRehydratesPayloadAfterSnapshotClear() {
+        final io.liparakis.chunkis.core.ChunkDelta<net.minecraft.block.BlockState, NbtCompound> delta =
+                new io.liparakis.chunkis.core.ChunkDelta<>(net.minecraft.block.BlockState::isAir);
+        final NbtCompound chest = new NbtCompound();
+        chest.putString("id", "minecraft:chest");
+        delta.addBlockEntityData(1, 70, 2, chest, false);
+
+        final Long2ObjectOpenHashMap<NbtCompound> preserved =
+                new Long2ObjectOpenHashMap<>(delta.getBlockEntities());
+        delta.clearBlockPayloads(false);
+        CisSnapshotCapture.restoreBlockEntities(delta, preserved);
+
+        assertEquals(1, delta.getBlockEntities().size());
+        assertEquals("minecraft:chest", delta.getBlockEntities()
+                .get(io.liparakis.chunkis.core.BlockInstruction.packPos(1, 70, 2))
+                .getString("id")
+                .orElseThrow());
     }
 }

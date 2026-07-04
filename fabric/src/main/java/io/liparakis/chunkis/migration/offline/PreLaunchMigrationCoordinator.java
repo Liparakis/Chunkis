@@ -66,26 +66,33 @@ public final class PreLaunchMigrationCoordinator {
                 final RegistryEntry<DimensionType> dimensionType = entry.getValue()
                         .dimensionTypeEntry();
                 final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, worldKey);
+                final Path entityDir = ChunkisStoragePaths.computeVanillaEntitiesDirectory(saveRoot, worldKey);
                 final List<Path> liveMca = collectFiles(regionDir, "r.*.*.mca");
-                final List<Path> backupMca = collectFiles(regionDir, "r.*.*.mca.backup");
+                final List<Path> liveEntityMca = collectFiles(entityDir, "r.*.*.mca");
                 final Path cisDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, worldKey);
                 final boolean hasCisData = Files.isDirectory(cisDir) && !collectFiles(cisDir, "*.cis").isEmpty();
 
-                if (liveMca.isEmpty()) {
-                    if (!backupMca.isEmpty() || hasCisData) {
+                if (liveMca.isEmpty() && liveEntityMca.isEmpty()) {
+                    if (shouldTreatCisAsAuthoritative(hasCisData)) {
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
                         LOGGER.info("Chunkis storage is authoritative for {}", worldKey.getValue());
                     }
                     continue;
                 }
 
-                if (!backupMca.isEmpty() || hasCisData) {
+                if (shouldDeleteVanillaSourcesAsStale(hasCisData)) {
                     for (final Path staleMca : liveMca) {
                         Files.deleteIfExists(staleMca);
                     }
+                    for (final Path staleEntityMca : liveEntityMca) {
+                        Files.deleteIfExists(staleEntityMca);
+                    }
                     MigrationStateServiceHolder.markAuthoritative(worldKey);
-                    LOGGER.warn("Deleted {} stale vanilla MCA file(s) after CIS takeover for {}",
-                            liveMca.size(), worldKey.getValue());
+                    LOGGER.warn(
+                            "Deleted {} stale vanilla region file(s) and {} stale entity region file(s) after CIS takeover for {}",
+                            liveMca.size(),
+                            liveEntityMca.size(),
+                            worldKey.getValue());
                     continue;
                 }
 
@@ -124,6 +131,22 @@ public final class PreLaunchMigrationCoordinator {
                             + saveRoot
             );
         }
+    }
+
+    /**
+     * Returns whether existing Chunkis storage is authoritative enough to skip
+     * vanilla-region migration.
+     */
+    static boolean shouldTreatCisAsAuthoritative(final boolean hasCisData) {
+        return hasCisData;
+    }
+
+    /**
+     * Returns whether live vanilla region files should be deleted as stale after
+     * Chunkis takeover.
+     */
+    static boolean shouldDeleteVanillaSourcesAsStale(final boolean hasCisData) {
+        return hasCisData;
     }
 
     /**

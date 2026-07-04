@@ -12,6 +12,7 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceJsonl;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.migration.offline.OfflineMcaCisTranslator;
+import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
@@ -19,7 +20,6 @@ import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +37,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtHelper;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.registry.Registries;
 import net.minecraft.state.property.Property;
@@ -73,15 +74,13 @@ public final class ChunkDebugActions {
     /**
      * Byte length of the padded truncation suffix.
      */
-    private static final int CHAT_TRUNCATION_SUFFIX_BYTES =
-            CHAT_TRUNCATION_SUFFIX_PADDED.getBytes(StandardCharsets.UTF_8).length;
+    private static final int CHAT_TRUNCATION_SUFFIX_BYTES = CHAT_TRUNCATION_SUFFIX_PADDED.getBytes(StandardCharsets.UTF_8).length;
 
     /**
      * Date/time formatter for generating trace export filenames.
      */
-    private static final DateTimeFormatter FILE_TIME_FORMAT =
-            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
-                    .withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter FILE_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
+            .withZone(ZoneOffset.UTC);
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -217,10 +216,9 @@ public final class ChunkDebugActions {
             sendFeedback(source, "[Chunkis] No retained suspect timeline for " + suspectId, false);
             return 1;
         }
-        sendFeedback(
-                source, "[Chunkis] Retained suspect timeline for " + suspectId + " (" + timeline.size() + " " +
-                        "events)", false
-        );
+        sendFeedback(source,
+                "[Chunkis] Retained suspect timeline for " + suspectId + " (" + timeline.size() + " " + "events)",
+                false);
         for (final ChunkTraceEvent event : timeline) {
             sendFeedback(source, ChunkDebugCommand.formatEvent(event), false);
         }
@@ -393,10 +391,9 @@ public final class ChunkDebugActions {
         final var trackerPending = GlobalChunkTracker.getPendingDeltas(world);
         final var asyncPending = AsyncCisSaveManager.snapshot(world);
         for (final DebugChunkKey chunkKey : watchedChunks) {
-            final var snapshot = new ChunkDebugCommand.PendingChunkSnapshot(
-                    chunkKey,
-                    trackerPending.containsKey(new ChunkPos(chunkKey.x(), chunkKey.z())), asyncPending.get(chunkKey)
-            );
+            final var snapshot = new ChunkDebugCommand.PendingChunkSnapshot(chunkKey,
+                    trackerPending.containsKey(new ChunkPos(chunkKey.x(), chunkKey.z())),
+                    asyncPending.get(chunkKey));
             sendFeedback(source, ChunkDebugCommand.formatPendingSnapshot(snapshot), false);
         }
         return watchedChunks.size();
@@ -411,15 +408,14 @@ public final class ChunkDebugActions {
     public static int inspectNeighborChunks(final ServerCommandSource source) {
         final var world = source.getWorld();
         final ChunkPos center = new ChunkPos(net.minecraft.util.math.BlockPos.ofFloored(source.getPosition()));
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
-                FabricCisStorageHelper.getStorage(world);
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
 
         for (int dz = -1; dz <= 1; dz++) {
             for (int dx = -1; dx <= 1; dx++) {
                 final ChunkPos pos = new ChunkPos(center.x + dx, center.z + dz);
-                sendFeedback(source, ChunkDebugCommand.formatChunkInspectSnapshot(
-                        inspectChunk(world, storage, pos)
-                ), false);
+                sendFeedback(source,
+                        ChunkDebugCommand.formatChunkInspectSnapshot(inspectChunk(world, storage, pos)),
+                        false);
             }
         }
         return 9;
@@ -438,6 +434,17 @@ public final class ChunkDebugActions {
     }
 
     /**
+     * Rebuilds and overwrites the caller's current chunk directly from MCA source.
+     *
+     * @param source command execution source
+     * @return {@code 1} on success
+     */
+    public static int remigrateCurrentChunkFromMca(final ServerCommandSource source) {
+        final ChunkPos center = new ChunkPos(BlockPos.ofFloored(source.getPosition()));
+        return remigrateChunkFromMca(source, center.x, center.z);
+    }
+
+    /**
      * Compares one chunk between raw MCA source data and the persisted CIS
      * snapshot.
      *
@@ -446,21 +453,15 @@ public final class ChunkDebugActions {
      * @param chunkZ chunk Z coordinate
      * @return {@code 1} after emitting diagnostic output
      */
-    public static int inspectChunkAgainstMca(
-            final ServerCommandSource source,
-            final int chunkX,
-            final int chunkZ
-    ) {
+    public static int inspectChunkAgainstMca(final ServerCommandSource source, final int chunkX, final int chunkZ) {
         final var world = source.getWorld();
         final ChunkPos pos = new ChunkPos(chunkX, chunkZ);
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
-                FabricCisStorageHelper.getStorage(world);
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
 
         final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> cisDelta;
         try {
-            cisDelta = storage.contains(FabricCisStorageHelper.toStoragePos(pos))
-                    ? storage.loadWithoutClearing(FabricCisStorageHelper.toStoragePos(pos))
-                    : null;
+            cisDelta = storage.contains(FabricCisStorageHelper.toStoragePos(pos)) ? storage.loadWithoutClearing(
+                    FabricCisStorageHelper.toStoragePos(pos)) : null;
         } catch (final IOException e) {
             sendFeedback(source,
                     "[Chunkis] Compare failed to load CIS chunk " + chunkX + "," + chunkZ + ": " + e.getMessage(),
@@ -478,63 +479,138 @@ public final class ChunkDebugActions {
             return 0;
         }
 
-        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> mcaDelta =
-                mcaRoot == null
-                        ? null
-                        : OfflineMcaCisTranslator.buildChunkDelta(
-                                world,
-                                PalettesFactory.fromRegistryManager(world.getRegistryManager()),
-                                mcaRoot,
-                                pos
-                        );
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> mcaDelta = mcaRoot == null ? null
+                : OfflineMcaCisTranslator.buildChunkDelta(world,
+                        PalettesFactory.fromRegistryManager(world.getRegistryManager()),
+                        mcaRoot,
+                        pos);
 
-        sendFeedback(
-                source,
-                "[Chunkis] Compare chunk=" + chunkX + "," + chunkZ
-                        + " mcaPresent=" + (mcaRoot != null)
-                        + " cisPresent=" + (cisDelta != null),
-                false
-        );
+        sendFeedback(source,
+                "[Chunkis] Compare chunk=" + chunkX + "," + chunkZ + " mcaPresent=" + (mcaRoot != null) + " cisPresent="
+                        + (cisDelta != null),
+                false);
         sendFeedback(source, "[Chunkis] MCA  " + describeDetailedDelta(mcaDelta), false);
         sendFeedback(source, "[Chunkis] CIS  " + describeDetailedDelta(cisDelta), false);
+        sendLiveChunkComparisonState(source, world, pos);
 
         if (mcaDelta == null || cisDelta == null) {
             return 1;
         }
 
         final ComparisonSummary summary = compareDeltas(mcaDelta, cisDelta);
-        sendFeedback(
-                source,
-                "[Chunkis] Diff realBlocks=" + summary.realBlockMismatchCount()
-                        + ", explicitAirOnly=" + summary.explicitAirOnlyMismatchCount()
-                        + ", totalBlocks=" + summary.totalBlockMismatchCount()
-                        + ", blockEntities=" + summary.blockEntityMismatchCount()
-                        + ", entitiesMatch=" + summary.entitiesMatch()
-                        + ", metadataMatch=" + summary.metadataMatch(),
-                false
-        );
-        if (!summary.realBlockSamples()
-                .isEmpty()) {
+        sendFeedback(source,
+                "[Chunkis] Diff realBlocks=" + summary.realBlockMismatchCount() + ", explicitAirOnly="
+                        + summary.explicitAirOnlyMismatchCount() + ", totalBlocks=" + summary.totalBlockMismatchCount()
+                        + ", blockEntities=" + summary.blockEntityMismatchCount() + ", entitiesMatch="
+                        + summary.entitiesMatch() + ", metadataMatch=" + summary.metadataMatch(),
+                false);
+        sendSampleLine(source, "Real block samples", summary.realBlockSamples());
+        sendSampleLine(source, "Explicit air samples", summary.explicitAirOnlySamples());
+        sendSampleLine(source, "BlockEntity samples", summary.blockEntitySamples());
+        sendSampleLine(source, "Entity samples", summary.entitySamples());
+        return 1;
+    }
+
+    private static void sendSampleLine(
+            final ServerCommandSource source,
+            final String label,
+            final List<String> samples
+    ) {
+        if (samples == null || samples.isEmpty()) {
+            return;
+        }
+        sendFeedback(source, "[Chunkis] " + label + " " + String.join(" | ", samples), false);
+    }
+
+    /**
+     * Emits the current in-memory chunk and delta state that the next save would use.
+     */
+    @SuppressWarnings("unchecked")
+    private static void sendLiveChunkComparisonState(final ServerCommandSource source,
+            final net.minecraft.server.world.ServerWorld world,
+            final ChunkPos pos) {
+        final WorldChunk liveChunk = world.getChunkManager()
+                .getWorldChunk(pos.x, pos.z, false);
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> attachedDelta =
+                liveChunk instanceof io.liparakis.chunkis.api.ChunkisDeltaDuck duck
+                        && duck.chunkis$getDelta() instanceof io.liparakis.chunkis.core.ChunkDelta<?, ?> delta
+                        ? (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) delta : null;
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> trackedDelta = (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(
+                world,
+                pos);
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> activeDelta = (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getActiveDelta(
+                world,
+                pos);
+
+        sendFeedback(source,
+                "[Chunkis] LIVE chunkLoaded=" + (liveChunk != null) + ", blockEntities=" + (liveChunk == null ? -1
+                        : liveChunk.getBlockEntities()
+                          .size()),
+                false);
+        sendFeedback(source, "[Chunkis] LIVE attached " + describeDetailedDelta(attachedDelta), false);
+        sendFeedback(source, "[Chunkis] LIVE tracked  " + describeDetailedDelta(trackedDelta), false);
+        sendFeedback(source, "[Chunkis] LIVE active   " + describeDetailedDelta(activeDelta), false);
+    }
+
+    /**
+     * Rebuilds one CIS chunk directly from raw MCA source and validates the write.
+     *
+     * @param source command execution source
+     * @param chunkX chunk X coordinate
+     * @param chunkZ chunk Z coordinate
+     * @return {@code 1} on success, {@code 0} on failure
+     */
+    public static int remigrateChunkFromMca(final ServerCommandSource source, final int chunkX, final int chunkZ) {
+        final var world = source.getWorld();
+        final ChunkPos pos = new ChunkPos(chunkX, chunkZ);
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
+
+        final NbtCompound mcaRoot;
+        try {
+            mcaRoot = loadMcaChunkNbt(source, pos);
+        } catch (final IOException e) {
             sendFeedback(source,
-                    "[Chunkis] Real block samples " + String.join(" | ", summary.realBlockSamples()),
+                    "[Chunkis] Remigrate failed to read MCA chunk " + chunkX + "," + chunkZ + ": " + e.getMessage(),
                     false);
+            return 0;
         }
-        if (!summary.explicitAirOnlySamples()
-                .isEmpty()) {
+        if (mcaRoot == null) {
+            sendFeedback(source, "[Chunkis] Remigrate skipped; no MCA source chunk " + chunkX + "," + chunkZ, false);
+            return 0;
+        }
+
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> rebuilt = OfflineMcaCisTranslator.buildChunkDelta(
+                world,
+                PalettesFactory.fromRegistryManager(world.getRegistryManager()),
+                mcaRoot,
+                pos);
+        if (!storage.replace(FabricCisStorageHelper.toStoragePos(pos), rebuilt)) {
+            sendFeedback(source, "[Chunkis] Remigrate failed to write CIS chunk " + chunkX + "," + chunkZ, false);
+            return 0;
+        }
+
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> stored;
+        try {
+            stored = storage.loadWithoutClearing(FabricCisStorageHelper.toStoragePos(pos));
+        } catch (final IOException e) {
             sendFeedback(source,
-                    "[Chunkis] Explicit air samples " + String.join(" | ", summary.explicitAirOnlySamples()),
+                    "[Chunkis] Remigrate wrote chunk but failed to read it back: " + e.getMessage(),
                     false);
+            return 0;
         }
-        if (!summary.blockEntitySamples()
-                .isEmpty()) {
+        final ComparisonSummary summary = compareDeltas(rebuilt, stored);
+        if (summary.realBlockMismatchCount() != 0 || summary.blockEntityMismatchCount() != 0 || !summary.entitiesMatch()
+                || !summary.metadataMatch()) {
             sendFeedback(source,
-                    "[Chunkis] BlockEntity samples " + String.join(" | ", summary.blockEntitySamples()),
+                    "[Chunkis] Remigrate wrote chunk but compare still differs realBlocks="
+                            + summary.realBlockMismatchCount() + ", blockEntities=" + summary.blockEntityMismatchCount()
+                            + ", entitiesMatch=" + summary.entitiesMatch() + ", metadataMatch="
+                            + summary.metadataMatch(),
                     false);
+            return 0;
         }
-        if (!summary.entitySamples()
-                .isEmpty()) {
-            sendFeedback(source, "[Chunkis] Entity samples " + String.join(" | ", summary.entitySamples()), false);
-        }
+
+        sendFeedback(source, "[Chunkis] Remigrated chunk " + chunkX + "," + chunkZ + " from MCA.", true);
         return 1;
     }
 
@@ -561,10 +637,11 @@ public final class ChunkDebugActions {
             source.sendError(Text.literal("[Chunkis] No watchpoints configured."));
             return 0;
         }
-        return exportEvents(
-                source, ChunkTraceStore.snapshotMatching(ChunkTraceWatchpoints::matches),
-                "watched-" + count, count, true
-        );
+        return exportEvents(source,
+                ChunkTraceStore.snapshotMatching(ChunkTraceWatchpoints::matches),
+                "watched-" + count,
+                count,
+                true);
     }
 
     /**
@@ -577,14 +654,16 @@ public final class ChunkDebugActions {
      * @param watched     true if filter applied
      * @return count of exported events
      */
-    private static int exportEvents(
-            final ServerCommandSource source, final List<ChunkTraceEvent> oldestFirst,
-            final String scope, final int count, final boolean watched) {
+    private static int exportEvents(final ServerCommandSource source,
+            final List<ChunkTraceEvent> oldestFirst,
+            final String scope,
+            final int count,
+            final boolean watched) {
         if (oldestFirst.isEmpty()) {
-            sendFeedback(
-                    source, watched ? ChunkDebugCommand.formatNoWatchedTraceMessage() : "[Chunkis] No trace " +
-                                                                                        "events stored.", false
-            );
+            sendFeedback(source,
+                    watched ? ChunkDebugCommand.formatNoWatchedTraceMessage()
+                            : "[Chunkis] No trace " + "events stored.",
+                    false);
             return 1;
         }
         final int fromIndex = Math.max(0, oldestFirst.size() - count);
@@ -629,8 +708,8 @@ public final class ChunkDebugActions {
      * @param message        feedback text
      * @param broadcastToOps true to notify ops
      */
-    private static void sendFeedback(
-            final ServerCommandSource source, final String message,
+    private static void sendFeedback(final ServerCommandSource source,
+            final String message,
             final boolean broadcastToOps) {
         final ChunkDebugCommand.ChatMessage chatMessage = truncateForChat(message);
         if (chatMessage.truncated()) {
@@ -648,9 +727,8 @@ public final class ChunkDebugActions {
      * @return path to the generated dump file
      */
     private static Path writeOversizedChatDump(final ServerCommandSource source, final String message) {
-        final Path path =
-                resolveExportPath(source, "chat-dump").resolveSibling(
-                        "trace-chat-dump-" + FILE_TIME_FORMAT.format(Instant.now()) + ".txt");
+        final Path path = resolveExportPath(source, "chat-dump").resolveSibling(
+                "trace-chat-dump-" + FILE_TIME_FORMAT.format(Instant.now()) + ".txt");
         try {
             Files.createDirectories(path.getParent());
             Files.writeString(path, message, StandardCharsets.UTF_8);
@@ -671,8 +749,7 @@ public final class ChunkDebugActions {
         final Path saveRoot = source.getServer()
                 .getSavePath(WorldSavePath.ROOT);
         return saveRoot.resolve("chunkis/debug")
-                .resolve(
-                        "trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
+                .resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
     }
 
     /**
@@ -682,8 +759,7 @@ public final class ChunkDebugActions {
      * @param newestFirst list of events sorted with newest at index 0
      * @return events count printed
      */
-    private static int sendEventsOldestFirst(
-            final ServerCommandSource source,
+    private static int sendEventsOldestFirst(final ServerCommandSource source,
             final List<ChunkTraceEvent> newestFirst) {
         for (int i = newestFirst.size() - 1; i >= 0; i--) {
             sendFeedback(source, ChunkDebugCommand.formatEvent(newestFirst.get(i)), false);
@@ -713,8 +789,7 @@ public final class ChunkDebugActions {
      * @return inspection snapshot
      */
     @SuppressWarnings("unchecked")
-    private static ChunkDebugCommand.ChunkInspectSnapshot inspectChunk(
-            final net.minecraft.server.world.ServerWorld world,
+    private static ChunkDebugCommand.ChunkInspectSnapshot inspectChunk(final net.minecraft.server.world.ServerWorld world,
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final ChunkPos pos) {
         final WorldChunk liveChunk = world.getChunkManager()
@@ -722,10 +797,10 @@ public final class ChunkDebugActions {
         final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> liveDelta =
                 liveChunk instanceof io.liparakis.chunkis.api.ChunkisDeltaDuck duck
                         && duck.chunkis$getDelta() instanceof io.liparakis.chunkis.core.ChunkDelta<?, ?> delta
-                        ? (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) delta
-                        : null;
-        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> trackedDelta =
-                (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(world, pos);
+                        ? (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) delta : null;
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> trackedDelta = (io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(
+                world,
+                pos);
 
         final boolean persistedPresent = storage.contains(FabricCisStorageHelper.toStoragePos(pos));
         io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> persistedDelta = null;
@@ -738,15 +813,13 @@ public final class ChunkDebugActions {
             }
         }
 
-        return new ChunkDebugCommand.ChunkInspectSnapshot(
-                new DebugChunkKey(pos.x, pos.z),
+        return new ChunkDebugCommand.ChunkInspectSnapshot(new DebugChunkKey(pos.x, pos.z),
                 liveChunk != null,
                 describeDelta(liveDelta),
                 describeDelta(trackedDelta),
                 describeDelta(persistedDelta),
                 persistedPresent,
-                persistenceError
-        );
+                persistenceError);
     }
 
     /**
@@ -761,16 +834,12 @@ public final class ChunkDebugActions {
         }
 
         final Object metadata = delta.getChunkMetadata();
-        return "restorable=" + ChunkDeltaOwnership.hasRestorableChunkisState(delta)
-                + ", owned=" + delta.hasOwnershipClaim()
-                + ", dirty=" + delta.isDirty()
-                + ", blocks=" + delta.getBlockChangesCount()
-                + ", sections=" + delta.getTouchedSectionCount()
-                + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(metadata)
-                + ", full=" + CisNbtUtil.hasFullBlockBaseline(metadata)
-                + ", useBase=" + CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata)
-                + ", suppress=" + delta.shouldSuppressInitialRepopulation()
-                + ", ver=" + delta.getSourceVersion();
+        return "restorable=" + ChunkDeltaOwnership.hasRestorableChunkisState(delta) + ", owned="
+                + delta.hasOwnershipClaim() + ", dirty=" + delta.isDirty() + ", blocks=" + delta.getBlockChangesCount()
+                + ", sections=" + delta.getTouchedSectionCount() + ", hasBase=" + CisNbtUtil.hasPersistedBaseChunkNbt(
+                metadata) + ", full=" + CisNbtUtil.hasFullBlockBaseline(metadata) + ", useBase="
+                + CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata) + ", suppress="
+                + delta.shouldSuppressInitialRepopulation() + ", ver=" + delta.getSourceVersion();
     }
 
     /**
@@ -787,13 +856,11 @@ public final class ChunkDebugActions {
 
         final NbtCompound metadata = delta.getChunkMetadata() instanceof NbtCompound compound ? compound : null;
         final NbtCompound auxiliary = metadata == null ? null : CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
-        return describeDelta(delta)
-                + ", blockEntities=" + delta.getBlockEntities()
-                .size()
-                + ", pendingEntities=" + delta.countPendingEntities()
-                + ", migrated=" + CisNbtUtil.isMigratedAuthoritativeChunk(metadata)
-                + ", auxKeys=" + (auxiliary == null ? 0 : auxiliary.getKeys()
-                                                          .size());
+        return describeDelta(delta) + ", blockEntities=" + delta.getBlockEntities()
+                .size() + ", pendingEntities=" + delta.countPendingEntities() + ", migrated="
+                + CisNbtUtil.isMigratedAuthoritativeChunk(metadata) + ", auxKeys=" + (auxiliary == null ? 0
+                : auxiliary.getKeys()
+                  .size());
     }
 
     /**
@@ -804,16 +871,12 @@ public final class ChunkDebugActions {
      * @return raw chunk NBT, or {@code null} when the source MCA chunk is absent
      * @throws IOException if reading fails
      */
-    private static NbtCompound loadMcaChunkNbt(
-            final ServerCommandSource source,
-            final ChunkPos pos
-    ) throws IOException {
-        final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(
-                source.getServer()
+    private static NbtCompound loadMcaChunkNbt(final ServerCommandSource source, final ChunkPos pos)
+            throws IOException {
+        final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(source.getServer()
                         .getSavePath(WorldSavePath.ROOT),
                 source.getWorld()
-                        .getRegistryKey()
-        );
+                        .getRegistryKey());
         final String baseName = "r." + pos.getRegionX() + "." + pos.getRegionZ() + ".mca";
         final Path livePath = regionDir.resolve(baseName);
         final Path backupPath = regionDir.resolve(baseName + ".backup");
@@ -846,10 +909,8 @@ public final class ChunkDebugActions {
      * @param actual   persisted CIS snapshot
      * @return comparison summary
      */
-    private static ComparisonSummary compareDeltas(
-            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> expected,
-            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> actual
-    ) {
+    private static ComparisonSummary compareDeltas(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> expected,
+            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> actual) {
         final List<String> realBlockSamples = new ArrayList<>();
         final List<String> explicitAirOnlySamples = new ArrayList<>();
         final List<String> blockEntitySamples = new ArrayList<>();
@@ -857,19 +918,18 @@ public final class ChunkDebugActions {
 
         final var expectedBlocks = materializeBlocks(expected);
         final var actualBlocks = materializeBlocks(actual);
-        final BlockMismatchSummary blockMismatchSummary =
-                countBlockMismatches(expectedBlocks, actualBlocks, realBlockSamples, explicitAirOnlySamples);
+        final BlockMismatchSummary blockMismatchSummary = countBlockMismatches(expectedBlocks,
+                actualBlocks,
+                realBlockSamples,
+                explicitAirOnlySamples);
 
-        final int blockEntityMismatchCount = countBlockEntityMismatches(
-                expected.getBlockEntities(),
-                actual.getBlockEntities(),
-                blockEntitySamples
-        );
+        final int blockEntityMismatchCount = countBlockEntityMismatches(materializeBlockEntities(expected),
+                materializeBlockEntities(actual),
+                blockEntitySamples);
 
         final boolean entitiesMatch = compareEntityPayloads(expected, actual, entitySamples);
         final boolean metadataMatch = compareMetadata(expected.getChunkMetadata(), actual.getChunkMetadata());
-        return new ComparisonSummary(
-                blockMismatchSummary.realMismatchCount(),
+        return new ComparisonSummary(blockMismatchSummary.realMismatchCount(),
                 blockMismatchSummary.explicitAirOnlyMismatchCount(),
                 blockMismatchSummary.totalMismatchCount(),
                 blockEntityMismatchCount,
@@ -878,8 +938,7 @@ public final class ChunkDebugActions {
                 realBlockSamples,
                 explicitAirOnlySamples,
                 blockEntitySamples,
-                entitySamples
-        );
+                entitySamples);
     }
 
     /**
@@ -888,9 +947,7 @@ public final class ChunkDebugActions {
      * @param delta source delta
      * @return local position to state map
      */
-    private static java.util.Map<Long, BlockState> materializeBlocks(
-            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+    private static java.util.Map<Long, BlockState> materializeBlocks(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta) {
         final java.util.Map<Long, BlockState> blocks = new java.util.HashMap<>();
         delta.forEachBlockInstruction((x, y, z, paletteId, state) -> blocks.put(BlockPos.asLong(x, y, z), state));
         return blocks;
@@ -902,15 +959,14 @@ public final class ChunkDebugActions {
      *
      * @param expected expected block map
      * @param actual   actual block map
-     * @param samples  sample output collector
-     * @return total mismatch count
+     * @param realSamples sample collector for real block mismatches
+     * @param explicitAirOnlySamples sample collector for explicit-air-only mismatches
+     * @return mismatch breakdown
      */
-    private static BlockMismatchSummary countBlockMismatches(
-            final java.util.Map<Long, BlockState> expected,
+    private static BlockMismatchSummary countBlockMismatches(final java.util.Map<Long, BlockState> expected,
             final java.util.Map<Long, BlockState> actual,
             final List<String> realSamples,
-            final List<String> explicitAirOnlySamples
-    ) {
+            final List<String> explicitAirOnlySamples) {
         final java.util.Set<Long> keys = new java.util.HashSet<>(expected.keySet());
         keys.addAll(actual.keySet());
 
@@ -929,12 +985,8 @@ public final class ChunkDebugActions {
                 explicitAirOnlyMismatches++;
                 if (explicitAirOnlySamples.size() < 6) {
                     explicitAirOnlySamples.add(
-                            formatLocalBlockPosition(key)
-                                    + "="
-                                    + describeState(expectedState)
-                                    + " -> "
-                                    + describeState(actualState)
-                    );
+                            formatLocalBlockPosition(key) + "=" + describeState(expectedState) + " -> " + describeState(
+                                    actualState));
                 }
                 continue;
             }
@@ -942,12 +994,8 @@ public final class ChunkDebugActions {
             realMismatches++;
             if (realSamples.size() < 6) {
                 realSamples.add(
-                        formatLocalBlockPosition(key)
-                                + "="
-                                + describeState(expectedState)
-                                + " -> "
-                                + describeState(actualState)
-                );
+                        formatLocalBlockPosition(key) + "=" + describeState(expectedState) + " -> " + describeState(
+                                actualState));
             }
         }
         return new BlockMismatchSummary(realMismatches, explicitAirOnlyMismatches, totalMismatches);
@@ -961,12 +1009,8 @@ public final class ChunkDebugActions {
      * @param actualState   actual block state, may be null
      * @return {@code true} when the mismatch is explicit-air-only
      */
-    private static boolean isExplicitAirOnlyMismatch(
-            final BlockState expectedState,
-            final BlockState actualState
-    ) {
-        return expectedState == null && isAirState(actualState)
-                || actualState == null && isAirState(expectedState);
+    private static boolean isExplicitAirOnlyMismatch(final BlockState expectedState, final BlockState actualState) {
+        return expectedState == null && isAirState(actualState) || actualState == null && isAirState(expectedState);
     }
 
     /**
@@ -988,11 +1032,9 @@ public final class ChunkDebugActions {
      * @param samples  sample output collector
      * @return total mismatch count
      */
-    private static int countBlockEntityMismatches(
-            final Long2ObjectMap<NbtCompound> expected,
-            final Long2ObjectMap<NbtCompound> actual,
-            final List<String> samples
-    ) {
+    private static int countBlockEntityMismatches(final java.util.Map<Long, NbtCompound> expected,
+            final java.util.Map<Long, NbtCompound> actual,
+            final List<String> samples) {
         final java.util.Set<Long> keys = new java.util.HashSet<>();
         keys.addAll(expected.keySet());
         keys.addAll(actual.keySet());
@@ -1007,16 +1049,59 @@ public final class ChunkDebugActions {
 
             mismatches++;
             if (samples.size() < 4) {
-                samples.add(
-                        formatLocalBlockPosition(key)
-                                + "="
-                                + describeBlockEntity(expectedNbt)
-                                + " -> "
-                                + describeBlockEntity(actualNbt)
-                );
+                samples.add(formatLocalBlockPosition(key) + "=" + describeBlockEntity(expectedNbt) + " -> "
+                        + describeBlockEntity(actualNbt));
             }
         }
         return mismatches;
+    }
+
+    /**
+     * Materializes the effective persisted block-entity payloads for one chunk delta.
+     *
+     * <p>Chunks saved through the persisted-base-chunk path keep block entities in the
+     * vanilla base NBT rather than in the sparse delta map. For inspection we need the
+     * effective persisted view, not just the sparse overlay.</p>
+     */
+    private static java.util.Map<Long, NbtCompound> materializeBlockEntities(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta) {
+        final java.util.Map<Long, NbtCompound> blockEntities = new java.util.HashMap<>();
+        if (delta == null) {
+            return blockEntities;
+        }
+
+        final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(delta.getChunkMetadata());
+        for (final NbtCompound blockEntityNbt : extractBlockEntityPayloads(baseChunkNbt)) {
+            final Integer x = readIntOrNull(blockEntityNbt, "x");
+            final Integer y = readIntOrNull(blockEntityNbt, "y");
+            final Integer z = readIntOrNull(blockEntityNbt, "z");
+            if (x == null || y == null || z == null) {
+                continue;
+            }
+            blockEntities.put(BlockInstruction.packPos(x & 15, y, z & 15), blockEntityNbt);
+        }
+        blockEntities.putAll(delta.getBlockEntities());
+        return blockEntities;
+    }
+
+    /**
+     * Extracts block-entity payload compounds from modern or legacy chunk roots.
+     */
+    private static List<NbtCompound> extractBlockEntityPayloads(final NbtCompound root) {
+        final List<NbtCompound> payloads = CisNbtUtil.extractCompoundList(chunkPayloadRoot(root), "block_entities");
+        return payloads.isEmpty()
+                ? CisNbtUtil.extractCompoundList(chunkPayloadRoot(root), "TileEntities")
+                : payloads;
+    }
+
+    /**
+     * Returns the nested legacy {@code Level} payload root when present.
+     */
+    private static NbtCompound chunkPayloadRoot(final NbtCompound root) {
+        if (root == null) {
+            return null;
+        }
+        return root.getCompound("Level")
+                .orElse(root);
     }
 
     /**
@@ -1027,11 +1112,9 @@ public final class ChunkDebugActions {
      * @param samples  mismatch sample collector
      * @return {@code true} when entity payloads match
      */
-    private static boolean compareEntityPayloads(
-            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> expected,
+    private static boolean compareEntityPayloads(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> expected,
             final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> actual,
-            final List<String> samples
-    ) {
+            final List<String> samples) {
         final List<String> expectedEntities = materializeEntities(expected);
         final List<String> actualEntities = materializeEntities(actual);
         if (expectedEntities.equals(actualEntities)) {
@@ -1039,13 +1122,24 @@ public final class ChunkDebugActions {
         }
 
         samples.add("expectedCount=" + expectedEntities.size() + ", actualCount=" + actualEntities.size());
-        if (!expectedEntities.isEmpty()) {
-            samples.add("expectedFirst=" + expectedEntities.getFirst());
-        }
-        if (!actualEntities.isEmpty()) {
-            samples.add("actualFirst=" + actualEntities.getFirst());
-        }
+        addFirstSample(samples, "expectedFirst=", expectedEntities);
+        addFirstSample(samples, "actualFirst=", actualEntities);
         return false;
+    }
+
+    private static Integer readIntOrNull(final NbtCompound root, final String key) {
+        return root == null ? null : root.getInt(key)
+                .orElse(null);
+    }
+
+    private static void addFirstSample(
+            final List<String> samples,
+            final String prefix,
+            final List<String> values
+    ) {
+        if (values != null && !values.isEmpty()) {
+            samples.add(prefix + values.getFirst());
+        }
     }
 
     /**
@@ -1054,9 +1148,7 @@ public final class ChunkDebugActions {
      * @param delta source delta
      * @return sorted entity payload list
      */
-    private static List<String> materializeEntities(
-            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+    private static List<String> materializeEntities(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta) {
         final List<String> entities = new ArrayList<>();
         delta.forEachEntity(entity -> entities.add(entity == null ? "<null>" : entity.toString()));
         Collections.sort(entities);
@@ -1081,16 +1173,11 @@ public final class ChunkDebugActions {
                 && CisNbtUtil.hasPersistedBaseChunkNbt(expected) == CisNbtUtil.hasPersistedBaseChunkNbt(actual)
                 && CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(expected)
                 == CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(actual)
-                && NbtHelper.matches(
-                CisNbtUtil.extractStructureData(expected),
+                && NbtHelper.matches(CisNbtUtil.extractStructureData(expected),
                 CisNbtUtil.extractStructureData(actual),
-                true
-        )
-                && NbtHelper.matches(
-                CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected),
+                true) && NbtHelper.matches(CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected),
                 CisNbtUtil.extractPreservedAuxiliaryChunkNbt(actual),
-                true
-        );
+                true);
     }
 
     /**
@@ -1100,7 +1187,8 @@ public final class ChunkDebugActions {
      * @return formatted local coordinate string
      */
     private static String formatLocalBlockPosition(final long key) {
-        return BlockPos.unpackLongX(key) + "," + BlockPos.unpackLongY(key) + "," + BlockPos.unpackLongZ(key);
+        return BlockInstruction.unpackX(key) + "," + BlockInstruction.unpackY(key) + ","
+                + BlockInstruction.unpackZ(key);
     }
 
     /**
@@ -1133,26 +1221,22 @@ public final class ChunkDebugActions {
     /**
      * Comparison summary for one MCA-vs-CIS chunk diff.
      *
-     * @param blockMismatchCount       mismatched block count
+     * @param realBlockMismatchCount mismatched non-air/non-null block count
+     * @param explicitAirOnlyMismatchCount mismatched explicit-air-only count
+     * @param totalBlockMismatchCount total block mismatch count
      * @param blockEntityMismatchCount mismatched block-entity count
-     * @param entitiesMatch            true when entity payloads match
-     * @param metadataMatch            true when owned/preserved metadata matches
-     * @param blockSamples             sample block mismatches
-     * @param blockEntitySamples       sample block-entity mismatches
-     * @param entitySamples            sample entity mismatch details
+     * @param entitiesMatch true when entity payloads match
+     * @param metadataMatch true when owned/preserved metadata matches
+     * @param realBlockSamples sample real block mismatches
+     * @param explicitAirOnlySamples sample explicit-air-only mismatches
+     * @param blockEntitySamples sample block-entity mismatches
+     * @param entitySamples sample entity mismatch details
      */
-    private record ComparisonSummary(
-            int realBlockMismatchCount,
-            int explicitAirOnlyMismatchCount,
-            int totalBlockMismatchCount,
-            int blockEntityMismatchCount,
-            boolean entitiesMatch,
-            boolean metadataMatch,
-            List<String> realBlockSamples,
-            List<String> explicitAirOnlySamples,
-            List<String> blockEntitySamples,
-            List<String> entitySamples
-    ) {
+    private record ComparisonSummary(int realBlockMismatchCount, int explicitAirOnlyMismatchCount,
+                                     int totalBlockMismatchCount, int blockEntityMismatchCount, boolean entitiesMatch,
+                                     boolean metadataMatch, List<String> realBlockSamples,
+                                     List<String> explicitAirOnlySamples, List<String> blockEntitySamples,
+                                     List<String> entitySamples) {
 
     }
 
@@ -1164,11 +1248,8 @@ public final class ChunkDebugActions {
      * @param explicitAirOnlyMismatchCount count of null-vs-air mismatches
      * @param totalMismatchCount           total mismatch count
      */
-    private record BlockMismatchSummary(
-            int realMismatchCount,
-            int explicitAirOnlyMismatchCount,
-            int totalMismatchCount
-    ) {
+    private record BlockMismatchSummary(int realMismatchCount, int explicitAirOnlyMismatchCount,
+                                        int totalMismatchCount) {
 
     }
 }

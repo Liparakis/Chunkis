@@ -35,9 +35,8 @@ public final class ChunkDebugCommand {
     /**
      * Date format pattern for displaying trace log timings.
      */
-    private static final DateTimeFormatter TIME_FORMAT =
-            DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
-                    .withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
+            .withZone(ZoneOffset.UTC);
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -58,50 +57,40 @@ public final class ChunkDebugCommand {
         final var watchChunkNode = CommandManager.literal("chunk")
                 .then(CommandManager.argument("x", IntegerArgumentType.integer())
                         .then(CommandManager.argument("z", IntegerArgumentType.integer())
-                                .executes(ctx -> ChunkDebugActions.watchChunk(
-                                        ctx.getSource(),
+                                .executes(ctx -> ChunkDebugActions.watchChunk(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "x"),
-                                        IntegerArgumentType.getInteger(ctx, "z")
-                                ))));
+                                        IntegerArgumentType.getInteger(ctx, "z")))));
 
         final var watchRegionNode = CommandManager.literal("region")
                 .then(CommandManager.argument("x", IntegerArgumentType.integer())
                         .then(CommandManager.argument("z", IntegerArgumentType.integer())
-                                .executes(ctx -> ChunkDebugActions.watchRegion(
-                                        ctx.getSource(),
+                                .executes(ctx -> ChunkDebugActions.watchRegion(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "x"),
-                                        IntegerArgumentType.getInteger(ctx, "z")
-                                ))));
+                                        IntegerArgumentType.getInteger(ctx, "z")))));
 
         final var watchBlockNode = CommandManager.literal("block")
                 .then(CommandManager.argument("x", IntegerArgumentType.integer())
                         .then(CommandManager.argument("y", IntegerArgumentType.integer())
                                 .then(CommandManager.argument("z", IntegerArgumentType.integer())
-                                        .executes(ctx -> ChunkDebugActions.watchBlock(
-                                                ctx.getSource(),
+                                        .executes(ctx -> ChunkDebugActions.watchBlock(ctx.getSource(),
                                                 IntegerArgumentType.getInteger(ctx, "x"),
                                                 IntegerArgumentType.getInteger(ctx, "y"),
-                                                IntegerArgumentType.getInteger(ctx, "z")
-                                        )))));
+                                                IntegerArgumentType.getInteger(ctx, "z"))))));
 
         final var watchBlockEntityNode = CommandManager.literal("blockentity")
                 .then(CommandManager.argument("x", IntegerArgumentType.integer())
                         .then(CommandManager.argument("y", IntegerArgumentType.integer())
                                 .then(CommandManager.argument("z", IntegerArgumentType.integer())
-                                        .executes(ctx -> ChunkDebugActions.watchBlockEntity(
-                                                ctx.getSource(),
+                                        .executes(ctx -> ChunkDebugActions.watchBlockEntity(ctx.getSource(),
                                                 IntegerArgumentType.getInteger(ctx, "x"),
                                                 IntegerArgumentType.getInteger(ctx, "y"),
-                                                IntegerArgumentType.getInteger(ctx, "z")
-                                        )))));
+                                                IntegerArgumentType.getInteger(ctx, "z"))))));
 
         final var watchEntityNode = CommandManager.literal("entity")
                 .then(CommandManager.argument("uuid", UuidArgumentType.uuid())
-                        .executes(ctx -> ChunkDebugActions.watchEntity(
-                                ctx.getSource(),
+                        .executes(ctx -> ChunkDebugActions.watchEntity(ctx.getSource(),
                                 UuidArgumentType.getUuid(ctx, "uuid")
-                                        .toString()
-                        )));
+                                        .toString())));
 
         final var watchCommand = CommandManager.literal("watch")
                 .then(watchChunkNode)
@@ -117,65 +106,49 @@ public final class ChunkDebugCommand {
                         .executes(ctx -> ChunkDebugActions.pendingWatched(ctx.getSource())))
                 .then(CommandManager.literal("latest")
                         .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
-                                .executes(ctx -> ChunkDebugActions.latestWatched(
-                                        ctx.getSource(),
-                                        IntegerArgumentType.getInteger(ctx, "count")
-                                ))));
+                                .executes(ctx -> ChunkDebugActions.latestWatched(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "count")))));
 
         final var suspectNode = CommandManager.literal("suspect")
                 .then(CommandManager.argument("suspectId", LongArgumentType.longArg(1L))
-                        .executes(ctx -> ChunkDebugActions.showSuspect(
-                                ctx.getSource(),
-                                LongArgumentType.getLong(ctx, "suspectId")
-                        )))
+                        .executes(ctx -> ChunkDebugActions.showSuspect(ctx.getSource(),
+                                LongArgumentType.getLong(ctx, "suspectId"))))
                 .then(CommandManager.literal("timeline")
                         .then(CommandManager.argument("suspectId", LongArgumentType.longArg(1L))
-                                .executes(ctx -> ChunkDebugActions.showSuspectTimeline(
-                                        ctx.getSource(),
-                                        LongArgumentType.getLong(ctx, "suspectId")
-                                ))))
+                                .executes(ctx -> ChunkDebugActions.showSuspectTimeline(ctx.getSource(),
+                                        LongArgumentType.getLong(ctx, "suspectId")))))
                 .then(CommandManager.literal("chunk")
                         .then(CommandManager.argument("x", IntegerArgumentType.integer())
                                 .then(CommandManager.argument("z", IntegerArgumentType.integer())
-                                        .executes(ctx -> ChunkDebugActions.showSuspectChunk(
-                                                ctx.getSource(),
+                                        .executes(ctx -> ChunkDebugActions.showSuspectChunk(ctx.getSource(),
                                                 IntegerArgumentType.getInteger(ctx, "x"),
-                                                IntegerArgumentType.getInteger(ctx, "z")
-                                        )))));
+                                                IntegerArgumentType.getInteger(ctx, "z"))))));
 
         final var exportNode = CommandManager.literal("export")
                 .then(CommandManager.literal("latest")
                         .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
-                                .executes(ctx -> ChunkDebugActions.exportLatest(
-                                        ctx.getSource(),
-                                        IntegerArgumentType.getInteger(ctx, "count")
-                                ))))
+                                .executes(ctx -> ChunkDebugActions.exportLatest(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "count")))))
                 .then(CommandManager.literal("watched")
                         .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
-                                .executes(ctx -> ChunkDebugActions.exportWatched(
-                                        ctx.getSource(),
-                                        IntegerArgumentType.getInteger(ctx, "count")
-                                ))));
+                                .executes(ctx -> ChunkDebugActions.exportWatched(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "count")))));
 
         final var debugCommand = CommandManager.literal("debug")
                 .then(CommandManager.literal("on")
-                        .executes(ctx -> ChunkDebugActions.setLevel(
-                                ctx.getSource(), ChunkisDebugLevel.LIFECYCLE,
-                                "Chunkis debug set to LIFECYCLE"
-                        )))
+                        .executes(ctx -> ChunkDebugActions.setLevel(ctx.getSource(),
+                                ChunkisDebugLevel.LIFECYCLE,
+                                "Chunkis debug set to LIFECYCLE")))
                 .then(CommandManager.literal("off")
-                        .executes(ctx -> ChunkDebugActions.setLevel(
-                                ctx.getSource(), ChunkisDebugLevel.OFF,
-                                "Chunkis debug disabled"
-                        )))
+                        .executes(ctx -> ChunkDebugActions.setLevel(ctx.getSource(),
+                                ChunkisDebugLevel.OFF,
+                                "Chunkis debug disabled")))
                 .then(CommandManager.literal("clear")
                         .executes(ctx -> ChunkDebugActions.clear(ctx.getSource())))
                 .then(CommandManager.literal("latest")
                         .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
-                                .executes(ctx -> ChunkDebugActions.latest(
-                                        ctx.getSource(),
-                                        IntegerArgumentType.getInteger(ctx, "count")
-                                ))))
+                                .executes(ctx -> ChunkDebugActions.latest(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "count")))))
                 .then(exportNode)
                 .then(CommandManager.literal("suspects")
                         .executes(ctx -> ChunkDebugActions.listSuspects(ctx.getSource()))
@@ -185,16 +158,12 @@ public final class ChunkDebugCommand {
                 .then(CommandManager.literal("failures")
                         .executes(ctx -> ChunkDebugActions.listFailures(ctx.getSource(), DEFAULT_FAILURE_COUNT))
                         .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
-                                .executes(ctx -> ChunkDebugActions.listFailures(
-                                        ctx.getSource(),
-                                        IntegerArgumentType.getInteger(ctx, "count")
-                                ))))
+                                .executes(ctx -> ChunkDebugActions.listFailures(ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "count")))))
                 .then(CommandManager.literal("failure")
                         .then(CommandManager.argument("eventId", LongArgumentType.longArg(1L))
-                                .executes(ctx -> ChunkDebugActions.showFailure(
-                                        ctx.getSource(),
-                                        LongArgumentType.getLong(ctx, "eventId")
-                                ))))
+                                .executes(ctx -> ChunkDebugActions.showFailure(ctx.getSource(),
+                                        LongArgumentType.getLong(ctx, "eventId")))))
                 .then(CommandManager.literal("inspect")
                         .then(CommandManager.literal("neighbors")
                                 .executes(ctx -> ChunkDebugActions.inspectNeighborChunks(ctx.getSource())))
@@ -202,17 +171,21 @@ public final class ChunkDebugCommand {
                                 .executes(ctx -> ChunkDebugActions.inspectCurrentChunkAgainstMca(ctx.getSource()))
                                 .then(CommandManager.argument("x", IntegerArgumentType.integer())
                                         .then(CommandManager.argument("z", IntegerArgumentType.integer())
-                                                .executes(ctx -> ChunkDebugActions.inspectChunkAgainstMca(
-                                                        ctx.getSource(),
+                                                .executes(ctx -> ChunkDebugActions.inspectChunkAgainstMca(ctx.getSource(),
                                                         IntegerArgumentType.getInteger(ctx, "x"),
-                                                        IntegerArgumentType.getInteger(ctx, "z")
-                                                ))))))
+                                                        IntegerArgumentType.getInteger(ctx, "z"))))))
+                        .then(CommandManager.literal("remigrate")
+                                .executes(ctx -> ChunkDebugActions.remigrateCurrentChunkFromMca(ctx.getSource()))
+                                .then(CommandManager.argument("x", IntegerArgumentType.integer())
+                                        .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                                                .executes(ctx -> ChunkDebugActions.remigrateChunkFromMca(ctx.getSource(),
+                                                        IntegerArgumentType.getInteger(ctx, "x"),
+                                                        IntegerArgumentType.getInteger(ctx, "z")))))))
                 .then(watchCommand);
 
         dispatcher.register(CommandManager.literal("chunkis")
                 .requires(source -> source.getPermissions()
-                        .hasPermission(
-                                new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
                 .then(debugCommand));
     }
 
@@ -301,32 +274,24 @@ public final class ChunkDebugCommand {
      * @param trackerDirty true if chunk tracking has dirty in-memory state changes
      * @param asyncPending details of async file saving thread queue, if any
      */
-    public record PendingChunkSnapshot(
-            DebugChunkKey chunkKey,
-            boolean trackerDirty,
-            AsyncCisSaveManager.PendingSaveSnapshot asyncPending) {
+    public record PendingChunkSnapshot(DebugChunkKey chunkKey, boolean trackerDirty,
+                                       AsyncCisSaveManager.PendingSaveSnapshot asyncPending) {
 
     }
 
     /**
      * Snapshot record describing live and persisted Chunkis state for one chunk.
      *
-     * @param chunkKey          chunk coordinates
-     * @param loaded            true if a live WorldChunk is currently loaded
-     * @param liveState         summarized delta attached to the loaded chunk, or null
-     * @param trackedState      summarized tracker/unload-cache delta, or null
-     * @param persistedState    summarized disk delta, or null
-     * @param persistedPresent  true if a CIS entry exists on disk
-     * @param persistenceError  storage load error message, or null
+     * @param chunkKey         chunk coordinates
+     * @param loaded           true if a live WorldChunk is currently loaded
+     * @param liveState        summarized delta attached to the loaded chunk, or null
+     * @param trackedState     summarized tracker/unload-cache delta, or null
+     * @param persistedState   summarized disk delta, or null
+     * @param persistedPresent true if a CIS entry exists on disk
+     * @param persistenceError storage load error message, or null
      */
-    public record ChunkInspectSnapshot(
-            DebugChunkKey chunkKey,
-            boolean loaded,
-            String liveState,
-            String trackedState,
-            String persistedState,
-            boolean persistedPresent,
-            String persistenceError) {
+    public record ChunkInspectSnapshot(DebugChunkKey chunkKey, boolean loaded, String liveState, String trackedState,
+                                       String persistedState, boolean persistedPresent, String persistenceError) {
 
     }
 

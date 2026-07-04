@@ -8,6 +8,8 @@ import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.IdentityHashMap;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
@@ -46,11 +48,9 @@ public final class CisSnapshotCapture {
      * @param operationId active load/save operation ID
      * @return updated block delta
      */
-    public static ChunkDelta<BlockState, NbtCompound> capture(
-            final WorldChunk chunk,
+    public static ChunkDelta<BlockState, NbtCompound> capture(final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> target,
-            final String operationId
-    ) {
+            final String operationId) {
         if (CisNbtUtil.hasFullBlockBaseline(target.getChunkMetadata()) && !target.isDirty()) {
             return target;
         }
@@ -58,13 +58,11 @@ public final class CisSnapshotCapture {
         final int previousNonAirBlocks = countPersistedNonAirBlocks(target);
         final int liveNonAirBlocks = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
         if (isSuspiciousBaselineShrink(previousNonAirBlocks, liveNonAirBlocks)) {
-            final String restoreOperationId = chunk instanceof ChunkisDeltaDuck deltaDuck
-                    ? deltaDuck.chunkis$getRestoreOperationId()
-                    : null;
-            Chunkis.LOGGER.warn(
-                    "Chunkis: Rejected suspicious full snapshot for {} in {}"
-                            + " previousNonAir={} liveNonAir={} suppressionCause={} restoreOperationId={} " +
-                            "chunkStatus={} saveOperationId={}",
+            final String restoreOperationId =
+                    chunk instanceof ChunkisDeltaDuck deltaDuck ? deltaDuck.chunkis$getRestoreOperationId() : null;
+            Chunkis.LOGGER.warn("Chunkis: Rejected suspicious full snapshot for {} in {}"
+                            + " previousNonAir={} liveNonAir={} suppressionCause={} restoreOperationId={} "
+                            + "chunkStatus={} saveOperationId={}",
                     chunk.getPos(),
                     chunk.getWorld()
                             .getRegistryKey()
@@ -74,29 +72,39 @@ public final class CisSnapshotCapture {
                     PendingChunkMutationSuppression.currentCause(chunk),
                     restoreOperationId,
                     chunk.getStatus(),
-                    operationId
-            );
+                    operationId);
             return target;
         }
         PayloadWatchTracer.traceCapturedBlocks(chunk);
-        if (shouldPersistBaseChunkForSnapshot(chunk.getBlockEntities().size())) {
-            final NbtCompound fullChunkNbt = BaseChunkCaptureUtil.captureBaseChunk(
-                    (net.minecraft.server.world.ServerWorld) chunk.getWorld(),
-                    chunk,
-                    target,
-                    BaseChunkCaptureUtil.hasPortalBlocks(chunk)
-            ).getChunkMetadata();
+        if (shouldPersistBaseChunkForSnapshot(chunk.getBlockEntities()
+                .size())) {
+            final NbtCompound fullChunkNbt = BaseChunkCaptureUtil.captureBaseChunk((net.minecraft.server.world.ServerWorld) chunk.getWorld(),
+                            chunk,
+                            target,
+                            BaseChunkCaptureUtil.hasPortalBlocks(chunk))
+                    .getChunkMetadata();
             target.setChunkMetadata(fullChunkNbt, false);
             target.setSuppressInitialRepopulation(true);
             return target;
         }
+        final boolean preserveMigratedBlockEntities = shouldPreserveMigratedBlockEntities(target,
+                chunk.getBlockEntities()
+                        .isEmpty());
+        final Long2ObjectMap<NbtCompound> preservedBlockEntities =
+                preserveMigratedBlockEntities ? new Long2ObjectOpenHashMap<>(target.getBlockEntities()) : null;
         target.clearBlockPayloads(false);
-        target.clearBlockEntityPayloads(false);
+        if (preservedBlockEntities != null) {
+            restoreBlockEntities(target, preservedBlockEntities);
+        }
         captureAuthoritativeBlockBaseline(chunk, target);
-        ChunkBlockEntityCapture.captureBlockEntities(chunk, chunk.getWorld().getRegistryManager(), target);
+        ChunkBlockEntityCapture.captureBlockEntities(chunk,
+                chunk.getWorld()
+                        .getRegistryManager(),
+                target);
 
         final NbtCompound existingMetadata = target.getChunkMetadata();
-        target.setChunkMetadata(createAuthoritativeSnapshotMetadata(existingMetadata, BaseChunkCaptureUtil.hasPortalBlocks(chunk)), false);
+        target.setChunkMetadata(createAuthoritativeSnapshotMetadata(existingMetadata,
+                BaseChunkCaptureUtil.hasPortalBlocks(chunk)), false);
         target.setSuppressInitialRepopulation(true);
         return target;
     }
@@ -106,19 +114,38 @@ public final class CisSnapshotCapture {
     }
 
     /**
+     * Keeps migrated sparse block-entity payloads when vanilla has not instantiated
+     * any live block entities yet.
+     */
+    static boolean shouldPreserveMigratedBlockEntities(final ChunkDelta<BlockState, NbtCompound> target,
+            final boolean noLiveBlockEntities) {
+        return noLiveBlockEntities && target != null && !target.getBlockEntities()
+                .isEmpty() && CisNbtUtil.isMigratedAuthoritativeChunk(target.getChunkMetadata());
+    }
+
+    static void restoreBlockEntities(final ChunkDelta<BlockState, NbtCompound> target,
+            final Long2ObjectMap<NbtCompound> blockEntities) {
+        blockEntities.forEach((packedPos, nbt) -> {
+            if (nbt == null) {
+                return;
+            }
+            target.addBlockEntityData(io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos),
+                    io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos),
+                    io.liparakis.chunkis.core.BlockInstruction.unpackZ(packedPos),
+                    nbt,
+                    false);
+        });
+    }
+
+    /**
      * Evaluates if non-air block count has shrunk suspiciously.
      *
      * @param previousNonAirBlocks previous count
      * @param liveNonAirBlocks     current count
      * @return true if suspicious
      */
-    static boolean isSuspiciousBaselineShrink(
-            final int previousNonAirBlocks,
-            final int liveNonAirBlocks
-    ) {
-        return previousNonAirBlocks > 0
-                && liveNonAirBlocks >= 0
-                && liveNonAirBlocks * 10 < previousNonAirBlocks * 6;
+    static boolean isSuspiciousBaselineShrink(final int previousNonAirBlocks, final int liveNonAirBlocks) {
+        return previousNonAirBlocks > 0 && liveNonAirBlocks >= 0 && liveNonAirBlocks * 10 < previousNonAirBlocks * 6;
     }
 
     /**
@@ -134,25 +161,16 @@ public final class CisSnapshotCapture {
         return target.getBlockChangesCount();
     }
 
-    static NbtCompound createAuthoritativeSnapshotMetadata(
-            final NbtCompound existingMetadata,
-            final boolean portalChunk
-    ) {
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
-                CisNbtUtil.extractPersistedStructureMetadata(existingMetadata),
-                true,
-                true,
-                null,
-                portalChunk
-        );
+    static NbtCompound createAuthoritativeSnapshotMetadata(final NbtCompound existingMetadata,
+            final boolean portalChunk) {
+        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(CisNbtUtil.extractPersistedStructureMetadata(
+                existingMetadata), true, true, null, portalChunk);
         CisNbtUtil.preserveMigratedAuthoritativeMetadata(existingMetadata, metadata);
         return metadata;
     }
 
-    private static void captureAuthoritativeBlockBaseline(
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> target
-    ) {
+    private static void captureAuthoritativeBlockBaseline(final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> target) {
         final ChunkSection[] sections = chunk.getSectionArray();
         final int chunkBottomY = chunk.getBottomY();
         target.ensureBlockCapacity(countNonAirBlocks(sections));
@@ -177,7 +195,8 @@ public final class CisSnapshotCapture {
                         if (cachedPaletteId != null) {
                             paletteId = cachedPaletteId;
                         } else {
-                            paletteId = target.getBlockPalette().getOrAdd(state);
+                            paletteId = target.getBlockPalette()
+                                    .getOrAdd(state);
                             paletteIds.put(state, paletteId);
                         }
                         target.appendDecodedBlockFast(localX, worldY, localZ, paletteId);

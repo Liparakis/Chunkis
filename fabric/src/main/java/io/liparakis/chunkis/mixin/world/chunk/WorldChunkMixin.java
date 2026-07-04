@@ -13,6 +13,7 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
+import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
 import io.liparakis.chunkis.storage.model.CisConstants;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityNbtCapture;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
@@ -216,6 +217,19 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
             final ChunkDelta<?, ?> delta
     ) {
         return deltaDuck.chunkis$wasRestoreLoadedFromStorage() || !delta.isDirty();
+    }
+
+    /**
+     * Returns whether vanilla post-processing should be given persisted block-entity NBT.
+     */
+    @Unique
+    private static boolean chunkis$shouldSeedPostProcessingBlockEntities(
+            final boolean hasLiveBlockEntities,
+            final boolean hasPendingBlockEntityNbts,
+            final boolean hasDelta,
+            final boolean hasDeltaBlockEntities
+    ) {
+        return !hasLiveBlockEntities && !hasPendingBlockEntityNbts && hasDelta && hasDeltaBlockEntities;
     }
 
     /**
@@ -471,6 +485,53 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 pos.getZ() & CisConstants.COORD_MASK
         );
         GlobalChunkTracker.markDirty(chunk, REMOVE_BLOCK_ENTITY_SOURCE);
+    }
+
+    /**
+     * Seeds vanilla's pending block-entity NBT map just before post-processing so
+     * WorldChunk can materialize persisted block entities through its normal path.
+     */
+    @Inject(method = "runPostProcessing", at = @At("HEAD"))
+    @SuppressWarnings("unchecked")
+    private void chunkis$seedPostProcessingBlockEntities(
+            final ServerWorld world,
+            final CallbackInfo ci
+    ) {
+        final WorldChunk chunk = chunkis$self();
+        final ChunkDelta<BlockState, NbtCompound> delta =
+                chunk instanceof ChunkisDeltaDuck duck
+                        ? (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta()
+                        : null;
+        final var pendingBlockEntityNbts = ((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts();
+        if (!chunkis$shouldSeedPostProcessingBlockEntities(
+                !chunk.getBlockEntities()
+                        .isEmpty(),
+                !pendingBlockEntityNbts.isEmpty(),
+                delta != null,
+                delta != null && !delta.getBlockEntities()
+                        .isEmpty()
+        )) {
+            return;
+        }
+
+        final int chunkStartX = chunk.getPos()
+                .getStartX();
+        final int chunkStartZ = chunk.getPos()
+                .getStartZ();
+        delta.getBlockEntities()
+                .forEach((packedPos, nbt) -> {
+                    if (nbt == null) {
+                        return;
+                    }
+                    pendingBlockEntityNbts.put(
+                            new BlockPos(
+                                    chunkStartX + io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos),
+                                    io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos),
+                                    chunkStartZ + io.liparakis.chunkis.core.BlockInstruction.unpackZ(packedPos)
+                            ),
+                            nbt.copy()
+                    );
+                });
     }
 
     /**

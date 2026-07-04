@@ -5,12 +5,35 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 class ChunkRestorerTest {
+
+    @Test
+    void seedMigratedAuthoritativeBlockEntitiesCarriesPersistedPayloadsIntoRuntimeDelta() {
+        final ChunkDelta<BlockState, NbtCompound> protoDelta = new ChunkDelta<>();
+        final ChunkDelta<BlockState, NbtCompound> runtimeDelta = new ChunkDelta<>();
+        final NbtCompound metadata = new NbtCompound();
+        final NbtCompound chest = new NbtCompound();
+        chest.putString("id", "minecraft:chest");
+        chest.putInt("x", 103);
+        chest.putInt("y", 93);
+        chest.putInt("z", 213);
+        CisNbtUtil.markMigratedAuthoritativeChunk(metadata);
+        protoDelta.setChunkMetadata(metadata, false);
+        protoDelta.addBlockEntityData(7, 93, 5, chest, false);
+
+        ChunkRestorer.seedMigratedAuthoritativeBlockEntities(protoDelta, runtimeDelta);
+
+        assertEquals(1,
+                runtimeDelta.getBlockEntities()
+                        .size());
+    }
 
     @Test
     void describeReplayPayloadListsSectionsBlockChangesAndBlockEntities() {
@@ -27,7 +50,7 @@ class ChunkRestorerTest {
         assertEquals(
                 "sections=[0,2], blockChanges=[(1,5,3)=stone, (4,32,6)=dirt], blockEntities=[(1,5,3)=minecraft:chest]",
                 description
-                    );
+        );
     }
 
     @Test

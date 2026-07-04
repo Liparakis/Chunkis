@@ -1,6 +1,8 @@
 package io.liparakis.chunkis.migration.offline;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.file.Path;
@@ -38,6 +40,18 @@ class PreLaunchMigrationCoordinatorTest {
                 ),
                 Path.of("migration")
         ));
+    }
+
+    @Test
+    void backupFilesAloneDoNotMakeCisAuthoritative() {
+        assertFalse(PreLaunchMigrationCoordinator.shouldTreatCisAsAuthoritative(false));
+        assertFalse(PreLaunchMigrationCoordinator.shouldDeleteVanillaSourcesAsStale(false));
+    }
+
+    @Test
+    void cisDataMakesChunkisAuthoritative() {
+        assertTrue(PreLaunchMigrationCoordinator.shouldTreatCisAsAuthoritative(true));
+        assertTrue(PreLaunchMigrationCoordinator.shouldDeleteVanillaSourcesAsStale(true));
     }
 
     private static RegistryKey<World> overworldKey() {

@@ -36,6 +36,10 @@ public final class ChunkisStoragePaths {
      * Folder label namespace mapped for vanilla regional MCA blocks.
      */
     private static final String VANILLA_REGION_DIR = "region";
+    /**
+     * Folder label namespace mapped for vanilla external entity region files.
+     */
+    private static final String VANILLA_ENTITIES_DIR = "entities";
 
     /**
      * Filename mapping global identifier registry values.
@@ -135,6 +139,21 @@ public final class ChunkisStoragePaths {
      */
     public static Path computeVanillaRegionDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
         return computeDimensionBaseDirectory(saveRoot, worldKey).resolve(VANILLA_REGION_DIR);
+    }
+
+    /**
+     * Resolves the vanilla external entity-region directory for a given dimension.
+     *
+     * <p>Modern vanilla stores chunk entities in {@code entities/} rather than in
+     * the chunk-region root. Offline migration must read both stores before Chunkis
+     * takes authority and blocks vanilla entity-region access.</p>
+     *
+     * @param saveRoot the world save root
+     * @param worldKey the registry key identifying the target dimension
+     * @return the resolved vanilla external entity directory path
+     */
+    public static Path computeVanillaEntitiesDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
+        return computeDimensionBaseDirectory(saveRoot, worldKey).resolve(VANILLA_ENTITIES_DIR);
     }
 
     /**

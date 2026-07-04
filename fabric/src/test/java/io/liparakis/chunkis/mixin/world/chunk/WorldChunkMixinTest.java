@@ -35,7 +35,7 @@ class WorldChunkMixinTest {
             final DebugChunkKey chunkKey,
             final String operationId,
             final String failedStage
-                                                     ) {
+    ) {
         try {
             final Method method = WorldChunkMixin.class.getDeclaredMethod(
                     "chunkis$tracePostRestoreFailure",
@@ -43,7 +43,7 @@ class WorldChunkMixinTest {
                     DebugChunkKey.class,
                     String.class,
                     String.class
-                                                                         );
+            );
             method.setAccessible(true);
             method.invoke(null, worldId, chunkKey, operationId, failedStage);
         } catch (final Exception e) {
@@ -54,15 +54,42 @@ class WorldChunkMixinTest {
     private static boolean invokeShouldMarkRestoredDeltaSaved(
             final ChunkisDeltaDuck duck,
             final ChunkDelta<?, ?> delta
-                                                             ) {
+    ) {
         try {
             final Method method = WorldChunkMixin.class.getDeclaredMethod(
                     "chunkis$shouldMarkRestoredDeltaSaved",
                     ChunkisDeltaDuck.class,
                     ChunkDelta.class
-                                                                         );
+            );
             method.setAccessible(true);
             return (boolean) method.invoke(null, duck, delta);
+        } catch (final Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static boolean invokeShouldSeedPostProcessingBlockEntities(
+            final boolean hasLiveBlockEntities,
+            final boolean hasPendingBlockEntityNbts,
+            final boolean hasDelta,
+            final boolean hasDeltaBlockEntities
+    ) {
+        try {
+            final Method method = WorldChunkMixin.class.getDeclaredMethod(
+                    "chunkis$shouldSeedPostProcessingBlockEntities",
+                    boolean.class,
+                    boolean.class,
+                    boolean.class,
+                    boolean.class
+            );
+            method.setAccessible(true);
+            return (boolean) method.invoke(
+                    null,
+                    hasLiveBlockEntities,
+                    hasPendingBlockEntityNbts,
+                    hasDelta,
+                    hasDeltaBlockEntities
+            );
         } catch (final Exception e) {
             throw new AssertionError(e);
         }
@@ -93,16 +120,22 @@ class WorldChunkMixinTest {
                 new DebugChunkKey(7, -3),
                 "load-17",
                 "portal-index-update"
-                                     );
+        );
 
-        final ChunkTraceEvent event = ChunkTraceStore.latest(1).getFirst();
+        final ChunkTraceEvent event = ChunkTraceStore.latest(1)
+                .getFirst();
         assertEquals(ChunkTraceEventType.RESTORE_FAILED, event.eventType());
         assertEquals(ChunkTraceReason.RESTORE_EXCEPTION, event.reason());
         assertEquals("load-17", event.operationId());
         assertEquals("minecraft:overworld", event.worldId());
-        assertEquals(7, event.chunkKey().x());
-        assertEquals(-3, event.chunkKey().z());
-        assertTrue(event.message().contains("portal-index-update"));
+        assertEquals(7,
+                event.chunkKey()
+                        .x());
+        assertEquals(-3,
+                event.chunkKey()
+                        .z());
+        assertTrue(event.message()
+                .contains("portal-index-update"));
     }
 
     @Test
@@ -116,6 +149,15 @@ class WorldChunkMixinTest {
 
         assertTrue(invokeShouldMarkRestoredDeltaSaved(storageDuck, dirtyDelta));
         assertTrue(!invokeShouldMarkRestoredDeltaSaved(memoryDuck, dirtyDelta));
+    }
+
+    @Test
+    void seedsPostProcessingBlockEntitiesOnlyWhenVanillaHasNothingPendingYet() {
+        assertTrue(invokeShouldSeedPostProcessingBlockEntities(false, false, true, true));
+        assertTrue(!invokeShouldSeedPostProcessingBlockEntities(true, false, true, true));
+        assertTrue(!invokeShouldSeedPostProcessingBlockEntities(false, true, true, true));
+        assertTrue(!invokeShouldSeedPostProcessingBlockEntities(false, false, false, true));
+        assertTrue(!invokeShouldSeedPostProcessingBlockEntities(false, false, true, false));
     }
 
     private static final class FakeChunkisDeltaDuck implements ChunkisDeltaDuck {

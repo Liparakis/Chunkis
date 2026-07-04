@@ -220,8 +220,10 @@ public final class BaseChunkCaptureUtil {
      * @return {@code true} if capture should not proceed
      */
     private static boolean shouldSkipCapture(final WorldChunk chunk, final ChunkDelta<?, ?> delta) {
-        return chunk == null || delta == null || CisNbtUtil.hasPersistedBaseChunkNbt(
-                delta.getChunkMetadata());
+        return chunk == null
+                || delta == null
+                || CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata())
+                || CisNbtUtil.hasFullBlockBaseline(delta.getChunkMetadata());
     }
 
     /**

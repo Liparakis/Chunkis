@@ -1,15 +1,18 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import java.util.ArrayList;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtList;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.math.ChunkPos;
 
@@ -115,6 +118,32 @@ public final class CisNbtUtil {
      * snapshot.
      */
     public static final String MIGRATED_AUTHORITATIVE_CHUNK_KEY = "migrated_authoritative_chunk";
+
+    /**
+     * Extracts compound entries from a named list if present.
+     *
+     * @param root source NBT root
+     * @param key list key to inspect
+     * @return copied view of compound entries, or an empty list
+     */
+    public static List<NbtCompound> extractCompoundList(final NbtCompound root, final String key) {
+        if (root == null || key == null || key.isBlank()) {
+            return List.of();
+        }
+        final NbtList entries = root.getList(key)
+                .orElse(null);
+        if (entries == null || entries.isEmpty()) {
+            return List.of();
+        }
+
+        final List<NbtCompound> compounds = new ArrayList<>(entries.size());
+        entries.forEach(element -> {
+            if (element instanceof NbtCompound compound) {
+                compounds.add(compound);
+            }
+        });
+        return compounds;
+    }
 
     /**
      * Chunkis metadata key holding preserved auxiliary vanilla chunk NBT that is

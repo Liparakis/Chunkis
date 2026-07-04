@@ -17,6 +17,7 @@ import io.liparakis.chunkis.world.entity.capture.LiveEntitySnapshotCapture;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
+import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.restoration.nbt.StructureMetadataExtractor;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
@@ -822,8 +823,10 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkPos pos
     ) {
         ChunkDelta<BlockState, NbtCompound> delta = chunkis$getActiveDelta(pos);
+        final ChunkDelta<BlockState, NbtCompound> attachedDelta = chunkis$getChunkDelta(chunk);
+        delta = chunkis$preserveMigratedAuthoritativeBlockEntities(pos, chunk, delta, attachedDelta);
         if (delta == null) {
-            delta = chunkis$getChunkDelta(chunk);
+            delta = attachedDelta;
         }
         if (ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             return delta;
@@ -841,6 +844,73 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceReason.EXPLICIT_CHUNKIS_MUTATION.name(),
                 SAVE_SOURCE + "#entityCapture"
         );
+    }
+
+    /**
+     * Prevents migrated authoritative block-entity payloads from being overwritten
+     * by an empty save candidate before vanilla has materialized live block entities.
+     */
+    @Unique
+    private ChunkDelta<BlockState, NbtCompound> chunkis$preserveMigratedAuthoritativeBlockEntities(
+            final ChunkPos pos,
+            final Chunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> saveDelta,
+            final ChunkDelta<BlockState, NbtCompound> attachedDelta
+    ) {
+        if (!(chunk instanceof WorldChunk worldChunk)) {
+            return saveDelta;
+        }
+
+        final ChunkDelta<BlockState, NbtCompound> delta = saveDelta != null ? saveDelta : attachedDelta;
+        if (delta == null
+                || !CisNbtUtil.isMigratedAuthoritativeChunk(delta.getChunkMetadata())
+                || !worldChunk.getBlockEntities()
+                .isEmpty()
+                || !delta.getBlockEntities()
+                .isEmpty()) {
+            return saveDelta;
+        }
+
+        final ChunkDelta<BlockState, NbtCompound> sourceDelta =
+                chunkis$resolveAuthoritativeBlockEntitySource(pos, attachedDelta, delta);
+        if (sourceDelta == null || sourceDelta.getBlockEntities()
+                .isEmpty()) {
+            return saveDelta;
+        }
+
+        ChunkRestorer.copyBlockEntityPayloads(sourceDelta, delta);
+        return delta;
+    }
+
+    /**
+     * Resolves a stronger migrated authoritative source for block-entity payloads.
+     */
+    @Unique
+    private ChunkDelta<BlockState, NbtCompound> chunkis$resolveAuthoritativeBlockEntitySource(
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> attachedDelta,
+            final ChunkDelta<BlockState, NbtCompound> currentDelta
+    ) {
+        if (attachedDelta != null
+                && attachedDelta != currentDelta
+                && !attachedDelta.getBlockEntities()
+                .isEmpty()) {
+            return attachedDelta;
+        }
+
+        try {
+            final ChunkDelta<BlockState, NbtCompound> persisted =
+                    chunkis$getStorage().loadWithoutClearing(FabricCisStorageHelper.toStoragePos(pos));
+            return persisted != null && !persisted.getBlockEntities()
+                    .isEmpty() ? persisted : null;
+        } catch (final Exception e) {
+            Chunkis.LOGGER.warn(
+                    "Chunkis: Failed to reload migrated block entities for chunk {} during save preservation",
+                    pos,
+                    e
+            );
+            return null;
+        }
     }
 
     /**
@@ -1017,6 +1087,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                         io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
                         : CisNbtUtil.hasPersistedPortalChunk(existingMetadata)
         );
+        CisNbtUtil.preserveMigratedAuthoritativeMetadata(existingMetadata, metadata);
 
         if (java.util.Objects.equals(metadata, existingMetadata)) {
             return delta;

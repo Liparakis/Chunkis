@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -33,6 +34,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtHelper;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtSizeTracker;
@@ -112,6 +114,7 @@ public final class OfflineMcaCisTranslator {
         final String worldId = worldKey.getValue()
                 .toString();
         final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, worldKey);
+        final Path entityDir = ChunkisStoragePaths.computeVanillaEntitiesDirectory(saveRoot, worldKey);
         LOGGER.info("Checking MCA region directory for world {}: {}", worldId, regionDir);
 
         if (!Files.exists(regionDir)) {
@@ -157,6 +160,7 @@ public final class OfflineMcaCisTranslator {
                         heightLimitView,
                         palettesFactory,
                         mcaPath,
+                        entityDir.resolve(region.fileName()),
                         region.regionX(),
                         region.regionZ()
                 );
@@ -219,17 +223,20 @@ public final class OfflineMcaCisTranslator {
             final HeightLimitView heightLimitView,
             final PalettesFactory palettesFactory,
             final Path mcaPath,
+            final Path entityMcaPath,
             final int regionX,
             final int regionZ
     ) throws IOException {
         final StorageKey storageKey = new StorageKey("chunk", worldKey, "chunk");
+        final StorageKey entityStorageKey = new StorageKey("entities", worldKey, "entities");
         int presentChunks = 0;
         int handledChunks = 0;
         int failedChunks = 0;
 
         LOGGER.info("Chunkis pre-launch migrator: converting {} to CIS...", mcaPath.getFileName());
 
-        try (RegionFile regionFile = new RegionFile(storageKey, mcaPath, mcaPath.getParent(), true)) {
+        try (RegionFile regionFile = new RegionFile(storageKey, mcaPath, mcaPath.getParent(), true);
+                RegionFile entityRegionFile = openOptionalRegionFile(entityStorageKey, entityMcaPath)) {
             for (int localX = 0; localX < REGION_SIZE; localX++) {
                 for (int localZ = 0; localZ < REGION_SIZE; localZ++) {
                     final ChunkPos chunkPos = new ChunkPos((regionX << 5) + localX, (regionZ << 5) + localZ);
@@ -250,6 +257,7 @@ public final class OfflineMcaCisTranslator {
                                 heightLimitView,
                                 palettesFactory,
                                 sourceNbt,
+                                loadOptionalEntityChunkNbt(entityRegionFile, chunkPos),
                                 chunkPos
                         );
                         if (isOmittableEmptyChunk(delta)) {
@@ -346,6 +354,7 @@ public final class OfflineMcaCisTranslator {
             final HeightLimitView heightLimitView,
             final PalettesFactory palettesFactory,
             final NbtCompound sourceNbt,
+            final NbtCompound entitySourceNbt,
             final ChunkPos chunkPos
     ) {
         final SerializedChunk serialized = SerializedChunk.fromNbt(heightLimitView, palettesFactory, sourceNbt);
@@ -363,8 +372,21 @@ public final class OfflineMcaCisTranslator {
                 createMigratedChunkMetadata(structureData, preservedAuxiliary, portalChunk),
                 false
         );
-        captureBlockEntities(serialized, chunkPos, delta);
+        captureBlockEntities(serialized, sourceNbt, chunkPos, delta);
+        captureEntities(serialized, sourceNbt, entitySourceNbt, delta);
         return delta;
+    }
+
+    /**
+     * Compatibility overload for callers that only have chunk-region NBT.
+     */
+    public static ChunkDelta<BlockState, NbtCompound> buildChunkDelta(
+            final HeightLimitView heightLimitView,
+            final PalettesFactory palettesFactory,
+            final NbtCompound sourceNbt,
+            final ChunkPos chunkPos
+    ) {
+        return buildChunkDelta(heightLimitView, palettesFactory, sourceNbt, null, chunkPos);
     }
 
     /**
@@ -410,6 +432,7 @@ public final class OfflineMcaCisTranslator {
      */
     private static void captureBlockEntities(
             final SerializedChunk serialized,
+            final NbtCompound sourceNbt,
             final ChunkPos chunkPos,
             final ChunkDelta<BlockState, NbtCompound> delta
     ) {
@@ -417,18 +440,102 @@ public final class OfflineMcaCisTranslator {
         final int chunkStartZ = chunkPos.getStartZ();
 
         for (final NbtCompound blockEntityNbt : serialized.blockEntities()) {
-            if (blockEntityNbt == null || !blockEntityNbt.contains("id")) {
-                throw new IllegalStateException("Block entity payload is missing required id field");
-            }
-
-            final int worldX = blockEntityNbt.getInt("x")
-                    .orElseThrow();
-            final int worldY = blockEntityNbt.getInt("y")
-                    .orElseThrow();
-            final int worldZ = blockEntityNbt.getInt("z")
-                    .orElseThrow();
-            delta.addBlockEntityData(worldX - chunkStartX, worldY, worldZ - chunkStartZ, blockEntityNbt.copy());
+            addBlockEntityPayload(delta, chunkStartX, chunkStartZ, blockEntityNbt);
         }
+        for (final NbtCompound blockEntityNbt
+                : CisNbtUtil.extractCompoundList(chunkPayloadRoot(sourceNbt), "block_entities")) {
+            addBlockEntityPayload(delta, chunkStartX, chunkStartZ, blockEntityNbt);
+        }
+    }
+
+    /**
+     * Adds one block-entity payload using local chunk coordinates.
+     */
+    private static void addBlockEntityPayload(
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final int chunkStartX,
+            final int chunkStartZ,
+            final NbtCompound blockEntityNbt
+    ) {
+        if (blockEntityNbt == null || !blockEntityNbt.contains("id")) {
+            throw new IllegalStateException("Block entity payload is missing required id field");
+        }
+
+        final int worldX = blockEntityNbt.getInt("x")
+                .orElseThrow();
+        final int worldY = blockEntityNbt.getInt("y")
+                .orElseThrow();
+        final int worldZ = blockEntityNbt.getInt("z")
+                .orElseThrow();
+        delta.addBlockEntityData(worldX - chunkStartX, worldY, worldZ - chunkStartZ, blockEntityNbt.copy());
+    }
+
+    /**
+     * Captures serialized chunk entities from both inline and external entity storage.
+     */
+    private static void captureEntities(
+            final SerializedChunk serialized,
+            final NbtCompound sourceNbt,
+            final NbtCompound entitySourceNbt,
+            final ChunkDelta<BlockState, NbtCompound> delta
+    ) {
+        final Set<String> seen = new HashSet<>();
+
+        for (final NbtCompound entityNbt : serialized.entities()) {
+            addEntityPayload(delta, seen, entityNbt);
+        }
+        for (final NbtCompound entityNbt : extractEntityPayloads(chunkPayloadRoot(sourceNbt))) {
+            addEntityPayload(delta, seen, entityNbt);
+        }
+        for (final NbtCompound entityNbt : extractEntityPayloads(chunkPayloadRoot(entitySourceNbt))) {
+            addEntityPayload(delta, seen, entityNbt);
+        }
+    }
+
+    /**
+     * Captures one serialized chunk entity as a pending entity.
+     */
+    private static void addEntityPayload(
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final Set<String> seen,
+            final NbtCompound entityNbt
+    ) {
+        if (entityNbt == null) {
+            return;
+        }
+        final String key = entityPayloadKey(entityNbt);
+        if (!seen.add(key)) {
+            return;
+        }
+        delta.addPendingEntity(entityNbt.copy());
+    }
+
+    /**
+     * Produces a stable dedupe key for migrated entity payloads.
+     */
+    private static String entityPayloadKey(final NbtCompound entityNbt) {
+        return entityNbt.getIntArray("UUID")
+                .map(array -> "uuid:" + java.util.Arrays.toString(array))
+                .orElseGet(() -> "nbt:" + entityNbt);
+    }
+
+    /**
+     * Extracts entity payload compounds from modern or legacy root layouts.
+     */
+    static List<NbtCompound> extractEntityPayloads(final NbtCompound root) {
+        final List<NbtCompound> payloads = CisNbtUtil.extractCompoundList(root, "Entities");
+        return payloads.isEmpty() ? CisNbtUtil.extractCompoundList(root, "entities") : payloads;
+    }
+
+    /**
+     * Returns the nested legacy {@code Level} payload root when present.
+     */
+    static NbtCompound chunkPayloadRoot(final NbtCompound root) {
+        if (root == null) {
+            return null;
+        }
+        return root.getCompound("Level")
+                .orElse(root);
     }
 
     /**
@@ -503,14 +610,9 @@ public final class OfflineMcaCisTranslator {
                             .size() + ", actual=" + actual.getBlockEntities()
                             .size());
         }
-        if (expected.countPendingEntities() != 0 || actual.countPendingEntities() != 0) {
-            return MigrationValidationResult.failure(
-                    "ENTITY_PAYLOAD_PRESENT",
-                    "migrated chunks must not persist normal entity payloads in CIS: expected="
-                            + expected.countPendingEntities()
-                            + ", actual="
-                            + actual.countPendingEntities()
-            );
+        if (expected.countPendingEntities() != actual.countPendingEntities()) {
+            return MigrationValidationResult.failure("ENTITY_COUNT_MISMATCH",
+                    "expected=" + expected.countPendingEntities() + ", actual=" + actual.countPendingEntities());
         }
 
         if (!NbtHelper.matches(
@@ -535,6 +637,10 @@ public final class OfflineMcaCisTranslator {
         final MigrationValidationResult blockEntities = validateBlockEntities(expected, actual);
         if (!blockEntities.valid()) {
             return blockEntities;
+        }
+        final MigrationValidationResult entities = validateEntities(expected, actual);
+        if (!entities.valid()) {
+            return entities;
         }
         return MigrationValidationResult.success();
     }
@@ -667,6 +773,26 @@ public final class OfflineMcaCisTranslator {
     }
 
     /**
+     * Compares pending-entity lists after normalizing them to sorted string representations.
+     */
+    private static MigrationValidationResult validateEntities(
+            final ChunkDelta<BlockState, NbtCompound> expected,
+            final ChunkDelta<BlockState, NbtCompound> actual
+    ) {
+        final List<String> expectedEntities = new ArrayList<>();
+        final List<String> actualEntities = new ArrayList<>();
+        expected.forEachEntity(entity -> expectedEntities.add(entity == null ? "<null>" : entity.toString()));
+        actual.forEachEntity(entity -> actualEntities.add(entity == null ? "<null>" : entity.toString()));
+        expectedEntities.sort(String::compareTo);
+        actualEntities.sort(String::compareTo);
+        if (!Objects.equals(expectedEntities, actualEntities)) {
+            return MigrationValidationResult.failure("ENTITY_MISMATCH",
+                    "entity list differs: expected=" + expectedEntities.size() + ", actual=" + actualEntities.size());
+        }
+        return MigrationValidationResult.success();
+    }
+
+    /**
      * Deletes an omitted empty placeholder chunk from the live MCA region and
      * clears any stale CIS entry for the same coordinates.
      */
@@ -683,6 +809,34 @@ public final class OfflineMcaCisTranslator {
         }
 
         return storage.save(cisChunkPos, new ChunkDelta<>());
+    }
+
+    /**
+     * Opens a region file only when the target path exists.
+     */
+    private static RegionFile openOptionalRegionFile(
+            final StorageKey storageKey,
+            final Path regionPath
+    ) throws IOException {
+        if (regionPath == null || !Files.exists(regionPath)) {
+            return null;
+        }
+        return new RegionFile(storageKey, regionPath, regionPath.getParent(), true);
+    }
+
+    /**
+     * Loads one chunk payload from an optional external entity-region file.
+     */
+    private static NbtCompound loadOptionalEntityChunkNbt(
+            final RegionFile entityRegionFile,
+            final ChunkPos chunkPos
+    ) throws IOException {
+        if (entityRegionFile == null) {
+            return null;
+        }
+        try (DataInputStream input = entityRegionFile.getChunkInputStream(chunkPos)) {
+            return input == null ? null : NbtIo.readCompound(input, NbtSizeTracker.ofUnlimitedBytes());
+        }
     }
 
     /**
