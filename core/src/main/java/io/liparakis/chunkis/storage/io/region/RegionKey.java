@@ -7,8 +7,6 @@ import org.jetbrains.annotations.NotNull;
  *
  * @param x the region's X coordinate
  * @param z the region's Z coordinate
- * @author Liparakis
- * @version 1
  */
 public record RegionKey(int x, int z) {
 

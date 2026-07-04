@@ -12,9 +12,6 @@ import net.minecraft.util.math.ChunkPos;
  * <p>A delta with sparse blocks, block entities, or entities but no base chunk
  * metadata cannot safely reconstruct terrain on reload. Persisting that state is
  * rejected with explicit attribution logging.</p>
- *
- * @author Liparakis
- * @version 1.0
  */
 public final class DeltaPersistenceGuard {
 

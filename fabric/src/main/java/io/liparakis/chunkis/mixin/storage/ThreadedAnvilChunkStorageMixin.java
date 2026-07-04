@@ -1069,8 +1069,9 @@ public abstract class ThreadedAnvilChunkStorageMixin {
     /**
      * Captures the current non-player entity set for the chunk before persistence.
      *
-     * <p>Vanilla entity storage is disabled, so Chunkis must own these payloads
-     * completely rather than relying on legacy replay leftovers.</p>
+     * <p>Chunkis snapshots live entities into the runtime delta during normal save.
+     * This is separate from the offline MCA migration path, where vanilla entity
+     * storage remains authoritative for already-persisted mobs.</p>
      *
      * @param chunk         the chunk being saved; may be {@code null}
      * @param existingDelta the existing delta; may be {@code null}

@@ -8,8 +8,6 @@ import java.io.IOException;
  * Adapter interface for NBT I/O operations.
  *
  * @param <N> The NBT type
- * @author Liparakis
- * @version 1
  */
 public interface NbtAdapter<N> {
 

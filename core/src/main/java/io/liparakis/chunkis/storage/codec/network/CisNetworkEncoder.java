@@ -22,8 +22,6 @@ import java.io.IOException;
  * @param <S> BlockState type
  * @param <P> Property type
  * @param <N> NBT type
- * @author Liparakis
- * @version 1
  */
 public final class CisNetworkEncoder<B, S, P, N> extends AbstractCisEncoder<S, N> {
 
@@ -62,12 +60,8 @@ public final class CisNetworkEncoder<B, S, P, N> extends AbstractCisEncoder<S, N
     }
 
     /**
-     * Encodes a chunk delta into compressed binary format.
+     * Encodes a chunk delta view into compressed binary format.
      */
-    public byte[] encode(ChunkDelta<S, N> delta) throws IOException {
-        return encodeInternal(delta);
-    }
-
     public byte[] encode(final ChunkDeltaView<S, N> delta) throws IOException {
         return encodeInternal(delta);
     }

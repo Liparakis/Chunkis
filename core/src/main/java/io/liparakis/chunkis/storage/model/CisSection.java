@@ -9,8 +9,6 @@ import java.util.Arrays;
  * Optimized for branch prediction and minimal garbage collection pressure.
  *
  * @param <S> the type representing a block state
- * @author Liparakis
- * @version 1
  */
 public final class CisSection<S> {
 

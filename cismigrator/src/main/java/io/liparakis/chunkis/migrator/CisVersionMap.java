@@ -17,9 +17,6 @@ import java.util.List;
  *
  * <p><b>Threading:</b> All methods are stateless and safe to call from any thread.
  *
- * @author Liparakis
- * @version 1.0
- *
  */
 public final class CisVersionMap {
 

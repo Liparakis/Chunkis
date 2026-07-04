@@ -33,8 +33,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * @param <B> Block type
  * @param <S> BlockState type
  * @param <P> Property type
- * @author Liparakis
- * @version 1
  */
 public final class PropertyPacker<B, S, P> {
 

@@ -9,8 +9,6 @@ import java.util.List;
  * @param fromVersion starting version
  * @param toVersion   target version
  * @param steps       ordered upgrade steps
- * @author Liparakis
- * @version 1.0
  */
 public record CisVersionPath(int fromVersion, int toVersion, List<CisVersionEdge> steps) {
 

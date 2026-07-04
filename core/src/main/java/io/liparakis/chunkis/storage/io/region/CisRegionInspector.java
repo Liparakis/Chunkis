@@ -16,9 +16,6 @@ import java.util.List;
  *
  * <p>This keeps operator-report inspection out of {@link CisStorage} while still
  * reusing {@link RegionFile}'s authoritative space accounting.</p>
- *
- * @author Liparakis
- * @version 1
  */
 public final class CisRegionInspector {
 

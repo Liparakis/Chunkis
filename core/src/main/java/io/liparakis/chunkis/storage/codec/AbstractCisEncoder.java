@@ -30,8 +30,6 @@ import java.util.Objects;
  *
  * @param <S> The BlockState type
  * @param <N> The NBT type
- * @author Liparakis
- * @version 1
  */
 public abstract class AbstractCisEncoder<S, N> {
 

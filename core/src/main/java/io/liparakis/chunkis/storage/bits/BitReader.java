@@ -11,8 +11,6 @@ import java.util.Arrays;
  * using zero-copy slicing.
  * </p>
  *
- * @author Liparakis
- * @version 1
  */
 public final class BitReader {
 

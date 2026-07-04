@@ -48,9 +48,6 @@ import org.slf4j.LoggerFactory;
  *
  * <p>
  * <b>Thread safety:</b> All public methods are thread-safe.
- *
- * @author Liparakis
- * @version 1.1
  */
 public final class FabricCisStorageHelper {
 

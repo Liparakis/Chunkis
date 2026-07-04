@@ -30,9 +30,6 @@ import java.util.List;
  * <p>The metadata footer is written after every mutating operation. If a write
  * is interrupted after the footer is truncated but before the new one is written,
  * the next open falls back to legacy free-list reconstruction from the header.
- *
- * @author Liparakis
- * @version 2.0
  */
 public final class RegionFile implements AutoCloseable {
 
@@ -137,7 +134,7 @@ public final class RegionFile implements AutoCloseable {
      * {@code target} at {@code metadataStart}.
      */
     static void writeMetadata(final FileChannel target, final long metadataStart,
-                              final List<RegionFreeBlock> freeBlocks, final long reuseHits, final long reuseMisses)
+            final List<RegionFreeBlock> freeBlocks, final long reuseHits, final long reuseMisses)
             throws IOException {
         final int payloadLength = (Integer.BYTES * 3) + (Long.BYTES * 2) + (freeBlocks.size() * HEADER_ENTRY_SIZE);
         final ByteBuffer buffer = ByteBuffer.allocate(payloadLength + (Integer.BYTES * 2));
@@ -242,14 +239,14 @@ public final class RegionFile implements AutoCloseable {
     public synchronized byte[] read(CisChunkPos pos, String operationId) throws IOException {
         final DebugChunkKey chunkKey = chunkKey(pos);
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_START,
-                              ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read started", null
+                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read started", null
                 , chunkKey, regionKey(), operationId, null, null);
 
         final int index = getChunkIndex(pos);
 
         if (offsets[index] == 0) {
             ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_END,
-                                  ChunkTraceSeverity.INFO, ChunkTraceReason.MISSING_ENTRY, READ_SOURCE, "region file entry missing"
+                    ChunkTraceSeverity.INFO, ChunkTraceReason.MISSING_ENTRY, READ_SOURCE, "region file entry missing"
                     , null, chunkKey, regionKey(), operationId, null, null);
             return null;
         }
@@ -262,8 +259,8 @@ public final class RegionFile implements AutoCloseable {
         final ByteBuffer buffer = ByteBuffer.allocate(lengths[index]);
         readFully(channel, buffer, offsets[index]);
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_END,
-                              ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read completed",
-                              null, chunkKey, regionKey(), operationId, null, lengths[index]);
+                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_READ, READ_SOURCE, "region file read completed",
+                null, chunkKey, regionKey(), operationId, null, lengths[index]);
         return buffer.array();
     }
 
@@ -297,8 +294,8 @@ public final class RegionFile implements AutoCloseable {
     public synchronized void write(CisChunkPos pos, byte[] data, String operationId) throws IOException {
         final DebugChunkKey chunkKey = chunkKey(pos);
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_START,
-                              ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write started", null,
-                              chunkKey, regionKey(), operationId, null, data == null ? 0 : data.length);
+                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write started", null,
+                chunkKey, regionKey(), operationId, null, data == null ? 0 : data.length);
 
         final int index = getChunkIndex(pos);
         final int oldOffset = offsets[index];
@@ -316,8 +313,8 @@ public final class RegionFile implements AutoCloseable {
             writeMetadata();
             dirty = true;
             ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
-                                  ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region clear completed",
-                                  null, chunkKey, regionKey(), operationId, null, 0);
+                    ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region clear completed",
+                    null, chunkKey, regionKey(), operationId, null, 0);
             return;
         }
 
@@ -331,8 +328,8 @@ public final class RegionFile implements AutoCloseable {
             writeMetadata();
             dirty = true;
             ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
-                                  ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed",
-                                  null, chunkKey, regionKey(), operationId, null, dataLength);
+                    ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed",
+                    null, chunkKey, regionKey(), operationId, null, dataLength);
             return;
         }
 
@@ -346,7 +343,7 @@ public final class RegionFile implements AutoCloseable {
         writeMetadata();
         dirty = true;
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
-                              ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed", null
+                ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed", null
                 , chunkKey, regionKey(), operationId, null, dataLength);
     }
 
@@ -429,7 +426,7 @@ public final class RegionFile implements AutoCloseable {
      */
     private Path writeCompactedTempFile(final long liveBytes) throws IOException {
         return RegionCompactionIO.writeCompactedTempFile(path, channel, offsets, lengths, liveBytes,
-                                                         allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
+                allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
     }
 
     /**
@@ -499,7 +496,7 @@ public final class RegionFile implements AutoCloseable {
     private boolean readFooterMetadata(final int footerStart) throws IOException {
         final ByteBuffer payload = RegionFooterIO.readFooterPayload(channel, footerStart);
         return allocationMetadata.loadFromFooter(payload, metadataOffset, offsets, lengths, HEADER_ENTRY_SIZE,
-                                                 METADATA_MAGIC, METADATA_VERSION);
+                METADATA_MAGIC, METADATA_VERSION);
     }
 
     /**
@@ -534,7 +531,7 @@ public final class RegionFile implements AutoCloseable {
     private void writeMetadata() throws IOException {
         metadataOffset = (int) channel.size();
         writeMetadata(channel, metadataOffset, allocationMetadata.freeBlocks(), allocationMetadata.reuseHits(),
-                      allocationMetadata.reuseMisses());
+                allocationMetadata.reuseMisses());
     }
 
     /**
@@ -554,8 +551,8 @@ public final class RegionFile implements AutoCloseable {
         final long physicalBytes = safeChannelSize();
         final int metadataBytes = Math.max(0, (int) physicalBytes - dataEndWithoutMetadata());
         return new RegionSpaceStats(path, physicalBytes, sumLiveBytes(), allocationMetadata.reusableBytes(),
-                                    metadataBytes, allocationMetadata.freeBlockCount(), allocationMetadata.largestFreeBlock(),
-                                    allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
+                metadataBytes, allocationMetadata.freeBlockCount(), allocationMetadata.largestFreeBlock(),
+                allocationMetadata.reuseHits(), allocationMetadata.reuseMisses());
     }
 
     /**
@@ -616,8 +613,10 @@ public final class RegionFile implements AutoCloseable {
     }
 
     private DebugRegionKey regionKey() {
-        final String fileName = path.getFileName().toString();
-        final String[] parts = fileName.substring(2, fileName.length() - 4).split("\\.");
+        final String fileName = path.getFileName()
+                .toString();
+        final String[] parts = fileName.substring(2, fileName.length() - 4)
+                .split("\\.");
         return new DebugRegionKey(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
 

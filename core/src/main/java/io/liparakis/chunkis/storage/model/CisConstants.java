@@ -7,9 +7,6 @@ package io.liparakis.chunkis.storage.model;
  * This class provides:
  * - File format constants (magic numbers, versions)
  * - Geometry constants (section sizes, region sizes)
- *
- * @author Liparakis
- * @version 1
  */
 public final class CisConstants {
 

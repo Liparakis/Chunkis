@@ -32,8 +32,6 @@ import java.util.Map;
  * - ~2 references per unique entry (map + list)
  *
  * @param <T> type stored in the palette
- * @author Liparakis
- * @version 1
  * @see ChunkDelta
  * @see BlockInstruction
  */

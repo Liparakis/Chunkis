@@ -19,9 +19,6 @@ import java.util.Set;
  *
  * <p>This keeps operator/report-oriented maintenance out of {@link CisStorage}
  * while reusing {@link RegionFile}'s compaction implementation.</p>
- *
- * @author Liparakis
- * @version 1
  */
 public final class CisRegionCompactor {
 

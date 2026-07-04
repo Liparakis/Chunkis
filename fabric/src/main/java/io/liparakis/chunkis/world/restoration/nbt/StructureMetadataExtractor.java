@@ -19,9 +19,6 @@ import net.minecraft.world.gen.structure.Structure;
  * <p>This mirrors the relevant behavior of
  * {@code SerializedChunk.writeStructures(...)} without paying to build a full
  * {@code SerializedChunk} first.</p>
- *
- * @author Liparakis
- * @version 1.1
  */
 public final class StructureMetadataExtractor {
 

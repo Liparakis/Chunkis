@@ -54,8 +54,6 @@ import java.util.Objects;
  * @param <S> block state type
  * @param <P> property type
  * @param <N> NBT type
- * @author Liparakis
- * @version 1.1
  */
 public final class CisStorage<B, S, P, N> {
 
@@ -131,7 +129,6 @@ public final class CisStorage<B, S, P, N> {
 
         // Captured into lambdas - validate once here so the ThreadLocal suppliers
         // never receive null.
-        final BlockStateAdapter<B, S, P> safeStateAdapter = Objects.requireNonNull(stateAdapter, "stateAdapter");
         final NbtAdapter<N> safeNbtAdapter = Objects.requireNonNull(nbtAdapter, "nbtAdapter");
         final S safeAirState = Objects.requireNonNull(airState, "airState");
 
@@ -143,7 +140,7 @@ public final class CisStorage<B, S, P, N> {
         ));
 
         this.decoder = ThreadLocal.withInitial(() -> new CisDecoder<>(
-                this.mapping, safeStateAdapter, safeNbtAdapter,
+                this.mapping, safeNbtAdapter,
                 safeAirState
         ));
     }

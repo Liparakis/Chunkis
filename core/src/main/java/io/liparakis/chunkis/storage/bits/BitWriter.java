@@ -11,9 +11,6 @@ import java.util.Arrays;
  * The underlying buffer grows automatically as needed, and the writer can be
  * reset for reuse to minimize garbage collection overhead.
  * </p>
- *
- * @author Liparakis
- * @version 1
  */
 public final class BitWriter {
 

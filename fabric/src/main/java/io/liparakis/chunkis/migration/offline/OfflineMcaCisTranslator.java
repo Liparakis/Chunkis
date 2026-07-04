@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -365,7 +364,6 @@ public final class OfflineMcaCisTranslator {
                 false
         );
         captureBlockEntities(serialized, chunkPos, delta);
-        captureEntities(serialized, delta);
         return delta;
     }
 
@@ -430,20 +428,6 @@ public final class OfflineMcaCisTranslator {
             final int worldZ = blockEntityNbt.getInt("z")
                     .orElseThrow();
             delta.addBlockEntityData(worldX - chunkStartX, worldY, worldZ - chunkStartZ, blockEntityNbt.copy());
-        }
-    }
-
-    /**
-     * Captures serialized chunk entities as pending entities.
-     */
-    private static void captureEntities(
-            final SerializedChunk serialized,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
-        for (final NbtCompound entityNbt : serialized.entities()) {
-            if (entityNbt != null) {
-                delta.addPendingEntity(entityNbt.copy());
-            }
         }
     }
 
@@ -519,9 +503,14 @@ public final class OfflineMcaCisTranslator {
                             .size() + ", actual=" + actual.getBlockEntities()
                             .size());
         }
-        if (expected.countPendingEntities() != actual.countPendingEntities()) {
-            return MigrationValidationResult.failure("ENTITY_COUNT_MISMATCH",
-                    "expected=" + expected.countPendingEntities() + ", actual=" + actual.countPendingEntities());
+        if (expected.countPendingEntities() != 0 || actual.countPendingEntities() != 0) {
+            return MigrationValidationResult.failure(
+                    "ENTITY_PAYLOAD_PRESENT",
+                    "migrated chunks must not persist normal entity payloads in CIS: expected="
+                            + expected.countPendingEntities()
+                            + ", actual="
+                            + actual.countPendingEntities()
+            );
         }
 
         if (!NbtHelper.matches(
@@ -546,10 +535,6 @@ public final class OfflineMcaCisTranslator {
         final MigrationValidationResult blockEntities = validateBlockEntities(expected, actual);
         if (!blockEntities.valid()) {
             return blockEntities;
-        }
-        final MigrationValidationResult entities = validateEntities(expected, actual);
-        if (!entities.valid()) {
-            return entities;
         }
         return MigrationValidationResult.success();
     }
@@ -677,30 +662,6 @@ public final class OfflineMcaCisTranslator {
         if (mismatchCount > 0) {
             return MigrationValidationResult.failure("BLOCK_ENTITY_MISMATCH",
                     mismatchCount + " block entity mismatches");
-        }
-        return MigrationValidationResult.success();
-    }
-
-    /**
-     * Compares pending-entity lists after normalizing them to sorted string representations.
-     *
-     * @param expected translated authoritative snapshot
-     * @param actual   stored CIS payload loaded back from disk
-     * @return validation result describing any entity-list mismatch
-     */
-    private static MigrationValidationResult validateEntities(
-            final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual
-    ) {
-        final List<String> expectedEntities = new ArrayList<>();
-        final List<String> actualEntities = new ArrayList<>();
-        expected.forEachEntity(entity -> expectedEntities.add(entity == null ? "<null>" : entity.toString()));
-        actual.forEachEntity(entity -> actualEntities.add(entity == null ? "<null>" : entity.toString()));
-        expectedEntities.sort(String::compareTo);
-        actualEntities.sort(String::compareTo);
-        if (!Objects.equals(expectedEntities, actualEntities)) {
-            return MigrationValidationResult.failure("ENTITY_MISMATCH",
-                    "entity list differs: expected=" + expectedEntities.size() + ", actual=" + actualEntities.size());
         }
         return MigrationValidationResult.success();
     }

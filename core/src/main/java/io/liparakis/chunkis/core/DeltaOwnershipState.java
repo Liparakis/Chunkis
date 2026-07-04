@@ -20,15 +20,4 @@ final class DeltaOwnershipState {
         this.mutationGeneration = 0L;
         this.savedGeneration = 0L;
     }
-
-    DeltaOwnershipState copy() {
-        final DeltaOwnershipState copy = new DeltaOwnershipState();
-        copy.ownershipReason = this.ownershipReason;
-        copy.ownershipSource = this.ownershipSource;
-        copy.firstMutationSource = this.firstMutationSource;
-        copy.pendingMutationSource = this.pendingMutationSource;
-        copy.mutationGeneration = this.mutationGeneration;
-        copy.savedGeneration = this.savedGeneration;
-        return copy;
-    }
 }

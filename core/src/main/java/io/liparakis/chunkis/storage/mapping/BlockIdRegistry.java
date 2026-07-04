@@ -19,9 +19,6 @@ import java.util.Map;
  * represent removed mods or renamed blocks loaded from an existing
  * {@code global_ids.json}; they are intentionally preserved in snapshots so
  * their numeric IDs are never reused for new blocks.
- *
- * @author Liparakis
- * @version 1
  */
 final class BlockIdRegistry<B> {
 

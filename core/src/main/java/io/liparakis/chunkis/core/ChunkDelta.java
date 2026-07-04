@@ -41,8 +41,6 @@ import java.util.function.UnaryOperator;
  *
  * @param <S> block state type
  * @param <N> NBT/data payload type
- * @author Liparakis
- * @version 1.1
  * @see BlockInstruction
  * @see Palette
  */
@@ -209,78 +207,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
-     * Creates a snapshot of this delta, copying payload values with the supplied
-     * copier.
-     *
-     * <p>Container state is copied by this method. The caller owns the payload
-     * copy policy because core does not know whether {@code N} is immutable. For
-     * Minecraft NBT payloads, pass {@code NbtCompound::copy}.</p>
-     *
-     * @param payloadCopier copies each stored payload value
-     * @return a new ChunkDelta instance representing this delta's current state
-     */
-    public ChunkDelta<S, N> snapshot(final UnaryOperator<N> payloadCopier) {
-        Objects.requireNonNull(payloadCopier, "payloadCopier");
-
-        final ChunkDelta<S, N> snap = new ChunkDelta<>(
-                this.blockPalette.copy(),
-                this.isEmptyState
-        );
-
-        this.instructions.copyInto(snap.instructions);
-
-        if (this.blockEntities != null) {
-            snap.blockEntities = new Long2ObjectOpenHashMap<>(this.blockEntities.size());
-            for (final Long2ObjectMap.Entry<N> entry : this.blockEntities.long2ObjectEntrySet()) {
-                snap.blockEntities.put(entry.getLongKey(), payloadCopier.apply(entry.getValue()));
-            }
-        }
-
-        if (this.activeEntities != null) {
-            snap.activeEntities = new Int2ObjectOpenHashMap<>(this.activeEntities.size());
-            for (final it.unimi.dsi.fastutil.ints.Int2ObjectMap.Entry<N> entry
-                    : this.activeEntities.int2ObjectEntrySet()) {
-                snap.activeEntities.put(entry.getIntKey(), payloadCopier.apply(entry.getValue()));
-            }
-        }
-
-        if (!this.pendingEntities.isEmpty()) {
-            snap.pendingEntities = new ArrayList<>(this.pendingEntities.size());
-            for (final N payload : this.pendingEntities) {
-                snap.pendingEntities.add(payloadCopier.apply(payload));
-            }
-        }
-
-        snap.chunkMetadata = this.chunkMetadata != null
-                ? payloadCopier.apply(this.chunkMetadata)
-                : null;
-
-        if (this.encodedChunkMetadata != null) {
-            snap.encodedChunkMetadata = Arrays.copyOf(this.encodedChunkMetadata, this.encodedChunkMetadata.length);
-            snap.encodedChunkMetadataHash = this.encodedChunkMetadataHash;
-        }
-
-        snap.ownershipState.mutationGeneration = this.ownershipState.mutationGeneration;
-        snap.ownershipState.savedGeneration = this.ownershipState.savedGeneration;
-        snap.sourceVersion = this.sourceVersion;
-        snap.suppressInitialRepopulation = this.suppressInitialRepopulation;
-        snap.blockSectionMask = this.blockSectionMask;
-        snap.blockEntitySectionMask = this.blockEntitySectionMask;
-        System.arraycopy(this.blockEntitySectionCounts, 0,
-                snap.blockEntitySectionCounts, 0, this.blockEntitySectionCounts.length);
-        snap.ownershipState.ownershipReason = this.ownershipState.ownershipReason;
-        snap.ownershipState.ownershipSource = this.ownershipState.ownershipSource;
-        snap.ownershipState.firstMutationSource = this.ownershipState.firstMutationSource;
-
-        return snap;
-    }
-
-    /**
      * Creates a detached read-only snapshot tailored for async encode/save work.
-     *
-     * <p>Unlike {@link #snapshot(UnaryOperator)}, this captures only the read
-     * payload required by persistence code and skips mutable lookup state such as
-     * the block position index.</p>
      *
      * @param payloadCopier copies each stored payload value
      * @return read-only snapshot view of this delta

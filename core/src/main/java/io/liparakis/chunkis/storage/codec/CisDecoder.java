@@ -2,7 +2,6 @@ package io.liparakis.chunkis.storage.codec;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.Palette;
-import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisAdapter;
 
@@ -14,8 +13,6 @@ import java.io.IOException;
  *
  * @param <S> The BlockState type
  * @param <N> The NBT type
- * @author Liparakis
- * @version 1
  */
 public final class CisDecoder<S, N> extends AbstractCisDecoder<S, N> {
 
@@ -28,7 +25,7 @@ public final class CisDecoder<S, N> extends AbstractCisDecoder<S, N> {
      * Constructs a new CisDecoder.
      */
     public CisDecoder(
-            CisAdapter<S> cisAdapter, BlockStateAdapter<?, S, ?> stateAdapter, NbtAdapter<N> nbtAdapter,
+            CisAdapter<S> cisAdapter, NbtAdapter<N> nbtAdapter,
             S airState) {
         super(nbtAdapter, airState);
         this.cisAdapter = cisAdapter;

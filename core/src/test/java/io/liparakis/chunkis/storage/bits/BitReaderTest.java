@@ -52,19 +52,17 @@ public class BitReaderTest {
             reader2.read(3);
 
             int count = (data.length * 8 - 3) / bits;
-            if (count > 0) {
-                int[] batch = new int[count];
-                reader1.readBatch(bits, batch);
+            int[] batch = new int[count];
+            reader1.readBatch(bits, batch);
 
-                int[] expected = new int[count];
-                for (int i = 0; i < count; i++) {
-                    expected[i] = (int) reader2.read(bits);
-                }
-
-                assertThat(batch)
-                    .as("Mismatch at bits=" + bits)
-                    .containsExactly(expected);
+            int[] expected = new int[count];
+            for (int i = 0; i < count; i++) {
+                expected[i] = (int) reader2.read(bits);
             }
+
+            assertThat(batch)
+                .as("Mismatch at bits=" + bits)
+                .containsExactly(expected);
         }
     }
 

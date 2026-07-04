@@ -14,8 +14,6 @@ import java.io.IOException;
  *
  * @param <S> The BlockState type
  * @param <N> The NBT type
- * @author Liparakis
- * @version 1
  */
 public final class CisEncoder<S, N> extends AbstractCisEncoder<S, N> {
 

@@ -10,9 +10,6 @@ package io.liparakis.chunkis.storage.bits;
  * Streaming bit-level I/O is handled separately by {@link BitReader} and
  * {@link BitWriter}.
  * </p>
- *
- * @author Liparakis
- * @version 1
  */
 public final class BitUtils {
 

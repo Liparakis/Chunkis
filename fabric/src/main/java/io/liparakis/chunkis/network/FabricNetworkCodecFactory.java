@@ -144,7 +144,6 @@ public final class FabricNetworkCodecFactory {
         return new CisNetworkDecoder<>(
                 REGISTRY_ADAPTER,
                 PROPERTY_PACKER,
-                STATE_ADAPTER,
                 NBT_ADAPTER,
                 AIR_STATE);
     }

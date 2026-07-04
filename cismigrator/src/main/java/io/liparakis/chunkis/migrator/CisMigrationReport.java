@@ -7,8 +7,6 @@ package io.liparakis.chunkis.migrator;
  * @param migratedChunks total chunks rewritten to the target format
  * @param skippedChunks  chunk positions that were valid but needed no migration
  * @param failedChunks   chunk positions that failed to migrate
- * @author Liparakis
- * @version 1.0
  *
  */
 public record CisMigrationReport(

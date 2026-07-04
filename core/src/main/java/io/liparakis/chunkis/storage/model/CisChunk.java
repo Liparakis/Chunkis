@@ -12,8 +12,6 @@ import java.util.Arrays;
  * operations.
  *
  * @param <S> the type representing a block state
- * @author Liparakis
- * @version 1
  */
 public final class CisChunk<S> {
 

@@ -21,8 +21,6 @@ import java.util.List;
  *
  * @param <S> The BlockState type
  * @param <N> The NBT type
- * @author Liparakis
- * @version 1
  */
 public abstract class AbstractCisDecoder<S, N> {
 

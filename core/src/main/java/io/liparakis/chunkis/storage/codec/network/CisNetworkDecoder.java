@@ -3,7 +3,6 @@ package io.liparakis.chunkis.storage.codec.network;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.Palette;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
-import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.codec.AbstractCisDecoder;
 import io.liparakis.chunkis.storage.mapping.PropertyPacker;
@@ -26,8 +25,6 @@ import java.util.List;
  * @param <S> BlockState type
  * @param <P> Property type
  * @param <N> NBT type
- * @author Liparakis
- * @version 1
  */
 public final class CisNetworkDecoder<B, S, P, N> extends AbstractCisDecoder<S, N> {
 
@@ -46,7 +43,6 @@ public final class CisNetworkDecoder<B, S, P, N> extends AbstractCisDecoder<S, N
     public CisNetworkDecoder(
             BlockRegistryAdapter<B> registryAdapter,
             PropertyPacker<B, S, P> propertyPacker,
-            BlockStateAdapter<B, S, P> stateAdapter,
             NbtAdapter<N> nbtAdapter,
             S airState) {
         super(nbtAdapter, airState);

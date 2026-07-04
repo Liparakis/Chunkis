@@ -14,9 +14,6 @@ import net.minecraft.world.World;
  *
  * <p>Kept separate from {@link FabricCisStorageHelper} so the layout contract can
  * be unit-tested without triggering block-registry bootstrap.
- *
- * @author Liparakis
- * @version 1.2
  */
 public final class ChunkisStoragePaths {
 

@@ -49,9 +49,6 @@ import net.minecraft.util.math.ChunkPos;
  * <p>The entrypoint intentionally stays thin. Migration, storage, dirty-delta
  * tracking, async saves, base chunk capture, and portal indexing are handled by
  * their dedicated classes.</p>
- *
- * @author Liparakis
- * @version 1.2
  */
 public final class ChunkisMod implements ModInitializer {
 

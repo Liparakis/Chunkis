@@ -6,9 +6,6 @@ import org.slf4j.LoggerFactory;
 /**
  * Shared constants and utilities for Chunkis core.
  * Loader-agnostic.
- *
- * @author Liparakis
- * @version 1
  */
 public class Chunkis {
 

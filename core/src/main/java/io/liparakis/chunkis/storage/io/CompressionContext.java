@@ -7,9 +7,6 @@ import java.io.IOException;
 
 /**
  * Thread-local compression context to avoid allocations and synchronization.
- *
- * @author Liparakis
- * @version 1
  */
 final class CompressionContext {
 

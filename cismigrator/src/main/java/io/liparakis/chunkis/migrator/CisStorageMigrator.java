@@ -31,8 +31,6 @@ import org.slf4j.Logger;
  *
  * @param <S> block state type
  * @param <N> chunk NBT type
- * @author Liparakis
- * @version 1.0
  */
 public final class CisStorageMigrator<S, N> {
 

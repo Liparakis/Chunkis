@@ -6,8 +6,6 @@ import java.util.Collection;
  * Adapter interface for interacting with the Block Registry.
  *
  * @param <B> The Block type
- * @author Liparakis
- * @version 1
  */
 public interface BlockRegistryAdapter<B> {
 

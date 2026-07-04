@@ -11,9 +11,6 @@ package io.liparakis.chunkis.migrator;
  * @param fromVersion source CIS version
  * @param toVersion   target CIS version
  * @param description short explanation of the format change
- * @author Liparakis
- * @version 1.0
- *
  */
 public record CisVersionEdge(int fromVersion, int toVersion, String description) {
 

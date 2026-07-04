@@ -9,8 +9,6 @@ import java.util.List;
  * @param <B> The Block (or Block ID/Type) type
  * @param <S> The BlockState type
  * @param <P> The Property type
- * @author Liparakis
- * @version 1
  */
 public interface BlockStateAdapter<B, S, P> {
 

@@ -27,8 +27,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * @param <B> Block type
  * @param <S> BlockState type
  * @param <P> Property type
- * @author Liparakis
- * @version 1
  */
 public final class CisMapping<B, S, P> implements CisAdapter<S> {
 

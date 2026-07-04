@@ -186,7 +186,7 @@ class CisPerformanceOptimizationTest {
 
         return new CodecHarness(
                 new CisEncoder<>(mapping, new TestNbtAdapter(), "air"),
-                new CisDecoder<>(mapping, stateAdapter, new TestNbtAdapter(), "air")
+                new CisDecoder<>(mapping, new TestNbtAdapter(), "air")
         );
     }
 
