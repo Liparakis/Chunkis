@@ -22,7 +22,6 @@ public final class ServerHotpathMetrics {
     private static final LongAdder totalRawBytes = new LongAdder();
     private static final LongAdder totalWireBytes = new LongAdder();
     private static final LongAdder totalFanoutPlayers = new LongAdder();
-
     private static final LongAdder restoreCount = new LongAdder();
     private static final LongAdder totalCursorWrites = new LongAdder();
     private static final LongAdder totalCursorRebinds = new LongAdder();
