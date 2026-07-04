@@ -20,6 +20,9 @@ class StorageReportCommandTest {
     /**
      * Builds a minimal raw CIS payload that exercises uniform, sparse,
      * default-sparse, and dense section accounting.
+     *
+     * @return a byte array containing the raw chunk payload
+     * @throws Exception if payload generation fails
      */
     private static byte[] buildChunkPayload() throws Exception {
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -80,6 +83,12 @@ class StorageReportCommandTest {
         return out.toByteArray();
     }
 
+    /**
+     * Tests that raw CIS payload diagnostics are correctly inspected, including
+     * section encodings, block entity counts, and bits per block calculations.
+     *
+     * @throws Exception if payload build or inspection fails
+     */
     @Test
     void inspectsSectionEncodingsAndBlockEntitiesFromRawChunkPayload() throws Exception {
         final byte[] payload = buildChunkPayload();

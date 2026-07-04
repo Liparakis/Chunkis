@@ -12,8 +12,14 @@ import net.minecraft.util.Uuids;
 import net.minecraft.util.math.BlockPos;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Test class for verifying NBT reading utilities in {@link EntityPayloadNbt}.
+ */
 class EntityPayloadNbtTest {
 
+    /**
+     * Verifies that the correct UUID can be parsed and matched from the entity's NBT payload.
+     */
     @Test
     void readsUuidAndMatchingStateFromEntityPayload() {
         final UUID uuid = UUID.randomUUID();
@@ -25,6 +31,10 @@ class EntityPayloadNbtTest {
         assertFalse(EntityPayloadNbt.hasUuid(nbt, UUID.randomUUID().toString()));
     }
 
+    /**
+     * Verifies that the entity's BlockPos is correctly extracted from the fractional coordinate list,
+     * rounding down (flooring) as expected by block coordinate conventions.
+     */
     @Test
     void readsFlooredBlockPositionFromPosList() {
         final NbtCompound nbt = new NbtCompound();

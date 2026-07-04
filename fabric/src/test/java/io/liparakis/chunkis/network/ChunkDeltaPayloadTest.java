@@ -21,6 +21,12 @@ import org.junit.jupiter.api.Test;
  */
 class ChunkDeltaPayloadTest {
 
+    /**
+     * Performs a round-trip encode and decode of a {@link ChunkDeltaPayload} to verify codec integrity.
+     *
+     * @param payload the source payload to round-trip
+     * @return the decoded {@link ChunkDeltaPayload}
+     */
     private static ChunkDeltaPayload roundTrip(ChunkDeltaPayload payload) {
         // The payload itself does not read registries, but the Fabric packet API
         // requires a RegistryByteBuf wrapper for the registered codec type.
@@ -29,6 +35,10 @@ class ChunkDeltaPayloadTest {
         return ChunkDeltaPayload.CODEC.decode(buf);
     }
 
+    /**
+     * Verifies that small payloads remain uncompressed and that the data array is copied to prevent
+     * external modifications from affecting the payload.
+     */
     @Test
     void smallPayloadStaysUncompressedAndIsCopied() {
         byte[] raw = new byte[]{1, 2, 3, 4};
@@ -44,6 +54,9 @@ class ChunkDeltaPayloadTest {
         assertNotSame(raw, payload.data());
     }
 
+    /**
+     * Verifies that the codec correctly encodes and decodes an uncompressed payload.
+     */
     @Test
     void codecRoundTripsUncompressedPayload() {
         ChunkDeltaPayload payload = ChunkDeltaPayload.create(new byte[]{10, 20, 30}, 3, 4);
@@ -57,6 +70,9 @@ class ChunkDeltaPayloadTest {
         assertArrayEquals(payload.data(), decoded.data());
     }
 
+    /**
+     * Verifies that large, compressible payloads are compressed when serialized.
+     */
     @Test
     void largeCompressiblePayloadUsesCompressedWireData() {
         byte[] raw = new byte[8192];
@@ -71,6 +87,9 @@ class ChunkDeltaPayloadTest {
         assertTrue(payload.data().length < raw.length);
     }
 
+    /**
+     * Verifies that the codec correctly round-trips a compressed payload, yielding the original raw data.
+     */
     @Test
     void codecRoundTripsCompressedPayloadToRawData() {
         byte[] raw = new byte[8192];

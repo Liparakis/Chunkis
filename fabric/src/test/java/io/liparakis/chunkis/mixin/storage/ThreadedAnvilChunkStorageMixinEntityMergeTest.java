@@ -12,8 +12,19 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.util.Uuids;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Test class for entity merging behavior in {@code ThreadedAnvilChunkStorageMixin}.
+ */
 final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
 
+    /**
+     * Helper method to invoke the private static method {@code copyUnresolvedPendingEntities} in {@link LiveEntitySnapshotCapture} via reflection.
+     *
+     * @param existingDelta the existing {@link ChunkDelta} containing previous entity snapshots
+     * @param liveEntities the list of live entity snapshots
+     * @return the list of merged entities
+     * @throws Exception if reflection or execution fails
+     */
     private static List<NbtCompound> invokeMerge(
             final ChunkDelta<Object, NbtCompound> existingDelta,
             final List<NbtCompound> liveEntities
@@ -36,16 +47,34 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
         return targetDelta.getEntitiesList();
     }
 
+    /**
+     * Creates a dummy NbtCompound representing an entity with the specified UUID.
+     *
+     * @param uuid the {@link UUID} of the entity
+     * @return the {@link NbtCompound} containing the entity UUID
+     */
     private static NbtCompound entityNbt(final UUID uuid) {
         final NbtCompound nbt = new NbtCompound();
         nbt.putIntArray("UUID", Uuids.toIntArray(uuid));
         return nbt;
     }
 
+    /**
+     * Extracts the UUID of an entity from its NbtCompound representation.
+     *
+     * @param nbt the {@link NbtCompound} of the entity
+     * @return the {@link UUID} of the entity
+     * @throws java.util.NoSuchElementException if the UUID is missing or invalid
+     */
     private static UUID uuidOf(final NbtCompound nbt) {
         return nbt.getIntArray("UUID").map(Uuids::toUuid).orElseThrow();
     }
 
+    /**
+     * Tests that unresolved pending entities in the existing delta are retained when capturing live entities.
+     *
+     * @throws Exception if reflection or execution fails
+     */
     @Test
     void keepsUnresolvedPendingEntitiesWhenCapturingLiveEntities() throws Exception {
         final UUID restoredLiveUuid = UUID.randomUUID();

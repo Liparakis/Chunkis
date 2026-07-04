@@ -41,18 +41,14 @@ class CisNbtUtilTest {
         final NbtCompound structures = new NbtCompound();
         structures.put(CisNbtUtil.STRUCTURE_REFERENCES_KEY, new NbtCompound());
         structures.getCompound(CisNbtUtil.STRUCTURE_REFERENCES_KEY)
-                  .orElseThrow()
-                  .putLongArray("minecraft:village", new long[]{1L});
+                .orElseThrow()
+                .putLongArray("minecraft:village", new long[]{1L});
 
         final NbtCompound extracted = CisNbtUtil.extractPersistedStructureMetadata(structures);
 
         assertNotNull(extracted);
         assertEquals(structures, extracted);
     }
-
-    // -------------------------------------------------------------------------
-    // shouldSuppressInitialRepopulation
-    // -------------------------------------------------------------------------
 
     /**
      * Verifies that extracting metadata from a null compound returns null.
@@ -71,8 +67,8 @@ class CisNbtUtilTest {
         final NbtCompound structures = new NbtCompound();
         structures.put(CisNbtUtil.STRUCTURE_STARTS_KEY, new NbtCompound());
         structures.getCompound(CisNbtUtil.STRUCTURE_STARTS_KEY)
-                  .orElseThrow()
-                  .putString("minecraft:village", "start");
+                .orElseThrow()
+                .putString("minecraft:village", "start");
 
         final NbtCompound metadata = CisNbtUtil.createChunkMetadata(structures, true);
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
@@ -116,6 +112,12 @@ class CisNbtUtilTest {
         assertFalse(CisNbtUtil.shouldSuppressInitialRepopulation(new NbtCompound(), null));
     }
 
+    /**
+     * Verifies that {@link CisNbtUtil#buildLoadChunkNbt} uses the persisted base chunk
+     * baseline when it is present in the chunk metadata.
+     *
+     * @throws Exception if an error occurs during test execution
+     */
     @Test
     void buildLoadChunkNbtUsesPersistedBaseChunkBaselineWhenPresent() throws Exception {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
@@ -133,40 +135,52 @@ class CisNbtUtilTest {
                         true,
                         false,
                         baseChunk
-                                                             ),
+                ),
                 false
-                              );
+        );
 
-        assertTrue(delta.getChunkMetadata().contains(CisNbtUtil.BASE_CHUNK_NBT_KEY));
-        assertFalse(delta.getChunkMetadata().contains(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY));
+        assertTrue(delta.getChunkMetadata()
+                .contains(CisNbtUtil.BASE_CHUNK_NBT_KEY));
+        assertFalse(delta.getChunkMetadata()
+                .contains(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY));
 
         final NbtCompound packedMetadata = CisNbtUtil.packPersistedBaseChunkPayload(delta.getChunkMetadata());
-        assertTrue(packedMetadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY).orElseThrow().length > 0);
+        assertTrue(packedMetadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
+                .orElseThrow().length > 0);
         assertFalse(packedMetadata.contains(CisNbtUtil.BASE_CHUNK_NBT_KEY));
 
         final CisNbtUtil.LoadChunkNbtResult result =
                 CisNbtUtil.buildLoadChunkNbt(3, 7, 3953, delta);
 
         assertEquals(CisNbtUtil.PersistedBaseChunkUsage.USED, result.baseChunkUsage());
-        assertEquals("minecraft:full", result.root().getString(CisNbtUtil.STATUS_KEY).orElseThrow());
-        assertEquals(3, result.root().getInt(CisNbtUtil.X_POS_KEY).orElseThrow());
-        assertEquals(7, result.root().getInt(CisNbtUtil.Z_POS_KEY).orElseThrow());
-        assertTrue(result.root().contains(CisNbtUtil.CHUNKIS_DATA_KEY));
-        final NbtList entities = result.root().getList("entities").orElseThrow();
+        assertEquals("minecraft:full",
+                result.root()
+                        .getString(CisNbtUtil.STATUS_KEY)
+                        .orElseThrow());
+        assertEquals(3,
+                result.root()
+                        .getInt(CisNbtUtil.X_POS_KEY)
+                        .orElseThrow());
+        assertEquals(7,
+                result.root()
+                        .getInt(CisNbtUtil.Z_POS_KEY)
+                        .orElseThrow());
+        assertTrue(result.root()
+                .contains(CisNbtUtil.CHUNKIS_DATA_KEY));
+        final NbtList entities = result.root()
+                .getList("entities")
+                .orElseThrow();
         assertEquals(1, entities.size());
     }
 
-    // -------------------------------------------------------------------------
-    // Shared fixture builder
-    // -------------------------------------------------------------------------
-
+    /**
+     * Verifies that {@link CisNbtUtil#buildLoadChunkNbt} skips the persisted base chunk
+     * baseline when the chunk is flagged as an authoritative full baseline.
+     */
     @Test
     void buildLoadChunkNbtSkipsPersistedBaseForAuthoritativeFullBaseline() {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
         final NbtCompound baseChunk = new NbtCompound();
-        baseChunk.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
-        baseChunk.putInt(CisNbtUtil.X_POS_KEY, 3);
-        baseChunk.putInt(CisNbtUtil.Z_POS_KEY, 7);
         baseChunk.putString("sentinel_block_from_stale_base", "minecraft:spruce_log");
 
         delta.addBlockChange(0, 64, 0, "oak_planks", false);
@@ -176,19 +190,28 @@ class CisNbtUtilTest {
                         true,
                         true,
                         baseChunk
-                                                             ),
+                ),
                 false
-                              );
+        );
 
         final CisNbtUtil.LoadChunkNbtResult result =
                 CisNbtUtil.buildLoadChunkNbt(3, 7, 3953, delta);
 
         assertEquals(CisNbtUtil.PersistedBaseChunkUsage.SKIPPED, result.baseChunkUsage());
-        assertEquals(CisNbtUtil.STATUS_EMPTY, result.root().getString(CisNbtUtil.STATUS_KEY).orElseThrow());
-        assertFalse(result.root().contains("sentinel_block_from_stale_base"));
-        assertTrue(result.root().contains(CisNbtUtil.CHUNKIS_DATA_KEY));
+        assertEquals(CisNbtUtil.STATUS_EMPTY,
+                result.root()
+                        .getString(CisNbtUtil.STATUS_KEY)
+                        .orElseThrow());
+        assertFalse(result.root()
+                .contains("sentinel_block_from_stale_base"));
+        assertTrue(result.root()
+                .contains(CisNbtUtil.CHUNKIS_DATA_KEY));
     }
 
+    /**
+     * Verifies that {@link CisNbtUtil#extractPreservedAuxiliaryChunkNbtFromChunkRoot}
+     * correctly removes runtime-owned fields from the source compound.
+     */
     @Test
     void extractPreservedAuxiliaryChunkNbtRemovesRuntimeOwnedFields() {
         final NbtCompound source = new NbtCompound();
@@ -204,8 +227,12 @@ class CisNbtUtilTest {
         final NbtCompound preserved = CisNbtUtil.extractPreservedAuxiliaryChunkNbtFromChunkRoot(source);
 
         assertNotNull(preserved);
-        assertEquals("minecraft:full", preserved.getString(CisNbtUtil.STATUS_KEY).orElseThrow());
-        assertEquals("keep-me", preserved.getString("PostProcessing").orElseThrow());
+        assertEquals("minecraft:full",
+                preserved.getString(CisNbtUtil.STATUS_KEY)
+                        .orElseThrow());
+        assertEquals("keep-me",
+                preserved.getString("PostProcessing")
+                        .orElseThrow());
         assertFalse(preserved.contains(CisNbtUtil.STRUCTURES_KEY));
         assertFalse(preserved.contains(CisNbtUtil.HEIGHTMAPS_KEY));
         assertFalse(preserved.contains(CisNbtUtil.IS_LIGHT_ON_KEY));
@@ -214,6 +241,10 @@ class CisNbtUtilTest {
         assertFalse(preserved.contains("block_entities"));
     }
 
+    /**
+     * Verifies that {@link CisNbtUtil#buildLoadChunkNbt} correctly merges preserved
+     * auxiliary metadata for migrated authoritative chunks.
+     */
     @Test
     void buildLoadChunkNbtMergesPreservedAuxiliaryMetadataForMigratedChunks() {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
@@ -237,11 +268,21 @@ class CisNbtUtilTest {
         final CisNbtUtil.LoadChunkNbtResult result =
                 CisNbtUtil.buildLoadChunkNbt(8, 9, 3953, delta);
 
-        assertEquals("minecraft:full", result.root().getString(CisNbtUtil.STATUS_KEY).orElseThrow());
-        assertEquals("kept", result.root().getString("PostProcessing").orElseThrow());
-        assertEquals(8, result.root().getInt(CisNbtUtil.X_POS_KEY).orElseThrow());
-        assertEquals(9, result.root().getInt(CisNbtUtil.Z_POS_KEY).orElseThrow());
+        assertEquals("minecraft:full",
+                result.root()
+                        .getString(CisNbtUtil.STATUS_KEY)
+                        .orElseThrow());
+        assertEquals("kept",
+                result.root()
+                        .getString("PostProcessing")
+                        .orElseThrow());
+        assertEquals(8,
+                result.root()
+                        .getInt(CisNbtUtil.X_POS_KEY)
+                        .orElseThrow());
+        assertEquals(9,
+                result.root()
+                        .getInt(CisNbtUtil.Z_POS_KEY)
+                        .orElseThrow());
     }
 }
-
-

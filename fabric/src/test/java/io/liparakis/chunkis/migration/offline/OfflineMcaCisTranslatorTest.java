@@ -15,11 +15,21 @@ import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+/**
+ * Tests for the {@link OfflineMcaCisTranslator} class, validating shape matching,
+ * empty chunk check, region retirement, and NBT payload extraction.
+ */
 class OfflineMcaCisTranslatorTest {
 
+    /**
+     * A temporary directory used for testing file operations.
+     */
     @TempDir
     Path tempDir;
 
+    /**
+     * Tests that a migrated chunk shape match requires a matching payload, not just markers.
+     */
     @Test
     void migratedChunkShapeRequiresMatchingPayloadNotJustMarkers() {
         final ChunkDelta<BlockState, NbtCompound> expected = migratedDelta("minecraft:pig");
@@ -32,6 +42,9 @@ class OfflineMcaCisTranslatorTest {
                 .valid());
     }
 
+    /**
+     * Tests that an omittable empty chunk correctly identifies when it has no blocks, block entities, or entities.
+     */
     @Test
     void omittableEmptyChunkRequiresNoBlocksBlockEntitiesOrEntities() {
         final ChunkDelta<BlockState, NbtCompound> empty = new ChunkDelta<>(BlockState::isAir);
@@ -42,6 +55,11 @@ class OfflineMcaCisTranslatorTest {
         assertFalse(OfflineMcaCisTranslator.isOmittableEmptyChunk(entityOnly));
     }
 
+    /**
+     * Tests that region file retirement renames the MCA file to a backup file.
+     *
+     * @throws IOException if a file IO operation fails
+     */
     @Test
     void retireRegionFileRenamesMcaToBackup() throws IOException {
         final Path mcaPath = tempDir.resolve("r.0.0.mca");
@@ -53,6 +71,9 @@ class OfflineMcaCisTranslatorTest {
         assertTrue(Files.exists(tempDir.resolve("r.0.0.mca.backup")));
     }
 
+    /**
+     * Tests that entity payload extraction successfully reads from the modern external entity list layout.
+     */
     @Test
     void extractEntityPayloadsReadsModernExternalEntityList() {
         final NbtCompound entity = new NbtCompound();
@@ -74,6 +95,9 @@ class OfflineMcaCisTranslatorTest {
                         .orElseThrow());
     }
 
+    /**
+     * Tests that chunk payload root extraction falls back to the legacy "Level" compound.
+     */
     @Test
     void chunkPayloadRootFallsBackToLegacyLevelCompound() {
         final NbtCompound level = new NbtCompound();
@@ -87,6 +111,12 @@ class OfflineMcaCisTranslatorTest {
                         .orElseThrow());
     }
 
+    /**
+     * Helper method to construct a mock {@link ChunkDelta} representing a migrated chunk.
+     *
+     * @param entityId the entity ID to add to the delta
+     * @return a new ChunkDelta populated with mock data
+     */
     private static ChunkDelta<BlockState, NbtCompound> migratedDelta(final String entityId) {
         final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>(BlockState::isAir);
 

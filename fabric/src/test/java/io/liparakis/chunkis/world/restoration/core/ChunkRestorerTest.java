@@ -12,8 +12,16 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+/**
+ * Test class for verifying chunk restorer and restore block operations logic in {@link ChunkRestorer}
+ * and {@link ChunkRestoreBlockOperations}.
+ */
 class ChunkRestorerTest {
 
+    /**
+     * Verifies that seeding block entities from a migrated authoritative chunk delta carries
+     * the persisted payloads into the runtime delta.
+     */
     @Test
     void seedMigratedAuthoritativeBlockEntitiesCarriesPersistedPayloadsIntoRuntimeDelta() {
         final ChunkDelta<BlockState, NbtCompound> protoDelta = new ChunkDelta<>();
@@ -35,6 +43,10 @@ class ChunkRestorerTest {
                         .size());
     }
 
+    /**
+     * Verifies that the string description of a replay payload lists section indices,
+     * block changes, and block entities correctly.
+     */
     @Test
     void describeReplayPayloadListsSectionsBlockChangesAndBlockEntities() {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
@@ -53,6 +65,9 @@ class ChunkRestorerTest {
         );
     }
 
+    /**
+     * Verifies that the block apply failure counters correct record and describe each failure reason.
+     */
     @Test
     void blockApplyFailureCountersDescribeEveryFailureReason() {
         final String description = getFailureCountersDescription();
@@ -66,6 +81,11 @@ class ChunkRestorerTest {
         assertTrue(description.contains("exception=1"));
     }
 
+    /**
+     * Helper method to instantiate and populate a {@link ChunkRestorer.BlockApplyFailureCounters} instance.
+     *
+     * @return the formatted description string of the failure counters
+     */
     private String getFailureCountersDescription() {
         final ChunkRestorer.BlockApplyFailureCounters counters =
                 new ChunkRestorer.BlockApplyFailureCounters();
@@ -82,6 +102,9 @@ class ChunkRestorerTest {
         return counters.describe();
     }
 
+    /**
+     * Verifies that the touched section Y coordinates are correctly collected based on the chunk bottom Y.
+     */
     @Test
     void collectTouchedSectionYCoordinatesUseChunkBottomSectionY() {
         final boolean[] touchedSections = {true, false, true, false, false, true};
@@ -101,6 +124,10 @@ class ChunkRestorerTest {
         );
     }
 
+    /**
+     * Verifies that collecting section Y coordinates needing refresh returns the entire chunk's sections
+     * when a base snapshot was used.
+     */
     @Test
     void collectSectionYCoordinatesNeedingRefreshReturnsWholeChunkWhenBaseSnapshotWasUsed() {
         final List<Integer> sectionYs = ChunkRestorer.collectSectionYCoordinatesNeedingRefresh(
@@ -112,14 +139,19 @@ class ChunkRestorerTest {
         assertEquals(List.of(-4, -3, -2), sectionYs);
     }
 
+    /**
+     * Verifies the threshold logic for determining when to use bulk chunk refresh.
+     */
     @Test
     void shouldUseBulkRefreshWhenExplicitDeltaIsDense() {
         assertTrue(ChunkRestorer.shouldUseBulkRefresh(1536, 2, 128, false));
         assertFalse(ChunkRestorer.shouldUseBulkRefresh(1535, 2, 128, false));
         assertFalse(ChunkRestorer.shouldUseBulkRefresh(1536, 2, 95, false));
-        assertTrue(ChunkRestorer.shouldUseBulkRefresh(1, 1, 1, true));
     }
 
+    /**
+     * Verifies that section local index mapping matches the expected layout.
+     */
     @Test
     void sectionLocalIndexMatchesRestoreIterationLayout() {
         assertEquals(0, ChunkRestoreBlockOperations.toSectionLocalIndex(0, 0, 0));

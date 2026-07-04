@@ -5,8 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for the {@link ChunkDebugOutput} class.
+ */
 final class ChunkDebugOutputTest {
 
+    /**
+     * Tests that the formatted inspect snapshot output correctly includes restore flags
+     * for live, tracked, and disk versions.
+     */
     @Test
     void formatChunkInspectSnapshotIncludesRestoreFlags() {
         final String line = ChunkDebugOutput.formatChunkInspectSnapshot(

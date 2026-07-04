@@ -11,11 +11,22 @@ import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Test class for save path and delta claiming behavior in {@code ThreadedAnvilChunkStorageMixin}.
+ */
 final class ThreadedAnvilChunkStorageMixinSavePathTest {
 
+    /**
+     * Helper method to invoke the private static method {@code chunkis$claimEntityCapturedDelta} in {@code ThreadedAnvilChunkStorageMixin} via reflection.
+     *
+     * @param delta the {@link ChunkDelta} to claim ownership of
+     * @return the claimed {@link ChunkDelta}
+     * @throws Exception if reflection or execution fails
+     */
     private static ChunkDelta<BlockState, NbtCompound> invokeClaimAfterEntityCapture(
             final ChunkDelta<BlockState, NbtCompound> delta) throws Exception {
-        final Method method = ThreadedAnvilChunkStorageMixin.class.getDeclaredMethod(
+        final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.mixin.storage.ThreadedAnvilChunkStorageMixin");
+        final Method method = mixinClass.getDeclaredMethod(
                 "chunkis$claimEntityCapturedDelta",
                 ChunkDelta.class,
                 String.class,
@@ -33,11 +44,21 @@ final class ThreadedAnvilChunkStorageMixinSavePathTest {
         return claimed;
     }
 
+    /**
+     * Tests that a null delta is handled gracefully, returning null without throwing.
+     *
+     * @throws Exception if reflection or execution fails
+     */
     @Test
     void skippedEntityCaptureLeavesMissingDeltaNull() throws Exception {
         assertDoesNotThrow(() -> assertNull(invokeClaimAfterEntityCapture(null)));
     }
 
+    /**
+     * Tests that a non-null delta successfully claims ownership when captured.
+     *
+     * @throws Exception if reflection or execution fails
+     */
     @Test
     void capturedEntityDeltaIsClaimedWhenPresent() throws Exception {
         final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();

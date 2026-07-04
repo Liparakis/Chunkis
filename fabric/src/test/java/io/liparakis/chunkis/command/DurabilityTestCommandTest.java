@@ -20,8 +20,19 @@ import net.minecraft.util.math.Vec3d;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for the {@link DurabilityTestCommand} class including reflection-based testing
+ * of run state setup, executor shutdown, and custom tracing events.
+ */
 class DurabilityTestCommandTest {
 
+    /**
+     * Sets the active runner executor and run ID in the {@link DurabilityTestCommand} class.
+     *
+     * @param executor the scheduled executor service to set
+     * @param runId the run ID to set
+     * @throws Exception if reflection access fails
+     */
     private static void setRunState(
             final ScheduledExecutorService executor,
             final String runId
@@ -30,6 +41,11 @@ class DurabilityTestCommandTest {
         runIdRef().set(runId);
     }
 
+    /**
+     * Clears the current durability test run state, shutting down the active executor if present.
+     *
+     * @throws Exception if reflection access fails
+     */
     private static void clearRunState() throws Exception {
         final ScheduledExecutorService executor = currentExecutor();
         if (executor != null) {
@@ -39,14 +55,32 @@ class DurabilityTestCommandTest {
         runIdRef().set(null);
     }
 
+    /**
+     * Retrieves the currently active scheduled executor service using reflection.
+     *
+     * @return the current ScheduledExecutorService instance, or null if none
+     * @throws Exception if reflection access fails
+     */
     private static ScheduledExecutorService currentExecutor() throws Exception {
         return executorRef().get();
     }
 
+    /**
+     * Retrieves the currently active run ID using reflection.
+     *
+     * @return the current run ID, or null if none
+     * @throws Exception if reflection access fails
+     */
     private static String currentRunId() throws Exception {
         return runIdRef().get();
     }
 
+    /**
+     * Helper method to access the private atomic reference executorRef in {@link DurabilityTestCommand}.
+     *
+     * @return the AtomicReference wrapping the ScheduledExecutorService
+     * @throws Exception if reflection access fails
+     */
     @SuppressWarnings("unchecked")
     private static AtomicReference<ScheduledExecutorService> executorRef() throws Exception {
         final Field field = DurabilityTestCommand.class.getDeclaredField("executorRef");
@@ -54,6 +88,12 @@ class DurabilityTestCommandTest {
         return (AtomicReference<ScheduledExecutorService>) field.get(null);
     }
 
+    /**
+     * Helper method to access the private atomic reference runIdRef in {@link DurabilityTestCommand}.
+     *
+     * @return the AtomicReference wrapping the run ID string
+     * @throws Exception if reflection access fails
+     */
     @SuppressWarnings("unchecked")
     private static AtomicReference<String> runIdRef() throws Exception {
         final Field field = DurabilityTestCommand.class.getDeclaredField("runIdRef");
@@ -61,6 +101,11 @@ class DurabilityTestCommandTest {
         return (AtomicReference<String>) field.get(null);
     }
 
+    /**
+     * Cleans up test run state, trace store events, and debug configuration after each test.
+     *
+     * @throws Exception if cleanup reflection fails
+     */
     @AfterEach
     void tearDown() throws Exception {
         clearRunState();
@@ -69,12 +114,20 @@ class DurabilityTestCommandTest {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
     }
 
+    /**
+     * Tests mapping of teleport targets to Chunk coordinates.
+     */
     @Test
     void mapsTeleportTargetToChunkCoordinates() {
         assertEquals(-1, DurabilityTestCommand.toChunkKey(new Vec3d(-0.5, 64.0, 31.9)).x());
         assertEquals(1, DurabilityTestCommand.toChunkKey(new Vec3d(-0.5, 64.0, 31.9)).z());
     }
 
+    /**
+     * Tests that stopping durability runs internally shuts down executors and emits a stop trace event.
+     *
+     * @throws Exception if reflection or method invocation fails
+     */
     @Test
     void stopInternalEmitsStoppedTraceAndClearsRunState() throws Exception {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -99,6 +152,9 @@ class DurabilityTestCommandTest {
                                                             && "stopped manually".equals(event.message())));
     }
 
+    /**
+     * Tests that started and failed durability events are tracked and stored in the trace store.
+     */
     @Test
     void emitsStartedAndFailedDurabilityTraceEvents() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);

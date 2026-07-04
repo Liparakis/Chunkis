@@ -5,8 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for the {@link OfflineRegionMigrationReport} class, validating condition checks
+ * for source region retirement and JSON serialization properties.
+ */
 class OfflineRegionMigrationReportTest {
 
+    /**
+     * Tests that a source region with complete coverage and no failures can be retired.
+     */
     @Test
     void completeCoverageWithoutFailuresCanRetireSourceRegion() {
         final OfflineRegionMigrationReport report = new OfflineRegionMigrationReport(
@@ -22,6 +29,10 @@ class OfflineRegionMigrationReportTest {
         assertTrue(report.canRetireSourceRegion());
     }
 
+    /**
+     * Tests that a source region with partial coverage can still be retired if every
+     * present chunk was successfully converted.
+     */
     @Test
     void partialCoverageCanRetireWhenEveryPresentChunkConverted() {
         final OfflineRegionMigrationReport partial = new OfflineRegionMigrationReport(
@@ -37,6 +48,10 @@ class OfflineRegionMigrationReportTest {
         assertTrue(partial.canRetireSourceRegion());
     }
 
+    /**
+     * Tests that a source region cannot be retired if there are failed chunk conversions
+     * or deferred coverage.
+     */
     @Test
     void failedOrDeferredCoverageCannotRetireSourceRegion() {
         final OfflineRegionMigrationReport failed = new OfflineRegionMigrationReport(
@@ -52,6 +67,9 @@ class OfflineRegionMigrationReportTest {
         assertFalse(failed.canRetireSourceRegion());
     }
 
+    /**
+     * Tests that the serialized JSON line contains the correct key and value for handled chunk counts.
+     */
     @Test
     void jsonLineUsesHandledChunkCount() {
         final OfflineRegionMigrationReport report = new OfflineRegionMigrationReport(

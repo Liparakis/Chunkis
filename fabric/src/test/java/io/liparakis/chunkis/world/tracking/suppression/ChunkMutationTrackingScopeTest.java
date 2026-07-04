@@ -10,8 +10,16 @@ import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Unit tests for {@link ChunkMutationTrackingScope}, validating the prioritization of
+ * mutation causes, suppression event mapping, and nested scope behavior.
+ */
 class ChunkMutationTrackingScopeTest {
 
+    /**
+     * Verifies that the initial cause for chunk loading is resolved to {@code BASE_APPLY}
+     * when the delta metadata indicates it is anchored.
+     */
     @Test
     void prefersBaseApplyDuringAnchoredLoad() {
         final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
@@ -29,6 +37,10 @@ class ChunkMutationTrackingScopeTest {
                     );
     }
 
+    /**
+     * Verifies that the initial cause for chunk loading falls back to {@code PASSIVE_LOAD}
+     * when there is no Chunkis anchor metadata in the delta.
+     */
     @Test
     void fallsBackToPassiveLoadWithoutChunkisAnchor() {
         assertEquals(
@@ -37,6 +49,10 @@ class ChunkMutationTrackingScopeTest {
                     );
     }
 
+    /**
+     * Verifies that push/pop scope operations manage nested mutation causes correctly,
+     * prioritizing {@code RESTORE} and ensuring suppression trace events are scoped correctly.
+     */
     @Test
     void restoreTakesPriorityAndSuppressionTraceIsScoped() {
         final ChunkMutationTrackingScope scope = new ChunkMutationTrackingScope();
@@ -60,6 +76,9 @@ class ChunkMutationTrackingScopeTest {
         assertTrue(scope.shouldTraceSuppression(ChunkMutationTrackingScope.Cause.PASSIVE_LOAD));
     }
 
+    /**
+     * Verifies that each mutation cause maps to the correct suppression trace event type.
+     */
     @Test
     void mapsSuppressionEventsByCause() {
         assertEquals(
@@ -76,5 +95,3 @@ class ChunkMutationTrackingScopeTest {
                     );
     }
 }
-
-

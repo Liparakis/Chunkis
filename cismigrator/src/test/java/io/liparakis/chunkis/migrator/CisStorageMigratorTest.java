@@ -56,10 +56,6 @@ class CisStorageMigratorTest {
     @TempDir
     Path tempDir;
 
-    // -------------------------------------------------------------------------
-    // Tests
-    // -------------------------------------------------------------------------
-
     /**
      * Asserts that the migration report contains the expected counts.
      */
@@ -175,10 +171,6 @@ class CisStorageMigratorTest {
         harness.close();
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
     /**
      * Verifies that migration failures do not delete the source chunk entry.
      *
@@ -253,10 +245,6 @@ class CisStorageMigratorTest {
         return new CisStorage<>(regionsDir, mapping, stateAdapter, new TestNbtAdapter(), "air");
     }
 
-    // -------------------------------------------------------------------------
-    // Test harness
-    // -------------------------------------------------------------------------
-
     /**
      * Stub implementation of {@link BlockRegistryAdapter} for testing.
      */
@@ -282,10 +270,6 @@ class CisStorageMigratorTest {
             return List.of("air", "stone", "dirt");
         }
     }
-
-    // -------------------------------------------------------------------------
-    // SPI stubs
-    // -------------------------------------------------------------------------
 
     /**
      * Stub implementation of {@link BlockStateAdapter} for testing.

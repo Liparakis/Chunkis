@@ -22,8 +22,15 @@ import net.minecraft.world.World;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Unit tests for {@link GlobalChunkTracker}, verifying delta tracking state rules,
+ * tracing behavior, debug log triggers, and assertion checks on cached deltas.
+ */
 class GlobalChunkTrackerTest {
 
+    /**
+     * Resets the tracker, trace store, and debug configurations after each test run.
+     */
     @AfterEach
     void tearDown() {
         GlobalChunkTracker.clear();
@@ -32,6 +39,10 @@ class GlobalChunkTrackerTest {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
     }
 
+    /**
+     * Verifies that the tracker retains the existing authoritative delta if the incoming replacement
+     * delta has a weaker authority state.
+     */
     @Test
     void keepsExistingAuthoritativeDeltaWhenIncomingReplacementIsWeaker() {
         final NbtCompound baseChunkNbt = new NbtCompound();
@@ -51,6 +62,10 @@ class GlobalChunkTrackerTest {
         assertTrue(GlobalChunkTracker.shouldKeepExistingAuthoritativeDelta(existing, weakerIncoming));
     }
 
+    /**
+     * Verifies that the tracker allows replacing the existing delta if the incoming delta
+     * is also flagged as authoritative.
+     */
     @Test
     void allowsReplacementWhenIncomingDeltaIsAlsoAuthoritative() {
         final ChunkDelta<String, NbtCompound> existing = new ChunkDelta<>();
@@ -61,6 +76,9 @@ class GlobalChunkTrackerTest {
         assertFalse(GlobalChunkTracker.shouldKeepExistingAuthoritativeDelta(existing, incoming));
     }
 
+    /**
+     * Verifies that unloading a chunk with an active dirty delta generates a corresponding trace event.
+     */
     @Test
     void tracesChunkUnloadWhenActiveDirtyDeltaWasPresent() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -80,6 +98,10 @@ class GlobalChunkTrackerTest {
         assertEquals(-3, latest.getFirst().chunkKey().z());
     }
 
+    /**
+     * Verifies that the mutation origin (source description) is correctly recorded
+     * in the trace event when a delta is added or modified.
+     */
     @Test
     void carriesMutationOriginIntoDirtyTrackerEvent() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -94,14 +116,18 @@ class GlobalChunkTrackerTest {
 
         final List<ChunkTraceEvent> latest = ChunkTraceStore.latest(6);
         assertTrue(latest.stream().anyMatch(event ->
-                                                    event.reason() == ChunkTraceReason.TRACKER_DIRTY_MAP_PUT
-                                                            && "WorldChunkMixin#setBlockState".equals(event.source())
-                                                            && "minecraft:overworld".equals(event.worldId())
-                                                            && event.chunkKey() != null
-                                                            && event.chunkKey().x() == 7
-                                                            && event.chunkKey().z() == 9));
+                                                     event.reason() == ChunkTraceReason.TRACKER_DIRTY_MAP_PUT
+                                                             && "WorldChunkMixin#setBlockState".equals(event.source())
+                                                             && "minecraft:overworld".equals(event.worldId())
+                                                             && event.chunkKey() != null
+                                                             && event.chunkKey().x() == 7
+                                                             && event.chunkKey().z() == 9));
     }
 
+    /**
+     * Verifies that adding a delta does not write any logs or trace events when
+     * debug logging is configured to be OFF.
+     */
     @Test
     void addDeltaDoesNotTraceWhenDebugIsOff() {
         final RegistryKey<World> overworld = RegistryKey.of(
@@ -116,6 +142,10 @@ class GlobalChunkTrackerTest {
         assertTrue(ChunkTraceStore.latest(10).isEmpty());
     }
 
+    /**
+     * Verifies that completing an asynchronous save invalidates the unload cache
+     * for a clean delta and logs appropriate mark-saved/invalidate trace events.
+     */
     @Test
     void asyncSaveCompletionInvalidatesUnloadCacheForCleanDelta() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -142,6 +172,10 @@ class GlobalChunkTrackerTest {
                 == ChunkTraceReason.TRACKER_UNLOAD_CACHE_INVALIDATED));
     }
 
+    /**
+     * Verifies that a dirty delta check requires both the exact same object instance
+     * and the exact mutation generation number to be considered current.
+     */
     @Test
     void currentDirtyDeltaRequiresSameInstanceAndGeneration() {
         final RegistryKey<World> overworld = RegistryKey.of(
@@ -173,6 +207,10 @@ class GlobalChunkTrackerTest {
                                                           ));
     }
 
+    /**
+     * Verifies that the tracker logs an assertion failure trace event if a client attempts to cache
+     * a block entity-only payload without a baseline chunk.
+     */
     @Test
     void assertsImmediatelyWhenCachingBlockEntityOnlyPayloadWithoutBase() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -188,10 +226,8 @@ class GlobalChunkTrackerTest {
 
         final List<ChunkTraceEvent> events = ChunkTraceStore.latest(4);
         assertTrue(events.stream().anyMatch(event ->
-                                                    event.eventType() == ChunkTraceEventType.ASSERTION_FAILED
-                                                            && event.reason() == ChunkTraceReason.INVALID_PAYLOAD
-                                                            && "WorldChunkMixin#setBlockEntity".equals(event.source())));
+                                                     event.eventType() == ChunkTraceEventType.ASSERTION_FAILED
+                                                             && event.reason() == ChunkTraceReason.INVALID_PAYLOAD
+                                                             && "WorldChunkMixin#setBlockEntity".equals(event.source())));
     }
 }
-
-

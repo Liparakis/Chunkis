@@ -19,13 +19,23 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for the {@link ChunkDebugCommand} utility methods including event formatting,
+ * watchpoint summary formatting, and suspect analysis formatting.
+ */
 class ChunkDebugCommandTest {
 
+    /**
+     * Clears all chunk trace watchpoints after each test to ensure test isolation.
+     */
     @AfterEach
     void tearDown() {
         ChunkTraceWatchpoints.clear();
     }
 
+    /**
+     * Tests that a structured chunk trace event is properly formatted into a timeline line.
+     */
     @Test
     void formatsStructuredEventTimelineLine() {
         final ChunkTraceEvent event = new ChunkTraceEvent(
@@ -68,6 +78,9 @@ class ChunkDebugCommandTest {
         assertTrue(formatted.contains("msg=flush completed"));
     }
 
+    /**
+     * Tests that the active watchpoints are formatted correctly into a summary string.
+     */
     @Test
     void formatsWatchpointSummary() {
         ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(7, -2));
@@ -81,6 +94,9 @@ class ChunkDebugCommandTest {
         assertTrue(formatted.contains("payloads=entity@1234 world=minecraft:overworld"));
     }
 
+    /**
+     * Tests that pending snapshot details are formatted correctly.
+     */
     @Test
     void formatsPendingSnapshotSummary() {
         final String formatted = ChunkDebugCommand.formatPendingSnapshot(
@@ -103,6 +119,9 @@ class ChunkDebugCommandTest {
         assertTrue(formatted.contains("asyncGeneration=4"));
     }
 
+    /**
+     * Tests that chat output exceeding character limits is successfully truncated.
+     */
     @Test
     void truncatesOversizedChatOutput() {
         final String oversized = "x".repeat(20_000);
@@ -116,6 +135,9 @@ class ChunkDebugCommandTest {
                 .length() < oversized.length());
     }
 
+    /**
+     * Tests that small chat output remains untouched and is not truncated.
+     */
     @Test
     void leavesSmallChatOutputUntouched() {
         final ChunkDebugCommand.ChatMessage chatMessage = ChunkDebugCommand.truncateForChat("small");
@@ -124,6 +146,9 @@ class ChunkDebugCommandTest {
         assertEquals("small", chatMessage.text());
     }
 
+    /**
+     * Tests formatting of suspect summary and detailed suspect information.
+     */
     @Test
     void formatsSuspectSummaryAndDetail() {
         final ChunkTraceSuspect suspect = createSuspect();
@@ -142,6 +167,11 @@ class ChunkDebugCommandTest {
         assertTrue(detail.contains("inspect=/chunkis debug suspect timeline 2"));
     }
 
+    /**
+     * Creates a mock {@link ChunkTraceSuspect} instance for test purposes.
+     *
+     * @return a new ChunkTraceSuspect instance with pre-configured events
+     */
     private static ChunkTraceSuspect createSuspect() {
         final ChunkTraceEvent originalFailure = new ChunkTraceEvent(
                 10L,

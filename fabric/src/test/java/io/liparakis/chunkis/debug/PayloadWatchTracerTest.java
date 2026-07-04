@@ -18,8 +18,14 @@ import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Tests for the {@link PayloadWatchTracer} class.
+ */
 class PayloadWatchTracerTest {
 
+    /**
+     * Cleans up watchpoints, trace store, and debug configurations after each test.
+     */
     @AfterEach
     void tearDown() {
         ChunkTraceWatchpoints.clear();
@@ -28,6 +34,10 @@ class PayloadWatchTracerTest {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
     }
 
+    /**
+     * Tests that tracing a delta stage successfully captures and logs a watch failure
+     * when a watched block is missing from the payload.
+     */
     @Test
     void traceDeltaStageReportsMissingWatchedBlock() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);

@@ -11,8 +11,14 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Test class for verifying chunk snapshot capture logic in {@link CisSnapshotCapture}.
+ */
 class CisSnapshotCaptureTest {
 
+    /**
+     * Verifies the translation from section index and local Y offset to absolute world Y coordinates.
+     */
     @Test
     void convertsSectionIndexToAbsoluteBlockY() {
         assertEquals(-64, CisSnapshotCapture.toWorldY(-64, 0, 0));
@@ -21,6 +27,9 @@ class CisSnapshotCaptureTest {
         assertEquals(319, CisSnapshotCapture.toWorldY(-64, 23, 15));
     }
 
+    /**
+     * Verifies detection of suspicious baseline size shrinkage.
+     */
     @Test
     void detectsSuspiciousBaselineShrink() {
         assertTrue(CisSnapshotCapture.isSuspiciousBaselineShrink(1000, 599));
@@ -28,6 +37,10 @@ class CisSnapshotCaptureTest {
         assertFalse(CisSnapshotCapture.isSuspiciousBaselineShrink(0, 0));
     }
 
+    /**
+     * Verifies that creating authoritative snapshot metadata correctly drops the persisted base chunk
+     * and marks the chunk as having a full block baseline.
+     */
     @Test
     void authoritativeSnapshotMetadataDropsPersistedBaseAndMarksFullBaseline() {
         final NbtCompound structures = new NbtCompound();
@@ -48,6 +61,10 @@ class CisSnapshotCaptureTest {
         assertFalse(CisNbtUtil.hasPersistedPortalChunk(metadata));
     }
 
+    /**
+     * Verifies that migrated auxiliary metadata (such as chunk status and post processing flags)
+     * is correctly preserved during authoritative snapshot metadata creation.
+     */
     @Test
     void authoritativeSnapshotMetadataPreservesMigratedAuxiliaryMetadata() {
         final NbtCompound existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(
@@ -72,12 +89,18 @@ class CisSnapshotCaptureTest {
         assertEquals("kept", preservedAuxiliary.getString("PostProcessing").orElseThrow());
     }
 
+    /**
+     * Verifies that the decision to persist base chunk info is made correctly based on block entity count.
+     */
     @Test
     void snapshotKeepsPersistedBaseForChunksWithBlockEntities() {
         assertTrue(CisSnapshotCapture.shouldPersistBaseChunkForSnapshot(1));
         assertFalse(CisSnapshotCapture.shouldPersistBaseChunkForSnapshot(0));
     }
 
+    /**
+     * Verifies that migrated block entities are preserved when the live chunk has not instantiated them yet.
+     */
     @Test
     void preservesMigratedBlockEntitiesWhenLiveChunkHasNotInstantiatedAnyYet() {
         final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
@@ -100,6 +123,9 @@ class CisSnapshotCaptureTest {
         assertFalse(CisSnapshotCapture.shouldPreserveMigratedBlockEntities(delta, false));
     }
 
+    /**
+     * Verifies that block entities are rehydrated and restored back into the chunk delta after a snapshot clear.
+     */
     @Test
     void restoreBlockEntitiesRehydratesPayloadAfterSnapshotClear() {
         final io.liparakis.chunkis.core.ChunkDelta<net.minecraft.block.BlockState, NbtCompound> delta =

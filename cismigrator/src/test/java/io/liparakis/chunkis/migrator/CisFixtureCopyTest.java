@@ -58,10 +58,6 @@ class CisFixtureCopyTest {
     @TempDir
     Path tempDir;
 
-    // -------------------------------------------------------------------------
-    // Test
-    // -------------------------------------------------------------------------
-
     /**
      * Converts a byte array to a hex-encoded string.
      */
@@ -73,10 +69,6 @@ class CisFixtureCopyTest {
         }
         return builder.toString();
     }
-
-    // -------------------------------------------------------------------------
-    // Fixture setup
-    // -------------------------------------------------------------------------
 
     /**
      * Inflates a zlib-compressed byte array.
@@ -107,10 +99,6 @@ class CisFixtureCopyTest {
                 | (data[offset + 3] & 0xFF);
     }
 
-    // -------------------------------------------------------------------------
-    // Hashing
-    // -------------------------------------------------------------------------
-
     /**
      * Verifies that flipping the "copy" bit for V8 fixtures correctly replicates
      * the static files into a temporary environment without altering the
@@ -126,7 +114,7 @@ class CisFixtureCopyTest {
         copiedVersions.forEach(version -> assertEquals(8, version));
 
         assertEquals(originalHashes, hashFixtureFiles(),
-                     "Fixture hashes changed even though the test should only copy them into temp storage");
+                "Fixture hashes changed even though the test should only copy them into temp storage");
     }
 
     /**
@@ -151,17 +139,14 @@ class CisFixtureCopyTest {
      * Copies a single resource file to the specified destination path.
      */
     private void copyResource(final String resourcePath, final Path destination) throws IOException {
-        try (InputStream input = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+        try (InputStream input = getClass().getClassLoader()
+                .getResourceAsStream(resourcePath)) {
             if (input == null) {
                 throw new IOException("Missing test resource: " + resourcePath);
             }
             Files.copy(input, destination);
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Region scanning
-    // -------------------------------------------------------------------------
 
     /**
      * Computes SHA-256 hashes for all fixture files in the classpath.
@@ -181,7 +166,8 @@ class CisFixtureCopyTest {
      * Computes the SHA-256 hash of a single classpath resource.
      */
     private String hashResource(final String resourcePath) throws Exception {
-        try (InputStream input = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+        try (InputStream input = getClass().getClassLoader()
+                .getResourceAsStream(resourcePath)) {
             if (input == null) {
                 throw new IOException("Missing test resource: " + resourcePath);
             }
