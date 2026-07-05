@@ -6,10 +6,12 @@ import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 
 /**
- * Pure path-resolution helpers for the Chunkis storage layout.
+ * Pure path-resolution helpers for Chunkis and vanilla world storage paths.
  *
- * <p>All methods mirror Minecraft's save directory convention: {@code minecraft:overworld}
- * resolves directly under the save root, while every other dimension is nested under
+ * <p>Chunkis keeps its own dimension-local data under a normalized
+ * {@code dimensions/<namespace>/<path>} layout for every non-overworld dimension.
+ * Vanilla storage is different: the Nether and End still use legacy save roots
+ * ({@code DIM-1} and {@code DIM1}) while custom dimensions use
  * {@code dimensions/<namespace>/<path>}.
  *
  * <p>Kept separate from {@link FabricCisStorageHelper} so the layout contract can
@@ -65,6 +67,26 @@ public final class ChunkisStoragePaths {
      * Path label identifying overworld dimension levels.
      */
     private static final String OVERWORLD_PATH = "overworld";
+
+    /**
+     * Legacy vanilla save directory used by the Nether.
+     */
+    private static final String NETHER_DIR = "DIM-1";
+
+    /**
+     * Legacy vanilla save directory used by the End.
+     */
+    private static final String END_DIR = "DIM1";
+
+    /**
+     * Vanilla dimension path for the Nether.
+     */
+    private static final String NETHER_PATH = "the_nether";
+
+    /**
+     * Vanilla dimension path for the End.
+     */
+    private static final String END_PATH = "the_end";
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -138,7 +160,7 @@ public final class ChunkisStoragePaths {
      * @return the resolved vanilla region directory path
      */
     public static Path computeVanillaRegionDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
-        return computeDimensionBaseDirectory(saveRoot, worldKey).resolve(VANILLA_REGION_DIR);
+        return computeVanillaDimensionBaseDirectory(saveRoot, worldKey).resolve(VANILLA_REGION_DIR);
     }
 
     /**
@@ -153,7 +175,7 @@ public final class ChunkisStoragePaths {
      * @return the resolved vanilla external entity directory path
      */
     public static Path computeVanillaEntitiesDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
-        return computeDimensionBaseDirectory(saveRoot, worldKey).resolve(VANILLA_ENTITIES_DIR);
+        return computeVanillaDimensionBaseDirectory(saveRoot, worldKey).resolve(VANILLA_ENTITIES_DIR);
     }
 
     /**
@@ -170,7 +192,7 @@ public final class ChunkisStoragePaths {
     }
 
     /**
-     * Mirrors Minecraft's save layout to determine the dimension base directory.
+     * Resolves Chunkis' normalized dimension base directory.
      *
      * <ul>
      *   <li>{@code minecraft:overworld} -> {@code <saveRoot>/} (no subdirectory)
@@ -194,6 +216,37 @@ public final class ChunkisStoragePaths {
     }
 
     /**
+     * Mirrors vanilla's actual dimension save roots for MCA-backed data.
+     *
+     * <ul>
+     *   <li>{@code minecraft:overworld} -> {@code <saveRoot>/}</li>
+     *   <li>{@code minecraft:the_nether} -> {@code <saveRoot>/DIM-1/}</li>
+     *   <li>{@code minecraft:the_end} -> {@code <saveRoot>/DIM1/}</li>
+     *   <li>Custom dimensions -> {@code <saveRoot>/dimensions/<namespace>/<path>/}</li>
+     * </ul>
+     *
+     * @param saveRoot the world save root
+     * @param worldKey the registry key identifying the target dimension
+     * @return the vanilla dimension base directory
+     */
+    private static Path computeVanillaDimensionBaseDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
+        final Identifier dimId = worldKey.getValue();
+        if (!requiresDimensionSubdirectory(dimId)) {
+            return saveRoot;
+        }
+        if (isVanillaDimension(dimId, NETHER_PATH)) {
+            return saveRoot.resolve(NETHER_DIR);
+        }
+        if (isVanillaDimension(dimId, END_PATH)) {
+            return saveRoot.resolve(END_DIR);
+        }
+        return saveRoot
+                .resolve(DIMENSIONS_DIR)
+                .resolve(dimId.getNamespace())
+                .resolve(dimId.getPath());
+    }
+
+    /**
      * Returns {@code true} if the given dimension identifier requires nesting under
      * {@code dimensions/<namespace>/<path>} rather than resolving at the save root.
      *
@@ -207,5 +260,16 @@ public final class ChunkisStoragePaths {
     private static boolean requiresDimensionSubdirectory(final Identifier dimId) {
         return !MINECRAFT_NAMESPACE.equals(dimId.getNamespace())
                 || !OVERWORLD_PATH.equals(dimId.getPath());
+    }
+
+    /**
+     * Returns whether the identifier refers to a vanilla dimension with the given path.
+     *
+     * @param dimId dimension identifier to inspect
+     * @param path expected vanilla path
+     * @return {@code true} when the identifier matches the requested vanilla dimension
+     */
+    private static boolean isVanillaDimension(final Identifier dimId, final String path) {
+        return MINECRAFT_NAMESPACE.equals(dimId.getNamespace()) && path.equals(dimId.getPath());
     }
 }
