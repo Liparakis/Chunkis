@@ -85,7 +85,7 @@ public abstract class RegionBasedStorageMixin {
     ) throws IOException {
         if (chunkis$shouldBlockVanillaStorage()) {
             final Path regionFile = chunkis$directory.resolve(chunkis$regionFileName(pos));
-            Chunkis.LOGGER.error(
+            Chunkis.LOGGER.debug(
                     "POST_CIS_ANVIL_ACCESS path={} pos={} sizeBefore={} operation=RegionBasedStorage.write stack={}",
                     chunkis$directory, pos,
                     java.nio.file.Files.exists(regionFile) ? java.nio.file.Files.size(regionFile) : -1,
