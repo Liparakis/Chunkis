@@ -30,7 +30,7 @@ This is the path that resolves Chunkis-owned chunk state during load, builds tem
 2. `CisNbtUtil.buildLoadChunkNbt(...)` chooses either persisted-base-backed NBT or a synthetic empty-shell root.
 3. Vanilla converts the NBT to `SerializedChunk` and then `ProtoChunk`.
 4. `ChunkSerializerMixin` attaches the `ChunkDelta` to the proto chunk and applies restore-suppression setup.
-5. On promotion to a live chunk, `ChunkRestorer.restore(...)` replays blocks, block entities, and pending entities.
+5. On promotion to a live chunk, `ChunkRestorer.restore(...)` replays blocks, recalculates touched section block occupancy counts (to ensure correct results for block entity lookups), and then replays block entities and pending entities.
 6. Derived state such as lighting, heightmaps, and follow-up networking is refreshed after replay.
 
 ## Current Sharp Edges

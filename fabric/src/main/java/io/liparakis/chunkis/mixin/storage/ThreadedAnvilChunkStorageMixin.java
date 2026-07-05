@@ -507,6 +507,16 @@ public abstract class ThreadedAnvilChunkStorageMixin {
 
         final CisNbtUtil.LoadChunkNbtResult loadNbt =
                 CisNbtUtil.buildLoadChunkNbt(chunkPos, chunkis$getGameDataVersion(), delta);
+        PayloadWatchTracer.traceBlockEntityPresenceInChunkNbt(
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
+                chunkPos,
+                null,
+                loadNbt.root(),
+                "synthetic-load-root",
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt"
+        );
         chunkis$traceLoadNbtSelection(chunkPos, delta, loadNbt);
         cir.setReturnValue(CompletableFuture.completedFuture(
                 Optional.of(loadNbt.root())));
@@ -615,13 +625,20 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final ChunkDelta<BlockState, NbtCompound> delta,
             final CisNbtUtil.LoadChunkNbtResult loadNbt
     ) {
+        final NbtCompound metadata = delta != null ? delta.getChunkMetadata() : null;
         final boolean hasPersistedBaseChunk = delta != null
-                && CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+                && CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
         final boolean authoritativeFullBaseline = delta != null
-                && CisNbtUtil.hasFullBlockBaseline(delta.getChunkMetadata());
+                && CisNbtUtil.hasFullBlockBaseline(metadata);
+        final boolean shouldUsePersistedBaseChunk = delta != null
+                && CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
+        final byte[] baseChunkPayload = metadata != null
+                ? metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
+                  .orElse(new byte[0])
+                : new byte[0];
 
         if (hasPersistedBaseChunk) {
-            final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(delta.getChunkMetadata());
+            final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     ChunkTraceEventType.BASE_NBT_DECODE_STARTED,
@@ -633,10 +650,14 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                             + ", storageEntryExists="
                             + !delta.isEmpty()
                             + ", metadataKeys="
-                            + (delta.getChunkMetadata() != null
-                            ? delta.getChunkMetadata()
+                            + (metadata != null
+                            ? metadata
                               .getKeys()
                             : List.of())
+                            + ", hasPersistedBaseChunk=" + hasPersistedBaseChunk
+                            + ", shouldUsePersistedBaseChunk=" + shouldUsePersistedBaseChunk
+                            + ", authoritativeFullBaseline=" + authoritativeFullBaseline
+                            + ", baseChunkPayloadBytes=" + baseChunkPayload.length
                             + ", baseNbtKeys="
                             + (baseChunkNbt != null ? baseChunkNbt.getKeys() : List.of())
                             + ", baseNbtApproxBytes="
@@ -659,15 +680,29 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
-                hasPersistedBaseChunk
-                        ? "found persisted base chunk NBT in delta metadata"
-                        : "no persisted base chunk NBT in delta metadata",
+                "base metadata decision: hasPersistedBaseChunk=" + hasPersistedBaseChunk
+                        + ", shouldUsePersistedBaseChunk=" + shouldUsePersistedBaseChunk
+                        + ", authoritativeFullBaseline=" + authoritativeFullBaseline
+                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : List.of())
+                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length,
                 chunkis$worldId(),
                 chunkis$debugChunkKey(chunkPos),
                 null,
                 null,
                 delta != null && delta.isDirty(),
                 null
+        );
+        PayloadWatchTracer.traceChunkWatchContext(
+                chunkis$worldId(),
+                chunkPos,
+                null,
+                "base-metadata-decision",
+                "ThreadedAnvilChunkStorageMixin#chunkis$onGetUpdatedChunkNbt",
+                "base metadata decision: hasPersistedBaseChunk=" + hasPersistedBaseChunk
+                        + ", shouldUsePersistedBaseChunk=" + shouldUsePersistedBaseChunk
+                        + ", authoritativeFullBaseline=" + authoritativeFullBaseline
+                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : List.of())
+                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length
         );
 
         if (authoritativeFullBaseline
@@ -1496,7 +1531,14 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             final String caller,
             final String operationId
     ) {
-        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        final NbtCompound metadata = delta.getChunkMetadata();
+        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
+        final boolean shouldUseBase = CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
+        final boolean fullBaseline = CisNbtUtil.hasFullBlockBaseline(metadata);
+        final byte[] baseChunkPayload = metadata != null
+                ? metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
+                  .orElse(new byte[0])
+                : new byte[0];
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 hasBase
@@ -1505,13 +1547,31 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 caller,
-                "save guard precheck: " + DeltaPersistenceGuard.describeLifecycleState(delta),
+                "save guard precheck: " + DeltaPersistenceGuard.describeLifecycleState(delta)
+                        + ", hasPersistedBaseChunk=" + hasBase
+                        + ", shouldUsePersistedBaseChunk=" + shouldUseBase
+                        + ", fullBlockBaseline=" + fullBaseline
+                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : List.of())
+                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length,
                 chunkis$worldId(),
                 chunkis$debugChunkKey(pos),
                 null,
                 operationId,
                 delta.isDirty(),
                 null
+        );
+        PayloadWatchTracer.traceChunkWatchContext(
+                chunkis$worldId(),
+                pos,
+                operationId,
+                "save-guard-precheck",
+                caller,
+                "save guard precheck: " + DeltaPersistenceGuard.describeLifecycleState(delta)
+                        + ", hasPersistedBaseChunk=" + hasBase
+                        + ", shouldUsePersistedBaseChunk=" + shouldUseBase
+                        + ", fullBlockBaseline=" + fullBaseline
+                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : List.of())
+                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length
         );
     }
 

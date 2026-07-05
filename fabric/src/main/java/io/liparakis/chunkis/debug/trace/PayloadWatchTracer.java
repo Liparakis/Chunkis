@@ -598,6 +598,58 @@ public final class PayloadWatchTracer {
     }
 
     /**
+     * Delegates trace output checking whether watched block entities are present
+     * in an intermediate vanilla chunk-NBT root.
+     */
+    public static void traceBlockEntityPresenceInChunkNbt(
+            final String worldId,
+            final ChunkPos chunkPos,
+            @Nullable final String operationId,
+            @Nullable final NbtCompound chunkNbt,
+            final String stage,
+            final String source
+    ) {
+        BlockEntityPayloadTracer.traceBlockEntityPresenceInChunkNbt(
+                worldId,
+                chunkPos,
+                operationId,
+                chunkNbt,
+                stage,
+                source
+        );
+    }
+
+    /**
+     * Emits a watch-scoped informational event for every watched payload in a chunk.
+     */
+    public static void traceChunkWatchContext(
+            final String worldId,
+            final ChunkPos chunkPos,
+            @Nullable final String operationId,
+            final String stage,
+            final String source,
+            final String message
+    ) {
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
+                worldId,
+                DebugChunkKeys.of(chunkPos)
+        )) {
+            traceWatch(
+                    ChunkTraceEventType.WATCH_CAPTURED,
+                    stage,
+                    source,
+                    message,
+                    worldId,
+                    chunkPos,
+                    operationId,
+                    target,
+                    message,
+                    null
+            );
+        }
+    }
+
+    /**
      * Delegates trace output showing entity restoration occurred.
      *
      * @param world       target world instance

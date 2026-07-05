@@ -1032,7 +1032,7 @@ public final class PersistedBaseChunkReloadGameTest {
                 storage.load(new CisChunkPos(rightChunkPos.x, rightChunkPos.z), "gametest-mixed-border-right-readback");
 
         context.assertTrue(
-                CisNbtUtil.hasPersistedBaseChunkNbt(leftDelta.getChunkMetadata())
+                !CisNbtUtil.hasPersistedBaseChunkNbt(leftDelta.getChunkMetadata())
                         && CisNbtUtil.hasFullBlockBaseline(leftDelta.getChunkMetadata()),
                 Text.literal("Expected left chunk to persist as full-baseline snapshot.")
         );

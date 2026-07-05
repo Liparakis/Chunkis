@@ -409,7 +409,14 @@ public class ChunkSerializerMixin {
         if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
             return;
         }
-        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        final NbtCompound metadata = delta.getChunkMetadata();
+        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
+        final boolean shouldUseBase = CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
+        final boolean fullBaseline = CisNbtUtil.hasFullBlockBaseline(metadata);
+        final byte[] baseChunkPayload = metadata != null
+                ? metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
+                  .orElse(new byte[0])
+                : new byte[0];
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 hasBase
@@ -420,7 +427,12 @@ public class ChunkSerializerMixin {
                 SOURCE + "#chunkis$traceBaseMetadataAfterDecode",
                 "decoded delta metadata: "
                         + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(
-                        delta),
+                        delta)
+                        + ", hasPersistedBaseChunk=" + hasBase
+                        + ", shouldUsePersistedBaseChunk=" + shouldUseBase
+                        + ", fullBlockBaseline=" + fullBaseline
+                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : java.util.List.of())
+                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length,
                 world.getRegistryKey()
                         .getValue()
                         .toString(),
@@ -429,6 +441,23 @@ public class ChunkSerializerMixin {
                 operationId,
                 delta.isDirty(),
                 null
+        );
+        PayloadWatchTracer.traceChunkWatchContext(
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
+                pos,
+                operationId,
+                "decoded-delta-metadata",
+                SOURCE + "#chunkis$traceBaseMetadataAfterDecode",
+                "decoded delta metadata: "
+                        + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(
+                        delta)
+                        + ", hasPersistedBaseChunk=" + hasBase
+                        + ", shouldUsePersistedBaseChunk=" + shouldUseBase
+                        + ", fullBlockBaseline=" + fullBaseline
+                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : java.util.List.of())
+                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length
         );
     }
 

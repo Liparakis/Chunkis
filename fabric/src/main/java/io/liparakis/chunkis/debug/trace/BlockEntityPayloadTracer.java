@@ -6,6 +6,8 @@ import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.NbtList;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
@@ -210,5 +212,82 @@ public final class BlockEntityPayloadTracer {
                 target.describe(),
                 null
         );
+    }
+
+    /**
+     * Logs whether watched block entities are present inside a vanilla chunk-NBT root.
+     *
+     * <p>This is trace-only instrumentation for narrowing whether a watched block
+     * entity is lost before or after the persisted base chunk root is built.</p>
+     */
+    public static void traceBlockEntityPresenceInChunkNbt(
+            final String worldId,
+            final ChunkPos chunkPos,
+            @Nullable final String operationId,
+            @Nullable final NbtCompound chunkNbt,
+            final String stage,
+            final String source
+    ) {
+        if (!ChunkTraceWatchpoints.hasPayloadWatches() || chunkNbt == null) {
+            return;
+        }
+
+        final NbtList blockEntities = chunkNbt.getList("block_entities").orElse(null);
+        final int blockEntityCount = blockEntities != null ? blockEntities.size() : 0;
+        final int sectionCount = chunkNbt.getList("sections").map(NbtList::size).orElse(0);
+        final Object status = chunkNbt.getString("Status").orElse("<missing>");
+
+        for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
+                worldId,
+                io.liparakis.chunkis.debug.util.DebugChunkKeys.of(chunkPos)
+        )) {
+            if (!target.hasBlockCoordinates()) {
+                continue;
+            }
+
+            final NbtCompound matched = findBlockEntityNbt(blockEntities, target);
+            PayloadWatchTracer.traceWatch(
+                    matched != null ? ChunkTraceEventType.WATCH_CAPTURED : ChunkTraceEventType.WATCH_FAILED,
+                    stage,
+                    source,
+                    matched != null
+                            ? "watched block entity present in chunk nbt root"
+                            : "watched block entity missing from chunk nbt root",
+                    worldId,
+                    chunkPos,
+                    operationId,
+                    target,
+                    "pos=" + target.blockX() + ',' + target.blockY() + ',' + target.blockZ()
+                            + " chunkStatus=" + status
+                            + " rootSectionCount=" + sectionCount
+                            + " rootBlockEntityCount=" + blockEntityCount
+                            + " matchedNbtId=" + (matched != null ? matched.getString("id").orElse("<missing-id>")
+                            : "<missing>")
+                            + " matchedNbtBytes=" + PayloadWatchSummaries.nbtSize(matched),
+                    null
+            );
+        }
+    }
+
+    @Nullable
+    private static NbtCompound findBlockEntityNbt(
+            @Nullable final NbtList blockEntities,
+            final PayloadWatchTarget target
+    ) {
+        if (blockEntities == null || !target.hasBlockCoordinates()) {
+            return null;
+        }
+        for (final NbtElement element : blockEntities) {
+            if (!(element instanceof NbtCompound compound)) {
+                continue;
+            }
+            final int x = compound.getInt("x").orElse(Integer.MIN_VALUE);
+            final int y = compound.getInt("y").orElse(Integer.MIN_VALUE);
+            final int z = compound.getInt("z").orElse(Integer.MIN_VALUE);
+            if (x == target.blockX() && y == target.blockY() && z == target.blockZ()) {
+                return compound;
+            }
+        }
+        return null;
     }
 }

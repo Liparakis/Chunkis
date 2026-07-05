@@ -76,7 +76,8 @@ public final class CisSnapshotCapture {
             return target;
         }
         PayloadWatchTracer.traceCapturedBlocks(chunk);
-        if (shouldPersistBaseChunkForSnapshot(chunk.getBlockEntities()
+        if (!CisNbtUtil.hasFullBlockBaseline(target.getChunkMetadata())
+                && shouldPersistBaseChunkForSnapshot(chunk.getBlockEntities()
                 .size())) {
             final NbtCompound fullChunkNbt = BaseChunkCaptureUtil.captureBaseChunk((net.minecraft.server.world.ServerWorld) chunk.getWorld(),
                             chunk,

@@ -46,6 +46,7 @@ import net.minecraft.world.poi.PointOfInterestStorage;
 import net.minecraft.world.poi.PointOfInterestType;
 import net.minecraft.world.poi.PointOfInterestTypes;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -125,6 +126,9 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
      */
     @Unique
     private int chunkis$portalBlockCount;
+
+    @Shadow
+    private boolean loadedToWorld;
 
     /**
      * Default constructor for WorldChunkMixin.
@@ -450,6 +454,19 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                     blockEntity, serverWorld.getRegistryManager(),
                     delta
             );
+            PayloadWatchTracer.traceDeltaStage(
+                    serverWorld.getRegistryKey()
+                            .getValue()
+                            .toString(),
+                    chunk.getPos(),
+                    delta,
+                    null,
+                    ChunkTraceEventType.WATCH_CAPTURED,
+                    "set-block-entity-post-capture",
+                    SET_BLOCK_ENTITY_SOURCE,
+                    "delta state after setBlockEntity capture",
+                    null
+            );
             GlobalChunkTracker.markDirty(chunk, SET_BLOCK_ENTITY_SOURCE);
         } catch (final Exception e) {
             Chunkis.LOGGER.error("Chunkis: Failed to capture block entity at {}", pos, e);
@@ -464,6 +481,9 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
      */
     @Inject(method = "removeBlockEntity", at = @At("HEAD"))
     private void chunkis$onRemoveBlockEntity(final BlockPos pos, final CallbackInfo ci) {
+        if (!this.loadedToWorld) {
+            return;
+        }
         final WorldChunk chunk = chunkis$self();
         final ChunkMutationTrackingScope.Cause suppressionCause = chunkis$getSuppressionCause(chunk);
         if (suppressionCause != ChunkMutationTrackingScope.Cause.NONE) {
@@ -484,6 +504,21 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
                 pos.getX() & CisConstants.COORD_MASK, pos.getY(),
                 pos.getZ() & CisConstants.COORD_MASK
         );
+        if (chunk.getWorld() instanceof ServerWorld serverWorld) {
+            PayloadWatchTracer.traceDeltaStage(
+                    serverWorld.getRegistryKey()
+                            .getValue()
+                            .toString(),
+                    chunk.getPos(),
+                    delta,
+                    null,
+                    ChunkTraceEventType.WATCH_CAPTURED,
+                    "remove-block-entity-post-remove",
+                    REMOVE_BLOCK_ENTITY_SOURCE,
+                    "delta state after removeBlockEntity removal",
+                    null
+            );
+        }
         GlobalChunkTracker.markDirty(chunk, REMOVE_BLOCK_ENTITY_SOURCE);
     }
 

@@ -4,7 +4,9 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.restoration.capture.ChunkBlockEntityCapture;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
@@ -170,6 +172,19 @@ public abstract class BlockEntityMixin {
                     (BlockEntity) (Object) this,
                     serverWorld.getRegistryManager(),
                     delta
+            );
+            PayloadWatchTracer.traceDeltaStage(
+                    serverWorld.getRegistryKey()
+                            .getValue()
+                            .toString(),
+                    new net.minecraft.util.math.ChunkPos(getPos()),
+                    delta,
+                    null,
+                    ChunkTraceEventType.WATCH_CAPTURED,
+                    "mark-dirty-post-capture",
+                    "BlockEntityMixin#captureBlockEntityNbt",
+                    "delta state after block entity markDirty capture",
+                    null
             );
         } catch (final Exception e) {
             Chunkis.LOGGER.error(

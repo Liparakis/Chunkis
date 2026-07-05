@@ -143,10 +143,21 @@ public final class BaseChunkCaptureUtil {
                 "BaseChunkCaptureUtil#captureBaseChunk", "delta state before base capture clear",
                 null);
 
+        final NbtCompound serializedBaseChunkNbt = SerializedChunk.fromChunk(world, chunk)
+                .serialize();
+        PayloadWatchTracer.traceBlockEntityPresenceInChunkNbt(
+                world.getRegistryKey()
+                        .getValue()
+                        .toString(),
+                chunk.getPos(),
+                null,
+                serializedBaseChunkNbt,
+                "base-capture-root",
+                "BaseChunkCaptureUtil#captureBaseChunk"
+        );
         final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 CisNbtUtil.extractPersistedStructureMetadata(delta.getChunkMetadata()), true, false,
-                SerializedChunk.fromChunk(world, chunk)
-                        .serialize(), portalChunk);
+                serializedBaseChunkNbt, portalChunk);
         CisNbtUtil.preserveMigratedAuthoritativeMetadata(delta.getChunkMetadata(), metadata);
 
         delta.setChunkMetadata(metadata);

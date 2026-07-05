@@ -313,7 +313,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     /**
      * Rebuilds section counts after restore-time raw container writes.
      */
-    private void recalculateTouchedSectionCounts() {
+    void recalculateTouchedSectionCounts() {
         for (int sectionIndex = 0; sectionIndex < touchedSections.length; sectionIndex++) {
             if (!touchedSections[sectionIndex]) {
                 continue;
