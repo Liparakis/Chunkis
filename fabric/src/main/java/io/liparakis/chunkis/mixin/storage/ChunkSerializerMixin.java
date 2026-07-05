@@ -567,7 +567,6 @@ public class ChunkSerializerMixin {
         wrappedDuck.chunkis$setRestoreLoadedFromStorage(restoreLoadedFromStorage);
         runtimeDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());
         runtimeDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
-        chunkis$hydrateWrappedChunkFromProtoBaseline(world, chunk, wrappedChunk, protoDelta, operationId);
         PayloadWatchTracer.traceWorldChunkDeltaAttached(
                 wrappedChunk,
                 runtimeDelta,
@@ -606,53 +605,6 @@ public class ChunkSerializerMixin {
             protoDelta.markSaved();
         }
         return true;
-    }
-
-    /**
-     * Copies decoded proto sections into the wrapped live chunk when the wrapped
-     * shortcut would otherwise replay a base-backed sparse delta onto air.
-     */
-    @Unique
-    private static void chunkis$hydrateWrappedChunkFromProtoBaseline(
-            final ServerWorld world,
-            final ProtoChunk protoChunk,
-            final WorldChunk wrappedChunk,
-            final ChunkDelta<BlockState, NbtCompound> protoDelta,
-            final String operationId
-    ) {
-        if (!CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(protoDelta.getChunkMetadata())) {
-            return;
-        }
-
-        final int protoNonEmptySections = ChunkSectionDebugUtil.countNonEmptySections(protoChunk);
-        final int wrappedNonEmptySections = ChunkSectionDebugUtil.countNonEmptySections(wrappedChunk);
-        if (protoNonEmptySections == 0 || wrappedNonEmptySections != 0) {
-            return;
-        }
-
-        final var protoSections = protoChunk.getSectionArray();
-        final var wrappedSections = wrappedChunk.getSectionArray();
-        System.arraycopy(protoSections, 0, wrappedSections, 0, Math.min(protoSections.length, wrappedSections.length));
-
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                ChunkTraceEventType.BASE_NBT_APPLIED,
-                ChunkTraceSeverity.INFO,
-                ChunkTraceReason.NONE,
-                SOURCE + "#chunkis$hydrateWrappedChunkFromProtoBaseline",
-                "copied decoded proto baseline into wrapped live chunk before sparse replay: proto="
-                        + ChunkSectionDebugUtil.summarize(protoChunk)
-                        + ", wrappedBefore=sections=" + wrappedNonEmptySections
-                        + ", wrappedAfter=" + ChunkSectionDebugUtil.summarize(wrappedChunk),
-                world.getRegistryKey()
-                        .getValue()
-                        .toString(),
-                DebugChunkKeys.of(wrappedChunk.getPos()),
-                null,
-                operationId,
-                protoDelta.isDirty(),
-                null
-        );
     }
 
     /**
