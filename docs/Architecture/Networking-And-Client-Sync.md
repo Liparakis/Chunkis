@@ -1,64 +1,53 @@
 # Networking And Client Sync
 
-## Purpose
+## What This Area Is
 
-Server-side Chunkis state is not part of vanilla chunk packets, so Chunkis sends a parallel delta payload whenever the server sends chunk data to clients.
+Chunkis sends chunk deltas to clients in addition to vanilla chunk packets. The server encodes Chunkis state, and the client decodes and applies it to the local chunk.
 
-## Main Classes
+## What Owns It
 
-- `fabric/src/main/java/io/liparakis/chunkis/mixin/network/ChunkHolderMixin.java`
+- server payload registration: `ChunkisMod`
+- server send path: `ChunkHolderMixin`, `ChunkisNetworking`, `ChunkDeltaPayload`
+- client receive/apply path: `ClientChunkisMod`, `ClientDeltaNetworking`, `ClientDeltaVisitor`
+
+## How It Relates To Other Flows
+
+- restore can trigger resend behavior after authoritative chunk replay
+- client sync uses the same `ChunkDelta` model and network codec family from `common`
+- networking does not replace vanilla chunk packets; it layers Chunkis state on top
+
+## Key Entry Points
+
 - `fabric/src/main/java/io/liparakis/chunkis/network/ChunkisNetworking.java`
 - `fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java`
-- `fabric/src/main/java/io/liparakis/chunkis/network/FabricNetworkCodecFactory.java`
-- `core/src/main/java/io/liparakis/chunkis/storage/codec/network/CisNetworkEncoder.java`
-- `core/src/main/java/io/liparakis/chunkis/storage/codec/network/CisNetworkDecoder.java`
 - `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java`
-- `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaVisitor.java`
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/network/ChunkHolderMixin.java`
 
-## Pipeline
+## Current Flow
 
-```mermaid
-flowchart TD
-    A["ChunkHolder sends vanilla ChunkDataS2CPacket"] --> B["ChunkHolderMixin invokes ChunkisNetworking"]
-    B --> C["Extract chunk delta"]
-    C --> D["Encode with CisNetworkEncoder"]
-    D --> E["Optional zlib compression inside ChunkDeltaPayload"]
-    E --> F["ClientDeltaNetworking decode"]
-    F --> G["ClientDeltaVisitor applies received delta"]
-```
+1. A vanilla chunk packet is about to be sent.
+2. `ChunkHolderMixin` invokes `ChunkisNetworking`.
+3. The server extracts the attached delta, encodes it, and wraps it in `ChunkDeltaPayload`.
+4. Payloads over `1_024_000` raw bytes are dropped.
+5. The client decodes the payload and applies it to the local `WorldChunk` through `ClientDeltaVisitor`.
 
-## Server-Side Rules
+## Current Sharp Edges
 
-- Chunkis does not replace vanilla chunk packets.
-- Empty deltas are skipped.
-- Oversized payloads are dropped.
-- One prepared payload can be fanned out to multiple players.
-- Bulk restore resends can pre-encode off-thread and send back on the server thread.
+- client apply assumes the chunk implements `ChunkisDeltaDuck`; failure is logged once and the payload is skipped
+- the code proves a size cap, not a guaranteed compression ratio or bandwidth target
+- restore-time async resend uses a generation snapshot guard to avoid sending stale payloads
 
-## Client-Side Rules
+## Where Behavior Is Proven
 
-- Payload decode happens before client-world application.
-- Actual chunk mutation is scheduled onto the main client thread.
-- Missing `ChunkisDeltaDuck` support on the client chunk is treated as a traced failure.
+- `ChunkisNetworkingTest`
+- `ChunkDeltaPayloadTest`
+- client and server networking classes
 
-## Wire Format
+## Evidence
 
-`ChunkDeltaPayload` carries:
-
-- chunk X
-- chunk Z
-- compression flag
-- data length
-- payload bytes
-- original uncompressed size when compressed
-
-Disk storage and network transport do not share the same compression layer:
-
-- disk uses the CIS storage pipeline and Zstd
-- client sync uses the network codec and optional zlib compression inside the packet payload
-
-## Related Docs
-
-- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
-- [Storage Format](Storage-Format.md)
-- [Observability And Debugging](Observability-And-Debugging.md)
+- `fabric/src/main/java/io/liparakis/chunkis/ChunkisMod.java`
+- `fabric/src/main/java/io/liparakis/chunkis/network/ChunkisNetworking.java`
+- `fabric/src/main/java/io/liparakis/chunkis/network/ChunkDeltaPayload.java`
+- `fabric/src/main/java/io/liparakis/chunkis/client/ClientDeltaNetworking.java`
+- `fabric/src/test/java/io/liparakis/chunkis/network/ChunkisNetworkingTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/network/ChunkDeltaPayloadTest.java`

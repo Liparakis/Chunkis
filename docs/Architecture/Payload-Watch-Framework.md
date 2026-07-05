@@ -1,47 +1,53 @@
 # Payload Watch Framework
 
-## Purpose
+## What This Area Is
 
-Chunk timelines answer "what happened to this chunk?" Payload watch answers "what happened to this specific block, block entity, or entity as it moved through Chunkis?"
+Payload watch is the targeted tracing layer used when whole-chunk timelines are too coarse. It lets operators watch specific chunks, regions, blocks, block entities, or entity UUIDs and then records focused events across save, load, decode, restore, and client sync.
 
-## Main Classes
+## What Owns It
 
-- `core/src/main/java/io/liparakis/chunkis/debug/model/watch/PayloadWatchTarget.java`
-- `core/src/main/java/io/liparakis/chunkis/debug/model/watch/PayloadWatchType.java`
-- `core/src/main/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpoints.java`
+- watch registration: `ChunkTraceWatchpoints`
+- main routing layer: `PayloadWatchTracer`
+- block/entity-specific tracking helpers: `BlockWatchTraceTracker`, `EntityWatchTracker`, `PayloadWatchSummaries`
+- command surface: `/chunkis debug watch ...`
+
+## How It Relates To Other Flows
+
+- it piggybacks on normal save/load/restore/network events
+- watched payload events bypass the regular debug-level filter
+- it complements, rather than replaces, the general `ChunkTraceStore` ring buffer
+
+## Key Entry Points
+
+- `common/src/main/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpoints.java`
 - `fabric/src/main/java/io/liparakis/chunkis/debug/trace/PayloadWatchTracer.java`
+- `fabric/src/main/java/io/liparakis/chunkis/debug/watch/BlockWatchTraceTracker.java`
+- `fabric/src/main/java/io/liparakis/chunkis/debug/watch/EntityWatchTracker.java`
 - `fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java`
 
-## What It Tracks
+## Current Behavior
 
-Payload watch emits trace events around:
+- watches are process-local and stored in insertion order
+- supported target types are chunk, region, block, block entity, and entity
+- watched payloads are traced during capture, decode, storage read/write, restore, and client apply stages
+- the framework also records missing-expected-payload conditions for watched targets
 
-- capture
-- encode
-- serialization
-- storage write and read
-- decode
-- proto attach
-- live-world restore
-- post-restore visibility
-- client send and client-visible state
+## Current Sharp Edges
 
-The important limit is that a successful earlier event does not prove a later stage happened. For example, `WATCH_DECODED` only proves the payload exists in the decoded `ChunkDelta`.
+- the framework is intentionally linear and set-based; it assumes watch lists stay small
+- these traces are runtime diagnostics, not a persistent audit log
 
-## Commands
+## Where Behavior Is Proven
 
-- `/chunkis debug watch block <x> <y> <z>`
-- `/chunkis debug watch blockentity <x> <y> <z>`
-- `/chunkis debug watch entity <uuid>`
-- `/chunkis debug watch clear`
-- `/chunkis debug watch list`
+- payload-watch tests
+- debug command tests
 
-## Practical Use
+## Evidence
 
-Use payload watch when chunk-level traces are too coarse and you need to know the exact boundary where one payload disappeared or diverged.
-
-## Related Docs
-
-- [Observability And Debugging](Observability-And-Debugging.md)
-- [Save Pipeline](Save-Pipeline.md)
-- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
+- `common/src/main/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpoints.java`
+- `fabric/src/main/java/io/liparakis/chunkis/debug/trace/PayloadWatchTracer.java`
+- `fabric/src/main/java/io/liparakis/chunkis/debug/watch/BlockWatchTraceTracker.java`
+- `fabric/src/main/java/io/liparakis/chunkis/debug/watch/EntityWatchTracker.java`
+- `fabric/src/test/java/io/liparakis/chunkis/debug/PayloadWatchTracerTest.java`
+- `common/src/test/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpointsTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/command/ChunkDebugCommandTest.java`

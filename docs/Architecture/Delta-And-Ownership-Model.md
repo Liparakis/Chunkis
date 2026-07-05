@@ -1,72 +1,56 @@
 # Delta And Ownership Model
 
-## Purpose
+## What This Area Is
 
-`ChunkDelta` is the central data structure that carries Chunkis state through mutation tracking, persistence, load, restore, and client sync.
+`ChunkDelta` is the shared state carrier for runtime mutation, persisted chunk payloads, metadata, block entities, and
+pending entities. Ownership helpers decide whether a delta is merely attached state or Chunkis-owned authoritative
+state.
 
-## Main Classes
+## What Owns It
 
-- `core/src/main/java/io/liparakis/chunkis/core/ChunkDelta.java`
-- `core/src/main/java/io/liparakis/chunkis/core/ChunkDeltaView.java`
-- `core/src/main/java/io/liparakis/chunkis/core/ChunkDeltaSnapshotView.java`
+- data structure: `common/src/main/java/io/liparakis/chunkis/core/ChunkDelta.java`
+- ownership classification: `ChunkDeltaOwnership`
+- runtime tracking: `GlobalChunkTracker`
+- vanilla-write suppression handoff: `PendingVanillaSaveDecision`, `StoragePreventionMixin`
+
+## How It Relates To Other Flows
+
+- save only persists Chunkis-owned state
+- load only restores deltas with replay payloads or persistence anchors
+- tracker can prefer an existing authoritative delta over a weaker replacement
+
+## Key Entry Points
+
+- `common/src/main/java/io/liparakis/chunkis/core/ChunkDelta.java`
 - `fabric/src/main/java/io/liparakis/chunkis/world/tracking/ownership/ChunkDeltaOwnership.java`
-- `fabric/src/main/java/io/liparakis/chunkis/api/ChunkisDeltaDuck.java`
-- `fabric/src/main/java/io/liparakis/chunkis/mixin/world/chunk/CommonChunkMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/GlobalChunkTracker.java`
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/StoragePreventionMixin.java`
 
-## What A Delta Contains
+## Current Rules
 
-- block instructions
-- block entity payloads
-- entity and pending-entity payloads
-- chunk metadata
-- ownership reason
-- source version
-- mutation and saved generations
+- `hasChunkisOwnedState(...)` currently means the delta has an ownership claim
+- `hasRestorableChunkisState(...)` is broader: replay payloads or persistence anchors are enough
+- `GlobalChunkTracker` keeps dirty deltas by dimension and chunk position, plus an unload cache mirror
+- an existing authoritative tracked delta can beat an incoming weaker one
+- vanilla writes are cancelled only when the higher-level save path marked the chunk as Chunkis-owned
 
-## Lifecycle
+## Current Sharp Edges
 
-### Attachment
+- docs that say "every attached delta is authoritative" would be wrong
+- clean unload-cache deltas are invalidated before load and do not override storage
 
-Every chunk gets a `ChunkDelta` through `CommonChunkMixin`.
+## Where Behavior Is Proven
 
-### Live mutation
+- `GlobalChunkTrackerTest`
+- `ChunkDeltaOwnershipTest`
+- `StoragePreventionMixinTest`
 
-`WorldChunkMixin` mutates the runtime delta during live block, block-entity, and entity changes, then routes meaningful state into `GlobalChunkTracker`.
+## Evidence
 
-### Save-time reshaping
-
-The attached runtime delta is not automatically the persisted shape. The save hook can rebuild it into an authoritative snapshot through `CisSnapshotCapture`.
-
-### Load and restore
-
-Decoded deltas are attached during the proto stage, then replayed into a live chunk. The runtime delta is repopulated silently after restore.
-
-## Ownership Rules
-
-The current ownership helper is `ChunkDeltaOwnership`.
-
-Important distinctions:
-
-- `hasChunkisOwnedState(delta)` answers whether Chunkis currently claims the state.
-- `hasChunkisPersistenceAnchor(delta)` answers whether metadata contains a usable persisted anchor.
-- `hasReplayPayload(delta)` answers whether there is actual replay content.
-- `hasRestorableChunkisState(delta)` means replay payload or persistence anchor exists.
-
-This matters because an attached empty placeholder delta must not be treated as authoritative Chunkis data by itself.
-
-## Dirty-State Rules
-
-- `mutationGeneration != savedGeneration` means dirty.
-- async save completion only wins when the same delta instance and generation are still current
-- a clean delta can still be meaningful if it carries persisted metadata anchors
-
-## Threading
-
-`ChunkDelta` is not a concurrent mutation structure. Live mutation is server-thread work. Snapshot views are what cross into async save workers.
-
-## Related Docs
-
-- [Save Pipeline](Save-Pipeline.md)
-- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
-- [Snapshots And Metadata](Snapshots-And-Metadata.md)
-- [Tracking, Guards, And Durability](Tracking-Guards-And-Durability.md)
+- `common/src/main/java/io/liparakis/chunkis/core/ChunkDelta.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/ownership/ChunkDeltaOwnership.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/GlobalChunkTracker.java`
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/StoragePreventionMixin.java`
+- `fabric/src/test/java/io/liparakis/chunkis/world/tracking/ownership/ChunkDeltaOwnershipTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/mixin/storage/StoragePreventionMixinTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/world/tracking/state/GlobalChunkTrackerTest.java`

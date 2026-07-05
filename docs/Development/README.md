@@ -1,9 +1,13 @@
-# Development Docs
+# Development
 
-This directory contains developer-facing workflow documentation.
+Use this section to navigate the current repository structure and the code paths that matter when persistence behavior changes.
 
-Current contents:
+## Start Here
 
 - [Developer Guide](Developer-Guide.md)
+- [Architecture index](../Architecture/README.md)
 
-Use the architecture docs in `../Architecture/` for subsystem behavior, and use this directory for setup and contributor workflow material.
+## Evidence
+
+- `docs/Development/README.md`
+- `docs/Development/Developer-Guide.md`

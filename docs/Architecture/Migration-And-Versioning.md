@@ -1,73 +1,66 @@
 # Migration And Versioning
 
-## Purpose
+## What This Area Is
 
-Chunkis currently has two distinct migration concerns:
+Chunkis has two separate migration concerns in the current code:
 
-- offline MCA-to-CIS translation
-- CIS-to-CIS storage version upgrades
+- CIS-to-CIS version upgrades in `migration`
+- vanilla MCA-to-CIS import at integrated-server startup in `fabric`
 
-They are separate code paths on purpose.
+## What Owns It
 
-## Main Classes
+- CIS version graph and storage-backed rewrites: `migration`
+- prelaunch MCA import and retirement rules: `fabric/integration/migration/offline`
 
-- `fabric/src/main/java/io/liparakis/chunkis/migration/offline/PreLaunchMigrationCoordinator.java`
-- `fabric/src/main/java/io/liparakis/chunkis/migration/offline/OfflineMcaCisTranslator.java`
-- `fabric/src/main/java/io/liparakis/chunkis/migration/offline/MigrationValidationResult.java`
-- `cismigrator/src/main/java/io/liparakis/chunkis/migrator/CisStorageMigrator.java`
-- `cismigrator/src/main/java/io/liparakis/chunkis/migrator/CisVersionMap.java`
-- `cismigrator/src/main/java/io/liparakis/chunkis/migrator/CisVersionPath.java`
-- `core/src/main/java/io/liparakis/chunkis/storage/model/CisConstants.java`
+## How It Relates To Other Flows
 
-## Offline MCA To CIS Translation
+- normal runtime load expects current CIS semantics
+- old CIS versions must migrate forward before normal runtime use
+- offline MCA import produces authoritative Chunkis snapshots before world start
 
-`PreLaunchMigrationCoordinator` decides whether a dimension needs offline translation before integrated-server startup continues.
+## Key Entry Points
 
-`OfflineMcaCisTranslator` then:
+- `migration/src/main/java/io/liparakis/chunkis/migrator/CisVersionMap.java`
+- `migration/src/main/java/io/liparakis/chunkis/migrator/CisStorageMigrator.java`
+- `fabric/src/main/java/io/liparakis/chunkis/integration/migration/offline/PreLaunchMigrationCoordinator.java`
+- `fabric/src/main/java/io/liparakis/chunkis/integration/migration/offline/OfflineMcaCisTranslator.java`
 
-1. scans vanilla `.mca` region files
-2. deserializes chunk NBT through vanilla `SerializedChunk`
-3. builds authoritative Chunkis snapshots
-4. writes them with `CisStorage.replace(...)`
-5. validates the written CIS payloads
-6. retires the source `.mca` file to `.backup` only after successful full-region coverage
+## Current CIS Version Facts
 
-Current translated chunks are marked as migrated authoritative snapshots in metadata.
+- latest runtime CIS version is `11`
+- explicit supported version edges are `7->8`, `8->9`, `9->10`, and `10->11`
+- downgrades are not supported
+- a clean full-directory CIS migration writes `.chunkis-cis-version`
 
-## CIS Version Upgrades
+## Current Offline MCA Import Facts
 
-`CisStorageMigrator` performs storage-backed version upgrades using the same `CisStorage` adapters and mappings as runtime code.
+- runs before integrated-server startup through `MinecraftClientMixin`
+- reads both vanilla `region/` and `entities/` directories
+- translates one authoritative snapshot per present chunk
+- validates migrated payload shape after writing
+- retires a source `.mca` file to `.backup` only when all present chunks were handled and none failed
 
-Current behavior:
+## Current Sharp Edges
 
-- scans `r.<x>.<z>.cis` files
-- loads chunks with `loadWithoutClearing(...)`
-- checks `ChunkDelta.sourceVersion`
-- plans an upgrade path with `CisVersionMap`
-- rewrites outdated chunks by saving them back through the current runtime storage stack
-- writes a `.chunkis-cis-version` marker after a clean directory scan
+- if CIS data already exists, prelaunch logic can mark it authoritative and delete stale vanilla source files
+- docs must not describe offline MCA import as reversible; the current code only documents forward takeover
 
-## Version Ownership
+## Where Behavior Is Proven
 
-- `CisConstants.VERSION` is the current on-disk CIS version.
-- `ChunkDelta.sourceVersion` records the version a delta came from or was last saved as.
-- `CisVersionMap` is the legal upgrade graph.
+- `CisVersionMapTest`
+- `CisStorageMigratorTest`
+- `OfflineMcaCisTranslatorTest`
+- `PreLaunchMigrationCoordinatorTest`
+- migration game tests using `migration/src/test/resources/V8`
 
-## Current Scope
+## Evidence
 
-Implemented today:
-
-- integrated-server prelaunch offline MCA translation
-- storage-backed CIS version migration
-- migration validation helpers and reports
-
-Not implemented here:
-
-- reversal from CIS back to vanilla Anvil
-- a generic dedicated-server offline migration orchestrator beyond the code paths in this repository
-
-## Related Docs
-
-- [Storage Format](Storage-Format.md)
-- [Snapshots And Metadata](Snapshots-And-Metadata.md)
-- [Startup And Lifecycle](Startup-And-Lifecycle.md)
+- `migration/src/main/java/io/liparakis/chunkis/migrator/CisVersionMap.java`
+- `migration/src/main/java/io/liparakis/chunkis/migrator/CisStorageMigrator.java`
+- `fabric/src/main/java/io/liparakis/chunkis/integration/migration/offline/PreLaunchMigrationCoordinator.java`
+- `fabric/src/main/java/io/liparakis/chunkis/integration/migration/offline/OfflineMcaCisTranslator.java`
+- `migration/src/test/java/io/liparakis/chunkis/migrator/CisVersionMapTest.java`
+- `migration/src/test/java/io/liparakis/chunkis/migrator/CisStorageMigratorTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/integration/migration/offline/OfflineMcaCisTranslatorTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/integration/migration/offline/PreLaunchMigrationCoordinatorTest.java`
+- `fabric/src/gametest/java/io/liparakis/chunkis/gametest/CisFixtureMigrationGameTest.java`

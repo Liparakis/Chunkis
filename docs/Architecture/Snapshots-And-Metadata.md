@@ -1,72 +1,56 @@
 # Snapshots And Metadata
 
-## Purpose
+## What This Area Is
 
-Chunkis separates runtime mutation tracking from the persisted information needed to restore a chunk safely later.
+Chunkis stores more than block changes. It also stores metadata used to decide restore baselines, structure data, auxiliary preserved NBT, portal flags, and migration markers.
 
-## Main Classes
+## What Owns It
 
+- metadata construction and extraction: `CisNbtUtil`
+- save-time snapshot capture: `CisSnapshotCapture`, `BaseChunkCaptureUtil`
+- direct structure metadata extraction: `StructureMetadataExtractor`
+- migrated authoritative metadata: `OfflineMcaCisTranslator`
+
+## How It Relates To Other Flows
+
+- save uses metadata to make sparse payloads restorable
+- load uses metadata to choose between persisted-base-backed NBT and synthetic empty-shell NBT
+- migration marks imported authoritative snapshots differently from runtime saves
+
+## Key Entry Points
+
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/CisNbtUtil.java`
 - `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/CisSnapshotCapture.java`
 - `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/BaseChunkCaptureUtil.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/CisNbtUtil.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/ChunkLoadNbtBuilder.java`
 - `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/StructureMetadataExtractor.java`
 
-## Two Snapshot Shapes
+## Current Metadata Shapes
 
-### Authoritative save snapshot
+- `chunkis` envelope under chunk metadata
+- persisted base chunk NBT or raw base chunk payload
+- full block baseline flag
+- suppress-initial-repopulation flag
+- portal chunk flag
+- migrated-authoritative-chunk flag
+- preserved auxiliary vanilla chunk NBT
 
-`CisSnapshotCapture.capture(...)` rebuilds the persisted chunk shape used by normal saves.
+## Current Sharp Edges
 
-Current behavior:
+- persisted base chunk metadata and full baseline metadata are not interchangeable in all paths; the code uses them for different restore decisions
+- metadata-only anchors can still matter even when live block replay is sparse
 
-- if block entities are present, Chunkis captures a persisted base chunk snapshot and marks suppression metadata
-- otherwise it captures a full authoritative block baseline directly into the delta
+## Where Behavior Is Proven
 
-### Persisted base chunk snapshot
+- `CisNbtUtilTest`
+- `CisSnapshotCaptureTest`
+- structure metadata game tests
 
-`BaseChunkCaptureUtil.captureBaseChunk(...)` stores a vanilla-compatible base chunk snapshot inside chunk metadata. This is used as a restore anchor when sparse replay alone would be unsafe.
+## Evidence
 
-## Metadata Envelope
-
-`CisNbtUtil` owns the current metadata envelope. Important fields include:
-
-- `structures`
-- `base_chunk_nbt` or packed `base_chunk_payload`
-- nested `chunkis`
-  - `suppress_initial_repopulation`
-  - `full_block_baseline`
-  - `portal_chunk`
-  - `migrated_authoritative_chunk`
-- `preserved_auxiliary_chunk_nbt`
-
-## Load-Side Use
-
-`CisNbtUtil.buildLoadChunkNbt(...)` decides whether load should use:
-
-- the persisted base chunk as the vanilla deserialization baseline
-- or a synthetic empty-shell chunk root
-
-That decision depends on metadata, especially whether the stored CIS payload already represents the authoritative block baseline.
-
-## Structural Metadata
-
-Chunkis currently preserves:
-
-- vanilla structure metadata
-- portal chunk markers
-- auxiliary vanilla chunk data that Chunkis does not explicitly model
-- migration markers for offline authoritative imports
-
-## Invariants
-
-- Persisted base capture is idempotent once present.
-- Full block baseline and persisted base chunk are different anchors with different load semantics.
-- Metadata is not optional decoration; it carries restore policy.
-
-## Related Docs
-
-- [Delta And Ownership Model](Delta-And-Ownership-Model.md)
-- [Save Pipeline](Save-Pipeline.md)
-- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
-- [Migration And Versioning](Migration-And-Versioning.md)
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/CisNbtUtil.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/CisSnapshotCapture.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/BaseChunkCaptureUtil.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/StructureMetadataExtractor.java`
+- `fabric/src/test/java/io/liparakis/chunkis/world/restoration/nbt/CisNbtUtilTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/world/restoration/capture/CisSnapshotCaptureTest.java`
+- `fabric/src/gametest/java/io/liparakis/chunkis/gametest/StructureMetadataExtractorGameTest.java`

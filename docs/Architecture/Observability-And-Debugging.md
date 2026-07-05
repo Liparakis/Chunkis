@@ -1,79 +1,58 @@
 # Observability And Debugging
 
-## Purpose
+## What This Area Is
 
-Chunkis persistence bugs are usually timeline bugs, not single-method bugs. The observability stack records the boundaries that matter when save, load, restore, or client sync goes wrong.
+Chunkis has a built-in trace/event system, suspect aggregation, payload-watch tracing, and command surfaces for inspecting persistence behavior.
 
-## Main Classes
+## What Owns It
 
-- `core/src/main/java/io/liparakis/chunkis/debug/trace/ChunkTraceStore.java`
-- `core/src/main/java/io/liparakis/chunkis/debug/trace/ChunkTraceInvariants.java`
-- `core/src/main/java/io/liparakis/chunkis/debug/model/ChunkTraceEvent.java`
-- `core/src/main/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpoints.java`
-- `core/src/main/java/io/liparakis/chunkis/debug/trace/ChunkTraceJsonl.java`
-- `fabric/src/main/java/io/liparakis/chunkis/debug/trace/PayloadWatchTracer.java`
+- debug config and model: `common/debug`
+- event storage and suspect tracking: `ChunkTraceStore`, `ChunkTraceSuspectManager`
+- watch registration: `ChunkTraceWatchpoints`
+- operator commands: `ChunkDebugCommand`, `StorageReportCommand`, `DurabilityTestCommand`
+
+## How It Relates To Other Flows
+
+- save, load, restore, storage, and client-sync code emit trace events
+- payload-watch tracing is selective and sits on top of the general event store
+- storage reports read region files directly for accounting instead of inferring usage from high-level state
+
+## Key Entry Points
+
+- `common/src/main/java/io/liparakis/chunkis/debug/config/ChunkisDebugConfig.java`
+- `common/src/main/java/io/liparakis/chunkis/debug/trace/ChunkTraceStore.java`
+- `common/src/main/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpoints.java`
 - `fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java`
-- `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java`
 - `fabric/src/main/java/io/liparakis/chunkis/command/StorageReportCommand.java`
 
-## Current Model
+## Current Surfaces
 
-The trace store records bounded in-memory events around:
+- debug level control through `/chunkis debug on|off`
+- latest traces, suspects, failures, and exports through `/chunkis debug ...`
+- watchpoints for chunks, regions, blocks, block entities, and entities
+- storage accounting through `/chunkis_storage_report`
+- durability stress test through `/durability_test` and `/durability_test_stop`
 
-- save requested, queued, flushed, failed
-- load started, source resolved, completed, failed
-- region reads and writes
-- restore started, applied, completed, failed
-- tracker transitions
-- client sync send and apply
-- assertion failures
+## Current Sharp Edges
 
-`ChunkTraceInvariants` only checks cheap, high-confidence rules. It does not attempt full causal proof.
+- `ChunkTraceStore` is a fixed-size ring buffer with overwrite behavior at capacity
+- payload-watch events bypass the normal debug-level gate
+- these tools are process-local runtime diagnostics, not persistent observability infrastructure
 
-## Suspects And Watches
+## Where Behavior Is Proven
 
-`ChunkTraceStore` promotes high-value failures into retained suspects so the ring buffer can rotate without immediately losing the interesting case.
+- command tests
+- trace and watchpoint tests in `common`
 
-Watch tooling is layered on top:
+## Evidence
 
-- chunk watchpoints
-- region watchpoints
-- payload watches for blocks, block entities, and entities
-
-See [Payload Watch Framework](Payload-Watch-Framework.md).
-
-## Commands
-
-Current operator-facing commands include:
-
-- `/chunkis debug on|off`
-- `/chunkis debug latest <count>`
-- `/chunkis debug failures [count]`
-- `/chunkis debug suspects`
-- `/chunkis debug suspect <id>`
-- `/chunkis debug watch ...`
-- `/chunkis durability ...`
-- `/chunkis_storage_report`
-
-## Practical Debug Order
-
-For a persistence bug:
-
-1. enable debug
-2. reproduce
-3. inspect suspect and failure timelines
-4. correlate save request, queue/flush, load source, restore, and client sync
-5. inspect pending async saves or payload watches when the chunk timeline alone is too coarse
-
-## Limits
-
-- Debugging is bounded and mostly in-memory, not a permanent trace database.
-- A clean delta is not proof of a successful flush without matching timeline evidence.
-- Payload watches prove stage boundaries, not impossible facts between stages.
-
-## Related Docs
-
-- [Tracking, Guards, And Durability](Tracking-Guards-And-Durability.md)
-- [Payload Watch Framework](Payload-Watch-Framework.md)
-- [Save Pipeline](Save-Pipeline.md)
-- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
+- `common/src/main/java/io/liparakis/chunkis/debug/config/ChunkisDebugConfig.java`
+- `common/src/main/java/io/liparakis/chunkis/debug/trace/ChunkTraceStore.java`
+- `common/src/main/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpoints.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/StorageReportCommand.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java`
+- `common/src/test/java/io/liparakis/chunkis/debug/trace/ChunkTraceStoreTest.java`
+- `common/src/test/java/io/liparakis/chunkis/debug/watch/ChunkTraceWatchpointsTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/command/ChunkDebugCommandTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/command/StorageReportCommandTest.java`

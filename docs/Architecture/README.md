@@ -1,6 +1,6 @@
-# Chunkis Architecture
+# Architecture
 
-This folder is the implementation-aligned architecture map for Chunkis.
+This folder documents the implementation that exists in the current repository, using the active module names: `common`, `storage`, `migration`, and `fabric`.
 
 ## Reading Order
 
@@ -19,10 +19,16 @@ This folder is the implementation-aligned architecture map for Chunkis.
 
 ## Scope
 
-These documents describe the code that exists in the repository today:
+- `common` defines the data model, codecs, and debug model
+- `storage` owns persistence mechanics
+- `migration` owns CIS version transitions
+- `fabric` owns Minecraft integration and runtime behavior
 
-- `core/` owns the storage engine, codecs, mapping, and debug model.
-- `fabric/` owns Minecraft integration, runtime tracking, restore, migration entrypoints, commands, and networking.
-- `cismigrator/` owns CIS-to-CIS version planning and storage-backed rewrites.
+## Evidence
 
-When the architecture changes, update the relevant document here in the same change.
+- `settings.gradle`
+- `docs/Architecture/README.md`
+- `common/build.gradle`
+- `storage/build.gradle`
+- `migration/build.gradle`
+- `fabric/build.gradle`

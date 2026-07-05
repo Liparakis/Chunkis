@@ -1,100 +1,56 @@
 # Load And Restore Pipeline
 
-## Purpose
+## What This Area Is
 
-Chunkis must load chunk state without reading vanilla region data, while still reusing vanilla deserialization where
-that is safer than decoding directly into a live chunk.
+This is the path that resolves Chunkis-owned chunk state during load, builds temporary NBT for vanilla deserialization, attaches the decoded delta, and restores chunk contents into live `WorldChunk` instances.
 
-## Main Classes
+## What Owns It
 
-- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/StoragePreventionMixin.java`
+- source resolution and synthetic NBT: `ThreadedAnvilChunkStorageMixin`, `CisNbtUtil`
+- proto attach and conversion hooks: `ChunkSerializerMixin`
+- live replay: `ChunkRestorer`
+- mutation suppression during restore: `PendingChunkMutationSuppression`, `ChunkMutationTrackingScope`
+
+## How It Relates To Other Flows
+
+- may flush dirty in-memory deltas before load so tracker and disk do not drift
+- uses vanilla deserialization as a carrier instead of replacing it completely
+- restore repopulates runtime delta state without treating replay as fresh player mutation
+
+## Key Entry Points
+
 - `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ThreadedAnvilChunkStorageMixin.java`
 - `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ChunkSerializerMixin.java`
-- `fabric/src/main/java/io/liparakis/chunkis/mixin/world/chunk/WorldChunkMixin.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/core/ChunkRestorer.java`
 - `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/CisNbtUtil.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/core/ChunkRestorer.java`
 
-## Pipeline
+## Current Flow
 
-```mermaid
-flowchart TD
-    A["Chunk load request"] --> B["Resolve tracker delta or CIS storage"]
-    B --> C["CisNbtUtil.buildLoadChunkNbt"]
-    C --> D["Vanilla deserialize to ProtoChunk"]
-    D --> E["ChunkSerializerMixin attaches decoded delta"]
-    E --> F{"WrapperProtoChunk already wraps live WorldChunk?"}
-    F -->|yes| G["Restore immediately into wrapped live chunk"]
-    F -->|no| H["WorldChunk construction path"]
-    H --> I["WorldChunkMixin restore hook"]
-    G --> J["ChunkRestorer replay + derived-state refresh"]
-    I --> J
-```
+1. Load resolves a delta from tracker memory, unload cache, or CIS storage.
+2. `CisNbtUtil.buildLoadChunkNbt(...)` chooses either persisted-base-backed NBT or a synthetic empty-shell root.
+3. Vanilla converts the NBT to `SerializedChunk` and then `ProtoChunk`.
+4. `ChunkSerializerMixin` attaches the `ChunkDelta` to the proto chunk and applies restore-suppression setup.
+5. On promotion to a live chunk, `ChunkRestorer.restore(...)` replays blocks, block entities, and pending entities.
+6. Derived state such as lighting, heightmaps, and follow-up networking is refreshed after replay.
 
-## Source Resolution
+## Current Sharp Edges
 
-`ThreadedAnvilChunkStorageMixin#chunkis$resolveDeltaForLoad(...)` prefers sources in this order:
+- block-entity-only sparse payloads without a persisted base are rejected during restore
+- full-baseline CIS snapshots and persisted-base-backed sparse payloads take different load baselines
+- restore may happen through a wrapped full-chunk path or normal promotion path, and docs should not collapse those into one idealized flow
 
-1. tracked in-memory delta
-2. unload-cache delta
-3. CIS storage
-4. no Chunkis state
+## Where Behavior Is Proven
 
-If a tracked dirty delta exists, Chunkis can synchronously flush it before building synthetic load NBT so storage and
-memory do not drift during load.
+- `ChunkSerializerMixin`
+- `ChunkRestorer`
+- `PersistedBaseChunkReloadGameTest`
+- `ChunkRestorerTest`
 
-## Synthetic NBT
+## Evidence
 
-`CisNbtUtil.buildLoadChunkNbt(...)` chooses between:
-
-- a persisted base chunk NBT baseline
-- a synthetic empty-shell chunk root
-
-The base chunk is used only when metadata says it should be the block baseline. Full-baseline CIS snapshots do not use
-persisted base chunk blocks during load.
-
-## Proto Attach Stage
-
-`ChunkSerializerMixin` attaches the decoded `ChunkDelta` to the proto chunk through `ChunkisDeltaDuck`.
-
-It also preserves the base-baseline decision:
-
-- base-backed loads keep the relevant metadata attached
-- baseline-free loads keep the proto ready for regeneration-first restore behavior
-
-## Restore Stage
-
-`ChunkRestorer.restore(...)` currently:
-
-1. clears runtime delta payloads and copies metadata/palette from the proto delta
-2. decides whether a persisted base chunk already supplies the block baseline
-3. clears the live chunk to air when restore must rebuild the baseline itself
-4. replays blocks, block entities, and pending or legacy entity payloads
-5. refreshes heightmaps and lighting
-6. repopulates the runtime delta without making it dirty
-
-For bulk restore cases, Chunkis resends a full vanilla chunk packet and then sends a fresh Chunkis delta to chunk
-watchers.
-
-## Restore-Time Safety Rules
-
-- Block-entity-only sparse payloads without a base are rejected.
-- Restore runs on the server thread.
-- Restore must not become a fresh tracked player mutation.
-- Derived state such as lighting and heightmaps is refreshed after raw writes.
-
-## Portal And Entity Follow-Up
-
-After restore, Chunkis may also:
-
-- replay pending entities through `EntityReplayCoordinator`
-- rebuild portal index state through the portal managers
-- resend updated chunk state to watching players
-
-Those are follow-up effects of restore, not separate persistence sources.
-
-## Related Docs
-
-- [Save Pipeline](Save-Pipeline.md)
-- [Snapshots And Metadata](Snapshots-And-Metadata.md)
-- [Tracking, Guards, And Durability](Tracking-Guards-And-Durability.md)
-- [Networking And Client Sync](Networking-And-Client-Sync.md)
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ThreadedAnvilChunkStorageMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ChunkSerializerMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/nbt/CisNbtUtil.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/core/ChunkRestorer.java`
+- `fabric/src/gametest/java/io/liparakis/chunkis/gametest/PersistedBaseChunkReloadGameTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/world/restoration/core/ChunkRestorerTest.java`

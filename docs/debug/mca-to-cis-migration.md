@@ -1,68 +1,41 @@
-# MCA to CIS Migration Investigation Summary
+# MCA to CIS Migration
 
-## Overview
+## What This Area Is
 
-The offline MCA-to-CIS migration path (`OfflineMcaCisTranslator`) converts vanilla `.mca` region files into authoritative Chunkis CIS snapshots before world launch. This document records the validation strategy, comparison semantics, retirement rules, and test coverage introduced to guarantee lossless round-trips.
+This note covers the current offline vanilla-region import path that runs before integrated-server startup and converts `.mca` data into authoritative Chunkis CIS snapshots.
 
-## Validation Result Type
+## What Owns It
 
-`MigrationValidationResult` encapsulates success/failure with:
-- `success` – boolean outcome
-- `failureCode` – stable machine-readable identifier (e.g., `BLOCK_STATE_MISMATCH`)
-- `details` – human-readable diagnostic (counts, positions, keys)
+- coordinator: `PreLaunchMigrationCoordinator`
+- translator: `OfflineMcaCisTranslator`
+- startup hook: `MinecraftClientMixin`
 
-Returned by `validateMigratedChunk` and the seven named validation helpers inside `matchesMigratedChunkShape`.
+## Current Behavior
 
-## Named Validation Methods
+- scans vanilla `region/` and `entities/` directories for each configured dimension
+- builds one authoritative Chunkis snapshot per present vanilla chunk
+- validates the written CIS payload shape after save
+- omits empty placeholder chunks so later loads can treat them as absent
+- retires a source `.mca` file to `.backup` only when all present chunks were handled and none failed
 
-`matchesMigratedChunkShape` was refactored into:
-1. `validateBlocks` – position set + canonical state key comparison
-2. `validateBlockEntities` – key presence + normalized NBT match
-3. `validateEntities` – sorted stringified list equality
-4. Structure/auxiliary metadata checks (via `NbtHelper.matches`)
-5. Count checks for blocks, block entities, entities
-6. Baseline/authoritative flag checks
-7. Null/empty guard checks
+## Current Validation Rules
 
-## Block Comparison (Semantic)
+- migrated chunks must keep full-baseline and authoritative markers
+- non-air block payloads are compared semantically, not by palette order
+- block entities are compared with recursive NBT matching
+- entity payloads are compared after normalization to sorted string form
+- structure and auxiliary metadata must also match
 
-`sameBlocks` replaced by `validateBlocks` using `canonicalBlockStateKey`:
-- Registry ID (namespaced string)
-- Properties sorted alphabetically by name
-- Format: `minecraft:stone_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]`
+## Current Sharp Edges
 
-This ignores internal palette id ordering and property iteration order.
+- if CIS data is already present, the coordinator can treat it as authoritative and delete stale vanilla source files
+- this is a forward migration path; the code does not prove a reversible export back to vanilla storage
 
-## Block Entity Comparison
+## Evidence
 
-`validateBlockEntities` reports the first mismatching key (packed long position) and differing top-level keys when `NbtHelper.matches` fails. Volatile fields (`x`,`y`,`z`,`id`) are intentionally kept; any difference in their values or presence is reported.
-
-## Entity Comparison
-
-Entity payloads are stringified, sorted, and compared as lists. Order-independent equality is preserved.
-
-## Logging Strategy
-
-- First 10 mismatches per region are logged at WARN with full details (position + expected/actual).
-- Subsequent mismatches are counted and summarized once at the end of the region.
-- Validation failures surface `failureCode` + `details` in the error log.
-
-## Retirement Rules (Strict – Unchanged)
-
-A source `.mca` region is retired to `.backup` only when:
-- `failedChunks == 0`
-- `presentChunks == handledChunks`
-
-Any validation failure, I/O error, or omitted placeholder failure keeps the original region in place. This rule is intentionally strict and was never relaxed.
-
-## Unit Test Coverage
-
-- Round-trip identity for normal chunks
-- Property preservation: stairs (facing, half, shape, waterlogged), slabs (type, waterlogged), fences (connected states), doors (hinge, half, facing, open), trapdoors, buttons, signs (rotation, waterlogged)
-- Negative coordinates and regions `r.-1.-1`
-- Block entity round-trips with complex NBT
-- Entity list preservation (order independent)
-- Empty placeholder omission (`isOmittableEmptyChunk`)
-- Validation failure paths (count mismatch, state mismatch, missing markers)
-
-The source of truth for current verification is the repository test suite, not this note. Keep this document focused on migration semantics and validation rules.
+- `fabric/src/main/java/io/liparakis/chunkis/mixin/client/storage/MinecraftClientMixin.java`
+- `fabric/src/main/java/io/liparakis/chunkis/integration/migration/offline/PreLaunchMigrationCoordinator.java`
+- `fabric/src/main/java/io/liparakis/chunkis/integration/migration/offline/OfflineMcaCisTranslator.java`
+- `fabric/src/test/java/io/liparakis/chunkis/integration/migration/offline/OfflineMcaCisTranslatorTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/integration/migration/offline/PreLaunchMigrationCoordinatorTest.java`
+- `fabric/src/gametest/java/io/liparakis/chunkis/gametest/CisFixtureMigrationGameTest.java`

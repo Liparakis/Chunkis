@@ -1,63 +1,59 @@
 # Tracking, Guards, And Durability
 
-## Purpose
+## What This Area Is
 
-Once Chunkis disables vanilla chunk persistence, losing a dirty chunk is a real durability bug. This subsystem keeps runtime ownership explicit and prevents stale or unsafe saves.
+This area covers dirty tracking, unload-cache mirroring, sparse-payload rejection, restore suppression, and the durability stress command used to exercise the pipeline.
 
-## Main Classes
+## What Owns It
+
+- tracker state: `GlobalChunkTracker`
+- sparse-payload policy: `DeltaPersistenceGuard`
+- restore/save suppression: `PendingChunkMutationSuppression`, `ChunkMutationTrackingScope`
+- durability operator command: `DurabilityTestCommand`
+
+## How It Relates To Other Flows
+
+- tracking decides what should be saved or reloaded from memory
+- guards prevent payloads that cannot safely restore
+- suppression prevents restore-time writes from being recorded as fresh mutation
+
+## Key Entry Points
 
 - `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/GlobalChunkTracker.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/GlobalChunkUnloadCache.java`
 - `fabric/src/main/java/io/liparakis/chunkis/world/tracking/ownership/DeltaPersistenceGuard.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/restoration/capture/BaseChunkCaptureUtil.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/save/AsyncCisSaveManager.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/save/AsyncCisSaveWorker.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/LeafTickContext.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/suppression/PendingChunkMutationSuppression.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/suppression/ChunkMutationTrackingScope.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java`
 
-## Tracker Model
+## Current Rules
 
-`GlobalChunkTracker` maintains:
+- dirty deltas are tracked by dimension and chunk position
+- unload cache mirrors tracked deltas across chunk unload boundaries
+- a replay payload with neither persisted base metadata nor full baseline metadata is rejected
+- restore paths use suppression scopes so replay work does not look like live edits
+- durability testing repeatedly teleports a player between positions to stress load/save transitions
 
-- `dirtyDeltas`: the current authoritative dirty deltas
-- unload cache state: recently unloaded deltas that may still be more authoritative than storage
+## Current Sharp Edges
 
-The tracker also refuses weaker replacements when an existing delta still carries the authoritative anchor.
+- the tracker may keep an existing authoritative delta over a weaker replacement
+- clean unload-cache deltas do not override stored data
+- the durability command is a runtime stress harness, not a proof of long-term storage correctness by itself
 
-## Guard Model
+## Where Behavior Is Proven
 
-`DeltaPersistenceGuard` rejects payloads that still contain replay content but have neither:
+- `GlobalChunkTrackerTest`
+- `DeltaPersistenceGuardTest`
+- suppression tests
+- durability command tests
 
-- persisted base chunk metadata
-- full block baseline metadata
+## Evidence
 
-The most explicit invalid case is block-entity-only payload without a base.
-
-## Async Durability Model
-
-`AsyncCisSaveManager` snapshots the delta and records its generation.
-
-`AsyncCisSaveWorker` only marks the live delta saved when:
-
-- the same live delta instance is still current
-- the generation still matches
-
-Otherwise the async completion is ignored as stale.
-
-## Natural-Mutation Exception
-
-`LeafTickContext` is a narrow policy escape hatch so natural leaf-decay churn does not become tracked meaningful mutation.
-
-It is not a general permission to ignore world changes.
-
-## Invariants
-
-- Dirty meaningful deltas must enter the tracker.
-- Clean unload-cache placeholders are not authoritative and are invalidated on lookup.
-- Stale async completions must not clean newer state.
-- Unsafe sparse payloads must be repaired or rejected before persistence.
-
-## Related Docs
-
-- [Save Pipeline](Save-Pipeline.md)
-- [Load And Restore Pipeline](Load-And-Restore-Pipeline.md)
-- [Observability And Debugging](Observability-And-Debugging.md)
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/state/GlobalChunkTracker.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/ownership/DeltaPersistenceGuard.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/suppression/PendingChunkMutationSuppression.java`
+- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/suppression/ChunkMutationTrackingScope.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java`
+- `fabric/src/test/java/io/liparakis/chunkis/world/tracking/ownership/DeltaPersistenceGuardTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/world/tracking/suppression/PendingChunkMutationSuppressionTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/world/tracking/suppression/ChunkMutationTrackingScopeTest.java`
+- `fabric/src/test/java/io/liparakis/chunkis/command/DurabilityTestCommandTest.java`

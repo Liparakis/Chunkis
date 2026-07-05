@@ -1,9 +1,20 @@
-# Debug Docs
+# Debug Notes
 
-This directory contains focused debugging and investigation notes that are narrower than the main architecture docs.
+This folder holds focused notes for operator and reviewer workflows that are narrower than the architecture docs.
 
-Current contents:
+## Current Topics
 
-- [MCA To CIS Migration Investigation Summary](mca-to-cis-migration.md)
+- [MCA to CIS migration](mca-to-cis-migration.md)
 
-These documents should stay implementation-aligned and should not be treated as the primary architecture source of truth.
+## Related Runtime Commands
+
+- `/chunkis debug ...`
+- `/chunkis_storage_report`
+- `/durability_test`
+
+## Evidence
+
+- `docs/debug/README.md`
+- `fabric/src/main/java/io/liparakis/chunkis/command/ChunkDebugCommand.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/StorageReportCommand.java`
+- `fabric/src/main/java/io/liparakis/chunkis/command/DurabilityTestCommand.java`
