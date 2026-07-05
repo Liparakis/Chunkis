@@ -28,6 +28,6 @@ public abstract class MinecraftClientMixin {
             final boolean newWorld,
             final CallbackInfo ci
     ) {
-        PreLaunchMigrationCoordinator.runBeforeIntegratedServerStart(session, saveLoader);
+        PreLaunchMigrationCoordinator.runBeforeIntegratedServerStart(session, saveLoader, newWorld);
     }
 }

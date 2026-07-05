@@ -46,10 +46,12 @@ public final class PreLaunchMigrationCoordinator {
      *
      * @param session    locked save session for the world being opened
      * @param saveLoader save loader containing dimension registries
+     * @param newWorld   whether Minecraft is booting a freshly created world
      */
     public static void runBeforeIntegratedServerStart(
             final LevelStorage.Session session,
-            final SaveLoader saveLoader
+            final SaveLoader saveLoader,
+            final boolean newWorld
     ) {
         final Path saveRoot = session.getDirectory(WorldSavePath.ROOT);
 
@@ -63,6 +65,11 @@ public final class PreLaunchMigrationCoordinator {
 
             for (final var entry : dimensionRegistry.getEntrySet()) {
                 final RegistryKey<World> worldKey = RegistryKeys.toWorldKey(entry.getKey());
+                if (shouldTreatDimensionAsAuthoritative(newWorld, false)) {
+                    MigrationStateServiceHolder.markAuthoritative(worldKey);
+                    LOGGER.info("Chunkis storage is authoritative from first boot for {}", worldKey.getValue());
+                    continue;
+                }
                 final RegistryEntry<DimensionType> dimensionType = entry.getValue()
                         .dimensionTypeEntry();
                 final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, worldKey);
@@ -73,7 +80,7 @@ public final class PreLaunchMigrationCoordinator {
                 final boolean hasCisData = Files.isDirectory(cisDir) && !collectFiles(cisDir, "*.cis").isEmpty();
 
                 if (liveMca.isEmpty() && liveEntityMca.isEmpty()) {
-                    if (shouldTreatCisAsAuthoritative(hasCisData)) {
+                    if (shouldTreatDimensionAsAuthoritative(false, hasCisData)) {
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
                         LOGGER.info("Chunkis storage is authoritative for {}", worldKey.getValue());
                     }
@@ -135,10 +142,11 @@ public final class PreLaunchMigrationCoordinator {
 
     /**
      * Returns whether existing Chunkis storage is authoritative enough to skip
-     * vanilla-region migration.
+     * vanilla-region migration, or whether a fresh world should start under
+     * Chunkis authority immediately.
      */
-    static boolean shouldTreatCisAsAuthoritative(final boolean hasCisData) {
-        return hasCisData;
+    static boolean shouldTreatDimensionAsAuthoritative(final boolean newWorld, final boolean hasCisData) {
+        return newWorld || hasCisData;
     }
 
     /**

@@ -1,6 +1,8 @@
 package io.liparakis.chunkis.integration.migration.offline;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.file.Path;
@@ -58,5 +60,22 @@ class PreLaunchMigrationCoordinatorTest {
                 ),
                 Path.of("migration")
         ));
+    }
+
+    /**
+     * Tests that a freshly created world starts under Chunkis authority even before
+     * any CIS region files exist.
+     */
+    @Test
+    void freshWorldIsImmediatelyAuthoritative() {
+        assertTrue(PreLaunchMigrationCoordinator.shouldTreatDimensionAsAuthoritative(true, false));
+    }
+
+    /**
+     * Tests that an existing world without CIS data is not treated as authoritative.
+     */
+    @Test
+    void existingWorldWithoutCisDataIsNotAuthoritative() {
+        assertFalse(PreLaunchMigrationCoordinator.shouldTreatDimensionAsAuthoritative(false, false));
     }
 }
