@@ -111,6 +111,14 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
     public void visitBlockEntity(final int x, final int y, final int z, final NbtCompound nbt) {
         clientDelta.addBlockEntityData(x, y, z, nbt, false);
 
+        // Trial spawners contain server-side registry-backed config that the client
+        // cannot decode from the full persistence payload. Vanilla already sends
+        // their client-safe initial data, so keep the payload for delta tracking but
+        // do not replay it through BlockEntity.createFromNbt.
+        if (isVanillaOwnedBlockEntity(nbt)) {
+            return;
+        }
+
         final BlockPos pos = new BlockPos(baseX + x, y, baseZ + z);
         if (!canHaveBlockEntity(pos)) {
             return;
@@ -122,6 +130,18 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
         }
 
         replaceBlockEntity(pos, be);
+    }
+
+    /**
+     * Returns whether the block entity's client state is authoritative from vanilla.
+     *
+     * @param nbt block entity payload
+     * @return {@code true} for block entities that must not receive full persistence NBT on the client
+     */
+    static boolean isVanillaOwnedBlockEntity(final NbtCompound nbt) {
+        return nbt.getString("id")
+                .map("minecraft:trial_spawner"::equals)
+                .orElse(false);
     }
 
     /**

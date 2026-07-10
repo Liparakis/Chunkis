@@ -15,6 +15,7 @@ import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
+import io.liparakis.chunkis.world.tracking.save.VanillaEntityRegionCleanup;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.util.Map;
 import net.fabricmc.api.ModInitializer;
@@ -22,6 +23,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -80,9 +82,11 @@ public final class ChunkisMod implements ModInitializer {
      */
     private static void registerEvents() {
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk));
+        ServerWorldEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.delete(world));
         ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
         ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> VanillaEntityRegionCleanup.deletePending());
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> clearRuntimeState());
     }
 

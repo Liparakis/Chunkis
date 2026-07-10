@@ -31,7 +31,7 @@ Chunkis sends chunk deltas to clients in addition to vanilla chunk packets. The 
 4. Payloads over `1_024_000` raw bytes are dropped.
 5. The client decodes the payload and applies it to the local `WorldChunk` through `ClientDeltaVisitor`.
 
-Vanilla entity tracking remains the source of truth for client entities. Custom Chunkis deltas apply block and block-entity state but do not materialize entity payloads again.
+Vanilla entity tracking remains the source of truth for client entities. Custom Chunkis deltas apply block and block-entity state but do not materialize entity payloads again. Trial spawners are also left to vanilla on the client: their persisted server payload references a dynamic registry that the client cannot decode, while the vanilla chunk/update path provides client-safe state.
 
 ## Current Sharp Edges
 

@@ -8,7 +8,7 @@ import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 
 /**
- * Resolves vanilla chunk region directories to dimension keys.
+ * Resolves vanilla chunk and external-entity region directories to dimension keys.
  * Used by low-level storage guards that have no world context.
  */
 public final class VanillaRegionPathResolver {
@@ -17,6 +17,11 @@ public final class VanillaRegionPathResolver {
      * Directory name used by vanilla chunk region storage.
      */
     private static final String REGION_DIR = "region";
+
+    /**
+     * Directory name used by vanilla external entity region storage.
+     */
+    private static final String ENTITIES_DIR = "entities";
 
     /**
      * Root directory name used by vanilla for non-overworld dimensions.
@@ -59,11 +64,11 @@ public final class VanillaRegionPathResolver {
     }
 
     /**
-     * Resolves the dimension key from a vanilla chunk region directory path.
+     * Resolves the dimension key from a vanilla chunk or entity region directory path.
      * Supports overworld, nether, end, and custom dimensions.
      *
-     * @param regionDirectory vanilla region directory path
-     * @return resolved dimension key, or empty when the path is not a region directory
+     * @param regionDirectory vanilla region or entity directory path
+     * @return resolved dimension key, or empty when the path is not a supported storage directory
      */
     public static Optional<RegistryKey<World>> resolveDimension(final Path regionDirectory) {
         if (regionDirectory == null) {
@@ -72,7 +77,9 @@ public final class VanillaRegionPathResolver {
         final Path normalized = regionDirectory.toAbsolutePath()
                 .normalize();
         final Path fileName = normalized.getFileName();
-        if (fileName == null || !REGION_DIR.equals(fileName.toString())) {
+        if (fileName == null
+                || (!REGION_DIR.equals(fileName.toString())
+                && !ENTITIES_DIR.equals(fileName.toString()))) {
             return Optional.empty();
         }
         final Path dimensionPath = normalized.getParent();

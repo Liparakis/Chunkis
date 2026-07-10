@@ -11,6 +11,7 @@ The save pipeline captures authoritative chunk state, rejects unsafe sparse payl
 - persistence safety: `DeltaPersistenceGuard`
 - async write path: `AsyncCisSaveManager`, `AsyncCisSaveWorker`
 - actual disk write: `FabricCisStorageHelper`, `CisStorage`
+- vanilla entity-region cleanup: `VanillaEntityRegionCleanup`
 
 ## How It Relates To Other Flows
 
@@ -35,6 +36,7 @@ The save pipeline captures authoritative chunk state, rejects unsafe sparse payl
 6. `DeltaPersistenceGuard` rejects replay payloads that have neither persisted base metadata nor full baseline metadata.
 7. Normal saves queue work through `AsyncCisSaveManager.submit(...)`.
 8. Shutdown and load-path safety flushes still use synchronous `FabricCisStorageHelper.saveTrackedDelta(...)`.
+9. Authoritative worlds delete stale vanilla `entities/r.*.*.mca` files after unload; the low-level region guard prevents new writes.
 
 ## Current Sharp Edges
 

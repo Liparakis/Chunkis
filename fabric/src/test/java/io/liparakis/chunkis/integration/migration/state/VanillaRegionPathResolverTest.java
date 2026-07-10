@@ -29,6 +29,14 @@ class VanillaRegionPathResolverTest {
                         .orElseThrow());
     }
 
+    /** Verifies that the overworld entity directory resolves to the overworld. */
+    @Test
+    void resolvesOverworldEntityDirectory() {
+        assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld")),
+                VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("entities"))
+                        .orElseThrow());
+    }
+
     /**
      * Tests that a dimension-scoped region directory (specifically within the minecraft namespace,
      * e.g., the nether) is successfully resolved to its corresponding {@link RegistryKey}.
@@ -54,6 +62,15 @@ class VanillaRegionPathResolverTest {
                                 .resolve("example")
                                 .resolve("overworld")
                                 .resolve("region"))
+                        .orElseThrow());
+    }
+
+    /** Verifies that a dimension-scoped entity directory resolves to its dimension. */
+    @Test
+    void resolvesDimensionScopedEntityDirectory() {
+        assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "the_nether")),
+                VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("DIM-1")
+                                .resolve("entities"))
                         .orElseThrow());
     }
 }
