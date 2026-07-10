@@ -3,7 +3,9 @@ package io.liparakis.chunkis.world.restoration.core;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
+import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.Set;
 import net.minecraft.block.Block;
@@ -76,13 +78,21 @@ final class ChunkRestoreBlockOperations {
      */
     static void clearChunkToAir(final WorldChunk chunk) {
         final ChunkSection[] sections = chunk.getSectionArray();
+        final SectionWriteCursor clearCursor = PALETTED_CONTAINER_REFLECTION.available()
+                ? new SectionWriteCursor()
+                : null;
         for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
             final ChunkSection section = sections[sectionIndex];
             if (section == null || section.isEmpty()) {
                 continue;
             }
-            // Replacing the whole section is substantially cheaper than touching 4096 cells one by one.
-            sections[sectionIndex] = createAirSectionPreservingBiomes(section);
+            if (clearCursor != null) {
+                clearCursor.clearToState(section, sectionIndex, Blocks.AIR.getDefaultState());
+                resetSectionCounts(section);
+            } else {
+                // Keep the safe fallback when mapped reflective access is unavailable.
+                sections[sectionIndex] = createAirSectionPreservingBiomes(section);
+            }
         }
 
         for (final BlockPos pos : Set.copyOf(chunk.getBlockEntities()
@@ -91,6 +101,18 @@ final class ChunkRestoreBlockOperations {
         }
         ((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts()
                 .clear();
+    }
+
+    /**
+     * Resets derived section counts after raw storage clearing.
+     *
+     * @param section section whose block storage is now air-only
+     */
+    private static void resetSectionCounts(final ChunkSection section) {
+        final ChunkSectionAccessor accessor = (ChunkSectionAccessor) section;
+        accessor.chunkis$setNonEmptyBlockCount((short) 0);
+        accessor.chunkis$setRandomTickableBlockCount((short) 0);
+        accessor.chunkis$setNonEmptyFluidCount((short) 0);
     }
 
     /**
@@ -440,6 +462,32 @@ final class ChunkRestoreBlockOperations {
         private long singularPaletteLookups;
 
         /**
+         * Clears one section's raw storage without replacing its palette container.
+         *
+         * @param section            target section
+         * @param targetSectionIndex section index inside the chunk
+         * @param state              state that should occupy every cell
+         */
+        void clearToState(
+                final ChunkSection section,
+                final int targetSectionIndex,
+                final BlockState state
+        ) {
+            if (targetSectionIndex != sectionIndex) {
+                bindSection(section, targetSectionIndex);
+            }
+
+            final int paletteId = resolvePaletteId(state);
+            if (paletteId == 0) {
+                Arrays.fill(storage.getData(), 0L);
+                return;
+            }
+            for (int i = 0; i < storage.getSize(); i++) {
+                storage.set(i, paletteId);
+            }
+        }
+
+        /**
          * Writes one restored block into the target section.
          *
          * <p>Uses the reflective fast path when available; otherwise falls back to
@@ -540,8 +588,10 @@ final class ChunkRestoreBlockOperations {
             recordPaletteLookupKind();
             final Object previousDataRef = dataRef;
             final int paletteId = palette.index(state, container);
-            refreshData();
-            if (dataRef != previousDataRef) {
+            assert PALETTED_CONTAINER_REFLECTION.dataField() != null;
+            final Object currentDataRef = readField(PALETTED_CONTAINER_REFLECTION.dataField(), container);
+            if (currentDataRef != previousDataRef) {
+                refreshData();
                 paletteInvalidations++;
                 paletteIds.clear();
             }

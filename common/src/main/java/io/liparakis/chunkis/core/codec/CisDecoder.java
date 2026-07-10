@@ -22,6 +22,11 @@ public final class CisDecoder<S, N> extends AbstractCisDecoder<S, N> {
     private final CisAdapter<S> cisAdapter;
 
     /**
+     * Reusable global block-id buffer for successive decodes on this decoder instance.
+     */
+    private int[] blockIdsBuffer = new int[0];
+
+    /**
      * Constructs a new CisDecoder.
      */
     public CisDecoder(
@@ -54,9 +59,11 @@ public final class CisDecoder<S, N> extends AbstractCisDecoder<S, N> {
         int requiredBytes = globalPaletteSize * 2 + 4;
         ensureAvailable(data, offset, requiredBytes, "global palette");
 
-        int[] blockIds = new int[globalPaletteSize];
+        if (blockIdsBuffer.length < globalPaletteSize) {
+            blockIdsBuffer = new int[globalPaletteSize];
+        }
         for (int i = 0; i < globalPaletteSize; i++) {
-            blockIds[i] = readShortBE(data, offset) & 0xFFFF;
+            blockIdsBuffer[i] = readShortBE(data, offset) & 0xFFFF;
             offset += 2;
         }
 
@@ -70,7 +77,7 @@ public final class CisDecoder<S, N> extends AbstractCisDecoder<S, N> {
 
         beginGlobalPalette(globalPaletteSize);
         for (int i = 0; i < globalPaletteSize; i++) {
-            addGlobalPaletteState(palette, cisAdapter.readStateProperties(propertyReader, blockIds[i]));
+            addGlobalPaletteState(palette, cisAdapter.readStateProperties(propertyReader, blockIdsBuffer[i]));
         }
 
         return offset;

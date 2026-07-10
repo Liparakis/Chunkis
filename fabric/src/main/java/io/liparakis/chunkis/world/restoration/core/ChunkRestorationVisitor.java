@@ -142,6 +142,14 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      */
     private final short[] sectionNonEmptyFluidCounts;
     /**
+     * Whether incremental counts were initialized from the base section.
+     */
+    private final boolean[] sectionCountsInitialized;
+    /**
+     * Whether incremental counts remain trustworthy for each base-backed section.
+     */
+    private final boolean[] sectionCountsUnavailable;
+    /**
      * Tracks touched chunk-local X/Z columns so derived-state refresh can avoid over-escalating.
      */
     private final boolean[] touchedColumns = new boolean[16 * 16];
@@ -199,6 +207,8 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         this.sectionNonEmptyBlockCounts = new short[this.sections.length];
         this.sectionRandomTickableBlockCounts = new short[this.sections.length];
         this.sectionNonEmptyFluidCounts = new short[this.sections.length];
+        this.sectionCountsInitialized = new boolean[this.sections.length];
+        this.sectionCountsUnavailable = new boolean[this.sections.length];
         if (this.replayLegacyEntities && this.runtimeDelta != null) {
             this.runtimeDelta.setEntities(sourceDelta.getEntitiesList(), false);
         }
@@ -322,6 +332,9 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             if (section != null && tryApplyExactClearToAirCounts(section, sectionIndex)) {
                 continue;
             }
+            if (section != null && tryApplyIncrementalBaseCounts(section, sectionIndex)) {
+                continue;
+            }
             if (section != null) {
                 section.calculateCounts();
             }
@@ -333,6 +346,21 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      */
     private boolean tryApplyExactClearToAirCounts(final ChunkSection section, final int sectionIndex) {
         if (!clearedToAir) {
+            return false;
+        }
+        final ChunkSectionAccessor accessor = (ChunkSectionAccessor) section;
+        accessor.chunkis$setNonEmptyBlockCount(sectionNonEmptyBlockCounts[sectionIndex]);
+        accessor.chunkis$setRandomTickableBlockCount(sectionRandomTickableBlockCounts[sectionIndex]);
+        accessor.chunkis$setNonEmptyFluidCount(sectionNonEmptyFluidCounts[sectionIndex]);
+        return true;
+    }
+
+    /**
+     * Applies counts tracked while replaying a sparse delta onto a persisted base section.
+     */
+    private boolean tryApplyIncrementalBaseCounts(final ChunkSection section, final int sectionIndex) {
+        if (clearedToAir || !sectionCountsInitialized[sectionIndex]
+                || sectionCountsUnavailable[sectionIndex]) {
             return false;
         }
         final ChunkSectionAccessor accessor = (ChunkSectionAccessor) section;
@@ -441,7 +469,9 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         }
 
         mutableWorldPos.set(chunkStartX + localX, localY, chunkStartZ + localZ);
-        final BlockState previousState = tracePayloadWatches ? chunk.getBlockState(mutableWorldPos) : null;
+        final BlockState previousState = (!clearedToAir || tracePayloadWatches)
+                ? chunk.getBlockState(mutableWorldPos)
+                : null;
         if (tracePayloadWatches) {
             PayloadWatchTracer.traceRestoreInstructionVisited(
                     chunk,
@@ -486,7 +516,11 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         final int sectionIndex = (localY - bottomY) >> 4;
         touchedSections[sectionIndex] = true;
         trackTouchedColumn(localX, localZ);
-        trackExactSectionCounts(sectionIndex, state);
+        if (clearedToAir) {
+            trackExactSectionCounts(sectionIndex, state);
+        } else {
+            trackIncrementalBaseCounts(sectionIndex, previousState, state);
+        }
         copyBlockToRuntimeDelta(localX, localY, localZ, paletteId, state);
         blockApplyFailureCounters.recordAppliedBlock();
         appliedBlocksCount++;
@@ -618,6 +652,51 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 .isEmpty()) {
             sectionNonEmptyFluidCounts[sectionIndex]++;
         }
+    }
+
+    /**
+     * Tracks count changes for a sparse write applied over an existing persisted base section.
+     */
+    private void trackIncrementalBaseCounts(
+            final int sectionIndex,
+            @Nullable final BlockState previousState,
+            final BlockState currentState
+    ) {
+        if (previousState == null) {
+            sectionCountsUnavailable[sectionIndex] = true;
+            return;
+        }
+        if (!sectionCountsInitialized[sectionIndex]) {
+            final ChunkSectionAccessor accessor = (ChunkSectionAccessor) sections[sectionIndex];
+            sectionNonEmptyBlockCounts[sectionIndex] = accessor.chunkis$getNonEmptyBlockCount();
+            sectionRandomTickableBlockCounts[sectionIndex] = accessor.chunkis$getRandomTickableBlockCount();
+            sectionNonEmptyFluidCounts[sectionIndex] = accessor.chunkis$getNonEmptyFluidCount();
+            sectionCountsInitialized[sectionIndex] = true;
+        }
+        if (sectionCountsUnavailable[sectionIndex]) {
+            return;
+        }
+        sectionNonEmptyBlockCounts[sectionIndex] += (short) countDelta(
+                !previousState.isAir(),
+                !currentState.isAir()
+        );
+        sectionRandomTickableBlockCounts[sectionIndex] += (short) countDelta(
+                previousState.hasRandomTicks(),
+                currentState.hasRandomTicks()
+        );
+        sectionNonEmptyFluidCounts[sectionIndex] += (short) countDelta(
+                !previousState.getFluidState()
+                        .isEmpty(),
+                !currentState.getFluidState()
+                        .isEmpty()
+        );
+    }
+
+    /**
+     * Returns the change from one boolean membership state to another.
+     */
+    private static int countDelta(final boolean previousIncluded, final boolean currentIncluded) {
+        return (currentIncluded ? 1 : 0) - (previousIncluded ? 1 : 0);
     }
 
     /**

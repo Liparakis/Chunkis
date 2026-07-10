@@ -1,4 +1,5 @@
 package io.liparakis.chunkis.storage.io;
+
 import io.liparakis.chunkis.core.compression.CompressionContext;
 
 import io.liparakis.chunkis.Chunkis;
@@ -413,7 +414,7 @@ public final class CisStorage<B, S, P, N> {
      * @return loaded chunk delta, or an empty delta if missing or corrupt
      */
     public ChunkDelta<S, N> load(final CisChunkPos pos) {
-        return load(pos, ChunkTraceStore.nextOperationId("load"));
+        return loadWithPresence(pos, ChunkTraceStore.nextOperationId("load")).delta();
     }
 
     /**
@@ -427,6 +428,20 @@ public final class CisStorage<B, S, P, N> {
      * @return loaded chunk delta, or an empty delta if missing or corrupt
      */
     public ChunkDelta<S, N> load(final CisChunkPos pos, final String operationId) {
+        return loadWithPresence(pos, operationId).delta();
+    }
+
+    /**
+     * Loads a chunk delta and reports whether a storage entry existed before decoding.
+     *
+     * <p>The existence check and read share the same cached region file lookup, avoiding
+     * a second storage probe for callers that need decode observability.</p>
+     *
+     * @param pos         chunk position
+     * @param operationId trace correlation id
+     * @return decoded delta and pre-decode storage presence
+     */
+    public LoadResult<S, N> loadWithPresence(final CisChunkPos pos, final String operationId) {
         Objects.requireNonNull(pos, "pos");
 
         ChunkTraceStore.trace(
@@ -435,8 +450,29 @@ public final class CisStorage<B, S, P, N> {
                 toRegionKey(pos), operationId, null, null
         );
 
+        final RegionFile regionFile;
         try {
-            final ChunkDelta<S, N> delta = loadUnchecked(pos, operationId);
+            regionFile = getRegionFile(pos, false);
+        } catch (final IOException e) {
+            final ChunkTraceReason reason = classifyLoadFailure(e);
+            ChunkTraceStore.trace(
+                    ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_END,
+                    ChunkTraceSeverity.ERROR, reason, LOAD_SOURCE,
+                    "load failed and entry will be cleared: " + e.getMessage(), null, toChunkKey(pos),
+                    toRegionKey(pos), operationId, null, null
+            );
+            Chunkis.LOGGER.error(
+                    "Chunkis: Failed to open CIS region for {}. Clearing corrupted data. Error: {}",
+                    pos,
+                    e.getMessage()
+            );
+            clearChunk(pos);
+            return new LoadResult<>(newEmptyDelta(), false);
+        }
+        final boolean storageEntryPresent = regionFile != null && regionFile.hasChunk(pos);
+
+        try {
+            final ChunkDelta<S, N> delta = loadUnchecked(pos, operationId, regionFile);
             if (!delta.isEmpty()) {
                 ChunkTraceStore.trace(
                         ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_SOURCE_RESOLVED,
@@ -461,7 +497,7 @@ public final class CisStorage<B, S, P, N> {
                     delta.isDirty(),
                     null
             );
-            return delta;
+            return new LoadResult<>(delta, storageEntryPresent);
         } catch (final Exception e) {
             final ChunkTraceReason reason = classifyLoadFailure(e);
             ChunkTraceStore.trace(
@@ -475,7 +511,7 @@ public final class CisStorage<B, S, P, N> {
                     , e.getMessage()
             );
             clearChunk(pos);
-            return newEmptyDelta();
+            return new LoadResult<>(newEmptyDelta(), storageEntryPresent);
         }
     }
 
@@ -512,7 +548,7 @@ public final class CisStorage<B, S, P, N> {
      */
     public ChunkDelta<S, N> loadWithoutClearing(final CisChunkPos pos) throws IOException {
         Objects.requireNonNull(pos, "pos");
-        return loadUnchecked(pos, null);
+        return loadUnchecked(pos);
     }
 
     /**
@@ -562,8 +598,18 @@ public final class CisStorage<B, S, P, N> {
      *
      * @throws IOException if region I/O, decompression, or decode fails
      */
-    private ChunkDelta<S, N> loadUnchecked(final CisChunkPos pos, final String operationId) throws IOException {
-        final RegionFile regionFile = getRegionFile(pos, false);
+    private ChunkDelta<S, N> loadUnchecked(final CisChunkPos pos) throws IOException {
+        return loadUnchecked(pos, null, getRegionFile(pos, false));
+    }
+
+    /**
+     * Decodes a chunk using an already resolved region file.
+     */
+    private ChunkDelta<S, N> loadUnchecked(
+            final CisChunkPos pos,
+            final String operationId,
+            final RegionFile regionFile
+    ) throws IOException {
 
         if (regionFile == null) {
             return newEmptyDelta();
@@ -628,6 +674,16 @@ public final class CisStorage<B, S, P, N> {
      */
     Path storageDir() {
         return storageDir;
+    }
+
+    /**
+     * Result of a load together with storage presence observed before decoding.
+     *
+     * @param delta               decoded delta
+     * @param storageEntryPresent whether the region contained an entry before decode
+     */
+    public record LoadResult<S, N>(ChunkDelta<S, N> delta, boolean storageEntryPresent) {
+
     }
 
     /**

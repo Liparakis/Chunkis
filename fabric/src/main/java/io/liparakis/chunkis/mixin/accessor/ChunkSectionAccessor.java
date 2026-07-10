@@ -8,10 +8,16 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface ChunkSectionAccessor {
 
     @Accessor("nonEmptyBlockCount")
-    short chunkis$getNonEmptyBlockCount();
+    void chunkis$setNonEmptyBlockCount(short count);
 
     @Accessor("nonEmptyBlockCount")
-    void chunkis$setNonEmptyBlockCount(short count);
+    short chunkis$getNonEmptyBlockCount();
+
+    @Accessor("randomTickableBlockCount")
+    short chunkis$getRandomTickableBlockCount();
+
+    @Accessor("nonEmptyFluidCount")
+    short chunkis$getNonEmptyFluidCount();
 
     @Accessor("randomTickableBlockCount")
     void chunkis$setRandomTickableBlockCount(short count);

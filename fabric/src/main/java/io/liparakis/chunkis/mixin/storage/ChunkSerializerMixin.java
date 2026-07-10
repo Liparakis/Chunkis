@@ -512,10 +512,15 @@ public class ChunkSerializerMixin {
             final String operationId) {
         final var storage = FabricCisStorageHelper.getStorage(world);
         final var cisPos = FabricCisStorageHelper.toStoragePos(pos);
-        final boolean storageEntryPresent = storage.contains(cisPos);
-        final ChunkDelta<BlockState, NbtCompound> delta = storage.load(cisPos, operationId);
-        PayloadWatchTracer.traceDecodeOutcome(world, pos, delta, operationId, storageEntryPresent);
-        return delta;
+        final var loaded = storage.loadWithPresence(cisPos, operationId);
+        PayloadWatchTracer.traceDecodeOutcome(
+                world,
+                pos,
+                loaded.delta(),
+                operationId,
+                loaded.storageEntryPresent()
+        );
+        return loaded.delta();
     }
 
     /**
