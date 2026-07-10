@@ -19,6 +19,7 @@ import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.load.CisLoadPrefetcher;
 import io.liparakis.chunkis.world.restoration.nbt.StructureMetadataExtractor;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
@@ -546,6 +547,7 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             return trackedDelta;
         }
 
+        CisLoadPrefetcher.observeColdLoad(world, chunkPos);
         final var cisPos = FabricCisStorageHelper.toStoragePos(chunkPos);
         if (!storage.contains(cisPos)) {
             return null;
