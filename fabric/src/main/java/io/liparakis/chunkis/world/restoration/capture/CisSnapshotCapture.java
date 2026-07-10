@@ -178,13 +178,13 @@ public final class CisSnapshotCapture {
         final ChunkSection[] sections = chunk.getSectionArray();
         final int chunkBottomY = chunk.getBottomY();
         target.ensureBlockCapacity(countNonAirBlocks(sections));
+        final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
 
         for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
             final ChunkSection section = sections[sectionIndex];
             if (section == null || section.isEmpty()) {
                 continue;
             }
-            final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
 
             final PalettedContainer<BlockState> container = section.getBlockStateContainer();
             final PalettedContainerAccessor<BlockState> rawContainer = (PalettedContainerAccessor<BlockState>) container;
