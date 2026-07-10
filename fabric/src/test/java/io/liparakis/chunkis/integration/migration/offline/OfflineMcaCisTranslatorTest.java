@@ -139,4 +139,13 @@ class OfflineMcaCisTranslatorTest {
                         .getString("marker")
                         .orElseThrow());
     }
+
+    /** Verifies CPU reservation, heap budgeting, and region-count bounds. */
+    @Test
+    void workerCountReservesTwoProcessorsAndHonorsHeapLimit() {
+        assertEquals(10, OfflineMcaCisTranslator.workerCountFor(20, 12, 24L * 1024 * 1024 * 1024));
+        assertEquals(1, OfflineMcaCisTranslator.workerCountFor(20, 12, 1024L * 1024 * 1024));
+        assertEquals(2, OfflineMcaCisTranslator.workerCountFor(20, 12, 3L * 1024 * 1024 * 1024));
+        assertEquals(2, OfflineMcaCisTranslator.workerCountFor(2, 12, 24L * 1024 * 1024 * 1024));
+    }
 }

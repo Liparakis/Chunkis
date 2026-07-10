@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.mixin.client.storage;
 
-import io.liparakis.chunkis.integration.migration.offline.PreLaunchMigrationCoordinator;
+import io.liparakis.chunkis.client.migration.PreLaunchMigrationGate;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.resource.ResourcePackManager;
 import net.minecraft.server.SaveLoader;
@@ -20,14 +20,18 @@ public abstract class MinecraftClientMixin {
      * Executes the blocking pre-launch MCA-to-CIS migration stage after the save
      * session lock exists but before the integrated server is started.
      */
-    @Inject(method = "startIntegratedServer", at = @At("HEAD"))
-    private void chunkis$runPreLaunchMigrationGate(
-            final LevelStorage.Session session,
+    @Inject(method = "startIntegratedServer", at = @At("HEAD"), cancellable = true)
+    private void chunkis$runPreLaunchMigrationGate(final LevelStorage.Session session,
             final ResourcePackManager dataPackManager,
             final SaveLoader saveLoader,
             final boolean newWorld,
-            final CallbackInfo ci
-    ) {
-        PreLaunchMigrationCoordinator.runBeforeIntegratedServerStart(session, saveLoader, newWorld);
+            final CallbackInfo ci) {
+        if (PreLaunchMigrationGate.shouldBlockStartup((MinecraftClient) (Object) this,
+                session,
+                dataPackManager,
+                saveLoader,
+                newWorld)) {
+            ci.cancel();
+        }
     }
 }

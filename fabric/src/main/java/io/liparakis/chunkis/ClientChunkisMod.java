@@ -2,13 +2,9 @@ package io.liparakis.chunkis;
 
 import io.liparakis.chunkis.client.ClientDeltaMetrics;
 import io.liparakis.chunkis.client.ClientDeltaNetworking;
-import io.liparakis.chunkis.integration.migration.MigrationProgressTracker;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.MessageScreen;
-import net.minecraft.text.Text;
 
 /**
  * Client-side Fabric entrypoint for Chunkis.
@@ -49,15 +45,6 @@ public final class ClientChunkisMod implements ClientModInitializer {
         Chunkis.LOGGER.info("Chunkis Client initializing...");
 
         ClientDeltaNetworking.register();
-
-        MigrationProgressTracker.setStatusListener(status -> {
-            if (status != null) {
-                final MinecraftClient client = MinecraftClient.getInstance();
-                if (client != null) {
-                    client.setScreenAndRender(new MessageScreen(Text.literal(status)));
-                }
-            }
-        });
 
         logInitializationComplete();
     }

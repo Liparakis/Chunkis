@@ -22,9 +22,9 @@ dependencies {
 jar {
     from {
         [
-            project(":common").sourceSets.main.output,
-            project(":storage").sourceSets.main.output,
-            project(":migration").sourceSets.main.output
+                project(":common").sourceSets.main.output,
+                project(":storage").sourceSets.main.output,
+                project(":migration").sourceSets.main.output
         ]
     }
 }
@@ -32,9 +32,9 @@ jar {
 sourcesJar {
     from {
         [
-            project(":common").sourceSets.main.allSource,
-            project(":storage").sourceSets.main.allSource,
-            project(":migration").sourceSets.main.allSource
+                project(":common").sourceSets.main.allSource,
+                project(":storage").sourceSets.main.allSource,
+                project(":migration").sourceSets.main.allSource
         ]
     }
 }

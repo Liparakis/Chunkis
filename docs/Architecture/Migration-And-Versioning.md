@@ -36,6 +36,7 @@ Chunkis has two separate migration concerns in the current code:
 
 - runs before integrated-server startup through `MinecraftClientMixin`
 - reads both vanilla `region/` and `entities/` directories
+- parallelizes independent region files while bounding worker count by CPU and heap budget
 - translates one authoritative snapshot per present chunk
 - validates migrated payload shape after writing
 - retires a source `.mca` file to `.backup` only when all present chunks were handled and none failed

@@ -43,7 +43,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      * <p>For compressed NBT, this is the compressed byte count. Parsed NBT size is
      * still guarded separately by {@link NbtSizeTracker}.</p>
      */
-    private static final int MAX_NBT_SIZE = 16 * 1024 * 1024;
+    public static final int MAX_NBT_SIZE = 16 * 1024 * 1024;
 
     /**
      * Initial reusable buffer size.

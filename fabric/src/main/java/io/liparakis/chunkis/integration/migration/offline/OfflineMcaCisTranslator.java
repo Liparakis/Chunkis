@@ -27,6 +27,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -88,6 +94,18 @@ public final class OfflineMcaCisTranslator {
     private static final int REGION_SIZE = 32;
 
     /**
+     * Reserves enough heap for one decoded source chunk, its authoritative delta,
+     * and compression buffers. This limits parallelism before the JVM is under
+     * allocation pressure.
+     */
+    private static final long MIGRATION_BASELINE_HEAP_BYTES = 2L * 1024L * 1024L * 1024L;
+
+    /**
+     * Heap budget reserved for each concurrently decoding worker.
+     */
+    private static final long MIGRATION_WORKER_HEAP_BYTES = 512L * 1024L * 1024L;
+
+    /**
      * Private constructor to prevent utility class instantiation.
      */
     private OfflineMcaCisTranslator() {
@@ -104,12 +122,10 @@ public final class OfflineMcaCisTranslator {
      * @param dimensionType   dimension height limits
      * @throws IOException if storage initialization or report writing fails
      */
-    public static OfflineWorldMigrationReport translateWorld(
-            final Path saveRoot,
+    public static OfflineWorldMigrationReport translateWorld(final Path saveRoot,
             final RegistryKey<World> worldKey,
             final DynamicRegistryManager registryManager,
-            final RegistryEntry<DimensionType> dimensionType
-    ) throws IOException {
+            final RegistryEntry<DimensionType> dimensionType) throws IOException {
         final String worldId = worldKey.getValue()
                 .toString();
         final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, worldKey);
@@ -121,48 +137,65 @@ public final class OfflineMcaCisTranslator {
             return OfflineWorldMigrationReport.empty(worldKey);
         }
 
-        final List<RegionCoordinates> regions = collectRegions(regionDir);
+        final StorageKey storageKey = new StorageKey("chunk", worldKey, "chunk");
+        final List<RegionTask> regions = collectRegionTasks(regionDir, entityDir, storageKey);
         if (regions.isEmpty()) {
             return OfflineWorldMigrationReport.empty(worldKey);
         }
 
         final Path storageDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, worldKey);
         final Path mappingFile = ChunkisStoragePaths.computeMappingFile(saveRoot, worldKey);
-        final HeightLimitView heightLimitView = HeightLimitView.create(
-                dimensionType.value()
+        final HeightLimitView heightLimitView = HeightLimitView.create(dimensionType.value()
                         .minY(),
                 dimensionType.value()
-                        .height()
-        );
+                        .height());
         final PalettesFactory palettesFactory = PalettesFactory.fromRegistryManager(registryManager);
 
+        final int workers = workerCountFor(regions.size(),
+                Runtime.getRuntime()
+                        .availableProcessors(),
+                Runtime.getRuntime()
+                        .maxMemory());
+        final long totalChunks = regions.stream()
+                .mapToLong(RegionTask::presentChunks)
+                .sum();
+        final long totalBytes = regions.stream()
+                .mapToLong(RegionTask::fileSizeBytes)
+                .sum();
         int handledChunks = 0;
         int failedChunks = 0;
         int retiredRegions = 0;
-        MigrationProgressTracker.begin(worldId, regions.size());
+        MigrationProgressTracker.begin(worldId, regions.size(), totalChunks, totalBytes, workers);
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
-                buildStorage(storageDir, mappingFile);
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = buildStorage(storageDir, mappingFile);
+        final AtomicInteger workerNumbers = new AtomicInteger();
+        final ExecutorService executor = Executors.newFixedThreadPool(workers, runnable -> {
+            final Thread thread = new Thread(runnable, "Chunkis-McaToCis-" + workerNumbers.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        });
         try {
-            for (int i = 0; i < regions.size(); i++) {
-                final RegionCoordinates region = regions.get(i);
-                final Path mcaPath = regionDir.resolve(region.fileName());
-                MigrationProgressTracker.region(worldId,
-                        mcaPath.getFileName()
-                                .toString(),
-                        i + 1,
-                        regions.size());
-
-                final OfflineRegionMigrationReport report = translateRegion(
-                        storage,
+            final List<Future<OfflineRegionMigrationReport>> futures = new ArrayList<>(regions.size());
+            for (final RegionTask region : regions) {
+                futures.add(executor.submit(() -> translateTask(storage,
                         worldKey,
                         heightLimitView,
                         palettesFactory,
-                        mcaPath,
-                        entityDir.resolve(region.fileName()),
-                        region.regionX(),
-                        region.regionZ()
-                );
+                        regionDir,
+                        entityDir,
+                        region)));
+            }
+            for (final Future<OfflineRegionMigrationReport> future : futures) {
+                final OfflineRegionMigrationReport report;
+                try {
+                    report = future.get();
+                } catch (final InterruptedException e) {
+                    Thread.currentThread()
+                            .interrupt();
+                    throw new IOException("Interrupted while waiting for MCA-to-CIS migration", e);
+                } catch (final ExecutionException e) {
+                    throw new IOException("MCA-to-CIS migration task failed", e.getCause());
+                }
                 handledChunks += report.handledChunks();
                 failedChunks += report.failedChunks();
                 if (report.retired()) {
@@ -170,25 +203,24 @@ public final class OfflineMcaCisTranslator {
                 }
             }
         } finally {
+            executor.shutdownNow();
+            try {
+                executor.awaitTermination(30, TimeUnit.SECONDS);
+            } catch (final InterruptedException e) {
+                Thread.currentThread()
+                        .interrupt();
+            }
             storage.close();
-            MigrationProgressTracker.finish(worldId);
+            MigrationProgressTracker.finish();
         }
 
-        LOGGER.info(
-                "Chunkis MCA Migration complete for world {}. Handled {}, failed {}, retired {} region(s).",
+        LOGGER.info("Chunkis MCA Migration complete for world {}. Handled {}, failed {}, retired {} region(s).",
                 worldId,
                 handledChunks,
                 failedChunks,
-                retiredRegions
-        );
+                retiredRegions);
 
-        return new OfflineWorldMigrationReport(
-                worldKey,
-                regions.size(),
-                handledChunks,
-                failedChunks,
-                retiredRegions
-        );
+        return new OfflineWorldMigrationReport(worldKey, regions.size(), handledChunks, failedChunks, retiredRegions);
     }
 
     /**
@@ -202,33 +234,130 @@ public final class OfflineMcaCisTranslator {
                 final Matcher matcher = REGION_FILE_PATTERN.matcher(path.getFileName()
                         .toString());
                 if (matcher.matches()) {
-                    regions.add(new RegionCoordinates(
-                            Integer.parseInt(matcher.group(1)),
-                            Integer.parseInt(matcher.group(2))
-                    ));
+                    regions.add(new RegionCoordinates(Integer.parseInt(matcher.group(1)),
+                            Integer.parseInt(matcher.group(2))));
                 }
             }
         }
+        regions.sort(Comparator.comparingInt(RegionCoordinates::regionX)
+                .thenComparingInt(RegionCoordinates::regionZ));
         return regions;
+    }
+
+    /**
+     * Counts source chunks and source file bytes before workers start so progress
+     * and byte-weighted ETA remain accurate without retaining chunk payloads.
+     */
+    private static List<RegionTask> collectRegionTasks(final Path regionDir,
+            final Path entityDir,
+            final StorageKey storageKey)
+            throws IOException {
+        final List<RegionTask> tasks = new ArrayList<>();
+        for (final RegionCoordinates region : collectRegions(regionDir)) {
+            final Path mcaPath = regionDir.resolve(region.fileName());
+            int presentChunks = 0;
+            try (RegionFile regionFile = new RegionFile(storageKey, mcaPath, mcaPath.getParent(), true)) {
+                for (int localX = 0; localX < REGION_SIZE; localX++) {
+                    for (int localZ = 0; localZ < REGION_SIZE; localZ++) {
+                        if (regionFile.hasChunk(new ChunkPos((region.regionX() << 5) + localX,
+                                (region.regionZ() << 5) + localZ))) {
+                            presentChunks++;
+                        }
+                    }
+                }
+            }
+            long fileSizeBytes = Files.size(mcaPath);
+            final Path entityPath = entityDir.resolve(region.fileName());
+            if (Files.isRegularFile(entityPath)) {
+                fileSizeBytes += Files.size(entityPath);
+            }
+            tasks.add(new RegionTask(region, presentChunks, fileSizeBytes));
+        }
+        return tasks;
+    }
+
+    /**
+     * Calculates the safe worker count from CPU, heap, and region limits.
+     */
+    static int workerCountFor(final int regionCount, final int availableProcessors, final long maxHeapBytes) {
+        if (regionCount <= 0) {
+            return 0;
+        }
+        final int cpuWorkers = Math.max(1, availableProcessors - 2);
+        final long migrationHeap = Math.max(0L, maxHeapBytes - MIGRATION_BASELINE_HEAP_BYTES);
+        final int heapWorkers = Math.max(1,
+                (int) Math.min(Integer.MAX_VALUE, migrationHeap / MIGRATION_WORKER_HEAP_BYTES));
+        return Math.min(regionCount, Math.min(cpuWorkers, heapWorkers));
+    }
+
+    /**
+     * Converts one queued region task and publishes its worker progress.
+     */
+    private static OfflineRegionMigrationReport translateTask(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final RegistryKey<World> worldKey,
+            final HeightLimitView heightLimitView,
+            final PalettesFactory palettesFactory,
+            final Path regionDir,
+            final Path entityDir,
+            final RegionTask task) {
+        final int worker = Integer.parseInt(Thread.currentThread()
+                .getName()
+                .replace("Chunkis-McaToCis-", ""));
+        final Path mcaPath = regionDir.resolve(task.coordinates()
+                .fileName());
+        MigrationProgressTracker.startRegion(worker,
+                mcaPath.getFileName()
+                        .toString(),
+                task.presentChunks(),
+                task.fileSizeBytes());
+        try {
+            final OfflineRegionMigrationReport report = translateRegion(storage,
+                    worldKey,
+                    heightLimitView,
+                    palettesFactory,
+                    mcaPath,
+                    entityDir.resolve(task.coordinates()
+                            .fileName()),
+                    task.coordinates()
+                            .regionX(),
+                    task.coordinates()
+                            .regionZ(),
+                    worker);
+            MigrationProgressTracker.completeRegion(worker);
+            return report;
+        } catch (final Exception e) {
+            LOGGER.error("Failed to migrate region {}", mcaPath.getFileName(), e);
+            MigrationProgressTracker.updateRegion(worker, task.presentChunks(), 0, Math.max(1, task.presentChunks()));
+            MigrationProgressTracker.completeRegion(worker);
+            return new OfflineRegionMigrationReport(worldKey.getValue()
+                    .toString(),
+                    mcaPath.getFileName()
+                            .toString(),
+                    task.presentChunks(),
+                    0,
+                    Math.max(1, task.presentChunks()),
+                    false,
+                    TRANSLATOR_VERSION);
+        }
     }
 
     /**
      * Translates one MCA region file and retires it when every present chunk
      * converts and validates successfully.
      */
-    private static OfflineRegionMigrationReport translateRegion(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+    private static OfflineRegionMigrationReport translateRegion(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final RegistryKey<World> worldKey,
             final HeightLimitView heightLimitView,
             final PalettesFactory palettesFactory,
             final Path mcaPath,
             final Path entityMcaPath,
             final int regionX,
-            final int regionZ
-    ) throws IOException {
+            final int regionZ,
+            final int worker) throws IOException {
         final StorageKey storageKey = new StorageKey("chunk", worldKey, "chunk");
         final StorageKey entityStorageKey = new StorageKey("entities", worldKey, "entities");
         int presentChunks = 0;
+        int processedChunks = 0;
         int handledChunks = 0;
         int failedChunks = 0;
 
@@ -246,35 +375,31 @@ public final class OfflineMcaCisTranslator {
                         }
 
                         presentChunks++;
-                        final NbtCompound sourceNbt = NbtIo.readCompound(input, NbtSizeTracker.ofUnlimitedBytes());
+                        final NbtCompound sourceNbt = NbtIo.readCompound(input,
+                                NbtSizeTracker.of(FabricNbtAdapter.MAX_NBT_SIZE));
                         if (sourceNbt == null) {
                             failedChunks++;
                             continue;
                         }
 
-                        final ChunkDelta<BlockState, NbtCompound> delta = buildChunkDelta(
-                                heightLimitView,
+                        final ChunkDelta<BlockState, NbtCompound> delta = buildChunkDelta(heightLimitView,
                                 palettesFactory,
                                 sourceNbt,
                                 loadOptionalEntityChunkNbt(entityRegionFile, chunkPos),
-                                chunkPos
-                        );
+                                chunkPos);
                         if (isOmittableEmptyChunk(delta)) {
-                            if (!deleteOmittedEmptyChunk(regionFile, storage, chunkPos)) {
+                            if (!clearOmittedEmptyChunk(storage, chunkPos)) {
                                 failedChunks++;
-                                LOGGER.error(
-                                        "Failed to omit empty placeholder chunk {} from {}",
+                                LOGGER.error("Failed to omit empty placeholder chunk {} from {}",
                                         chunkPos,
-                                        mcaPath.getFileName()
-                                );
+                                        mcaPath.getFileName());
                                 continue;
                             }
                             handledChunks++;
                             LOGGER.info(
                                     "Omitting empty MCA placeholder chunk {} from {} so vanilla can treat it as absent.",
                                     chunkPos,
-                                    mcaPath.getFileName()
-                            );
+                                    mcaPath.getFileName());
                             continue;
                         }
                         if (!storage.replace(new CisChunkPos(chunkPos.x, chunkPos.z), delta)) {
@@ -287,7 +412,10 @@ public final class OfflineMcaCisTranslator {
                         if (!vr.valid()) {
                             failedChunks++;
                             LOGGER.error("Failed to validate migrated chunk {} from {}: code={} details={}",
-                                    chunkPos, mcaPath.getFileName(), vr.failureCode(), vr.details());
+                                    chunkPos,
+                                    mcaPath.getFileName(),
+                                    vr.failureCode(),
+                                    vr.details());
                             continue;
                         }
 
@@ -295,53 +423,48 @@ public final class OfflineMcaCisTranslator {
                     } catch (final Exception e) {
                         failedChunks++;
                         LOGGER.error("Failed to migrate chunk {} in {}", chunkPos, mcaPath.getFileName(), e);
+                    } finally {
+                        processedChunks++;
+                        MigrationProgressTracker.updateRegion(worker, processedChunks, handledChunks, failedChunks);
                     }
                 }
             }
         }
 
-        final boolean retired = new OfflineRegionMigrationReport(
-                worldKey.getValue()
-                        .toString(),
+        final boolean retired = new OfflineRegionMigrationReport(worldKey.getValue()
+                .toString(),
                 mcaPath.getFileName()
                         .toString(),
                 presentChunks,
                 handledChunks,
                 failedChunks,
                 false,
-                TRANSLATOR_VERSION
-        ).canRetireSourceRegion();
+                TRANSLATOR_VERSION).canRetireSourceRegion();
         if (retired) {
             retireRegionFile(mcaPath);
         } else {
-            LOGGER.warn(
-                    "Chunkis pre-launch migrator: keeping {} in place because present={}, handled={}, failed={}.",
+            LOGGER.warn("Chunkis pre-launch migrator: keeping {} in place because present={}, handled={}, failed={}.",
                     mcaPath.getFileName(),
                     presentChunks,
                     handledChunks,
-                    failedChunks
-            );
+                    failedChunks);
         }
 
-        final OfflineRegionMigrationReport report = new OfflineRegionMigrationReport(
-                worldKey.getValue()
-                        .toString(),
+        final OfflineRegionMigrationReport report = new OfflineRegionMigrationReport(worldKey.getValue()
+                .toString(),
                 mcaPath.getFileName()
                         .toString(),
                 presentChunks,
                 handledChunks,
                 failedChunks,
                 retired,
-                TRANSLATOR_VERSION
-        );
-        LOGGER.info(
-                "Finished {}. Handled {}, failed {}, coverage {}/{}.",
+                TRANSLATOR_VERSION);
+        LOGGER.info("Finished {}. Handled {}, failed {}, coverage {}/{}.",
                 mcaPath.getFileName(),
                 handledChunks,
                 failedChunks,
                 handledChunks,
-                presentChunks
-        );
+                presentChunks);
         return report;
     }
 
@@ -349,13 +472,11 @@ public final class OfflineMcaCisTranslator {
      * Captures one authoritative full CIS snapshot from raw serialized chunk
      * data.
      */
-    public static ChunkDelta<BlockState, NbtCompound> buildChunkDelta(
-            final HeightLimitView heightLimitView,
+    public static ChunkDelta<BlockState, NbtCompound> buildChunkDelta(final HeightLimitView heightLimitView,
             final PalettesFactory palettesFactory,
             final NbtCompound sourceNbt,
             final NbtCompound entitySourceNbt,
-            final ChunkPos chunkPos
-    ) {
+            final ChunkPos chunkPos) {
         final SerializedChunk serialized = SerializedChunk.fromNbt(heightLimitView, palettesFactory, sourceNbt);
         if (serialized == null) {
             throw new IllegalStateException("Vanilla could not deserialize chunk " + chunkPos);
@@ -367,10 +488,7 @@ public final class OfflineMcaCisTranslator {
         final boolean portalChunk = captureBlocks(serialized, delta);
 
         delta.setSuppressInitialRepopulation(true);
-        delta.setChunkMetadata(
-                createMigratedChunkMetadata(structureData, preservedAuxiliary, portalChunk),
-                false
-        );
+        delta.setChunkMetadata(createMigratedChunkMetadata(structureData, preservedAuxiliary, portalChunk), false);
         captureBlockEntities(serialized, sourceNbt, chunkPos, delta);
         captureEntities(serialized, sourceNbt, entitySourceNbt, delta);
         return delta;
@@ -379,12 +497,10 @@ public final class OfflineMcaCisTranslator {
     /**
      * Compatibility overload for callers that only have chunk-region NBT.
      */
-    public static ChunkDelta<BlockState, NbtCompound> buildChunkDelta(
-            final HeightLimitView heightLimitView,
+    public static ChunkDelta<BlockState, NbtCompound> buildChunkDelta(final HeightLimitView heightLimitView,
             final PalettesFactory palettesFactory,
             final NbtCompound sourceNbt,
-            final ChunkPos chunkPos
-    ) {
+            final ChunkPos chunkPos) {
         return buildChunkDelta(heightLimitView, palettesFactory, sourceNbt, null, chunkPos);
     }
 
@@ -393,10 +509,8 @@ public final class OfflineMcaCisTranslator {
      *
      * @return {@code true} when at least one nether portal block was observed
      */
-    private static boolean captureBlocks(
-            final SerializedChunk serialized,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+    private static boolean captureBlocks(final SerializedChunk serialized,
+            final ChunkDelta<BlockState, NbtCompound> delta) {
         boolean portalChunk = false;
 
         for (final SerializedChunk.SectionData sectionData : serialized.sectionData()) {
@@ -429,20 +543,18 @@ public final class OfflineMcaCisTranslator {
     /**
      * Captures serialized block entities using local chunk X/Z coordinates.
      */
-    private static void captureBlockEntities(
-            final SerializedChunk serialized,
+    private static void captureBlockEntities(final SerializedChunk serialized,
             final NbtCompound sourceNbt,
             final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+            final ChunkDelta<BlockState, NbtCompound> delta) {
         final int chunkStartX = chunkPos.getStartX();
         final int chunkStartZ = chunkPos.getStartZ();
 
         for (final NbtCompound blockEntityNbt : serialized.blockEntities()) {
             addBlockEntityPayload(delta, chunkStartX, chunkStartZ, blockEntityNbt);
         }
-        for (final NbtCompound blockEntityNbt
-                : CisNbtUtil.extractCompoundList(chunkPayloadRoot(sourceNbt), "block_entities")) {
+        for (final NbtCompound blockEntityNbt : CisNbtUtil.extractCompoundList(chunkPayloadRoot(sourceNbt),
+                "block_entities")) {
             addBlockEntityPayload(delta, chunkStartX, chunkStartZ, blockEntityNbt);
         }
     }
@@ -450,12 +562,10 @@ public final class OfflineMcaCisTranslator {
     /**
      * Adds one block-entity payload using local chunk coordinates.
      */
-    private static void addBlockEntityPayload(
-            final ChunkDelta<BlockState, NbtCompound> delta,
+    private static void addBlockEntityPayload(final ChunkDelta<BlockState, NbtCompound> delta,
             final int chunkStartX,
             final int chunkStartZ,
-            final NbtCompound blockEntityNbt
-    ) {
+            final NbtCompound blockEntityNbt) {
         if (blockEntityNbt == null || !blockEntityNbt.contains("id")) {
             throw new IllegalStateException("Block entity payload is missing required id field");
         }
@@ -472,12 +582,10 @@ public final class OfflineMcaCisTranslator {
     /**
      * Captures serialized chunk entities from both inline and external entity storage.
      */
-    private static void captureEntities(
-            final SerializedChunk serialized,
+    private static void captureEntities(final SerializedChunk serialized,
             final NbtCompound sourceNbt,
             final NbtCompound entitySourceNbt,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+            final ChunkDelta<BlockState, NbtCompound> delta) {
         final Set<String> seen = new HashSet<>();
 
         for (final NbtCompound entityNbt : serialized.entities()) {
@@ -494,11 +602,9 @@ public final class OfflineMcaCisTranslator {
     /**
      * Captures one serialized chunk entity as a pending entity.
      */
-    private static void addEntityPayload(
-            final ChunkDelta<BlockState, NbtCompound> delta,
+    private static void addEntityPayload(final ChunkDelta<BlockState, NbtCompound> delta,
             final Set<String> seen,
-            final NbtCompound entityNbt
-    ) {
+            final NbtCompound entityNbt) {
         if (entityNbt == null) {
             return;
         }
@@ -540,18 +646,14 @@ public final class OfflineMcaCisTranslator {
     /**
      * Creates authoritative migrated metadata.
      */
-    public static NbtCompound createMigratedChunkMetadata(
-            final NbtCompound structureData,
+    public static NbtCompound createMigratedChunkMetadata(final NbtCompound structureData,
             final NbtCompound preservedAuxiliaryChunkNbt,
-            final boolean portalChunk
-    ) {
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
-                structureData,
+            final boolean portalChunk) {
+        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(structureData,
                 true,
                 true,
                 null,
-                portalChunk
-        );
+                portalChunk);
         CisNbtUtil.putPreservedAuxiliaryChunkNbt(metadata, preservedAuxiliaryChunkNbt);
         CisNbtUtil.markMigratedAuthoritativeChunk(metadata);
         return metadata;
@@ -562,29 +664,23 @@ public final class OfflineMcaCisTranslator {
      * should be omitted entirely so future loads treat it as absent.
      */
     static boolean isOmittableEmptyChunk(final ChunkDelta<BlockState, NbtCompound> delta) {
-        return delta.getBlockChangesCount() == 0
-                && delta.getBlockEntities()
-                .isEmpty()
-                && delta.countPendingEntities() == 0;
+        return delta.getBlockChangesCount() == 0 && delta.getBlockEntities()
+                .isEmpty() && delta.countPendingEntities() == 0;
     }
 
     /**
      * Validates that the stored migrated chunk still matches the translated
      * authoritative snapshot shape, not just its marker flags.
      */
-    static MigrationValidationResult validateMigratedChunk(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+    static MigrationValidationResult validateMigratedChunk(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> expected
-    ) {
+            final ChunkDelta<BlockState, NbtCompound> expected) {
         final ChunkDelta<BlockState, NbtCompound> stored = storage.load(new CisChunkPos(chunkPos.x, chunkPos.z));
         return matchesMigratedChunkShape(expected, stored);
     }
 
-    static MigrationValidationResult matchesMigratedChunkShape(
-            final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual
-    ) {
+    static MigrationValidationResult matchesMigratedChunkShape(final ChunkDelta<BlockState, NbtCompound> expected,
+            final ChunkDelta<BlockState, NbtCompound> actual) {
         if (expected == null || actual == null || actual.isEmpty()) {
             return MigrationValidationResult.failure("NULL_OR_EMPTY", "expected or actual is null/empty");
         }
@@ -614,18 +710,14 @@ public final class OfflineMcaCisTranslator {
                     "expected=" + expected.countPendingEntities() + ", actual=" + actual.countPendingEntities());
         }
 
-        if (!NbtHelper.matches(
-                CisNbtUtil.extractPersistedStructureMetadata(expected.getChunkMetadata()),
+        if (!NbtHelper.matches(CisNbtUtil.extractPersistedStructureMetadata(expected.getChunkMetadata()),
                 CisNbtUtil.extractPersistedStructureMetadata(actual.getChunkMetadata()),
-                true
-        )) {
+                true)) {
             return MigrationValidationResult.failure("STRUCTURE_META_MISMATCH", "structure metadata differs");
         }
-        if (!NbtHelper.matches(
-                CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected.getChunkMetadata()),
+        if (!NbtHelper.matches(CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected.getChunkMetadata()),
                 CisNbtUtil.extractPreservedAuxiliaryChunkNbt(actual.getChunkMetadata()),
-                true
-        )) {
+                true)) {
             return MigrationValidationResult.failure("AUX_META_MISMATCH", "auxiliary metadata differs");
         }
 
@@ -651,10 +743,8 @@ public final class OfflineMcaCisTranslator {
      * @param actual   stored CIS payload loaded back from disk
      * @return validation result describing the first block-level mismatch class
      */
-    private static MigrationValidationResult validateBlocks(
-            final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual
-    ) {
+    private static MigrationValidationResult validateBlocks(final ChunkDelta<BlockState, NbtCompound> expected,
+            final ChunkDelta<BlockState, NbtCompound> actual) {
         final Map<Long, String> expectedNonAir = canonicalNonAirBlockMap(expected);
         final Map<Long, String> actualNonAir = canonicalNonAirBlockMap(actual);
 
@@ -698,8 +788,7 @@ public final class OfflineMcaCisTranslator {
         }
         final StringBuilder sb = new StringBuilder(Registries.BLOCK.getId(state.getBlock())
                 .toString());
-        final Map<Property<?>, Comparable<?>> props = new TreeMap<>(
-                Comparator.comparing(Property::getName));
+        final Map<Property<?>, Comparable<?>> props = new TreeMap<>(Comparator.comparing(Property::getName));
         props.putAll(state.getEntries());
         if (!props.isEmpty()) {
             sb.append('[');
@@ -718,9 +807,7 @@ public final class OfflineMcaCisTranslator {
      * AIR and null states are excluded because they are not authoritative
      * semantic changes for migration validation.
      */
-    private static Map<Long, String> canonicalNonAirBlockMap(
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
+    private static Map<Long, String> canonicalNonAirBlockMap(final ChunkDelta<BlockState, NbtCompound> delta) {
         final Map<Long, String> result = new HashMap<>();
         delta.forEachBlockInstruction((x, y, z, paletteId, state) -> {
             if (state != null && !state.isAir()) {
@@ -737,10 +824,8 @@ public final class OfflineMcaCisTranslator {
      * @param actual   stored CIS payload loaded back from disk
      * @return validation result describing any block-entity mismatch
      */
-    private static MigrationValidationResult validateBlockEntities(
-            final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual
-    ) {
+    private static MigrationValidationResult validateBlockEntities(final ChunkDelta<BlockState, NbtCompound> expected,
+            final ChunkDelta<BlockState, NbtCompound> actual) {
         final Set<Long> keys = new HashSet<>();
         keys.addAll(expected.getBlockEntities()
                 .keySet());
@@ -757,7 +842,9 @@ public final class OfflineMcaCisTranslator {
                 final BlockPos pos = BlockPos.fromLong(key);
                 if (mismatchCount <= 10) {
                     LOGGER.warn("Block entity mismatch at {}: expected keys={} actual keys={}",
-                            pos, exp.getKeys(), act != null ? act.getKeys() : "null");
+                            pos,
+                            exp.getKeys(),
+                            act != null ? act.getKeys() : "null");
                 }
             }
         }
@@ -774,10 +861,8 @@ public final class OfflineMcaCisTranslator {
     /**
      * Compares pending-entity lists after normalizing them to sorted string representations.
      */
-    private static MigrationValidationResult validateEntities(
-            final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual
-    ) {
+    private static MigrationValidationResult validateEntities(final ChunkDelta<BlockState, NbtCompound> expected,
+            final ChunkDelta<BlockState, NbtCompound> actual) {
         final List<String> expectedEntities = new ArrayList<>();
         final List<String> actualEntities = new ArrayList<>();
         expected.forEachEntity(entity -> expectedEntities.add(entity == null ? "<null>" : entity.toString()));
@@ -792,16 +877,11 @@ public final class OfflineMcaCisTranslator {
     }
 
     /**
-     * Deletes an omitted empty placeholder chunk from the live MCA region and
-     * clears any stale CIS entry for the same coordinates.
+     * Clears any stale CIS entry for an omitted placeholder without mutating the
+     * source MCA region before its verified backup is created.
      */
-    private static boolean deleteOmittedEmptyChunk(
-            final RegionFile regionFile,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
-            final ChunkPos chunkPos
-    ) throws IOException {
-        regionFile.delete(chunkPos);
-
+    private static boolean clearOmittedEmptyChunk(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos chunkPos) {
         final CisChunkPos cisChunkPos = new CisChunkPos(chunkPos.x, chunkPos.z);
         if (!storage.contains(cisChunkPos)) {
             return true;
@@ -813,10 +893,8 @@ public final class OfflineMcaCisTranslator {
     /**
      * Opens a region file only when the target path exists.
      */
-    private static RegionFile openOptionalRegionFile(
-            final StorageKey storageKey,
-            final Path regionPath
-    ) throws IOException {
+    private static RegionFile openOptionalRegionFile(final StorageKey storageKey, final Path regionPath)
+            throws IOException {
         if (regionPath == null || !Files.exists(regionPath)) {
             return null;
         }
@@ -826,15 +904,13 @@ public final class OfflineMcaCisTranslator {
     /**
      * Loads one chunk payload from an optional external entity-region file.
      */
-    private static NbtCompound loadOptionalEntityChunkNbt(
-            final RegionFile entityRegionFile,
-            final ChunkPos chunkPos
-    ) throws IOException {
+    private static NbtCompound loadOptionalEntityChunkNbt(final RegionFile entityRegionFile, final ChunkPos chunkPos)
+            throws IOException {
         if (entityRegionFile == null) {
             return null;
         }
         try (DataInputStream input = entityRegionFile.getChunkInputStream(chunkPos)) {
-            return input == null ? null : NbtIo.readCompound(input, NbtSizeTracker.ofUnlimitedBytes());
+            return input == null ? null : NbtIo.readCompound(input, NbtSizeTracker.of(FabricNbtAdapter.MAX_NBT_SIZE));
         }
     }
 
@@ -871,8 +947,8 @@ public final class OfflineMcaCisTranslator {
         if (backupSize != size) {
             // Backup failed verification - remove partial backup and abort
             Files.deleteIfExists(backupPath);
-            throw new IOException("Backup verification failed for " + mcaPath +
-                    " (source=" + size + ", backup=" + backupSize + ")");
+            throw new IOException(
+                    "Backup verification failed for " + mcaPath + " (source=" + size + ", backup=" + backupSize + ")");
         }
 
         // Only after successful verified backup, remove source
@@ -885,10 +961,8 @@ public final class OfflineMcaCisTranslator {
     /**
      * Builds a standalone CIS storage instance rooted at the supplied paths.
      */
-    private static CisStorage<Block, BlockState, Property<?>, NbtCompound> buildStorage(
-            final Path storageDir,
-            final Path mappingFile
-    ) throws IOException {
+    private static CisStorage<Block, BlockState, Property<?>, NbtCompound> buildStorage(final Path storageDir,
+            final Path mappingFile) throws IOException {
         Files.createDirectories(storageDir);
         Files.createDirectories(mappingFile.getParent());
 
@@ -896,8 +970,10 @@ public final class OfflineMcaCisTranslator {
         final FabricBlockStateAdapter stateAdapter = new FabricBlockStateAdapter();
         final FabricNbtAdapter nbtAdapter = new FabricNbtAdapter();
         final PropertyPacker<Block, BlockState, Property<?>> packer = new PropertyPacker<>(stateAdapter);
-        final CisMapping<Block, BlockState, Property<?>> mapping =
-                new CisMapping<>(mappingFile, registryAdapter, stateAdapter, packer);
+        final CisMapping<Block, BlockState, Property<?>> mapping = new CisMapping<>(mappingFile,
+                registryAdapter,
+                stateAdapter,
+                packer);
         return new CisStorage<>(storageDir, mapping, nbtAdapter, Blocks.AIR.getDefaultState());
     }
 
@@ -917,5 +993,17 @@ public final class OfflineMcaCisTranslator {
         private String fileName() {
             return "r." + regionX + "." + regionZ + ".mca";
         }
+    }
+
+    /**
+     * A bounded work item containing coordinates, a header-derived chunk count,
+     * and source file bytes; it never retains decoded NBT or chunk deltas.
+     *
+     * @param coordinates   region coordinates
+     * @param presentChunks chunks present in the source header
+     * @param fileSizeBytes region plus optional entity file size
+     */
+    private record RegionTask(RegionCoordinates coordinates, int presentChunks, long fileSizeBytes) {
+
     }
 }
