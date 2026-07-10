@@ -141,6 +141,8 @@ public final class CisStorage<B, S, P, N> {
     private final LongAdder prefetchAccepted = new LongAdder();
     private final LongAdder prefetchHits = new LongAdder();
     private final LongAdder prefetchDrops = new LongAdder();
+    private final LongAdder prefetchStoredEntries = new LongAdder();
+    private final LongAdder prefetchNonEmptyDeltas = new LongAdder();
 
     private static final int MAX_PREFETCHES = 32;
     private static final long PREFETCH_TTL_MILLIS = 2_000L;
@@ -489,8 +491,20 @@ public final class CisStorage<B, S, P, N> {
                     () -> loadWithPresenceSync(key, operationId, false),
                     prefetchExecutor
             );
-            CompletableFuture.delayedExecutor(PREFETCH_TTL_MILLIS, TimeUnit.MILLISECONDS)
-                    .execute(() -> prefetchedLoads.remove(key, future));
+            future.whenComplete((result, error) -> {
+                if (error != null) {
+                    prefetchedLoads.remove(key, future);
+                    return;
+                }
+                if (result.storageEntryPresent()) {
+                    prefetchStoredEntries.increment();
+                }
+                if (!result.delta().isEmpty()) {
+                    prefetchNonEmptyDeltas.increment();
+                }
+                CompletableFuture.delayedExecutor(PREFETCH_TTL_MILLIS, TimeUnit.MILLISECONDS)
+                        .execute(() -> prefetchedLoads.remove(key, future));
+            });
             return future;
         });
     }
@@ -664,9 +678,11 @@ public final class CisStorage<B, S, P, N> {
         }
         if (prefetchRequests.sum() > 0) {
             Chunkis.LOGGER.info(
-                    "Chunkis prefetch summary: requests={}, accepted={}, hits={}, drops={}, unused={}",
+                    "Chunkis prefetch summary: requests={}, accepted={}, storedEntries={}, nonEmpty={}, hits={}, drops={}, unused={}",
                     prefetchRequests.sum(),
                     prefetchAccepted.sum(),
+                    prefetchStoredEntries.sum(),
+                    prefetchNonEmptyDeltas.sum(),
                     prefetchHits.sum(),
                     prefetchDrops.sum(),
                     Math.max(0L, prefetchAccepted.sum() - prefetchHits.sum())
