@@ -547,11 +547,11 @@ public abstract class ThreadedAnvilChunkStorageMixin {
             return trackedDelta;
         }
 
-        CisLoadPrefetcher.observeColdLoad(world, chunkPos);
         final var cisPos = FabricCisStorageHelper.toStoragePos(chunkPos);
         if (!storage.contains(cisPos)) {
             return null;
         }
+        CisLoadPrefetcher.observeColdLoad(world, chunkPos);
         final ChunkDelta<BlockState, NbtCompound> storedDelta = storage.load(cisPos);
         storedDelta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(storedDelta));
         return storedDelta;

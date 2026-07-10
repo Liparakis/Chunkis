@@ -40,7 +40,7 @@ Entity payloads are deliberately removed from synthetic vanilla chunk NBT before
 - block-entity-only sparse payloads without a persisted base are rejected during restore
 - full-baseline CIS snapshots and persisted-base-backed sparse payloads take different load baselines
 - restore may happen through a wrapped full-chunk path or normal promotion path, and docs should not collapse those into one idealized flow
-- player movement prefetches a bounded forward strip; misses retain the existing synchronous storage fallback
+- confirmed CIS entries are decoded on the prefetch worker before the normal load consumes them; misses retain the existing synchronous fallback
 
 ## Where Behavior Is Proven
 

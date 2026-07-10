@@ -16,7 +16,6 @@ import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import io.liparakis.chunkis.world.tracking.load.CisLoadPrefetcher;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
@@ -511,7 +510,6 @@ public class ChunkSerializerMixin {
             final ServerWorld world,
             final ChunkPos pos,
             final String operationId) {
-        CisLoadPrefetcher.observeColdLoad(world, pos);
         final var storage = FabricCisStorageHelper.getStorage(world);
         final var cisPos = FabricCisStorageHelper.toStoragePos(pos);
         final var loaded = storage.loadWithPresence(cisPos, operationId);
