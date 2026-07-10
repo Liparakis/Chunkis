@@ -170,7 +170,6 @@ public final class GlobalChunkTracker {
         final ChunkDelta<?, ?> existing = dirtyDeltas.get(key);
 
         if (existing == delta) {
-            putInUnloadCache(key, delta, false, null);
             return;
         }
 
@@ -573,7 +572,6 @@ public final class GlobalChunkTracker {
         GlobalChunkTrackerTrace.assertInvalidSparsePayloadWithoutBase(key, delta, source);
 
         if (existing == delta) {
-            putInUnloadCache(key, delta, false, null);
             return;
         }
 
