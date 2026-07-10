@@ -128,6 +128,9 @@ class CisNbtUtilTest {
 
         final NbtCompound entity = new NbtCompound();
         entity.putString("id", "minecraft:pig");
+        final NbtList baseEntities = new NbtList();
+        baseEntities.add(entity.copy());
+        baseChunk.put("entities", baseEntities);
         delta.setEntities(java.util.List.of(entity), false);
         delta.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
@@ -167,10 +170,7 @@ class CisNbtUtilTest {
                         .orElseThrow());
         assertTrue(result.root()
                 .contains(CisNbtUtil.CHUNKIS_DATA_KEY));
-        final NbtList entities = result.root()
-                .getList("entities")
-                .orElseThrow();
-        assertEquals(1, entities.size());
+        assertFalse(result.root().contains("entities"));
     }
 
     /**

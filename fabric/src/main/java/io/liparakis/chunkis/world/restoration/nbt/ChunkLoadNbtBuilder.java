@@ -4,7 +4,6 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import java.util.Objects;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
 
 /**
  * Builds the synthetic chunk NBT that Chunkis feeds into vanilla load paths.
@@ -49,10 +48,6 @@ final class ChunkLoadNbtBuilder {
         if (baseChunkNbt != null && usePersistedBaseChunkForBlocks) {
             root = baseChunkNbt;
             baseChunkUsage = CisNbtUtil.PersistedBaseChunkUsage.USED;
-
-            if (delta.countNonNullEntities() > 0) {
-                replaceChunkEntitiesFromDelta(root, castDelta(delta));
-            }
         } else {
             root = CisNbtUtil.createBaseNbt(chunkX, chunkZ, dataVersion);
             if (migratedAuthoritativeChunk && preservedAuxiliaryChunkNbt != null) {
@@ -60,9 +55,6 @@ final class ChunkLoadNbtBuilder {
                 root.putInt(CisNbtUtil.DATA_VERSION_KEY, dataVersion);
                 root.putInt(CisNbtUtil.X_POS_KEY, chunkX);
                 root.putInt(CisNbtUtil.Z_POS_KEY, chunkZ);
-                if (delta.countNonNullEntities() > 0) {
-                    replaceChunkEntitiesFromDelta(root, castDelta(delta));
-                }
             }
             baseChunkUsage = CisNbtUtil.hasPersistedBaseChunkNbt(metadata)
                     ? CisNbtUtil.PersistedBaseChunkUsage.SKIPPED
@@ -70,36 +62,15 @@ final class ChunkLoadNbtBuilder {
         }
 
         if (delta != null) {
+            // EntityReplayCoordinator owns CIS entity materialization; vanilla's embedded
+            // entity loader would load the same payload a second time.
+            root.remove("entities");
             putChunkMetadata(root, castDelta(delta));
             CisNbtUtil.putDelta(root, castDelta(delta));
         }
         SyntheticChunkisLoadMarker.putLoadBaseChunkUsage(root, baseChunkUsage);
 
         return new CisNbtUtil.LoadChunkNbtResult(root, baseChunkUsage);
-    }
-
-    /**
-     * Replaces the entities list key inside target root NBT with elements fetched from delta.
-     *
-     * @param root  target NBT compound
-     * @param delta source block delta
-     */
-    static void replaceChunkEntitiesFromDelta(
-            final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta
-    ) {
-        Objects.requireNonNull(root, "root");
-        if (delta == null) {
-            return;
-        }
-
-        final NbtList entities = new NbtList();
-        delta.forEachEntity(nbt -> {
-            if (nbt != null) {
-                entities.add(nbt.copy());
-            }
-        });
-        root.put("entities", entities);
     }
 
     /**

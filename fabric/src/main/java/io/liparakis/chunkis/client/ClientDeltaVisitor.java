@@ -7,8 +7,6 @@ import net.fabricmc.api.Environment;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.util.math.BlockPos;
 
@@ -127,25 +125,14 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
     }
 
     /**
-     * Applies an entity NBT update to the client world.
+     * Ignores entity NBT because vanilla entity tracking already synchronizes
+     * server entities to the client.
      *
-     * <p>
-     * Skips adding the entity if it is already tracked by the world
-     * (identified by entity ID), preventing duplicates on re-send.
-     *
-     * @param nbt the entity data to deserialize and add
+     * @param nbt entity data supplied by the custom delta, intentionally ignored
      */
     @Override
     public void visitEntity(final NbtCompound nbt) {
-        clientDelta.getEntitiesList()
-                .add(nbt);
-
-        EntityType.loadEntityWithPassengers(nbt, world, SpawnReason.LOAD, entity -> {
-            if (isEntityUntracked(entity.getId())) {
-                world.addEntity(entity);
-            }
-            return entity;
-        });
+        // Vanilla entity tracking already synchronizes these entities to the client.
     }
 
     /**
@@ -190,14 +177,4 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
         world.addBlockEntity(be);
     }
 
-    /**
-     * Returns true if no entity with the given ID is currently tracked by the world.
-     * Used to prevent adding duplicate entities on re-send.
-     *
-     * @param entityId the entity ID to check
-     * @return true if the entity is not yet present in the world
-     */
-    private boolean isEntityUntracked(final int entityId) {
-        return world.getEntityById(entityId) == null;
-    }
 }

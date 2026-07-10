@@ -33,6 +33,8 @@ This is the path that resolves Chunkis-owned chunk state during load, builds tem
 5. On promotion to a live chunk, `ChunkRestorer.restore(...)` replays blocks, recalculates touched section block occupancy counts (to ensure correct results for block entity lookups), and then replays block entities and pending entities.
 6. Derived state such as lighting, heightmaps, and follow-up networking is refreshed after replay.
 
+Entity payloads are deliberately removed from synthetic vanilla chunk NBT before deserialization. `EntityReplayCoordinator` is the sole server-side materializer for CIS-owned entities; leaving them in vanilla's `entities` list would load every payload twice.
+
 ## Current Sharp Edges
 
 - block-entity-only sparse payloads without a persisted base are rejected during restore
