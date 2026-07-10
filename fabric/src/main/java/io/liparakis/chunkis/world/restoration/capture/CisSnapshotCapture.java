@@ -6,6 +6,7 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
+import io.liparakis.chunkis.mixin.accessor.PalettedContainerAccessor;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -14,6 +15,7 @@ import java.util.IdentityHashMap;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
 
 /**
@@ -170,6 +172,7 @@ public final class CisSnapshotCapture {
         return metadata;
     }
 
+    @SuppressWarnings("unchecked")
     private static void captureAuthoritativeBlockBaseline(final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> target) {
         final ChunkSection[] sections = chunk.getSectionArray();
@@ -183,26 +186,29 @@ public final class CisSnapshotCapture {
             }
             final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
 
-            for (int localY = 0; localY < SECTION_SIZE; localY++) {
-                final int worldY = toWorldY(chunkBottomY, sectionIndex, localY);
-                for (int localZ = 0; localZ < SECTION_SIZE; localZ++) {
-                    for (int localX = 0; localX < SECTION_SIZE; localX++) {
-                        final BlockState state = section.getBlockState(localX, localY, localZ);
-                        if (state.isAir()) {
-                            continue;
-                        }
-                        final Integer cachedPaletteId = paletteIds.get(state);
-                        final int paletteId;
-                        if (cachedPaletteId != null) {
-                            paletteId = cachedPaletteId;
-                        } else {
-                            paletteId = target.getBlockPalette()
-                                    .getOrAdd(state);
-                            paletteIds.put(state, paletteId);
-                        }
-                        target.appendDecodedBlockFast(localX, worldY, localZ, paletteId);
-                    }
+            final PalettedContainer<BlockState> container = section.getBlockStateContainer();
+            final PalettedContainerAccessor<BlockState> rawContainer = (PalettedContainerAccessor<BlockState>) container;
+            for (int index = 0; index < SECTION_SIZE * SECTION_SIZE * SECTION_SIZE; index++) {
+                final BlockState state = rawContainer.chunkis$get(index);
+                if (state.isAir()) {
+                    continue;
                 }
+                final Integer cachedPaletteId = paletteIds.get(state);
+                final int paletteId;
+                if (cachedPaletteId != null) {
+                    paletteId = cachedPaletteId;
+                } else {
+                    paletteId = target.getBlockPalette()
+                            .getOrAdd(state);
+                    paletteIds.put(state, paletteId);
+                }
+                final int localX = index & (SECTION_SIZE - 1);
+                final int localZ = (index >>> 4) & (SECTION_SIZE - 1);
+                final int localY = index >>> 8;
+                target.appendDecodedBlockFast(localX,
+                        toWorldY(chunkBottomY, sectionIndex, localY),
+                        localZ,
+                        paletteId);
             }
         }
     }
