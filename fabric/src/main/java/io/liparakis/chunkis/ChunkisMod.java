@@ -13,6 +13,7 @@ import io.liparakis.chunkis.portal.PortalLinkManager;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
+import io.liparakis.chunkis.world.tracking.load.CisLoadPrefetcher;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.save.VanillaEntityRegionCleanup;
@@ -84,6 +85,7 @@ public final class ChunkisMod implements ModInitializer {
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk));
         ServerWorldEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.delete(world));
         ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
+        ServerTickEvents.END_SERVER_TICK.register(CisLoadPrefetcher::tick);
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
         ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> VanillaEntityRegionCleanup.deletePending());
@@ -189,6 +191,7 @@ public final class ChunkisMod implements ModInitializer {
      */
     private static void clearRuntimeState() {
         GlobalChunkTracker.clear();
+        CisLoadPrefetcher.clear();
         AsyncCisSaveManager.clear();
         PortalChunkIndexManager.clear();
         PortalLinkManager.clear();

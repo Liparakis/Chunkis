@@ -26,6 +26,13 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.LongAdder;
 
 /**
  * Region-based storage system for Chunkis chunk deltas.
@@ -44,8 +51,10 @@ import java.util.Objects;
  * <p><b>Threading:</b> region cache mutation is protected by a write lock. Cache
  * hits also take the write lock because LRU order updates are mutations.
  * Compression and codec objects are per-thread to avoid contention during
- * concurrent save/load calls. Individual {@link RegionFile} instances serialize
- * their own read/write operations.</p>
+ * concurrent save/load calls. Speculative loads use one bounded worker and
+ * retain decoded results briefly. Region cache access and the corresponding
+ * file operation share a storage monitor so eviction cannot close an active
+ * handle.</p>
  *
  * <p><b>Ownership:</b> callers own the {@link ChunkDelta} instances they pass
  * in, but the storage instance owns its region cache and must be closed exactly
@@ -112,6 +121,29 @@ public final class CisStorage<B, S, P, N> {
      * Per-thread CIS decoder to avoid allocator churn on loads.
      */
     private final ThreadLocal<CisDecoder<S, N>> decoder;
+
+    /**
+     * Bounded decoded-load prefetches keyed by chunk position.
+     */
+    private final ConcurrentHashMap<CisChunkPos, CompletableFuture<LoadResult<S, N>>> prefetchedLoads =
+            new ConcurrentHashMap<>();
+
+    /**
+     * Single worker keeps speculative disk work from competing with the server.
+     */
+    private final ExecutorService prefetchExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        final Thread thread = new Thread(runnable, "Chunkis-CisPrefetch");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    private final LongAdder prefetchRequests = new LongAdder();
+    private final LongAdder prefetchAccepted = new LongAdder();
+    private final LongAdder prefetchHits = new LongAdder();
+    private final LongAdder prefetchDrops = new LongAdder();
+
+    private static final int MAX_PREFETCHES = 32;
+    private static final long PREFETCH_TTL_MILLIS = 2_000L;
 
     /**
      * Creates a new CIS storage instance.
@@ -346,6 +378,7 @@ public final class CisStorage<B, S, P, N> {
             throws IOException {
         Objects.requireNonNull(pos, "pos");
         Objects.requireNonNull(preparedSave, "preparedSave");
+        prefetchedLoads.remove(pos);
 
         if (preparedSave.clearChunk()) {
             return clearChunk(pos);
@@ -359,14 +392,17 @@ public final class CisStorage<B, S, P, N> {
 
         final byte[] compressedData = compressionContext.get()
                 .compress(preparedSave.rawData());
-        final RegionFile regionFile = getRegionFile(pos, true);
+        synchronized (regionFiles) {
+            final RegionFile regionFile = getRegionFile(pos, true);
 
-        if (regionFile == null) {
-            return false;
+            if (regionFile == null) {
+                return false;
+            }
+
+            regionFile.write(pos, compressedData, operationId);
+            verifyParanoidReadBack(pos, regionFile, compressedData, operationId);
         }
-
-        regionFile.write(pos, compressedData, operationId);
-        verifyParanoidReadBack(pos, regionFile, compressedData, operationId);
+        prefetchedLoads.remove(pos);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "flush completed", null,
@@ -432,6 +468,34 @@ public final class CisStorage<B, S, P, N> {
     }
 
     /**
+     * Starts a bounded speculative load. The normal load path consumes the
+     * result if it is ready, otherwise it keeps its existing synchronous
+     * behavior.
+     *
+     * @param pos         chunk position
+     * @param operationId trace correlation id for the background load
+     */
+    public void prefetch(final CisChunkPos pos, final String operationId) {
+        Objects.requireNonNull(pos, "pos");
+        prefetchRequests.increment();
+        if (prefetchedLoads.size() >= MAX_PREFETCHES && !prefetchedLoads.containsKey(pos)) {
+            prefetchDrops.increment();
+            return;
+        }
+
+        prefetchedLoads.computeIfAbsent(pos, key -> {
+            prefetchAccepted.increment();
+            final CompletableFuture<LoadResult<S, N>> future = CompletableFuture.supplyAsync(
+                    () -> loadWithPresenceSync(key, operationId, false),
+                    prefetchExecutor
+            );
+            CompletableFuture.delayedExecutor(PREFETCH_TTL_MILLIS, TimeUnit.MILLISECONDS)
+                    .execute(() -> prefetchedLoads.remove(key, future));
+            return future;
+        });
+    }
+
+    /**
      * Loads a chunk delta and reports whether a storage entry existed before decoding.
      *
      * <p>The existence check and read share the same cached region file lookup, avoiding
@@ -443,16 +507,36 @@ public final class CisStorage<B, S, P, N> {
      */
     public LoadResult<S, N> loadWithPresence(final CisChunkPos pos, final String operationId) {
         Objects.requireNonNull(pos, "pos");
+        final CompletableFuture<LoadResult<S, N>> prefetched = prefetchedLoads.remove(pos);
+        if (prefetched != null) {
+            prefetchHits.increment();
+            try {
+                return prefetched.join();
+            } catch (final CompletionException ignored) {
+                // Fall back to the established synchronous recovery path.
+            }
+        }
+        return loadWithPresenceSync(pos, operationId);
+    }
 
+    private LoadResult<S, N> loadWithPresenceSync(final CisChunkPos pos, final String operationId) {
+        return loadWithPresenceSync(pos, operationId, true);
+    }
+
+    private LoadResult<S, N> loadWithPresenceSync(
+            final CisChunkPos pos,
+            final String operationId,
+            final boolean clearOnFailure
+    ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_START,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, LOAD_SOURCE, "load requested", null, toChunkKey(pos),
                 toRegionKey(pos), operationId, null, null
         );
 
-        final RegionFile regionFile;
+        final RegionRead regionRead;
         try {
-            regionFile = getRegionFile(pos, false);
+            regionRead = readRegion(pos, operationId);
         } catch (final IOException e) {
             final ChunkTraceReason reason = classifyLoadFailure(e);
             ChunkTraceStore.trace(
@@ -462,17 +546,20 @@ public final class CisStorage<B, S, P, N> {
                     toRegionKey(pos), operationId, null, null
             );
             Chunkis.LOGGER.error(
-                    "Chunkis: Failed to open CIS region for {}. Clearing corrupted data. Error: {}",
+                    "Chunkis: Failed to open CIS region for {}.{} Error: {}",
                     pos,
+                    clearOnFailure ? " Clearing corrupted data." : "",
                     e.getMessage()
             );
-            clearChunk(pos);
+            if (clearOnFailure) {
+                clearChunk(pos);
+            }
             return new LoadResult<>(newEmptyDelta(), false);
         }
-        final boolean storageEntryPresent = regionFile != null && regionFile.hasChunk(pos);
+        final boolean storageEntryPresent = regionRead.entryPresent();
 
         try {
-            final ChunkDelta<S, N> delta = loadUnchecked(pos, operationId, regionFile);
+            final ChunkDelta<S, N> delta = decodeCompressed(pos, regionRead.compressedData());
             if (!delta.isEmpty()) {
                 ChunkTraceStore.trace(
                         ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_SOURCE_RESOLVED,
@@ -507,10 +594,13 @@ public final class CisStorage<B, S, P, N> {
                     toRegionKey(pos), operationId, null, null
             );
             Chunkis.LOGGER.error(
-                    "Chunkis: Failed to decode CIS chunk at {}. Clearing corrupted data. Error: {}", pos
-                    , e.getMessage()
+                    "Chunkis: Failed to decode CIS chunk at {}.{} Error: {}", pos,
+                    clearOnFailure ? " Clearing corrupted data." : "",
+                    e.getMessage()
             );
-            clearChunk(pos);
+            if (clearOnFailure) {
+                clearChunk(pos);
+            }
             return new LoadResult<>(newEmptyDelta(), storageEntryPresent);
         }
     }
@@ -527,8 +617,10 @@ public final class CisStorage<B, S, P, N> {
     public boolean contains(final CisChunkPos pos) {
         Objects.requireNonNull(pos, "pos");
         try {
-            final RegionFile regionFile = getRegionFile(pos, false);
-            return regionFile != null && regionFile.hasChunk(pos);
+            synchronized (regionFiles) {
+                final RegionFile regionFile = getRegionFile(pos, false);
+                return regionFile != null && regionFile.hasChunk(pos);
+            }
         } catch (final IOException e) {
             return false;
         }
@@ -560,7 +652,31 @@ public final class CisStorage<B, S, P, N> {
      * after this method returns.</p>
      */
     public void close() {
-        regionFiles.closeAll();
+        prefetchExecutor.shutdown();
+        try {
+            if (!prefetchExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                prefetchExecutor.shutdownNow();
+            }
+        } catch (final InterruptedException e) {
+            Thread.currentThread()
+                    .interrupt();
+            prefetchExecutor.shutdownNow();
+        }
+        if (prefetchRequests.sum() > 0) {
+            Chunkis.LOGGER.info(
+                    "Chunkis prefetch summary: requests={}, accepted={}, hits={}, drops={}, unused={}",
+                    prefetchRequests.sum(),
+                    prefetchAccepted.sum(),
+                    prefetchHits.sum(),
+                    prefetchDrops.sum(),
+                    Math.max(0L, prefetchAccepted.sum() - prefetchHits.sum())
+            );
+        }
+        prefetchedLoads.clear();
+
+        synchronized (regionFiles) {
+            regionFiles.closeAll();
+        }
 
         compressionContext.remove();
         encoder.remove();
@@ -575,10 +691,13 @@ public final class CisStorage<B, S, P, N> {
      */
     private boolean clearChunk(final CisChunkPos pos) {
         try {
-            final RegionFile regionFile = getRegionFile(pos, false);
+            synchronized (regionFiles) {
+                prefetchedLoads.remove(pos);
+                final RegionFile regionFile = getRegionFile(pos, false);
 
-            if (regionFile != null) {
-                regionFile.write(pos, null);
+                if (regionFile != null) {
+                    regionFile.write(pos, null);
+                }
             }
 
             return true;
@@ -599,24 +718,20 @@ public final class CisStorage<B, S, P, N> {
      * @throws IOException if region I/O, decompression, or decode fails
      */
     private ChunkDelta<S, N> loadUnchecked(final CisChunkPos pos) throws IOException {
-        return loadUnchecked(pos, null, getRegionFile(pos, false));
+        return decodeCompressed(pos, readRegion(pos, null).compressedData());
     }
 
-    /**
-     * Decodes a chunk using an already resolved region file.
-     */
-    private ChunkDelta<S, N> loadUnchecked(
-            final CisChunkPos pos,
-            final String operationId,
-            final RegionFile regionFile
-    ) throws IOException {
-
-        if (regionFile == null) {
-            return newEmptyDelta();
+    private RegionRead readRegion(final CisChunkPos pos, final String operationId) throws IOException {
+        synchronized (regionFiles) {
+            final RegionFile regionFile = getRegionFile(pos, false);
+            if (regionFile == null) {
+                return new RegionRead(false, null);
+            }
+            return new RegionRead(regionFile.hasChunk(pos), regionFile.read(pos, operationId));
         }
+    }
 
-        final byte[] compressedData = regionFile.read(pos, operationId);
-
+    private ChunkDelta<S, N> decodeCompressed(final CisChunkPos pos, final byte[] compressedData) throws IOException {
         if (compressedData == null) {
             return newEmptyDelta();
         }
@@ -664,7 +779,9 @@ public final class CisStorage<B, S, P, N> {
      * @return cached region files previously held open by this storage instance
      */
     List<RegionFile> drainRegionCache() {
-        return regionFiles.drain();
+        synchronized (regionFiles) {
+            return regionFiles.drain();
+        }
     }
 
     /**
@@ -683,6 +800,10 @@ public final class CisStorage<B, S, P, N> {
      * @param storageEntryPresent whether the region contained an entry before decode
      */
     public record LoadResult<S, N>(ChunkDelta<S, N> delta, boolean storageEntryPresent) {
+
+    }
+
+    private record RegionRead(boolean entryPresent, byte[] compressedData) {
 
     }
 

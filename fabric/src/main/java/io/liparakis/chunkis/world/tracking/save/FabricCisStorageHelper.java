@@ -138,6 +138,24 @@ public final class FabricCisStorageHelper {
     }
 
     /**
+     * Starts a speculative load only when this world's storage is already open.
+     * This avoids creating CIS storage for worlds with no Chunkis data.
+     *
+     * @param world       owning world
+     * @param pos         chunk position
+     * @param operationId trace correlation id
+     */
+    public static void prefetch(final ServerWorld world, final ChunkPos pos, final String operationId) {
+        Objects.requireNonNull(world, "ServerWorld cannot be null");
+        Objects.requireNonNull(pos, "ChunkPos cannot be null");
+
+        final StorageWrapper wrapper = storageMap.get(world.getRegistryKey());
+        if (wrapper != null && wrapper.isOpen()) {
+            wrapper.prefetch(toStoragePos(pos), operationId);
+        }
+    }
+
+    /**
      * Closes and removes the storage instance for the given world.
      *
      * <p>
@@ -389,6 +407,19 @@ public final class FabricCisStorageHelper {
                     throw new IllegalStateException("Storage has been closed");
                 }
                 return storage;
+            } finally {
+                lock.readLock()
+                        .unlock();
+            }
+        }
+
+        void prefetch(final CisChunkPos pos, final String operationId) {
+            lock.readLock()
+                    .lock();
+            try {
+                if (open) {
+                    storage.prefetch(pos, operationId);
+                }
             } finally {
                 lock.readLock()
                         .unlock();

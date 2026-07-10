@@ -26,7 +26,7 @@ This is the path that resolves Chunkis-owned chunk state during load, builds tem
 
 ## Current Flow
 
-1. Load resolves a delta from tracker memory, unload cache, or CIS storage.
+1. Load resolves a delta from tracker memory, unload cache, a completed CIS prefetch, or CIS storage.
 2. `CisNbtUtil.buildLoadChunkNbt(...)` chooses either persisted-base-backed NBT or a synthetic empty-shell root.
 3. Vanilla converts the NBT to `SerializedChunk` and then `ProtoChunk`.
 4. `ChunkSerializerMixin` attaches the `ChunkDelta` to the proto chunk and applies restore-suppression setup.
@@ -40,6 +40,7 @@ Entity payloads are deliberately removed from synthetic vanilla chunk NBT before
 - block-entity-only sparse payloads without a persisted base are rejected during restore
 - full-baseline CIS snapshots and persisted-base-backed sparse payloads take different load baselines
 - restore may happen through a wrapped full-chunk path or normal promotion path, and docs should not collapse those into one idealized flow
+- player movement prefetches a bounded forward strip; misses retain the existing synchronous storage fallback
 
 ## Where Behavior Is Proven
 
