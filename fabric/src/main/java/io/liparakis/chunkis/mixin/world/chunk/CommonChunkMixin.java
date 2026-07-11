@@ -8,6 +8,7 @@ import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import java.util.Objects;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Mixin;
@@ -45,6 +46,12 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      */
     @Unique
     private volatile boolean chunkis$restoreLoadedFromStorage;
+
+    /**
+     * Serialized vanilla base snapshot captured before the chunk's first edit.
+     */
+    @Unique
+    private volatile NbtCompound chunkis$pendingBaseChunkNbt;
 
     /**
      * Default constructor for CommonChunkMixin.
@@ -102,6 +109,22 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     @Override
     public void chunkis$setRestoreLoadedFromStorage(final boolean restoreLoadedFromStorage) {
         this.chunkis$restoreLoadedFromStorage = restoreLoadedFromStorage;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public NbtCompound chunkis$getPendingBaseChunkNbt() {
+        return chunkis$pendingBaseChunkNbt;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void chunkis$setPendingBaseChunkNbt(final NbtCompound nbt) {
+        this.chunkis$pendingBaseChunkNbt = nbt;
     }
 
     /**

@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.api;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import net.minecraft.nbt.NbtCompound;
 
 /**
  * Duck-typed attachment point for Chunkis per-chunk runtime state.
@@ -55,4 +56,22 @@ public interface ChunkisDeltaDuck {
      * @param restoreLoadedFromStorage {@code true} when storage was the restore source
      */
     void chunkis$setRestoreLoadedFromStorage(boolean restoreLoadedFromStorage);
+
+    /**
+     * Returns a pre-captured vanilla base snapshot awaiting first mutation.
+     *
+     * @return pending base NBT, or {@code null}
+     */
+    default NbtCompound chunkis$getPendingBaseChunkNbt() {
+        return null;
+    }
+
+    /**
+     * Stores or clears the pre-captured vanilla base snapshot.
+     *
+     * @param nbt pending base NBT, or {@code null}
+     */
+    default void chunkis$setPendingBaseChunkNbt(final NbtCompound nbt) {
+    }
+
 }

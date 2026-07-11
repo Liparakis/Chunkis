@@ -226,6 +226,7 @@ public final class ChunkRestorer {
             } else {
                 protoDelta.forEachBlock(visitor::visitBlock);
             }
+            visitor.recalculateTouchedSectionCounts();
             protoDelta.getBlockEntities()
                     .forEach((packedPos, nbt) -> visitor.visitBlockEntity(io.liparakis.chunkis.core.BlockInstruction.unpackX(
                                     packedPos),

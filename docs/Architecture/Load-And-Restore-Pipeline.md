@@ -41,6 +41,7 @@ Entity payloads are deliberately removed from synthetic vanilla chunk NBT before
 - full-baseline CIS snapshots and persisted-base-backed sparse payloads take different load baselines
 - restore may happen through a wrapped full-chunk path or normal promotion path, and docs should not collapse those into one idealized flow
 - confirmed CIS entries are decoded on the prefetch worker before the normal load consumes them; misses retain the existing synchronous fallback
+- clean loaded chunks may retain one bounded server-thread base snapshot until their first mutation, avoiding a synchronous initial serialization
 
 ## Where Behavior Is Proven
 

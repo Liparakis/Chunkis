@@ -12,6 +12,7 @@ import io.liparakis.chunkis.portal.PortalChunkIndexManager;
 import io.liparakis.chunkis.portal.PortalLinkManager;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
+import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
@@ -81,9 +82,14 @@ public final class ChunkisMod implements ModInitializer {
      * are still available. Server stopped clears static managers.</p>
      */
     private static void registerEvents() {
-        ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> GlobalChunkTracker.noteChunkUnloaded(chunk));
+        ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> BaseChunkCaptureUtil.scheduleBaseCapture(chunk));
+        ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> {
+            BaseChunkCaptureUtil.clearPendingBaseCapture(chunk);
+            GlobalChunkTracker.noteChunkUnloaded(chunk);
+        });
         ServerWorldEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.delete(world));
         ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
+        ServerTickEvents.START_SERVER_TICK.register(BaseChunkCaptureUtil::tick);
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
         ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> VanillaEntityRegionCleanup.deletePending());
@@ -193,6 +199,7 @@ public final class ChunkisMod implements ModInitializer {
         PortalChunkIndexManager.clear();
         PortalLinkManager.clear();
         ScheduledEntityReplayQueue.clear();
+        BaseChunkCaptureUtil.clear();
         MigrationProgressTracker.clear();
     }
 

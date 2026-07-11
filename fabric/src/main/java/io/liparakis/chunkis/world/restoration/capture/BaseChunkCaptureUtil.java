@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.world.restoration.capture;
 
+import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
@@ -12,11 +13,15 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
+import java.lang.ref.WeakReference;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.chunk.SerializedChunk;
 import net.minecraft.world.chunk.WorldChunk;
 
@@ -35,12 +40,97 @@ import net.minecraft.world.chunk.WorldChunk;
 public final class BaseChunkCaptureUtil {
 
     /**
+     * Limits queued speculative snapshots so startup and teleport bursts do not retain chunks.
+     */
+    private static final int MAX_QUEUED_BASE_CAPTURES = 32;
+
+    /**
+     * Chunks waiting for a single server-thread base snapshot.
+     */
+    private static final ConcurrentLinkedQueue<WeakReference<WorldChunk>> pendingBaseCaptures =
+            new ConcurrentLinkedQueue<>();
+
+    /**
+     * Approximate queued-entry count, maintained without traversing the concurrent queue.
+     */
+    private static final AtomicInteger pendingBaseCaptureCount = new AtomicInteger();
+
+    /**
      * Private constructor to prevent utility class instantiation.
      *
      * @throws AssertionError always
      */
     private BaseChunkCaptureUtil() {
         throw new AssertionError("Utility class");
+    }
+
+    /**
+     * Queues a clean live chunk for a bounded, one-per-tick baseline snapshot.
+     *
+     * <p>The snapshot is retained only until the chunk's first mutation, where
+     * {@link #captureBaseChunk} consumes it instead of serializing synchronously.</p>
+     *
+     * @param chunk loaded chunk to pre-capture
+     */
+    public static void scheduleBaseCapture(final WorldChunk chunk) {
+        if (!(chunk instanceof ChunkisDeltaDuck duck)
+                || duck.chunkis$getDelta() != null
+                || duck.chunkis$getPendingBaseChunkNbt() != null) {
+            return;
+        }
+        if (pendingBaseCaptureCount.incrementAndGet() > MAX_QUEUED_BASE_CAPTURES) {
+            pendingBaseCaptureCount.decrementAndGet();
+            return;
+        }
+        pendingBaseCaptures.offer(new WeakReference<>(chunk));
+    }
+
+    /**
+     * Captures at most one queued baseline on the server thread.
+     *
+     * @param server active Minecraft server
+     */
+    public static void tick(final MinecraftServer server) {
+        while (true) {
+            final WeakReference<WorldChunk> reference = pendingBaseCaptures.poll();
+            if (reference == null) {
+                return;
+            }
+            pendingBaseCaptureCount.decrementAndGet();
+            final WorldChunk chunk = reference.get();
+            if (!(chunk instanceof ChunkisDeltaDuck duck)
+                    || duck.chunkis$getDelta() != null
+                    || duck.chunkis$getPendingBaseChunkNbt() != null
+                    || !(chunk.getWorld() instanceof ServerWorld world)) {
+                continue;
+            }
+            duck.chunkis$setPendingBaseChunkNbt(SerializedChunk.fromChunk(world, chunk).serialize());
+            return;
+        }
+    }
+
+    /**
+     * Clears a chunk's retained speculative snapshot when it unloads.
+     *
+     * @param chunk unloading chunk
+     */
+    public static void clearPendingBaseCapture(final WorldChunk chunk) {
+        if (chunk instanceof ChunkisDeltaDuck duck) {
+            duck.chunkis$setPendingBaseChunkNbt(null);
+        }
+        pendingBaseCaptures.removeIf(reference -> {
+            final WorldChunk scheduled = reference.get();
+            return scheduled == null || scheduled == chunk;
+        });
+        pendingBaseCaptureCount.set(pendingBaseCaptures.size());
+    }
+
+    /**
+     * Clears queued and retained runtime state on server shutdown.
+     */
+    public static void clear() {
+        pendingBaseCaptures.clear();
+        pendingBaseCaptureCount.set(0);
     }
 
     /**
@@ -143,8 +233,7 @@ public final class BaseChunkCaptureUtil {
                 "BaseChunkCaptureUtil#captureBaseChunk", "delta state before base capture clear",
                 null);
 
-        final NbtCompound serializedBaseChunkNbt = SerializedChunk.fromChunk(world, chunk)
-                .serialize();
+        final NbtCompound serializedBaseChunkNbt = takePendingBaseChunkNbt(world, chunk);
         PayloadWatchTracer.traceBlockEntityPresenceInChunkNbt(
                 world.getRegistryKey()
                         .getValue()
@@ -197,6 +286,20 @@ public final class BaseChunkCaptureUtil {
         }
 
         return delta;
+    }
+
+    /**
+     * Takes a queued baseline or falls back to the established live serialization path.
+     */
+    private static NbtCompound takePendingBaseChunkNbt(final ServerWorld world, final WorldChunk chunk) {
+        if (chunk instanceof ChunkisDeltaDuck duck) {
+            final NbtCompound pending = duck.chunkis$getPendingBaseChunkNbt();
+            if (pending != null) {
+                duck.chunkis$setPendingBaseChunkNbt(null);
+                return pending;
+            }
+        }
+        return SerializedChunk.fromChunk(world, chunk).serialize();
     }
 
     /**

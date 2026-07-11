@@ -290,7 +290,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Performs final runtime-delta cleanup after restoration.
      */
     void finishRestoration() {
-        recalculateTouchedSectionCounts();
         ChunkRestorer.refreshDerivedChunkState(
                 world,
                 chunk,
