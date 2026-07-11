@@ -1,5 +1,6 @@
 subprojects {
     apply plugin: 'maven-publish'
+    apply plugin: 'checkstyle'
 
     group = providers.gradleProperty("maven_group").get()
     version = providers.gradleProperty("mod_version").get()
@@ -32,5 +33,10 @@ subprojects {
         test {
             useJUnitPlatform()
         }
+    }
+
+    checkstyle {
+        toolVersion = '10.21.1'
+        configFile = rootProject.file('config/checkstyle/checkstyle.xml')
     }
 }
