@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../common/src/main/resources/assets/logo.png" width="150" alt="Chunkis logo">
+  <img src="common/src/main/resources/assets/logo.png" width="150" alt="Chunkis logo">
 </p>
 
 <p align="center">
