@@ -2,8 +2,6 @@
   <img src="../common/src/main/resources/assets/logo.png" width="150" alt="Chunkis logo">
 </p>
 
-<h1 align="center">Chunkis</h1>
-
 <p align="center">
   A Fabric mod for safe, compact, and predictable Minecraft chunk persistence.
 </p>
