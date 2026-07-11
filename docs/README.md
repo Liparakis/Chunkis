@@ -1,95 +1,102 @@
-# Chunkis
+<p align="center">
+  <img src="../common/src/main/resources/assets/logo.png" width="150" alt="Chunkis logo">
+</p>
 
-Chunkis is a Fabric mod that takes ownership of chunk persistence. In the current codebase it intercepts vanilla chunk save and load paths, stores Chunkis-managed chunk data in CIS region files, rebuilds load input from Chunkis state, and sends chunk deltas to clients on a separate networking path.
+<h1 align="center">Chunkis</h1>
 
-## Current Modules
+<p align="center">
+  A Fabric mod for safe, compact, and predictable Minecraft chunk persistence.
+</p>
 
-- `common`: loader-agnostic chunk model, codecs, compression helpers, debug model, and SPI adapters
-- `storage`: CIS storage engine, region files, mapping persistence, and storage inspection helpers
-- `migration`: CIS-to-CIS version planning and storage-backed rewrite logic
-- `fabric`: Fabric entrypoints, mixins, runtime tracking, restore, commands, networking, portal support, and offline MCA-to-CIS migration
+Chunkis adds a chunk storage pipeline built around a sparse delta format called
+CIS. It records Chunkis-managed changes relative to a chunk baseline, stores
+those changes in dimension-local CIS region files, and reconstructs the chunk
+when it is loaded.
 
-## Current Capabilities
+Chunkis is primarily a disk-I/O and persistence-format project. It is not an
+FPS, TPS, rendering, or gameplay optimization mod.
 
-- Tracks chunk-owned runtime state through `ChunkDelta`
-- Writes dimension-local `chunkis/regions/r.<x>.<z>.cis` files
-- Persists dimension-local `global_ids.json` mapping files
-- Uses authoritative save-time snapshots instead of persisting raw live sparse edits directly
-- Builds synthetic load NBT and replays Chunkis state during restore
-- Blocks vanilla writes only when Chunkis has taken ownership of the save
-- Runs integrated-server offline MCA-to-CIS migration before startup
-- Provides CIS version migration from older CIS versions to the current format
-- Exposes debug tracing, payload watches, durability test commands, and storage reports
+## At a glance
 
-## Current Limitations
+| Area          | Current behavior                                                                             |
+|---------------|----------------------------------------------------------------------------------------------|
+| Platform      | Fabric on Minecraft 1.21.11                                                                  |
+| Runtime       | Java 21 or newer                                                                             |
+| Storage       | CIS region files, mapping files, and optional metadata files                                 |
+| Ownership     | Chunkis selectively takes ownership of saves; unowned vanilla writes remain available        |
+| Size impact   | Workload-dependent; the project does not guarantee a fixed reduction                         |
+| Data safety   | Ownership guards, authoritative snapshots, restore suppression, and corruption-aware loading |
+| Reversibility | Treat authoritative CIS storage as one-way; keep a tested backup before installation         |
 
-- The code does not provide a supported path back to vanilla `.mca` storage after Chunkis data becomes authoritative
-- Mods or tools that expect vanilla region files to remain authoritative are a bad fit
-- Offline MCA-to-CIS migration is proven for the integrated-server startup path, not for a separate dedicated-server prelaunch hook
-- Storage size is workload-dependent; the codebase does not prove that CIS is always smaller than vanilla
-- Some restore paths still depend on persisted base chunk metadata or a full baseline to make sparse payloads safe
+## How it works
 
-## On-Disk Layout
+Vanilla chunk persistence writes Anvil region data. Chunkis intercepts relevant
+save and load paths through Fabric mixins:
 
-Overworld:
+1. Runtime changes are tracked in a `ChunkDelta`.
+2. Save-time capture rebuilds authoritative state when needed instead of blindly
+   persisting raw live edits.
+3. The encoded delta is written through `CisStorage` into CIS region files.
+4. Load paths rebuild the input data and replay Chunkis state during restoration.
+5. Vanilla writes are suppressed only when Chunkis has actually claimed the
+   save, so ownership decisions remain explicit.
+
+The common codec stores a palette, bit-packed chunk instructions, compression
+data, block-entity payloads, entity data, and preserved metadata as supported by
+the current format version.
+
+## On-disk layout
+
+For the overworld, Chunkis data is stored below the world directory:
 
 ```text
 <world>/
-  chunkis/
-    global_ids.json
-    portal_chunks.nbt
-    portal_links.nbt
-    regions/
-      r.<regionX>.<regionZ>.cis
+└── chunkis/
+    ├── global_ids.json
+    ├── portal_chunks.nbt
+    ├── portal_links.nbt
+    └── regions/
+        ├── r.0.0.cis
+        ├── r.0.1.cis
+        └── ...
 ```
 
-Other dimensions:
+Other dimensions use their dimension directory under `<world>/dimensions/`.
+The current CIS format version is tracked by the shared `CisConstants` model,
+and older CIS data can be upgraded through the migration module.
 
-```text
-<world>/
-  dimensions/
-    <namespace>/
-      <path>/
-        chunkis/
-          global_ids.json
-          portal_chunks.nbt
-          regions/
-            r.<regionX>.<regionZ>.cis
-```
+## Compatibility and limitations
 
-## Build And Test
+Chunkis is a poor fit for tools or mods that assume vanilla `.mca` files remain
+the authoritative source of every chunk. Test carefully if a mod:
 
-```bash
-./gradlew build
-./gradlew test
-./gradlew runGameTest
-```
+- reads or writes Anvil region files directly;
+- performs its own chunk serialization or migration;
+- applies chunk changes after world generation;
+- replaces the normal world, save, or chunk lifecycle.
 
-On Windows PowerShell:
+There is no supported general conversion from authoritative CIS data back to
+vanilla Anvil storage. Offline MCA-to-CIS migration currently belongs to the
+Fabric integrated-server startup path; it is not a general dedicated-server
+prelaunch migration command.
 
-```powershell
-.\gradlew.bat build
-.\gradlew.bat test
-.\gradlew.bat runGameTest
-```
+Always test on a copy of the world and keep a backup that can be restored
+without Chunkis before enabling authoritative storage.
 
-## Docs Map
+## Reporting issues
 
-- [Architecture index](Architecture/README.md)
-- [Module docs](common/README.md), [storage](storage/README.md), [migration](migration/README.md), [fabric](fabric/README.md)
-- [Development guide](Development/Developer-Guide.md)
-- [Debug notes](debug/README.md)
+Before opening an issue:
 
-## Stale Naming To Avoid
+- reproduce it on a copy or backup of the world;
+- check the compatibility limitations above;
+- confirm the issue occurs on the current project version;
+- collect the Minecraft version, Fabric Loader version, Fabric API version, and
+  complete mod list.
 
-Some current repository docs still refer to `core/` and `cismigrator/`. The active Gradle modules are `common`, `storage`, `migration`, and `fabric`.
+Include `latest.log` or a crash report, exact reproduction steps, and any
+relevant CIS files only when it is safe to share them.
 
-## Evidence
+## Wiki
 
-- `settings.gradle`
-- `README.md`
-- `fabric/src/main/java/io/liparakis/chunkis/ChunkisMod.java`
-- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/ThreadedAnvilChunkStorageMixin.java`
-- `fabric/src/main/java/io/liparakis/chunkis/mixin/storage/StoragePreventionMixin.java`
-- `fabric/src/main/java/io/liparakis/chunkis/world/tracking/save/ChunkisStoragePaths.java`
-- `fabric/src/main/java/io/liparakis/chunkis/mixin/client/storage/MinecraftClientMixin.java`
+Architecture, development, build instructions, module details, and contributor
+guidance will live in the [project wiki](../../wiki).
