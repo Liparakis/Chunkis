@@ -42,6 +42,7 @@ Entity payloads are deliberately removed from synthetic vanilla chunk NBT before
 - restore may happen through a wrapped full-chunk path or normal promotion path, and docs should not collapse those into one idealized flow
 - confirmed CIS entries are decoded on the prefetch worker before the normal load consumes them; misses retain the existing synchronous fallback
 - clean loaded chunks may retain one bounded server-thread base snapshot until their first mutation, avoiding a synchronous initial serialization
+- player join also queues a bounded 5x5 CIS-data prefetch around the player; it does not force-load world chunks
 
 ## Where Behavior Is Proven
 
