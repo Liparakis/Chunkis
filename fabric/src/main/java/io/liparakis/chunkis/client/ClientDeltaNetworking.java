@@ -3,6 +3,7 @@ package io.liparakis.chunkis.client;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.codec.network.CisNetworkDecoder;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -12,7 +13,6 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.network.FabricNetworkCodecFactory;
-import io.liparakis.chunkis.core.codec.network.CisNetworkDecoder;
 import java.io.IOException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -57,7 +57,9 @@ public final class ClientDeltaNetworking {
      */
     private static volatile boolean typeWarningLogged = false;
 
-    /** Performs client delta networking. */
+    /**
+     * Performs client delta networking.
+     */
     private ClientDeltaNetworking() {
         throw new AssertionError("Utility class");
     }

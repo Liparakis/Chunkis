@@ -1,10 +1,16 @@
 package io.liparakis.chunkis.debug.model;
 
 public enum ChunkTraceSeverity {
-    /** Stores info. */
+    /**
+     * Stores info.
+     */
     INFO,
-    /** Stores warn. */
+    /**
+     * Stores warn.
+     */
     WARN,
-    /** Represents an error severity. */
+    /**
+     * Represents an error severity.
+     */
     ERROR
 }

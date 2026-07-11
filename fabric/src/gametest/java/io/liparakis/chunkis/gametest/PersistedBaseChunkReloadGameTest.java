@@ -19,8 +19,6 @@ import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
-import java.util.List;
-import java.util.UUID;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -42,6 +40,8 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.GameMode;
 import net.minecraft.world.chunk.WorldChunk;
+import java.util.List;
+import java.util.UUID;
 
 @SuppressWarnings("unused")
 public final class PersistedBaseChunkReloadGameTest {

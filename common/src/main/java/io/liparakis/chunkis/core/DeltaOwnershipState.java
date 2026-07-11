@@ -5,20 +5,34 @@ package io.liparakis.chunkis.core;
  */
 final class DeltaOwnershipState {
 
-    /** Stores ownership reason. */
+    /**
+     * Stores ownership reason.
+     */
     String ownershipReason;
-    /** Stores ownership source. */
+    /**
+     * Stores ownership source.
+     */
     String ownershipSource;
-    /** Stores first mutation source. */
+    /**
+     * Stores first mutation source.
+     */
     String firstMutationSource;
-    /** Stores pending mutation source. */
+    /**
+     * Stores pending mutation source.
+     */
     String pendingMutationSource;
-    /** Stores mutation generation. */
+    /**
+     * Stores mutation generation.
+     */
     long mutationGeneration;
-    /** Stores saved generation. */
+    /**
+     * Stores saved generation.
+     */
     long savedGeneration;
 
-    /** Performs delta ownership state. */
+    /**
+     * Performs delta ownership state.
+     */
     DeltaOwnershipState() {
         this.ownershipReason = null;
         this.ownershipSource = null;

@@ -257,6 +257,7 @@ public final class ChunkisStoragePaths {
      * @param dimId the dimension identifier to check
      * @return {@code true} if a dimension subdirectory is required
      */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private static boolean requiresDimensionSubdirectory(final Identifier dimId) {
         return !MINECRAFT_NAMESPACE.equals(dimId.getNamespace())
                 || !OVERWORLD_PATH.equals(dimId.getPath());
@@ -266,7 +267,7 @@ public final class ChunkisStoragePaths {
      * Returns whether the identifier refers to a vanilla dimension with the given path.
      *
      * @param dimId dimension identifier to inspect
-     * @param path expected vanilla path
+     * @param path  expected vanilla path
      * @return {@code true} when the identifier matches the requested vanilla dimension
      */
     private static boolean isVanillaDimension(final Identifier dimId, final String path) {

@@ -51,7 +51,8 @@ public abstract class RegionBasedStorageMixin {
             final CallbackInfo ci) {
         this.chunkis$directory = directory;
         final var cls = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.classify(directory);
-        final var dimOpt = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(directory);
+        final var dimOpt = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(
+                directory);
         final boolean auth = dimOpt.isPresent()
                 && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
         Chunkis.LOGGER.info(
@@ -60,8 +61,9 @@ public abstract class RegionBasedStorageMixin {
                 dimOpt.map(k -> k.getValue()
                                 .toString())
                         .orElse("unknown"),
-                dimOpt.map(k -> io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(k)
-                                ? "CIS_AUTHORITATIVE" : "NOT")
+                dimOpt.map(k ->
+                                io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(k)
+                                        ? "CIS_AUTHORITATIVE" : "NOT")
                         .orElse("unknown"),
                 auth
         );
@@ -154,7 +156,8 @@ public abstract class RegionBasedStorageMixin {
             return false;
         }
         final java.util.Optional<net.minecraft.registry.RegistryKey<net.minecraft.world.World>> dimOpt =
-                io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(chunkis$directory);
+                io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(
+                        chunkis$directory);
         return dimOpt.isPresent()
                 && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
     }

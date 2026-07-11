@@ -6,18 +6,25 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.WorldSavePath;
 
-/** Removes stale vanilla entity-region files after an authoritative world unload. */
+/**
+ * Removes stale vanilla entity-region files after an authoritative world unload.
+ */
 public final class VanillaEntityRegionCleanup {
 
-    /** Stores pending directories. */
+    /**
+     * Stores pending directories.
+     */
     private static final Set<Path> PENDING_DIRECTORIES = ConcurrentHashMap.newKeySet();
 
-    /** Performs vanilla entity region cleanup. */
+    /**
+     * Performs vanilla entity region cleanup.
+     */
     private VanillaEntityRegionCleanup() {
     }
 
@@ -32,13 +39,15 @@ public final class VanillaEntityRegionCleanup {
         }
 
         final Path directory = ChunkisStoragePaths.computeVanillaEntitiesDirectory(
-                world.getServer().getSavePath(WorldSavePath.ROOT),
+                Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT),
                 world.getRegistryKey());
         PENDING_DIRECTORIES.add(directory);
         deleteDirectory(directory);
     }
 
-    /** Retries cleanup after the server has closed vanilla storage handles. */
+    /**
+     * Retries cleanup after the server has closed vanilla storage handles.
+     */
     public static void deletePending() {
         for (final Path directory : Set.copyOf(PENDING_DIRECTORIES)) {
             deleteDirectory(directory);
@@ -46,7 +55,9 @@ public final class VanillaEntityRegionCleanup {
         PENDING_DIRECTORIES.clear();
     }
 
-    /** Performs delete directory. */
+    /**
+     * Performs delete directory.
+     */
     private static void deleteDirectory(final Path directory) {
         if (!Files.isDirectory(directory)) {
             PENDING_DIRECTORIES.remove(directory);

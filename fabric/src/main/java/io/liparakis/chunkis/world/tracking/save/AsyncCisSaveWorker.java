@@ -4,6 +4,7 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
@@ -13,7 +14,6 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
@@ -65,7 +65,9 @@ final class AsyncCisSaveWorker implements Runnable {
         this.thread.start();
     }
 
-    /** Performs cache encoded chunk metadata. */
+    /**
+     * Performs cache encoded chunk metadata.
+     */
     private static void cacheEncodedChunkMetadata(final ChunkDeltaView<BlockState, NbtCompound> snapshot)
             throws IOException {
         if (snapshot.getEncodedChunkMetadata() != null) {

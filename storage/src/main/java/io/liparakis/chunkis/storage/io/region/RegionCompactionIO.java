@@ -17,7 +17,9 @@ import java.util.List;
  */
 final class RegionCompactionIO {
 
-    /** Performs region compaction io. */
+    /**
+     * Performs region compaction io.
+     */
     private RegionCompactionIO() {
         throw new AssertionError("Utility class");
     }

@@ -36,19 +36,31 @@ public final class ClientDeltaMetrics {
      */
     private static final int ERROR_LOG_INTERVAL = 100;
 
-    /** Stores packets received. */
+    /**
+     * Stores packets received.
+     */
     private static final LongAdder packetsReceived = new LongAdder();
-    /** Stores total bytes received. */
+    /**
+     * Stores total bytes received.
+     */
     private static final LongAdder totalBytesReceived = new LongAdder();
-    /** Stores total decode nanos. */
+    /**
+     * Stores total decode nanos.
+     */
     private static final LongAdder totalDecodeNanos = new LongAdder();
-    /** Stores total blocks changed. */
+    /**
+     * Stores total blocks changed.
+     */
     private static final LongAdder totalBlocksChanged = new LongAdder();
 
-    /** Stores error count. */
+    /**
+     * Stores error count.
+     */
     private static final AtomicInteger errorCount = new AtomicInteger(0);
 
-    /** Performs client delta metrics. */
+    /**
+     * Performs client delta metrics.
+     */
     private ClientDeltaMetrics() {
         throw new AssertionError("Utility class");
     }

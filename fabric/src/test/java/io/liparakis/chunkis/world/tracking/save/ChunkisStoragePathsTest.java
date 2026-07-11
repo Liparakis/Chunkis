@@ -20,6 +20,16 @@ class ChunkisStoragePathsTest {
     private static final Path SAVE_ROOT = Path.of("world");
 
     /**
+     * Creates a vanilla world registry key for test assertions.
+     *
+     * @param path vanilla world path
+     * @return registry key for the requested vanilla dimension
+     */
+    private static RegistryKey<World> vanillaWorld(final String path) {
+        return RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla(path));
+    }
+
+    /**
      * Verifies Chunkis keeps Nether CIS data in its normalized multi-dimension layout.
      */
     @Test
@@ -40,7 +50,8 @@ class ChunkisStoragePathsTest {
     @Test
     void vanillaNetherRegionDirectoryUsesLegacyRoot() {
         assertEquals(
-                SAVE_ROOT.resolve("DIM-1").resolve("region"),
+                SAVE_ROOT.resolve("DIM-1")
+                        .resolve("region"),
                 ChunkisStoragePaths.computeVanillaRegionDirectory(SAVE_ROOT, vanillaWorld("the_nether"))
         );
     }
@@ -51,18 +62,9 @@ class ChunkisStoragePathsTest {
     @Test
     void vanillaEndEntityDirectoryUsesLegacyRoot() {
         assertEquals(
-                SAVE_ROOT.resolve("DIM1").resolve("entities"),
+                SAVE_ROOT.resolve("DIM1")
+                        .resolve("entities"),
                 ChunkisStoragePaths.computeVanillaEntitiesDirectory(SAVE_ROOT, vanillaWorld("the_end"))
         );
-    }
-
-    /**
-     * Creates a vanilla world registry key for test assertions.
-     *
-     * @param path vanilla world path
-     * @return registry key for the requested vanilla dimension
-     */
-    private static RegistryKey<World> vanillaWorld(final String path) {
-        return RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla(path));
     }
 }

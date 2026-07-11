@@ -31,8 +31,9 @@ public final class BitReader {
      */
     private int endIndex;
 
-    /** Performs bit reader. */
-    /** Performs bit reader. */
+    /**
+     * Performs bit reader.
+     */
     public BitReader(byte[] data) {
         setData(data, 0, data.length);
     }

@@ -3,11 +3,11 @@ package io.liparakis.chunkis.core.codec;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -23,11 +23,15 @@ import org.junit.jupiter.api.io.TempDir;
 
 class CisPerformanceOptimizationTest {
 
-    /** Stores temp dir. */
+    /**
+     * Stores temp dir.
+     */
     @TempDir
     Path tempDir;
 
-    /** Performs test all air section. */
+    /**
+     * Performs test all air section.
+     */
     @Test
     void testAllAirSection() throws Exception {
         final CodecHarness harness = newHarness();
@@ -36,7 +40,9 @@ class CisPerformanceOptimizationTest {
         verifyEquivalence(harness, delta);
     }
 
-    /** Performs test all stone section. */
+    /**
+     * Performs test all stone section.
+     */
     @Test
     void testAllStoneSection() throws Exception {
         final CodecHarness harness = newHarness();
@@ -45,7 +51,9 @@ class CisPerformanceOptimizationTest {
         verifyEquivalence(harness, delta);
     }
 
-    /** Performs test mostly stone with air exceptions. */
+    /**
+     * Performs test mostly stone with air exceptions.
+     */
     @Test
     void testMostlyStoneWithAirExceptions() throws Exception {
         final CodecHarness harness = newHarness();
@@ -60,7 +68,9 @@ class CisPerformanceOptimizationTest {
         verifyEquivalence(harness, delta);
     }
 
-    /** Performs test mostly air with stone exceptions. */
+    /**
+     * Performs test mostly air with stone exceptions.
+     */
     @Test
     void testMostlyAirWithStoneExceptions() throws Exception {
         final CodecHarness harness = newHarness();
@@ -74,7 +84,9 @@ class CisPerformanceOptimizationTest {
         verifyEquivalence(harness, delta);
     }
 
-    /** Performs test checkerboard section. */
+    /**
+     * Performs test checkerboard section.
+     */
     @Test
     void testCheckerboardSection() throws Exception {
         final CodecHarness harness = newHarness();
@@ -93,7 +105,9 @@ class CisPerformanceOptimizationTest {
         verifyEquivalence(harness, delta);
     }
 
-    /** Performs test layered terrain section. */
+    /**
+     * Performs test layered terrain section.
+     */
     @Test
     void testLayeredTerrainSection() throws Exception {
         final CodecHarness harness = newHarness();
@@ -112,7 +126,9 @@ class CisPerformanceOptimizationTest {
         verifyEquivalence(harness, delta);
     }
 
-    /** Performs test negative section y. */
+    /**
+     * Performs test negative section y.
+     */
     @Test
     void testNegativeSectionY() throws Exception {
         final CodecHarness harness = newHarness();
@@ -131,7 +147,9 @@ class CisPerformanceOptimizationTest {
         verifyEquivalence(harness, delta);
     }
 
-    /** Performs coarse block capacity reserve scales by section count. */
+    /**
+     * Performs coarse block capacity reserve scales by section count.
+     */
     @Test
     void coarseBlockCapacityReserveScalesBySectionCount() {
         assertThat(AbstractCisDecoder.coarseBlockCapacityReserve(0)).isZero();
@@ -139,7 +157,10 @@ class CisPerformanceOptimizationTest {
         assertThat(AbstractCisDecoder.coarseBlockCapacityReserve(4)).isEqualTo(16384);
     }
 
-    /** Performs fill section uniform. */
+    /**
+     * Performs fill section uniform.
+     */
+    @SuppressWarnings("SameParameterValue")
     private void fillSectionUniform(final ChunkDelta<String, String> delta, final int sectionY, final String state) {
         final int baseY = sectionY << 4;
         for (int y = 0; y < 16; y++) {
@@ -151,7 +172,9 @@ class CisPerformanceOptimizationTest {
         }
     }
 
-    /** Performs verify equivalence. */
+    /**
+     * Performs verify equivalence.
+     */
     private void verifyEquivalence(
             final CodecHarness harness,
             final ChunkDelta<String, String> original
@@ -177,7 +200,9 @@ class CisPerformanceOptimizationTest {
         });
     }
 
-    /** Performs get blocks map. */
+    /**
+     * Performs get blocks map.
+     */
     private Map<Long, String> getBlocksMap(final ChunkDelta<String, String> delta) {
         final Map<Long, String> map = new LinkedHashMap<>();
         delta.forEachBlock((x, y, z, state) -> {
@@ -187,7 +212,9 @@ class CisPerformanceOptimizationTest {
         return map;
     }
 
-    /** Performs new harness. */
+    /**
+     * Performs new harness.
+     */
     private CodecHarness newHarness() throws IOException {
         final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
         final CisMapping<String, String, String> mapping = new CisMapping<>(
@@ -209,12 +236,18 @@ class CisPerformanceOptimizationTest {
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
 
-        /** Stores air. */
+        /**
+         * Stores air.
+         */
         private static final String AIR = "air";
-        /** Stores string. */
+        /**
+         * Stores string.
+         */
         private static final Map<String, String> BLOCKS = canonicalBlocks();
 
-        /** Performs canonical blocks. */
+        /**
+         * Performs canonical blocks.
+         */
         private static Map<String, String> canonicalBlocks() {
             final Map<String, String> blocks = new LinkedHashMap<>();
             blocks.put(AIR, AIR);

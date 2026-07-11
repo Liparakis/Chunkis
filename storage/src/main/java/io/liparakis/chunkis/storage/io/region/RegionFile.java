@@ -161,7 +161,9 @@ public final class RegionFile implements AutoCloseable {
         return (pos.x() & REGION_MASK) + (pos.z() & REGION_MASK) * 32;
     }
 
-    /** Performs chunk key. */
+    /**
+     * Performs chunk key.
+     */
     private static DebugChunkKey chunkKey(final CisChunkPos pos) {
         return new DebugChunkKey(pos.x(), pos.z());
     }
@@ -237,7 +239,9 @@ public final class RegionFile implements AutoCloseable {
         return read(pos, null);
     }
 
-    /** Performs read. */
+    /**
+     * Performs read.
+     */
     public synchronized byte[] read(CisChunkPos pos, String operationId) throws IOException {
         final DebugChunkKey chunkKey = chunkKey(pos);
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_READ_TX_START,
@@ -266,7 +270,9 @@ public final class RegionFile implements AutoCloseable {
         return buffer.array();
     }
 
-    /** Performs has chunk. */
+    /**
+     * Performs has chunk.
+     */
     public synchronized boolean hasChunk(CisChunkPos pos) {
         final int index = getChunkIndex(pos);
         return offsets[index] != 0 && lengths[index] > 0;
@@ -294,7 +300,9 @@ public final class RegionFile implements AutoCloseable {
         write(pos, data, null);
     }
 
-    /** Performs write. */
+    /**
+     * Performs write.
+     */
     public synchronized void write(CisChunkPos pos, byte[] data, String operationId) throws IOException {
         final DebugChunkKey chunkKey = chunkKey(pos);
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_START,
@@ -616,7 +624,9 @@ public final class RegionFile implements AutoCloseable {
         return FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.CREATE);
     }
 
-    /** Performs region key. */
+    /**
+     * Performs region key.
+     */
     private DebugRegionKey regionKey() {
         final String fileName = path.getFileName()
                 .toString();

@@ -13,7 +13,9 @@ package io.liparakis.chunkis.core.bits;
  */
 public final class BitUtils {
 
-    /** Performs bit utils. */
+    /**
+     * Performs bit utils.
+     */
     private BitUtils() {
     }
 

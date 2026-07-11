@@ -1,14 +1,14 @@
 package io.liparakis.chunkis.storage.mapping;
-import io.liparakis.chunkis.core.mapping.PropertyPacker;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import io.liparakis.chunkis.core.bits.BitReader;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
-import io.liparakis.chunkis.core.bits.BitReader;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
@@ -22,17 +22,25 @@ import org.junit.jupiter.api.io.TempDir;
 
 class CisMappingTest {
 
-    /** Stores gson. */
+    /**
+     * Stores gson.
+     */
     private static final Gson GSON = new Gson();
-    /** Stores mapping type. */
+    /**
+     * Stores mapping type.
+     */
     private static final Type MAPPING_TYPE = new TypeToken<Map<String, Integer>>() {
     }.getType();
 
-    /** Stores temp dir. */
+    /**
+     * Stores temp dir.
+     */
     @TempDir
     Path tempDir;
 
-    /** Performs creates full registry mapping and parent directories when missing. */
+    /**
+     * Performs creates full registry mapping and parent directories when missing.
+     */
     @Test
     void createsFullRegistryMappingAndParentDirectoriesWhenMissing() throws IOException {
         Path mappingFile = tempDir.resolve("nested/chunkis/global_ids.json");
@@ -45,7 +53,9 @@ class CisMappingTest {
                 .containsEntry("known:dirt", 2);
     }
 
-    /** Performs restores known ids and appends new registered blocks after highest persisted id. */
+    /**
+     * Performs restores known ids and appends new registered blocks after highest persisted id.
+     */
     @Test
     void restoresKnownIdsAndAppendsNewRegisteredBlocksAfterHighestPersistedId() throws IOException {
         Path mappingFile = writeMapping(Map.of(
@@ -68,7 +78,9 @@ class CisMappingTest {
         assertThat(readMapping(mappingFile).values()).containsExactly(0, 2, 5, 6);
     }
 
-    /** Performs rejects decode for unresolved persisted block id. */
+    /**
+     * Performs rejects decode for unresolved persisted block id.
+     */
     @Test
     void rejectsDecodeForUnresolvedPersistedBlockId() throws IOException {
         Path mappingFile = writeMapping(Map.of(
@@ -82,19 +94,25 @@ class CisMappingTest {
                 .hasMessageContaining("Unknown Block ID 5");
     }
 
-    /** Performs write mapping. */
+    /**
+     * Performs write mapping.
+     */
     private Path writeMapping(Map<String, Integer> mapping) throws IOException {
         Path mappingFile = tempDir.resolve("global_ids.json");
         Files.writeString(mappingFile, GSON.toJson(mapping));
         return mappingFile;
     }
 
-    /** Performs read mapping. */
+    /**
+     * Performs read mapping.
+     */
     private Map<String, Integer> readMapping(Path mappingFile) throws IOException {
         return GSON.fromJson(Files.readString(mappingFile), MAPPING_TYPE);
     }
 
-    /** Performs new mapping. */
+    /**
+     * Performs new mapping.
+     */
     private CisMapping<String, String, String> newMapping(Path mappingFile) throws IOException {
         BlockStateAdapter<String, String, String> stateAdapter = new TestBlockStateAdapter();
         return new CisMapping<>(mappingFile, new TestBlockRegistryAdapter(), stateAdapter,
@@ -103,12 +121,18 @@ class CisMappingTest {
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
 
-        /** Stores air. */
+        /**
+         * Stores air.
+         */
         private static final String AIR = "minecraft:air";
-        /** Stores string. */
+        /**
+         * Stores string.
+         */
         private static final Map<String, String> KNOWN_BLOCKS = canonicalBlocks();
 
-        /** Performs canonical blocks. */
+        /**
+         * Performs canonical blocks.
+         */
         private static Map<String, String> canonicalBlocks() {
             Map<String, String> blocks = new LinkedHashMap<>();
             blocks.put(AIR, AIR);

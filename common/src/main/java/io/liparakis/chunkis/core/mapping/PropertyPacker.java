@@ -1,10 +1,9 @@
 package io.liparakis.chunkis.core.mapping;
 
-import io.liparakis.chunkis.spi.BlockStateAdapter;
-import io.liparakis.chunkis.spi.PropertyValueAdapter;
 import io.liparakis.chunkis.core.bits.BitReader;
 import io.liparakis.chunkis.core.bits.BitWriter;
-
+import io.liparakis.chunkis.spi.BlockStateAdapter;
+import io.liparakis.chunkis.spi.PropertyValueAdapter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -265,7 +264,9 @@ public final class PropertyPacker<B, S, P> {
             return (PropertyMeta<P>[]) new PropertyMeta<?>[size];
         }
 
-        /** Performs get value index. */
+        /**
+         * Performs get value index.
+         */
         int getValueIndex(final Object value) {
             return valueIndices.getOrDefault(value, -1);
         }

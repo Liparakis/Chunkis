@@ -28,7 +28,9 @@ final class GlobalChunkTrackerTrace {
      */
     private static final String SOURCE = "GlobalChunkTracker";
 
-    /** Stores info. */
+    /**
+     * Stores info.
+     */
     private static final ChunkTraceSeverity INFO = ChunkTraceSeverity.INFO;
 
     /**

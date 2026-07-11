@@ -6,10 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import net.minecraft.nbt.NbtCompound;
 import org.junit.jupiter.api.Test;
 
-/** Tests the client-only block-entity replay guard. */
+/**
+ * Tests the client-only block-entity replay guard.
+ */
 class ClientDeltaVisitorTest {
 
-    /** Performs only trial spawners are owned by vanilla. */
+    /**
+     * Performs only trial spawners are owned by vanilla.
+     */
     @Test
     void onlyTrialSpawnersAreOwnedByVanilla() {
         final NbtCompound trialSpawner = new NbtCompound();

@@ -2,9 +2,8 @@ package io.liparakis.chunkis.core.codec;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.ChunkDeltaView;
-import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.core.mapping.CisAdapter;
-
+import io.liparakis.chunkis.spi.NbtAdapter;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
@@ -44,7 +43,9 @@ public final class CisEncoder<S, N> extends AbstractCisEncoder<S, N> {
         return encodeInternal(delta);
     }
 
-    /** Performs encode. */
+    /**
+     * Performs encode.
+     */
     public byte[] encode(final ChunkDeltaView<S, N> delta) throws IOException {
         return encodeInternal(delta);
     }

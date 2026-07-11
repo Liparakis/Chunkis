@@ -19,26 +19,42 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class ChunkTraceSuspectManager {
 
-    /** Stores default suspect capacity. */
+    /**
+     * Stores default suspect capacity.
+     */
     static final int DEFAULT_SUSPECT_CAPACITY = 256;
 
-    /** Stores suspect ids. */
+    /**
+     * Stores suspect ids.
+     */
     private static final AtomicLong SUSPECT_IDS = new AtomicLong();
-    /** Stores monitor. */
+    /**
+     * Stores monitor.
+     */
     private static final Object MONITOR = new Object();
-    /** Stores long. */
+    /**
+     * Stores long.
+     */
     private static final Map<Long, ChunkTraceSuspect> SUSPECTS_BY_ID = new HashMap<>();
-    /** Stores suspect key. */
+    /**
+     * Stores suspect key.
+     */
     private static final Map<SuspectKey, Long> SUSPECT_IDS_BY_KEY = new HashMap<>();
-    /** Stores suspect capacity. */
+    /**
+     * Stores suspect capacity.
+     */
     private static int suspectCapacity = DEFAULT_SUSPECT_CAPACITY;
 
-    /** Performs chunk trace suspect manager. */
+    /**
+     * Performs chunk trace suspect manager.
+     */
     private ChunkTraceSuspectManager() {
         throw new AssertionError("Utility class");
     }
 
-    /** Performs suspects. */
+    /**
+     * Performs suspects.
+     */
     public static List<ChunkTraceSuspect> suspects() {
         synchronized (MONITOR) {
             final List<ChunkTraceSuspect> result = new ArrayList<>(SUSPECTS_BY_ID.values());
@@ -49,14 +65,18 @@ public final class ChunkTraceSuspectManager {
         }
     }
 
-    /** Performs suspect. */
+    /**
+     * Performs suspect.
+     */
     public static ChunkTraceSuspect suspect(final long suspectId) {
         synchronized (MONITOR) {
             return SUSPECTS_BY_ID.get(suspectId);
         }
     }
 
-    /** Performs suspect. */
+    /**
+     * Performs suspect.
+     */
     public static ChunkTraceSuspect suspect(final DebugChunkKey chunkKey) {
         Objects.requireNonNull(chunkKey, "chunkKey");
         ChunkTraceSuspect newest = null;
@@ -71,13 +91,17 @@ public final class ChunkTraceSuspectManager {
         return newest;
     }
 
-    /** Performs suspect timeline. */
+    /**
+     * Performs suspect timeline.
+     */
     public static List<ChunkTraceEvent> suspectTimeline(final long suspectId) {
         final ChunkTraceSuspect s = suspect(suspectId);
         return s == null ? List.of() : s.copiedTimeline();
     }
 
-    /** Performs clear suspects. */
+    /**
+     * Performs clear suspects.
+     */
     public static void clearSuspects() {
         synchronized (MONITOR) {
             SUSPECTS_BY_ID.clear();
@@ -85,7 +109,9 @@ public final class ChunkTraceSuspectManager {
         }
     }
 
-    /** Performs maybe capture suspect. */
+    /**
+     * Performs maybe capture suspect.
+     */
     public static void maybeCaptureSuspect(final ChunkTraceEvent event) {
         if (event.chunkKey() == null) {
             return;
@@ -98,7 +124,9 @@ public final class ChunkTraceSuspectManager {
         upsertSuspect(event, suspicion, timeline);
     }
 
-    /** Performs describe suspicion. */
+    /**
+     * Performs describe suspicion.
+     */
     private static Suspicion describeSuspicion(final ChunkTraceEvent event) {
         return switch (event.eventType()) {
             case ASSERTION_FAILED, SAVE_REJECTED, SAVE_FLUSH_FAILED,
@@ -140,7 +168,9 @@ public final class ChunkTraceSuspectManager {
         };
     }
 
-    /** Performs upsert suspect. */
+    /**
+     * Performs upsert suspect.
+     */
     private static void upsertSuspect(
             final ChunkTraceEvent event,
             final Suspicion suspicion,
@@ -193,7 +223,9 @@ public final class ChunkTraceSuspectManager {
         }
     }
 
-    /** Performs evict oldest suspect if needed. */
+    /**
+     * Performs evict oldest suspect if needed.
+     */
     private static void evictOldestSuspectIfNeeded() {
         while (SUSPECTS_BY_ID.size() > suspectCapacity) {
             long oldestId = -1L;
@@ -215,7 +247,9 @@ public final class ChunkTraceSuspectManager {
         }
     }
 
-    /** Performs merge timeline. */
+    /**
+     * Performs merge timeline.
+     */
     private static List<ChunkTraceEvent> mergeTimeline(
             final List<ChunkTraceEvent> existing,
             final List<ChunkTraceEvent> captured
@@ -233,7 +267,9 @@ public final class ChunkTraceSuspectManager {
         return new ArrayList<>(timeline.subList(fromIndex, timeline.size()));
     }
 
-    /** Performs more severe. */
+    /**
+     * Performs more severe.
+     */
     private static ChunkTraceSeverity moreSevere(
             final ChunkTraceSeverity left,
             final ChunkTraceSeverity right
@@ -241,7 +277,9 @@ public final class ChunkTraceSuspectManager {
         return left.ordinal() >= right.ordinal() ? left : right;
     }
 
-    /** Performs reset for tests. */
+    /**
+     * Performs reset for tests.
+     */
     public static void resetForTests() {
         synchronized (MONITOR) {
             suspectCapacity = DEFAULT_SUSPECT_CAPACITY;

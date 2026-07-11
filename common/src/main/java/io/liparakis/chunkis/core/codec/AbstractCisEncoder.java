@@ -2,11 +2,11 @@ package io.liparakis.chunkis.core.codec;
 
 import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDeltaView;
-import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.core.bits.BitWriter;
 import io.liparakis.chunkis.core.model.CisChunk;
 import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.core.model.CisSection;
+import io.liparakis.chunkis.spi.NbtAdapter;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -49,24 +49,32 @@ public abstract class AbstractCisEncoder<S, N> {
      */
     protected final S airState;
 
-    /** Performs abstract cis encoder. */
+    /**
+     * Performs abstract cis encoder.
+     */
     protected AbstractCisEncoder(NbtAdapter<N> nbtAdapter, S airState) {
         this.nbtAdapter = nbtAdapter;
         this.airState = airState;
     }
 
-    /** Performs write header. */
+    /**
+     * Performs write header.
+     */
     private static void writeHeader(DataOutputStream dos) throws IOException {
         dos.writeInt(CisConstants.MAGIC);
         dos.writeInt(CisConstants.VERSION);
     }
 
-    /** Performs uniform encoding bits. */
+    /**
+     * Performs uniform encoding bits.
+     */
     private static int uniformEncodingBits(final int globalBits) {
         return 1 + CisConstants.BLOCK_COUNT_BITS + globalBits;
     }
 
-    /** Performs default sparse encoding bits. */
+    /**
+     * Performs default sparse encoding bits.
+     */
     private static int defaultSparseEncodingBits(final int exceptionCount, final int globalBits) {
         return 1 + CisConstants.BLOCK_COUNT_BITS + globalBits + CisConstants.BLOCK_COUNT_BITS
                 + (exceptionCount * (12 + globalBits));
@@ -141,7 +149,9 @@ public abstract class AbstractCisEncoder<S, N> {
         dos.write(palettePropertyData);
     }
 
-    /** Performs write sections. */
+    /**
+     * Performs write sections.
+     */
     private void writeSections(DataOutputStream dos, EncoderContext<S> ctx, CisChunk<S> chunk)
             throws IOException {
         Int2ObjectMap<CisSection<S>> sections = chunk.getSections();
@@ -161,7 +171,9 @@ public abstract class AbstractCisEncoder<S, N> {
         dos.write(sectionData);
     }
 
-    /** Performs write block entities. */
+    /**
+     * Performs write block entities.
+     */
     private void writeBlockEntities(DataOutputStream dos, ChunkDeltaView<S, N> delta) throws IOException {
         Long2ObjectMap<N> bes = delta.getBlockEntities();
 
@@ -193,7 +205,9 @@ public abstract class AbstractCisEncoder<S, N> {
         }
     }
 
-    /** Performs write entities. */
+    /**
+     * Performs write entities.
+     */
     private void writeEntities(DataOutputStream dos, ChunkDeltaView<S, N> delta) throws IOException {
         final int entityCount = delta.countNonNullEntities();
         dos.writeInt(entityCount);
@@ -559,7 +573,9 @@ public abstract class AbstractCisEncoder<S, N> {
         }
     }
 
-    /** Performs sparse encoding bits. */
+    /**
+     * Performs sparse encoding bits.
+     */
     private int sparseEncodingBits(final CisSection<S> section, final int globalBits) {
         return 1 + CisConstants.BLOCK_COUNT_BITS + (sparseEntryCount(section) * (12 + globalBits));
     }
@@ -736,13 +752,21 @@ public abstract class AbstractCisEncoder<S, N> {
      * Section encodings considered by the adaptive cost selector.
      */
     private enum SectionEncoding {
-        /** Stores uniform. */
+        /**
+         * Stores uniform.
+         */
         UNIFORM,
-        /** Stores default sparse. */
+        /**
+         * Stores default sparse.
+         */
         DEFAULT_SPARSE,
-        /** Stores sparse. */
+        /**
+         * Stores sparse.
+         */
         SPARSE,
-        /** Stores chunk. */
+        /**
+         * Stores chunk.
+         */
         DENSE
     }
 
@@ -825,7 +849,9 @@ public abstract class AbstractCisEncoder<S, N> {
      */
     private static final class EntityEncodingException extends RuntimeException {
 
-        /** Performs entity encoding exception. */
+        /**
+         * Performs entity encoding exception.
+         */
         EntityEncodingException(final IOException cause) {
             super(cause);
         }

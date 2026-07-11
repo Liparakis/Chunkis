@@ -18,7 +18,9 @@ import org.junit.jupiter.api.Test;
 
 class ChunkTraceStoreTest {
 
-    /** Performs tear down. */
+    /**
+     * Performs tear down.
+     */
     @AfterEach
     void tearDown() {
         ChunkTraceStore.clear();
@@ -27,14 +29,18 @@ class ChunkTraceStoreTest {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
     }
 
-    /** Performs debug defaults to off and store starts empty. */
+    /**
+     * Performs debug defaults to off and store starts empty.
+     */
     @Test
     void debugDefaultsToOffAndStoreStartsEmpty() {
         assertThat(ChunkisDebugConfig.level()).isEqualTo(ChunkisDebugLevel.OFF);
         assertThat(ChunkTraceStore.latest(10)).isEmpty();
     }
 
-    /** Performs keeps only most recent events within capacity. */
+    /**
+     * Performs keeps only most recent events within capacity.
+     */
     @Test
     void keepsOnlyMostRecentEventsWithinCapacity() {
         ChunkTraceStore.setCapacityForTests(3);
@@ -83,7 +89,9 @@ class ChunkTraceStoreTest {
                 .containsExactly(4L, 3L, 2L);
     }
 
-    /** Performs creates monotonic operation ids. */
+    /**
+     * Performs creates monotonic operation ids.
+     */
     @Test
     void createsMonotonicOperationIds() {
         assertThat(ChunkTraceStore.nextOperationId("save")).isEqualTo("save-1");
@@ -91,7 +99,9 @@ class ChunkTraceStoreTest {
         assertThat(ChunkTraceStore.nextOperationId("load")).isEqualTo("load-3");
     }
 
-    /** Performs snapshot returns oldest first. */
+    /**
+     * Performs snapshot returns oldest first.
+     */
     @Test
     void snapshotReturnsOldestFirst() {
         ChunkTraceStore.record(new ChunkTraceEvent(
@@ -122,7 +132,9 @@ class ChunkTraceStoreTest {
                 .containsExactly("first", "second");
     }
 
-    /** Performs records assertion for malformed save rejected event. */
+    /**
+     * Performs records assertion for malformed save rejected event.
+     */
     @Test
     void recordsAssertionForMalformedSaveRejectedEvent() {
         ChunkTraceStore.record(new ChunkTraceEvent(
@@ -152,7 +164,9 @@ class ChunkTraceStoreTest {
                 .contains("save rejected without a machine-readable reason");
     }
 
-    /** Performs promotes suspicious chunks from failure and history signals. */
+    /**
+     * Performs promotes suspicious chunks from failure and history signals.
+     */
     @Test
     void promotesSuspiciousChunksFromFailureAndHistorySignals() {
         final DebugChunkKey savedThenMissing = new DebugChunkKey(8, 9);
@@ -230,7 +244,9 @@ class ChunkTraceStoreTest {
                 .contains("without queued or flushed save evidence");
     }
 
-    /** Performs retained suspect snapshot survives ring rotation. */
+    /**
+     * Performs retained suspect snapshot survives ring rotation.
+     */
     @Test
     void retainedSuspectSnapshotSurvivesRingRotation() {
         ChunkTraceStore.setCapacityForTests(3);

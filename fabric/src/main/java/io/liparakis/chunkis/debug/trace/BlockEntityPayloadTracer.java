@@ -232,10 +232,14 @@ public final class BlockEntityPayloadTracer {
             return;
         }
 
-        final NbtList blockEntities = chunkNbt.getList("block_entities").orElse(null);
+        final NbtList blockEntities = chunkNbt.getList("block_entities")
+                .orElse(null);
         final int blockEntityCount = blockEntities != null ? blockEntities.size() : 0;
-        final int sectionCount = chunkNbt.getList("sections").map(NbtList::size).orElse(0);
-        final Object status = chunkNbt.getString("Status").orElse("<missing>");
+        final int sectionCount = chunkNbt.getList("sections")
+                .map(NbtList::size)
+                .orElse(0);
+        final Object status = chunkNbt.getString("Status")
+                .orElse("<missing>");
 
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
@@ -261,7 +265,8 @@ public final class BlockEntityPayloadTracer {
                             + " chunkStatus=" + status
                             + " rootSectionCount=" + sectionCount
                             + " rootBlockEntityCount=" + blockEntityCount
-                            + " matchedNbtId=" + (matched != null ? matched.getString("id").orElse("<missing-id>")
+                            + " matchedNbtId=" + (matched != null ? matched.getString("id")
+                                                                    .orElse("<missing-id>")
                             : "<missing>")
                             + " matchedNbtBytes=" + PayloadWatchSummaries.nbtSize(matched),
                     null
@@ -269,7 +274,9 @@ public final class BlockEntityPayloadTracer {
         }
     }
 
-    /** Performs find block entity nbt. */
+    /**
+     * Performs find block entity nbt.
+     */
     @Nullable
     private static NbtCompound findBlockEntityNbt(
             @Nullable final NbtList blockEntities,
@@ -282,9 +289,12 @@ public final class BlockEntityPayloadTracer {
             if (!(element instanceof NbtCompound compound)) {
                 continue;
             }
-            final int x = compound.getInt("x").orElse(Integer.MIN_VALUE);
-            final int y = compound.getInt("y").orElse(Integer.MIN_VALUE);
-            final int z = compound.getInt("z").orElse(Integer.MIN_VALUE);
+            final int x = compound.getInt("x")
+                    .orElse(Integer.MIN_VALUE);
+            final int y = compound.getInt("y")
+                    .orElse(Integer.MIN_VALUE);
+            final int z = compound.getInt("z")
+                    .orElse(Integer.MIN_VALUE);
             if (x == target.blockX() && y == target.blockY() && z == target.blockZ()) {
                 return compound;
             }

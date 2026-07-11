@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test;
 
 class ChunkTraceInvariantsTest {
 
-    /** Performs non empty restore assertion requires replay payload and zero applied count. */
+    /**
+     * Performs non empty restore assertion requires replay payload and zero applied count.
+     */
     @Test
     void nonEmptyRestoreAssertionRequiresReplayPayloadAndZeroAppliedCount() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>();
@@ -18,7 +20,9 @@ class ChunkTraceInvariantsTest {
         assertThat(ChunkTraceInvariants.shouldAssertNonEmptyRestore(new ChunkDelta<>(), 0)).isFalse();
     }
 
-    /** Performs metadata only delta does not trigger non empty restore assertion. */
+    /**
+     * Performs metadata only delta does not trigger non empty restore assertion.
+     */
     @Test
     void metadataOnlyDeltaDoesNotTriggerNonEmptyRestoreAssertion() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>();
@@ -27,7 +31,9 @@ class ChunkTraceInvariantsTest {
         assertThat(ChunkTraceInvariants.shouldAssertNonEmptyRestore(delta, 0)).isFalse();
     }
 
-    /** Performs block entity only payload without base is invalid. */
+    /**
+     * Performs block entity only payload without base is invalid.
+     */
     @Test
     void blockEntityOnlyPayloadWithoutBaseIsInvalid() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>();
@@ -37,7 +43,9 @@ class ChunkTraceInvariantsTest {
         assertThat(ChunkTraceInvariants.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta, true)).isFalse();
     }
 
-    /** Performs snapshot backed restore is not empty when only base was applied. */
+    /**
+     * Performs snapshot backed restore is not empty when only base was applied.
+     */
     @Test
     void snapshotBackedRestoreIsNotEmptyWhenOnlyBaseWasApplied() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>();

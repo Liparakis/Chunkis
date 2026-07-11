@@ -25,7 +25,9 @@ import java.util.Arrays;
  */
 final class BlockInstructionStorage {
 
-    /** Stores initial capacity. */
+    /**
+     * Stores initial capacity.
+     */
     private static final int INITIAL_CAPACITY = 64;
 
     /**
@@ -39,9 +41,13 @@ final class BlockInstructionStorage {
      * have only ever received {@link #addAppendOnly(long)} calls.
      */
     Long2IntOpenHashMap positionMap;
-    /** Stores long. */
+    /**
+     * Stores long.
+     */
     long[] packedInstructions;
-    /** Stores instruction count. */
+    /**
+     * Stores instruction count.
+     */
     int instructionCount;
 
     /**
@@ -52,37 +58,18 @@ final class BlockInstructionStorage {
     boolean positionMapDirty;
 
 
-    /** Performs block instruction storage. */
+    /**
+     * Performs block instruction storage.
+     */
     BlockInstructionStorage() {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;
         // positionMap intentionally left null - created lazily on first lookup/add.
     }
 
-    /** Performs copy into. */
-    void copyInto(final BlockInstructionStorage target) {
-        target.packedInstructions = Arrays.copyOf(this.packedInstructions, this.packedInstructions.length);
-        target.instructionCount = this.instructionCount;
-        // Propagate dirty state: if source is dirty or has no map, target inherits
-        // dirty status instead of eagerly rebuilding the map.
-        if (this.positionMapDirty || this.positionMap == null) {
-            target.positionMapDirty = true;
-            if (target.positionMap != null) {
-                target.positionMap.clear();
-            }
-        } else {
-            if (target.positionMap == null) {
-                target.positionMap = new Long2IntOpenHashMap(this.positionMap.size());
-                target.positionMap.defaultReturnValue(-1);
-            } else {
-                target.positionMap.clear();
-            }
-            target.positionMap.putAll(this.positionMap);
-            target.positionMapDirty = false;
-        }
-    }
-
-    /** Performs clear. */
+    /**
+     * Performs clear.
+     */
     void clear() {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;
@@ -92,7 +79,9 @@ final class BlockInstructionStorage {
         this.positionMapDirty = false;
     }
 
-    /** Performs ensure capacity. */
+    /**
+     * Performs ensure capacity.
+     */
     void ensureCapacity() {
         if (instructionCount < packedInstructions.length) {
             return;

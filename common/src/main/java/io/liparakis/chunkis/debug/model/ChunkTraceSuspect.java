@@ -51,7 +51,9 @@ public record ChunkTraceSuspect(
         String latestMessage
 ) {
 
-    /** Performs copy of. */
+    /**
+     * Performs copy of.
+     */
     public ChunkTraceSuspect {
         // Defensive copy so callers cannot mutate the stored timeline.
         copiedTimeline = List.copyOf(copiedTimeline);

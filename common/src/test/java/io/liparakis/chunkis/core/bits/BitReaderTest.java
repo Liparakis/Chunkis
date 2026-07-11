@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 
 public class BitReaderTest {
 
-    /** Performs test read batch aligned. */
+    /**
+     * Performs test read batch aligned.
+     */
     @Test
     public void testReadBatchAligned() {
         byte[] data = {(byte) 0xAB, (byte) 0xCD, (byte) 0xEF, (byte) 0x12};
@@ -24,7 +26,9 @@ public class BitReaderTest {
         assertThat(batch).containsExactly(expected);
     }
 
-    /** Performs test read batch unaligned. */
+    /**
+     * Performs test read batch unaligned.
+     */
     @Test
     public void testReadBatchUnaligned() {
         byte[] data = {(byte) 0b11010101, (byte) 0b10111000, (byte) 0b01111111};
@@ -42,7 +46,9 @@ public class BitReaderTest {
         assertThat(batch).containsExactly(expected);
     }
 
-    /** Performs test read batch mixed. */
+    /**
+     * Performs test read batch mixed.
+     */
     @Test
     public void testReadBatchMixed() {
         byte[] data = {(byte) 0xFF, (byte) 0x00, (byte) 0xAA, (byte) 0x55, (byte) 0x12, (byte) 0x34};
@@ -70,7 +76,9 @@ public class BitReaderTest {
         }
     }
 
-    /** Performs test read batch zero bits. */
+    /**
+     * Performs test read batch zero bits.
+     */
     @Test
     public void testReadBatchZeroBits() {
         byte[] data = {(byte) 0xFF};
@@ -80,7 +88,9 @@ public class BitReaderTest {
         assertThat(batch).containsExactly(0, 0, 0, 0, 0);
     }
 
-    /** Performs test read batch end of stream. */
+    /**
+     * Performs test read batch end of stream.
+     */
     @Test
     public void testReadBatchEndOfStream() {
         byte[] data = {(byte) 0xFF};

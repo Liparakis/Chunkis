@@ -170,7 +170,8 @@ class CisNbtUtilTest {
                         .orElseThrow());
         assertTrue(result.root()
                 .contains(CisNbtUtil.CHUNKIS_DATA_KEY));
-        assertFalse(result.root().contains("entities"));
+        assertFalse(result.root()
+                .contains("entities"));
     }
 
     /**

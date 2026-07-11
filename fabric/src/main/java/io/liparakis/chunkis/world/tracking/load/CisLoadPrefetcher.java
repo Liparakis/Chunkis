@@ -16,7 +16,9 @@ public final class CisLoadPrefetcher {
      */
     private static final int INITIAL_PREFETCH_RADIUS = 2;
 
-    /** Performs cis load prefetcher. */
+    /**
+     * Performs cis load prefetcher.
+     */
     private CisLoadPrefetcher() {
         throw new AssertionError("Utility class");
     }

@@ -9,7 +9,9 @@ import org.junit.jupiter.api.Test;
 
 class ChunkDeltaTest {
 
-    /** Performs block changes count tracks stored instructions without double counting updates. */
+    /**
+     * Performs block changes count tracks stored instructions without double counting updates.
+     */
     @Test
     void blockChangesCountTracksStoredInstructionsWithoutDoubleCountingUpdates() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
@@ -29,7 +31,9 @@ class ChunkDeltaTest {
         assertThat(delta.getBlockChangesCount()).isZero();
     }
 
-    /** Performs snapshot append stores blocks without needing the general mutation path. */
+    /**
+     * Performs snapshot append stores blocks without needing the general mutation path.
+     */
     @Test
     void snapshotAppendStoresBlocksWithoutNeedingTheGeneralMutationPath() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
@@ -48,7 +52,9 @@ class ChunkDeltaTest {
         );
     }
 
-    /** Performs snapshot append rebuilds lookup state when later mutation needs upsert. */
+    /**
+     * Performs snapshot append rebuilds lookup state when later mutation needs upsert.
+     */
     @Test
     void snapshotAppendRebuildsLookupStateWhenLaterMutationNeedsUpsert() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
@@ -68,7 +74,9 @@ class ChunkDeltaTest {
         );
     }
 
-    /** Performs snapshot view preserves readable payload without mutable block index state. */
+    /**
+     * Performs snapshot view preserves readable payload without mutable block index state.
+     */
     @Test
     void snapshotViewPreservesReadablePayloadWithoutMutableBlockIndexState() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
@@ -93,7 +101,9 @@ class ChunkDeltaTest {
         );
     }
 
-    /** Performs touched section count tracks blocks and block entities without scanning. */
+    /**
+     * Performs touched section count tracks blocks and block entities without scanning.
+     */
     @Test
     void touchedSectionCountTracksBlocksAndBlockEntitiesWithoutScanning() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);

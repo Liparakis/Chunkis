@@ -4,10 +4,9 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.Palette;
-import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.core.bits.BitReader;
 import io.liparakis.chunkis.core.model.CisConstants;
-
+import io.liparakis.chunkis.spi.NbtAdapter;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
@@ -84,7 +83,9 @@ public abstract class AbstractCisDecoder<S, N> {
      */
     protected List<S> globalPalette;
 
-    /** Performs abstract cis decoder. */
+    /**
+     * Performs abstract cis decoder.
+     */
     protected AbstractCisDecoder(NbtAdapter<N> nbtAdapter, S airState) {
         this.nbtAdapter = nbtAdapter;
         this.airState = airState;

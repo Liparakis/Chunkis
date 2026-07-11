@@ -2,12 +2,11 @@ package io.liparakis.chunkis.core.codec.network;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.ChunkDeltaView;
+import io.liparakis.chunkis.core.codec.AbstractCisEncoder;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
-import io.liparakis.chunkis.core.codec.AbstractCisEncoder;
-import io.liparakis.chunkis.core.mapping.PropertyPacker;
-
 import java.io.DataOutputStream;
 import java.io.IOException;
 

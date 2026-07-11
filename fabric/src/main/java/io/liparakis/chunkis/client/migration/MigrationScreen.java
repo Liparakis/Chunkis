@@ -17,21 +17,37 @@ public final class MigrationScreen extends Screen {
      * Panel and progress colors used by the migration overlay.
      */
     private static final int PANEL_BACKGROUND = 0xD0101216;
-    /** Stores panel border. */
+    /**
+     * Stores panel border.
+     */
     private static final int PANEL_BORDER = 0xFF4C5260;
-    /** Stores track background. */
+    /**
+     * Stores track background.
+     */
     private static final int TRACK_BACKGROUND = 0xFF24272C;
-    /** Stores blue. */
+    /**
+     * Stores blue.
+     */
     private static final int BLUE = 0xFF2E6BE6;
-    /** Stores green. */
+    /**
+     * Stores green.
+     */
     private static final int GREEN = 0xFF44DD60;
-    /** Stores white. */
+    /**
+     * Stores white.
+     */
     private static final int WHITE = 0xFFF4F6FB;
-    /** Stores muted. */
+    /**
+     * Stores muted.
+     */
     private static final int MUTED = 0xFFC3C8D2;
-    /** Stores scroll track. */
+    /**
+     * Stores scroll track.
+     */
     private static final int SCROLL_TRACK = 0xFF20242A;
-    /** Stores scroll thumb. */
+    /**
+     * Stores scroll thumb.
+     */
     private static final int SCROLL_THUMB = 0xFF8792A6;
 
     /**
@@ -46,17 +62,25 @@ public final class MigrationScreen extends Screen {
      * Cached table bounds used by mouse interaction.
      */
     private int tableX;
-    /** Stores table y. */
+    /**
+     * Stores table y.
+     */
     private int tableY;
-    /** Stores table width. */
+    /**
+     * Stores table width.
+     */
     private int tableWidth;
-    /** Stores table height. */
+    /**
+     * Stores table height.
+     */
     private int tableHeight;
     /**
      * Cached row geometry used to size and scroll the worker table.
      */
     private int rowHeight;
-    /** Stores visible rows. */
+    /**
+     * Stores visible rows.
+     */
     private int visibleRows;
     /**
      * Largest valid scroll index for the current snapshot.
@@ -68,6 +92,249 @@ public final class MigrationScreen extends Screen {
      */
     public MigrationScreen() {
         super(Text.literal("Converting MCA to CIS"));
+    }
+
+    /**
+     * Returns abbreviated status text for dense rows.
+     */
+    private static String shortStatus(final MigrationProgressTracker.WorkerProgress worker) {
+        if (worker.state() == MigrationProgressTracker.WorkerState.CONVERTING
+                && worker.totalChunks() > 0
+                && worker.processedChunks() >= worker.totalChunks()) {
+            return "Fin.";
+        }
+        return switch (worker.state()) {
+            case QUEUED -> "Queue";
+            case CONVERTING -> "Conv.";
+            case COMPLETED -> worker.failedChunks() == 0 ? "Done" : "Fail";
+        };
+    }
+
+    /**
+     * Returns full status text for normal and compact rows.
+     */
+    private static String status(final MigrationProgressTracker.WorkerProgress worker) {
+        if (worker.state() == MigrationProgressTracker.WorkerState.CONVERTING
+                && worker.totalChunks() > 0
+                && worker.processedChunks() >= worker.totalChunks()) {
+            return "Finalizing";
+        }
+        return switch (worker.state()) {
+            case QUEUED -> "Queued";
+            case CONVERTING -> "Converting";
+            case COMPLETED -> worker.failedChunks() == 0 ? "Completed" : "Failed";
+        };
+    }
+
+    /**
+     * Returns the status color associated with the worker lifecycle state.
+     */
+    private static int statusColor(final MigrationProgressTracker.WorkerProgress worker) {
+        if (worker.state() == MigrationProgressTracker.WorkerState.CONVERTING
+                && worker.totalChunks() > 0
+                && worker.processedChunks() >= worker.totalChunks()) {
+            return 0xFFFFC43D;
+        }
+        return switch (worker.state()) {
+            case QUEUED -> MUTED;
+            case CONVERTING, COMPLETED -> worker.failedChunks() == 0 ? GREEN : 0xFFFF6B4A;
+        };
+    }
+
+    /**
+     * Calculates the clamped progress fraction for one worker.
+     */
+    private static double workerProgress(final MigrationProgressTracker.WorkerProgress worker) {
+        return worker.state() == MigrationProgressTracker.WorkerState.COMPLETED
+                ? 1.0
+                : ratio(worker.processedChunks(), worker.totalChunks());
+    }
+
+    /**
+     * Draws a filled panel with the overlay border style.
+     */
+    private static void drawPanel(final DrawContext context,
+            final int x,
+            final int y,
+            final int panelWidth,
+            final int panelHeight) {
+        context.fill(x, y, x + panelWidth, y + panelHeight, PANEL_BACKGROUND);
+        context.drawStrokedRectangle(x, y, panelWidth, panelHeight, PANEL_BORDER);
+    }
+
+    /**
+     * Draws a clamped progress bar with a filled and track portion.
+     */
+    @SuppressWarnings("SameParameterValue")
+    private static void drawProgressBar(final DrawContext context,
+            final int x,
+            final int y,
+            final int progressWidth,
+            final int progressHeight,
+            final double progress) {
+        context.fill(x, y, x + progressWidth, y + progressHeight, TRACK_BACKGROUND);
+        final int filledWidth = (int) Math.round(progressWidth * Math.clamp(progress, 0.0, 1.0));
+        if (filledWidth > 0) {
+            context.fill(x, y, x + filledWidth, y + progressHeight, BLUE);
+        }
+        context.drawStrokedRectangle(x, y, progressWidth, progressHeight, PANEL_BORDER);
+    }
+
+    /**
+     * Calculates overall region completion as a clamped fraction.
+     */
+    private static double regionProgress(final MigrationProgressTracker.Snapshot snapshot) {
+        return ratio(snapshot.completedRegions(), snapshot.totalRegions());
+    }
+
+    /**
+     * Divides progress values safely and clamps the result to [0, 1].
+     */
+    private static double ratio(final long current, final long total) {
+        return total <= 0 ? 0.0 : Math.clamp((double) current / total, 0.0, 1.0);
+    }
+
+    /**
+     * Converts an elapsed monotonic-nanosecond timestamp to whole seconds.
+     */
+    private static long elapsedSeconds(final long startedAtNanos) {
+        return startedAtNanos == 0L ? 0L : (System.nanoTime() - startedAtNanos) / 1_000_000_000L;
+    }
+
+    /**
+     * Combines byte-weighted, queued-work, and active-worker ETA estimates.
+     */
+    static long etaSeconds(final MigrationProgressTracker.Snapshot snapshot) {
+        final long slowestWorkerEta = snapshot.workers()
+                .stream()
+                .mapToLong(MigrationScreen::workerEtaSeconds)
+                .max()
+                .orElse(0L);
+        final long elapsed = Math.max(1L, elapsedSeconds(snapshot.startedAtNanos()));
+        final long remainingRegions = Math.max(0L, snapshot.totalRegions() - snapshot.completedRegions());
+        final long regionEta = snapshot.completedRegions() == 0 || remainingRegions == 0
+                ? 0L
+                : ceilDivide(elapsed * remainingRegions, snapshot.completedRegions());
+        final long byteEta = byteEtaSeconds(snapshot);
+        final long queuedWorkEta = queuedWorkEta(snapshot, elapsed, slowestWorkerEta);
+        if (snapshot.processedChunks() == 0 || snapshot.totalChunks() <= snapshot.processedChunks()) {
+            return Math.max(byteEta, Math.max(queuedWorkEta, Math.max(regionEta, slowestWorkerEta)));
+        }
+        final long remainingChunks = snapshot.totalChunks() - snapshot.processedChunks();
+        final long aggregateEta = ceilDivide(elapsed * remainingChunks, snapshot.processedChunks());
+        return Math.max(byteEta,
+                Math.max(queuedWorkEta, Math.max(regionEta, Math.max(aggregateEta, slowestWorkerEta))));
+    }
+
+    /**
+     * Estimates remaining time from the first completed worker batch's byte rate.
+     */
+    private static long byteEtaSeconds(final MigrationProgressTracker.Snapshot snapshot) {
+        final long totalBytes = Math.max(0L, snapshot.totalBytes());
+        final long processedBytes = Math.clamp(snapshot.processedBytes(), 0L, totalBytes);
+        final long sampleBytes = Math.clamp(snapshot.sampleBytes(), 0L, totalBytes);
+        if (sampleBytes == 0L || totalBytes <= processedBytes) {
+            return 0L;
+        }
+        final long sampleElapsed = Math.max(1L, snapshot.sampleElapsedNanos() / 1_000_000_000L);
+        return ceilDivide(sampleElapsed * (totalBytes - processedBytes), sampleBytes);
+    }
+
+    /**
+     * Estimates work that has not reached a worker yet. The active-worker ETA
+     * alone cannot account for the executor queue, so queued work is added to
+     * the active tail using the measured global throughput.
+     */
+    private static long queuedWorkEta(final MigrationProgressTracker.Snapshot snapshot,
+            final long elapsed,
+            final long activeTailEta) {
+        final long totalChunks = Math.max(0L, snapshot.totalChunks());
+        final long processedChunks = Math.clamp(snapshot.processedChunks(), 0L, totalChunks);
+        final long activeRemainingChunks = Math.clamp(snapshot.workers()
+                .stream()
+                .filter(worker -> worker.state() == MigrationProgressTracker.WorkerState.CONVERTING)
+                .mapToLong(worker -> Math.max(0L, (long) worker.totalChunks() - worker.processedChunks()))
+                .sum(), 0L, totalChunks - processedChunks);
+        final long queuedChunks = Math.clamp(totalChunks - processedChunks - activeRemainingChunks,
+                0L,
+                totalChunks - processedChunks);
+        final int totalRegions = Math.max(0, snapshot.totalRegions());
+        final int completedRegions = Math.clamp(snapshot.completedRegions(), 0, totalRegions);
+        final long activeRegions = snapshot.workers()
+                .stream()
+                .filter(worker -> worker.state() == MigrationProgressTracker.WorkerState.CONVERTING)
+                .count();
+        final long queuedRegions = Math.clamp(totalRegions - completedRegions - activeRegions,
+                0L,
+                (long) totalRegions - completedRegions);
+        if (queuedChunks == 0L && queuedRegions == 0L) {
+            return activeTailEta;
+        }
+
+        long queuedEta = 0L;
+        if (queuedChunks > 0L && processedChunks > 0L) {
+            final long chunksPerSecond = Math.max(1L, processedChunks / elapsed);
+            queuedEta = ceilDivide(queuedChunks, chunksPerSecond);
+        }
+        if (queuedRegions > 0L && completedRegions > 0) {
+            queuedEta = Math.max(queuedEta,
+                    ceilDivide(elapsed * queuedRegions, completedRegions));
+        }
+        return activeTailEta + queuedEta;
+    }
+
+    /**
+     * Estimates remaining time for the worker's current region.
+     */
+    private static long workerEtaSeconds(final MigrationProgressTracker.WorkerProgress worker) {
+        if (worker.processedChunks() == 0 || worker.totalChunks() <= worker.processedChunks()) {
+            return 0L;
+        }
+        final long elapsed = Math.max(1L, elapsedSeconds(worker.startedAtNanos()));
+        return ceilDivide(elapsed * (worker.totalChunks() - worker.processedChunks()), worker.processedChunks());
+    }
+
+    /**
+     * Performs positive integer ceiling division for ETA calculations.
+     */
+    private static long ceilDivide(final long numerator, final long denominator) {
+        return (numerator + denominator - 1L) / denominator;
+    }
+
+    /**
+     * Formats seconds as a full HH:MM:SS duration.
+     */
+    private static String formatDuration(final long seconds) {
+        return String.format(Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60);
+    }
+
+    /**
+     * Formats seconds as a compact MM:SS duration.
+     */
+    private static String formatShortDuration(final long seconds) {
+        return String.format(Locale.ROOT, "%02d:%02d", (seconds / 60) % 60, seconds % 60);
+    }
+
+    /**
+     * Formats a worker ETA for dense rows.
+     */
+    private static String formatShortEta(final MigrationProgressTracker.WorkerProgress worker) {
+        return worker.state() != MigrationProgressTracker.WorkerState.CONVERTING
+                || worker.totalChunks() <= 0
+                || worker.processedChunks() >= worker.totalChunks()
+                ? "--:--"
+                : formatShortDuration(workerEtaSeconds(worker));
+    }
+
+    /**
+     * Formats a worker ETA for full-width rows.
+     */
+    private static String formatEta(final MigrationProgressTracker.WorkerProgress worker) {
+        return worker.state() != MigrationProgressTracker.WorkerState.CONVERTING
+                || worker.totalChunks() <= 0
+                || worker.processedChunks() >= worker.totalChunks()
+                ? "--:--:--"
+                : formatDuration(workerEtaSeconds(worker));
     }
 
     /**
@@ -395,248 +662,5 @@ public final class MigrationScreen extends Screen {
                 progressX + progressWidth + 5, y + 2, WHITE);
         context.drawTextWithShadow(textRenderer, shortStatus(worker), statusX, y + 2, statusColor(worker));
         context.drawTextWithShadow(textRenderer, formatShortEta(worker), x + panelWidth - 48, y + 2, MUTED);
-    }
-
-    /**
-     * Returns abbreviated status text for dense rows.
-     */
-    private static String shortStatus(final MigrationProgressTracker.WorkerProgress worker) {
-        if (worker.state() == MigrationProgressTracker.WorkerState.CONVERTING
-                && worker.totalChunks() > 0
-                && worker.processedChunks() >= worker.totalChunks()) {
-            return "Fin.";
-        }
-        return switch (worker.state()) {
-            case QUEUED -> "Queue";
-            case CONVERTING -> "Conv.";
-            case COMPLETED -> worker.failedChunks() == 0 ? "Done" : "Fail";
-        };
-    }
-
-    /**
-     * Returns full status text for normal and compact rows.
-     */
-    private static String status(final MigrationProgressTracker.WorkerProgress worker) {
-        if (worker.state() == MigrationProgressTracker.WorkerState.CONVERTING
-                && worker.totalChunks() > 0
-                && worker.processedChunks() >= worker.totalChunks()) {
-            return "Finalizing";
-        }
-        return switch (worker.state()) {
-            case QUEUED -> "Queued";
-            case CONVERTING -> "Converting";
-            case COMPLETED -> worker.failedChunks() == 0 ? "Completed" : "Failed";
-        };
-    }
-
-    /**
-     * Returns the status color associated with the worker lifecycle state.
-     */
-    private static int statusColor(final MigrationProgressTracker.WorkerProgress worker) {
-        if (worker.state() == MigrationProgressTracker.WorkerState.CONVERTING
-                && worker.totalChunks() > 0
-                && worker.processedChunks() >= worker.totalChunks()) {
-            return 0xFFFFC43D;
-        }
-        return switch (worker.state()) {
-            case QUEUED -> MUTED;
-            case CONVERTING, COMPLETED -> worker.failedChunks() == 0 ? GREEN : 0xFFFF6B4A;
-        };
-    }
-
-    /**
-     * Calculates the clamped progress fraction for one worker.
-     */
-    private static double workerProgress(final MigrationProgressTracker.WorkerProgress worker) {
-        return worker.state() == MigrationProgressTracker.WorkerState.COMPLETED
-                ? 1.0
-                : ratio(worker.processedChunks(), worker.totalChunks());
-    }
-
-    /**
-     * Draws a filled panel with the overlay border style.
-     */
-    private static void drawPanel(final DrawContext context,
-            final int x,
-            final int y,
-            final int panelWidth,
-            final int panelHeight) {
-        context.fill(x, y, x + panelWidth, y + panelHeight, PANEL_BACKGROUND);
-        context.drawStrokedRectangle(x, y, panelWidth, panelHeight, PANEL_BORDER);
-    }
-
-    /**
-     * Draws a clamped progress bar with a filled and track portion.
-     */
-    @SuppressWarnings("SameParameterValue")
-    private static void drawProgressBar(final DrawContext context,
-            final int x,
-            final int y,
-            final int progressWidth,
-            final int progressHeight,
-            final double progress) {
-        context.fill(x, y, x + progressWidth, y + progressHeight, TRACK_BACKGROUND);
-        final int filledWidth = (int) Math.round(progressWidth * Math.clamp(progress, 0.0, 1.0));
-        if (filledWidth > 0) {
-            context.fill(x, y, x + filledWidth, y + progressHeight, BLUE);
-        }
-        context.drawStrokedRectangle(x, y, progressWidth, progressHeight, PANEL_BORDER);
-    }
-
-    /**
-     * Calculates overall region completion as a clamped fraction.
-     */
-    private static double regionProgress(final MigrationProgressTracker.Snapshot snapshot) {
-        return ratio(snapshot.completedRegions(), snapshot.totalRegions());
-    }
-
-    /**
-     * Divides progress values safely and clamps the result to [0, 1].
-     */
-    private static double ratio(final long current, final long total) {
-        return total <= 0 ? 0.0 : Math.clamp((double) current / total, 0.0, 1.0);
-    }
-
-    /**
-     * Converts an elapsed monotonic-nanosecond timestamp to whole seconds.
-     */
-    private static long elapsedSeconds(final long startedAtNanos) {
-        return startedAtNanos == 0L ? 0L : (System.nanoTime() - startedAtNanos) / 1_000_000_000L;
-    }
-
-    /**
-     * Combines byte-weighted, queued-work, and active-worker ETA estimates.
-     */
-    static long etaSeconds(final MigrationProgressTracker.Snapshot snapshot) {
-        final long slowestWorkerEta = snapshot.workers()
-                .stream()
-                .mapToLong(MigrationScreen::workerEtaSeconds)
-                .max()
-                .orElse(0L);
-        final long elapsed = Math.max(1L, elapsedSeconds(snapshot.startedAtNanos()));
-        final long remainingRegions = Math.max(0L, snapshot.totalRegions() - snapshot.completedRegions());
-        final long regionEta = snapshot.completedRegions() == 0 || remainingRegions == 0
-                ? 0L
-                : ceilDivide(elapsed * remainingRegions, snapshot.completedRegions());
-        final long byteEta = byteEtaSeconds(snapshot);
-        final long queuedWorkEta = queuedWorkEta(snapshot, elapsed, slowestWorkerEta);
-        if (snapshot.processedChunks() == 0 || snapshot.totalChunks() <= snapshot.processedChunks()) {
-            return Math.max(byteEta, Math.max(queuedWorkEta, Math.max(regionEta, slowestWorkerEta)));
-        }
-        final long remainingChunks = snapshot.totalChunks() - snapshot.processedChunks();
-        final long aggregateEta = ceilDivide(elapsed * remainingChunks, snapshot.processedChunks());
-        return Math.max(byteEta,
-                Math.max(queuedWorkEta, Math.max(regionEta, Math.max(aggregateEta, slowestWorkerEta))));
-    }
-
-    /**
-     * Estimates remaining time from the first completed worker batch's byte rate.
-     */
-    private static long byteEtaSeconds(final MigrationProgressTracker.Snapshot snapshot) {
-        final long totalBytes = Math.max(0L, snapshot.totalBytes());
-        final long processedBytes = Math.clamp(snapshot.processedBytes(), 0L, totalBytes);
-        final long sampleBytes = Math.clamp(snapshot.sampleBytes(), 0L, totalBytes);
-        if (sampleBytes == 0L || totalBytes <= processedBytes) {
-            return 0L;
-        }
-        final long sampleElapsed = Math.max(1L, snapshot.sampleElapsedNanos() / 1_000_000_000L);
-        return ceilDivide(sampleElapsed * (totalBytes - processedBytes), sampleBytes);
-    }
-
-    /**
-     * Estimates work that has not reached a worker yet. The active-worker ETA
-     * alone cannot account for the executor queue, so queued work is added to
-     * the active tail using the measured global throughput.
-     */
-    private static long queuedWorkEta(final MigrationProgressTracker.Snapshot snapshot,
-            final long elapsed,
-            final long activeTailEta) {
-        final long totalChunks = Math.max(0L, snapshot.totalChunks());
-        final long processedChunks = Math.clamp(snapshot.processedChunks(), 0L, totalChunks);
-        final long activeRemainingChunks = Math.clamp(snapshot.workers()
-                .stream()
-                .filter(worker -> worker.state() == MigrationProgressTracker.WorkerState.CONVERTING)
-                .mapToLong(worker -> Math.max(0L, (long) worker.totalChunks() - worker.processedChunks()))
-                .sum(), 0L, totalChunks - processedChunks);
-        final long queuedChunks = Math.clamp(totalChunks - processedChunks - activeRemainingChunks,
-                0L,
-                totalChunks - processedChunks);
-        final int totalRegions = Math.max(0, snapshot.totalRegions());
-        final int completedRegions = Math.clamp(snapshot.completedRegions(), 0, totalRegions);
-        final long activeRegions = snapshot.workers()
-                .stream()
-                .filter(worker -> worker.state() == MigrationProgressTracker.WorkerState.CONVERTING)
-                .count();
-        final long queuedRegions = Math.clamp(totalRegions - completedRegions - activeRegions,
-                0L,
-                (long) totalRegions - completedRegions);
-        if (queuedChunks == 0L && queuedRegions == 0L) {
-            return activeTailEta;
-        }
-
-        long queuedEta = 0L;
-        if (queuedChunks > 0L && processedChunks > 0L) {
-            final long chunksPerSecond = Math.max(1L, processedChunks / elapsed);
-            queuedEta = ceilDivide(queuedChunks, chunksPerSecond);
-        }
-        if (queuedRegions > 0L && completedRegions > 0) {
-            queuedEta = Math.max(queuedEta,
-                    ceilDivide(elapsed * queuedRegions, completedRegions));
-        }
-        return activeTailEta + queuedEta;
-    }
-
-    /**
-     * Estimates remaining time for the worker's current region.
-     */
-    private static long workerEtaSeconds(final MigrationProgressTracker.WorkerProgress worker) {
-        if (worker.processedChunks() == 0 || worker.totalChunks() <= worker.processedChunks()) {
-            return 0L;
-        }
-        final long elapsed = Math.max(1L, elapsedSeconds(worker.startedAtNanos()));
-        return ceilDivide(elapsed * (worker.totalChunks() - worker.processedChunks()), worker.processedChunks());
-    }
-
-    /**
-     * Performs positive integer ceiling division for ETA calculations.
-     */
-    private static long ceilDivide(final long numerator, final long denominator) {
-        return (numerator + denominator - 1L) / denominator;
-    }
-
-    /**
-     * Formats seconds as a full HH:MM:SS duration.
-     */
-    private static String formatDuration(final long seconds) {
-        return String.format(Locale.ROOT, "%02d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60);
-    }
-
-    /**
-     * Formats seconds as a compact MM:SS duration.
-     */
-    private static String formatShortDuration(final long seconds) {
-        return String.format(Locale.ROOT, "%02d:%02d", (seconds / 60) % 60, seconds % 60);
-    }
-
-    /**
-     * Formats a worker ETA for dense rows.
-     */
-    private static String formatShortEta(final MigrationProgressTracker.WorkerProgress worker) {
-        return worker.state() != MigrationProgressTracker.WorkerState.CONVERTING
-                || worker.totalChunks() <= 0
-                || worker.processedChunks() >= worker.totalChunks()
-                ? "--:--"
-                : formatShortDuration(workerEtaSeconds(worker));
-    }
-
-    /**
-     * Formats a worker ETA for full-width rows.
-     */
-    private static String formatEta(final MigrationProgressTracker.WorkerProgress worker) {
-        return worker.state() != MigrationProgressTracker.WorkerState.CONVERTING
-                || worker.totalChunks() <= 0
-                || worker.processedChunks() >= worker.totalChunks()
-                ? "--:--:--"
-                : formatDuration(workerEtaSeconds(worker));
     }
 }

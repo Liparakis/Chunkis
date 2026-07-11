@@ -7,7 +7,9 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 @Mixin(PalettedContainer.class)
 public interface PalettedContainerAccessor<T> {
 
-    /** Performs invoker. */
+    /**
+     * Performs invoker.
+     */
     @Invoker("get")
     T chunkis$get(int index);
 }

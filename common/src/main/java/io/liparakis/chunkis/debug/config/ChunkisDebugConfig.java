@@ -24,7 +24,9 @@ public final class ChunkisDebugConfig {
      */
     private static volatile ChunkisDebugLevel level = ChunkisDebugLevel.OFF;
 
-    /** Performs chunkis debug config. */
+    /**
+     * Performs chunkis debug config.
+     */
     private ChunkisDebugConfig() {
         throw new AssertionError("Utility class");
     }

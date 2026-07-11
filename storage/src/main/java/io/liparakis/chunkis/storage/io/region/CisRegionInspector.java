@@ -19,7 +19,9 @@ import java.util.List;
  */
 public final class CisRegionInspector {
 
-    /** Performs cis region inspector. */
+    /**
+     * Performs cis region inspector.
+     */
     private CisRegionInspector() {
         throw new AssertionError("Utility class");
     }

@@ -5,11 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -62,7 +62,9 @@ class CisStorageCompactionTest {
         data[offset + 3] = (byte) value;
     }
 
-    /** Performs compact regions removes slack without changing live chunks. */
+    /**
+     * Performs compact regions removes slack without changing live chunks.
+     */
     @Test
     void compactRegionsRemovesSlackWithoutChangingLiveChunks() throws Exception {
         final TestStorageHarness harness = createHarness();
@@ -91,7 +93,9 @@ class CisStorageCompactionTest {
         harness.close();
     }
 
-    /** Performs compaction failure preserves original region file. */
+    /**
+     * Performs compaction failure preserves original region file.
+     */
     @Test
     void compactionFailurePreservesOriginalRegionFile() throws Exception {
         final TestStorageHarness harness = createHarness();
@@ -244,7 +248,9 @@ class CisStorageCompactionTest {
          */
         private CisStorage<String, String, String, String> storage;
 
-        /** Performs test storage harness. */
+        /**
+         * Performs test storage harness.
+         */
         private TestStorageHarness(
                 final Path storageRoot,
                 final Path regionsDir,

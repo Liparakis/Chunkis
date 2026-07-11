@@ -1,14 +1,24 @@
 package io.liparakis.chunkis.debug.config;
 
 public enum ChunkisDebugLevel {
-    /** Stores off. */
+    /**
+     * Stores off.
+     */
     OFF,
-    /** Stores errors only. */
+    /**
+     * Stores errors only.
+     */
     ERRORS_ONLY,
-    /** Stores lifecycle. */
+    /**
+     * Stores lifecycle.
+     */
     LIFECYCLE,
-    /** Stores verbose. */
+    /**
+     * Stores verbose.
+     */
     VERBOSE,
-    /** Represents this debug level. */
+    /**
+     * Represents this debug level.
+     */
     PARANOID
 }

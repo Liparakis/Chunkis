@@ -4,8 +4,8 @@
     "compatibilityLevel": "JAVA_21",
     "mixins": [
         "accessor.ChunkBlockEntityNbtAccessor",
-        "accessor.PalettedContainerAccessor",
         "accessor.ChunkSectionAccessor",
+        "accessor.PalettedContainerAccessor",
         "network.ChunkHolderMixin",
         "storage.ChunkSerializerMixin",
         "storage.RegionBasedStorageMixin",

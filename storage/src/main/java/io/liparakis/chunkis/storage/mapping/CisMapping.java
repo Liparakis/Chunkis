@@ -1,15 +1,14 @@
 package io.liparakis.chunkis.storage.mapping;
-import io.liparakis.chunkis.core.mapping.PropertyPacker;
-import io.liparakis.chunkis.core.mapping.CisAdapter;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import io.liparakis.chunkis.spi.BlockRegistryAdapter;
-import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.core.bits.BitReader;
 import io.liparakis.chunkis.core.bits.BitWriter;
+import io.liparakis.chunkis.core.mapping.CisAdapter;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.core.mapping.PropertyPacker.PropertyMeta;
-
+import io.liparakis.chunkis.spi.BlockRegistryAdapter;
+import io.liparakis.chunkis.spi.BlockStateAdapter;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -32,7 +31,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public final class CisMapping<B, S, P> implements CisAdapter<S> {
 
-    /** Stores gson. */
+    /**
+     * Stores gson.
+     */
     private static final Gson GSON = new Gson();
 
     /**

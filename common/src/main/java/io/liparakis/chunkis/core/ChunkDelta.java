@@ -1,12 +1,12 @@
 package io.liparakis.chunkis.core;
 
+import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
-import io.liparakis.chunkis.core.model.CisConstants;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMaps;
@@ -46,9 +46,13 @@ import java.util.function.UnaryOperator;
  */
 public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
-    /** Stores source. */
+    /**
+     * Stores source.
+     */
     private static final String SOURCE = "ChunkDelta";
-    /** Stores section count. */
+    /**
+     * Stores section count.
+     */
     private static final int SECTION_COUNT = CisConstants.MAX_SECTION_Y - CisConstants.MIN_SECTION_Y + 1;
 
     /**
@@ -1522,13 +1526,19 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     public interface DeltaVisitor<S, N> {
 
-        /** Performs visit block. */
+        /**
+         * Performs visit block.
+         */
         void visitBlock(int x, int y, int z, S state);
 
-        /** Performs visit block entity. */
+        /**
+         * Performs visit block entity.
+         */
         void visitBlockEntity(int x, int y, int z, N nbt);
 
-        /** Performs visit entity. */
+        /**
+         * Performs visit entity.
+         */
         void visitEntity(N nbt);
     }
 
@@ -1538,7 +1548,9 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     @FunctionalInterface
     public interface BlockVisitor<S> {
 
-        /** Performs visit block. */
+        /**
+         * Performs visit block.
+         */
         void visitBlock(int x, int y, int z, S state);
     }
 
@@ -1548,7 +1560,9 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     @FunctionalInterface
     public interface BlockInstructionVisitor<S> {
 
-        /** Performs visit block. */
+        /**
+         * Performs visit block.
+         */
         void visitBlock(int x, int y, int z, int paletteId, S state);
     }
 }

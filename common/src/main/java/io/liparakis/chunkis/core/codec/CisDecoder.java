@@ -2,9 +2,8 @@ package io.liparakis.chunkis.core.codec;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.Palette;
-import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.core.mapping.CisAdapter;
-
+import io.liparakis.chunkis.spi.NbtAdapter;
 import java.io.IOException;
 
 /**

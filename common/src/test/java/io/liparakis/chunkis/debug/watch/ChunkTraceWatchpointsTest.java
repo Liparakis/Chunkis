@@ -16,7 +16,9 @@ import org.junit.jupiter.api.Test;
 
 class ChunkTraceWatchpointsTest {
 
-    /** Performs tear down. */
+    /**
+     * Performs tear down.
+     */
     @AfterEach
     void tearDown() {
         ChunkTraceWatchpoints.clear();
@@ -24,7 +26,9 @@ class ChunkTraceWatchpointsTest {
         ChunkTraceStore.resetForTests();
     }
 
-    /** Performs matches watched chunk and region events. */
+    /**
+     * Performs matches watched chunk and region events.
+     */
     @Test
     void matchesWatchedChunkAndRegionEvents() {
         ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(3, -2));
@@ -63,7 +67,9 @@ class ChunkTraceWatchpointsTest {
         assertThat(ChunkTraceWatchpoints.matches(missEvent)).isFalse();
     }
 
-    /** Performs latest matching returns only watched events. */
+    /**
+     * Performs latest matching returns only watched events.
+     */
     @Test
     void latestMatchingReturnsOnlyWatchedEvents() {
         ChunkTraceStore.record(new ChunkTraceEvent(
@@ -102,7 +108,9 @@ class ChunkTraceWatchpointsTest {
                 .containsExactly("hit-2", "hit-1");
     }
 
-    /** Performs matches watched payload events. */
+    /**
+     * Performs matches watched payload events.
+     */
     @Test
     void matchesWatchedPayloadEvents() {
         final PayloadWatchTarget blockTarget = PayloadWatchTarget.block("minecraft:overworld", 10, 64, -3);

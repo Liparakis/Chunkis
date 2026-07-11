@@ -123,7 +123,9 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Tracker instance maintaining failure occurrences during block application loops.
      */
     private final ChunkRestorer.BlockApplyFailureCounters blockApplyFailureCounters;
-    /** Stores section write cursor. */
+    /**
+     * Stores section write cursor.
+     */
     private final ChunkRestoreBlockOperations.SectionWriteCursor sectionWriteCursor;
 
     /**
@@ -259,6 +261,13 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     private static String blockEntityTypeId(@Nullable final NbtCompound nbt) {
         return nbt == null ? "<null>" : nbt.getString("id")
                                         .orElse("<missing>");
+    }
+
+    /**
+     * Returns the change from one boolean membership state to another.
+     */
+    private static int countDelta(final boolean previousIncluded, final boolean currentIncluded) {
+        return (currentIncluded ? 1 : 0) - (previousIncluded ? 1 : 0);
     }
 
     /**
@@ -690,13 +699,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 !currentState.getFluidState()
                         .isEmpty()
         );
-    }
-
-    /**
-     * Returns the change from one boolean membership state to another.
-     */
-    private static int countDelta(final boolean previousIncluded, final boolean currentIncluded) {
-        return (currentIncluded ? 1 : 0) - (previousIncluded ? 1 : 0);
     }
 
     /**

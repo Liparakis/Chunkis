@@ -3,13 +3,13 @@ package io.liparakis.chunkis.core.codec;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.bits.BitReader;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
+import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
-import io.liparakis.chunkis.core.bits.BitReader;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.core.mapping.PropertyPacker;
-import io.liparakis.chunkis.core.model.CisConstants;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -25,18 +25,28 @@ import org.junit.jupiter.api.io.TempDir;
 
 class CisUniformSectionCodecTest {
 
-    /** Stores section y 64. */
+    /**
+     * Stores section y 64.
+     */
     private static final int SECTION_Y_64 = 4;
-    /** Stores section y 80. */
+    /**
+     * Stores section y 80.
+     */
     private static final int SECTION_Y_80 = 5;
-    /** Stores default sparse sentinel. */
+    /**
+     * Stores default sparse sentinel.
+     */
     private static final int DEFAULT_SPARSE_SENTINEL = CisConstants.DEFAULT_SPARSE_SECTION_SENTINEL;
 
-    /** Stores temp dir. */
+    /**
+     * Stores temp dir.
+     */
     @TempDir
     Path tempDir;
 
-    /** Performs create mixed section delta. */
+    /**
+     * Performs create mixed section delta.
+     */
     private static ChunkDelta<String, String> createMixedSectionDelta() {
         final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
         for (int y = 64; y < 80; y++) {
@@ -53,7 +63,9 @@ class CisUniformSectionCodecTest {
         return delta;
     }
 
-    /** Performs encodes full single state section using uniform sentinel and round trips. */
+    /**
+     * Performs encodes full single state section using uniform sentinel and round trips.
+     */
     @Test
     void encodesFullSingleStateSectionUsingUniformSentinelAndRoundTrips() throws Exception {
         final CodecHarness harness = newHarness();
@@ -100,7 +112,9 @@ class CisUniformSectionCodecTest {
         assertThat(blockCount[0]).isEqualTo(4096);
     }
 
-    /** Performs chooses sparse when dense source section would be larger. */
+    /**
+     * Performs chooses sparse when dense source section would be larger.
+     */
     @Test
     void choosesSparseWhenDenseSourceSectionWouldBeLarger() throws Exception {
         final CodecHarness harness = newHarness();
@@ -118,7 +132,9 @@ class CisUniformSectionCodecTest {
                 .containsExactly(new SectionEncodingInfo(SECTION_Y_64, "sparse", 513, 0));
     }
 
-    /** Performs chooses dense when sparse source section would be larger with large chunk palette. */
+    /**
+     * Performs chooses dense when sparse source section would be larger with large chunk palette.
+     */
     @Test
     void choosesDenseWhenSparseSourceSectionWouldBeLargerWithLargeChunkPalette() throws Exception {
         final CodecHarness harness = newHarness();
@@ -143,7 +159,9 @@ class CisUniformSectionCodecTest {
                 .contains(new SectionEncodingInfo(SECTION_Y_80, "sparse", 256, 0));
     }
 
-    /** Performs chooses default sparse for mostly stone with air caves and round trips. */
+    /**
+     * Performs chooses default sparse for mostly stone with air caves and round trips.
+     */
     @Test
     void choosesDefaultSparseForMostlyStoneWithAirCavesAndRoundTrips() throws Exception {
         final CodecHarness harness = newHarness();
@@ -178,7 +196,9 @@ class CisUniformSectionCodecTest {
         assertThat(airCount[0]).isEqualTo(241);
     }
 
-    /** Performs keeps normal sparse for mostly air section with few blocks. */
+    /**
+     * Performs keeps normal sparse for mostly air section with few blocks.
+     */
     @Test
     void keepsNormalSparseForMostlyAirSectionWithFewBlocks() throws Exception {
         final CodecHarness harness = newHarness();
@@ -193,7 +213,9 @@ class CisUniformSectionCodecTest {
                 .containsExactly(new SectionEncodingInfo(SECTION_Y_64, "sparse", 12, 0));
     }
 
-    /** Performs preserves explicit air override in sparse base backed delta. */
+    /**
+     * Performs preserves explicit air override in sparse base backed delta.
+     */
     @Test
     void preservesExplicitAirOverrideInSparseBaseBackedDelta() throws Exception {
         final CodecHarness harness = newHarness();
@@ -206,7 +228,9 @@ class CisUniformSectionCodecTest {
         assertThat(snapshot(decoded)).containsEntry((((long) 85) << 8) | (7L << 4) | 4L, "air");
     }
 
-    /** Performs preserves explicit air when default sparse would otherwise collapse it. */
+    /**
+     * Performs preserves explicit air when default sparse would otherwise collapse it.
+     */
     @Test
     void preservesExplicitAirWhenDefaultSparseWouldOtherwiseCollapseIt() throws Exception {
         final CodecHarness harness = newHarness();
@@ -222,7 +246,9 @@ class CisUniformSectionCodecTest {
         assertThat(snapshot(decoded)).containsEntry((((long) 85) << 8) | (12L << 4) | 12L, "air");
     }
 
-    /** Performs still prefers uniform for full single state section. */
+    /**
+     * Performs still prefers uniform for full single state section.
+     */
     @Test
     void stillPrefersUniformForFullSingleStateSection() throws Exception {
         final CodecHarness harness = newHarness();
@@ -241,7 +267,9 @@ class CisUniformSectionCodecTest {
                 .containsExactly(new SectionEncodingInfo(SECTION_Y_64, "uniform", 4096, 0));
     }
 
-    /** Performs chooses dense for noisy section when default sparse would be larger. */
+    /**
+     * Performs chooses dense for noisy section when default sparse would be larger.
+     */
     @Test
     void choosesDenseForNoisySectionWhenDefaultSparseWouldBeLarger() throws Exception {
         final CodecHarness harness = newHarness();
@@ -260,7 +288,9 @@ class CisUniformSectionCodecTest {
                 .containsExactly(new SectionEncodingInfo(SECTION_Y_64, "dense", 0, 258));
     }
 
-    /** Performs preserves logical section across repeated save reload. */
+    /**
+     * Performs preserves logical section across repeated save reload.
+     */
     @Test
     void preservesLogicalSectionAcrossRepeatedSaveReload() throws Exception {
         final CodecHarness harness = newHarness();
@@ -272,7 +302,9 @@ class CisUniformSectionCodecTest {
         assertThat(snapshot(decoded2)).isEqualTo(snapshot(decoded1));
     }
 
-    /** Performs new harness. */
+    /**
+     * Performs new harness.
+     */
     private CodecHarness newHarness() throws IOException {
         final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
         final CisMapping<String, String, String> mapping = new CisMapping<>(
@@ -288,14 +320,18 @@ class CisUniformSectionCodecTest {
         );
     }
 
-    /** Performs snapshot. */
+    /**
+     * Performs snapshot.
+     */
     private Map<Long, String> snapshot(final ChunkDelta<String, String> delta) {
         final Map<Long, String> out = new LinkedHashMap<>();
         delta.forEachBlock((x, y, z, state) -> out.put((((long) y) << 8) | ((long) (z & 15) << 4) | (x & 15), state));
         return out;
     }
 
-    /** Performs parse sections. */
+    /**
+     * Performs parse sections.
+     */
     private List<SectionEncodingInfo> parseSections(final byte[] encoded) throws IOException {
         try (DataInputStream in = new DataInputStream(new java.io.ByteArrayInputStream(encoded))) {
             in.readInt();
@@ -363,12 +399,18 @@ class CisUniformSectionCodecTest {
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
 
-        /** Stores air. */
+        /**
+         * Stores air.
+         */
         private static final String AIR = "air";
-        /** Stores string. */
+        /**
+         * Stores string.
+         */
         private static final Map<String, String> BLOCKS = canonicalBlocks();
 
-        /** Performs canonical blocks. */
+        /**
+         * Performs canonical blocks.
+         */
         private static Map<String, String> canonicalBlocks() {
             final Map<String, String> blocks = new LinkedHashMap<>();
             blocks.put(AIR, AIR);

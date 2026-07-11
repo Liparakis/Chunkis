@@ -29,7 +29,9 @@ class VanillaRegionPathResolverTest {
                         .orElseThrow());
     }
 
-    /** Verifies that the overworld entity directory resolves to the overworld. */
+    /**
+     * Verifies that the overworld entity directory resolves to the overworld.
+     */
     @Test
     void resolvesOverworldEntityDirectory() {
         assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld")),
@@ -65,7 +67,9 @@ class VanillaRegionPathResolverTest {
                         .orElseThrow());
     }
 
-    /** Verifies that a dimension-scoped entity directory resolves to its dimension. */
+    /**
+     * Verifies that a dimension-scoped entity directory resolves to its dimension.
+     */
     @Test
     void resolvesDimensionScopedEntityDirectory() {
         assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "the_nether")),

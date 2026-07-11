@@ -19,11 +19,15 @@ import org.junit.jupiter.api.io.TempDir;
 
 class ChunkTraceJsonlTest {
 
-    /** Stores temp dir. */
+    /**
+     * Stores temp dir.
+     */
     @TempDir
     Path tempDir;
 
-    /** Performs serializes stable json fields. */
+    /**
+     * Performs serializes stable json fields.
+     */
     @Test
     void serializesStableJsonFields() {
         final ChunkTraceEvent event = new ChunkTraceEvent(
@@ -70,7 +74,9 @@ class ChunkTraceJsonlTest {
         assertThat(json).contains("\"payloadSummary\":\"pos=200,64,-120 type=minecraft:chest nbtBytes=88\"");
     }
 
-    /** Performs writes one event per line. */
+    /**
+     * Performs writes one event per line.
+     */
     @Test
     void writesOneEventPerLine() throws IOException {
         final Path output = tempDir.resolve("chunkis/debug/trace.jsonl");

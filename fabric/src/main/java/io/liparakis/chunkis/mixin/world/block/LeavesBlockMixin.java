@@ -34,7 +34,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(LeavesBlock.class)
 public class LeavesBlockMixin {
 
-    /** Performs inject. */
+    /**
+     * Performs inject.
+     */
     @Inject(method = "scheduledTick", at = @At("HEAD"))
     private void chunkis$beforeLeafTick(
             final BlockState state,

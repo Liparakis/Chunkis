@@ -39,9 +39,13 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
     private final BlockPos.Mutable mutablePos = new BlockPos.Mutable();
 
     // Mutable context - set by reset() before each delta application.
-    /** Stores block state. */
+    /**
+     * Stores block state.
+     */
     private ChunkDelta<BlockState, NbtCompound> clientDelta;
-    /** Stores world. */
+    /**
+     * Stores world.
+     */
     private ClientWorld world;
 
     /**
@@ -55,6 +59,18 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
      * Cached to avoid repeated bit-shift in the block visit hot path.
      */
     private int baseZ;
+
+    /**
+     * Returns whether the block entity's client state is authoritative from vanilla.
+     *
+     * @param nbt block entity payload
+     * @return {@code true} for block entities that must not receive full persistence NBT on the client
+     */
+    static boolean isVanillaOwnedBlockEntity(final NbtCompound nbt) {
+        return nbt.getString("id")
+                .map("minecraft:trial_spawner"::equals)
+                .orElse(false);
+    }
 
     /**
      * Prepares this visitor for a new delta application.
@@ -132,18 +148,6 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
         }
 
         replaceBlockEntity(pos, be);
-    }
-
-    /**
-     * Returns whether the block entity's client state is authoritative from vanilla.
-     *
-     * @param nbt block entity payload
-     * @return {@code true} for block entities that must not receive full persistence NBT on the client
-     */
-    static boolean isVanillaOwnedBlockEntity(final NbtCompound nbt) {
-        return nbt.getString("id")
-                .map("minecraft:trial_spawner"::equals)
-                .orElse(false);
     }
 
     /**

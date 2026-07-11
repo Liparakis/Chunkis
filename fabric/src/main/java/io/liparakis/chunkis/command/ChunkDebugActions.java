@@ -513,7 +513,9 @@ public final class ChunkDebugActions {
         return 1;
     }
 
-    /** Performs send sample line. */
+    /**
+     * Performs send sample line.
+     */
     private static void sendSampleLine(final ServerCommandSource source,
             final String label,
             final List<String> samples) {
@@ -1114,13 +1116,17 @@ public final class ChunkDebugActions {
         return false;
     }
 
-    /** Performs read int or null. */
+    /**
+     * Performs read int or null.
+     */
     private static Integer readIntOrNull(final NbtCompound root, final String key) {
         return root == null ? null : root.getInt(key)
                                      .orElse(null);
     }
 
-    /** Performs add first sample. */
+    /**
+     * Performs add first sample.
+     */
     private static void addFirstSample(final List<String> samples, final String prefix, final List<String> values) {
         if (values != null && !values.isEmpty()) {
             samples.add(prefix + values.getFirst());
@@ -1203,7 +1209,9 @@ public final class ChunkDebugActions {
         return nbt.getString("id", "<missing>") + nbt.getKeys();
     }
 
-    /** Performs suppress warnings. */
+    /**
+     * Performs suppress warnings.
+     */
     @SuppressWarnings("unchecked")
     private static ChunkDeltas getChunkDeltas(final ServerWorld world, final ChunkPos pos) {
         final WorldChunk liveChunk = world.getChunkManager()

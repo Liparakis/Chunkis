@@ -15,10 +15,14 @@ import net.minecraft.world.level.storage.LevelStorage;
  */
 public final class PreLaunchMigrationGate {
 
-    /** State of the one-shot startup gate. */
+    /**
+     * State of the one-shot startup gate.
+     */
     private static State state = State.IDLE;
 
-    /** Performs pre launch migration gate. */
+    /**
+     * Performs pre launch migration gate.
+     */
     private PreLaunchMigrationGate() {
         throw new AssertionError("Utility class");
     }
@@ -26,11 +30,11 @@ public final class PreLaunchMigrationGate {
     /**
      * Starts migration once and returns whether the caller must cancel startup.
      *
-     * @param client active client used to render and resume startup
-     * @param session locked world save session
+     * @param client          active client used to render and resume startup
+     * @param session         locked world save session
      * @param dataPackManager resource-pack manager for startup
-     * @param saveLoader loaded world save configuration
-     * @param newWorld whether startup is creating a new world
+     * @param saveLoader      loaded world save configuration
+     * @param newWorld        whether startup is creating a new world
      * @return {@code true} while migration owns startup; otherwise {@code false}
      */
     public static synchronized boolean shouldBlockStartup(final MinecraftClient client,
@@ -55,7 +59,9 @@ public final class PreLaunchMigrationGate {
         return true;
     }
 
-    /** Runs conversion off-thread and posts either resume or failure to the client thread. */
+    /**
+     * Runs conversion off-thread and posts either resume or failure to the client thread.
+     */
     private static void runMigration(final MinecraftClient client, final PendingStart pendingStart) {
         try {
             PreLaunchMigrationCoordinator.runBeforeIntegratedServerStart(pendingStart.session(),
@@ -68,7 +74,9 @@ public final class PreLaunchMigrationGate {
         }
     }
 
-    /** Resumes integrated-server startup after successful migration. */
+    /**
+     * Resumes integrated-server startup after successful migration.
+     */
     private static synchronized void resumeStartup(final MinecraftClient client, final PendingStart pendingStart) {
         if (state != State.RUNNING) {
             return;
@@ -80,7 +88,9 @@ public final class PreLaunchMigrationGate {
                 pendingStart.newWorld());
     }
 
-    /** Displays a user-visible migration failure and resets the gate. */
+    /**
+     * Displays a user-visible migration failure and resets the gate.
+     */
     private static synchronized void showFailure(final MinecraftClient client, final Exception error) {
         state = State.IDLE;
         client.setScreenAndRender(new MessageScreen(Text.literal(
@@ -88,13 +98,19 @@ public final class PreLaunchMigrationGate {
                                                                              .getSimpleName() : error.getMessage()))));
     }
 
-    /** Internal lifecycle states preventing duplicate startup migrations. */
+    /**
+     * Internal lifecycle states preventing duplicate startup migrations.
+     */
     private enum State {
-        /** Stores idle. */
+        /**
+         * Stores idle.
+         */
         IDLE, RUNNING, RESUMING
     }
 
-    /** Startup arguments retained while the background migration is running. */
+    /**
+     * Startup arguments retained while the background migration is running.
+     */
     private record PendingStart(LevelStorage.Session session, ResourcePackManager dataPackManager,
                                 SaveLoader saveLoader, boolean newWorld) {
 

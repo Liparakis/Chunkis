@@ -21,7 +21,6 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.chunk.SerializedChunk;
 import net.minecraft.world.chunk.WorldChunk;
 
@@ -88,9 +87,8 @@ public final class BaseChunkCaptureUtil {
     /**
      * Captures at most one queued baseline on the server thread.
      *
-     * @param server active Minecraft server
      */
-    public static void tick(final MinecraftServer server) {
+    public static void tick() {
         while (true) {
             final WeakReference<WorldChunk> reference = pendingBaseCaptures.poll();
             if (reference == null) {
@@ -104,7 +102,8 @@ public final class BaseChunkCaptureUtil {
                     || !(chunk.getWorld() instanceof ServerWorld world)) {
                 continue;
             }
-            duck.chunkis$setPendingBaseChunkNbt(SerializedChunk.fromChunk(world, chunk).serialize());
+            duck.chunkis$setPendingBaseChunkNbt(SerializedChunk.fromChunk(world, chunk)
+                    .serialize());
             return;
         }
     }
@@ -299,7 +298,8 @@ public final class BaseChunkCaptureUtil {
                 return pending;
             }
         }
-        return SerializedChunk.fromChunk(world, chunk).serialize();
+        return SerializedChunk.fromChunk(world, chunk)
+                .serialize();
     }
 
     /**

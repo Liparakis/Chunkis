@@ -21,7 +21,9 @@ public record OfflineWorldMigrationReport(
         return new OfflineWorldMigrationReport(worldKey, 0, 0, 0, 0);
     }
 
-    /** Performs escape. */
+    /**
+     * Performs escape.
+     */
     private static String escape(final String value) {
         return value.replace("\\", "\\\\")
                 .replace("\"", "\\\"");

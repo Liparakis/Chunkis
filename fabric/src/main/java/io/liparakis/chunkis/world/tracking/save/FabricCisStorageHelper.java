@@ -5,12 +5,12 @@ import io.liparakis.chunkis.adapter.FabricBlockStateAdapter;
 import io.liparakis.chunkis.adapter.FabricNbtAdapter;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -413,7 +413,9 @@ public final class FabricCisStorageHelper {
             }
         }
 
-        /** Performs prefetch. */
+        /**
+         * Performs prefetch.
+         */
         void prefetch(final CisChunkPos pos, final String operationId) {
             lock.readLock()
                     .lock();

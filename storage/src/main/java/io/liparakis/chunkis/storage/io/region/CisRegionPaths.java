@@ -29,7 +29,9 @@ public final class CisRegionPaths {
      */
     private static final Pattern REGION_FILE_PATTERN = Pattern.compile("r\\.(-?\\d+)\\.(-?\\d+)\\.cis");
 
-    /** Performs cis region paths. */
+    /**
+     * Performs cis region paths.
+     */
     private CisRegionPaths() {
         throw new AssertionError("Utility class");
     }

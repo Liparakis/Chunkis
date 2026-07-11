@@ -6,4 +6,6 @@ package io.liparakis.chunkis.storage.io.region;
  * @param offset start offset in the region file
  * @param length byte length of the reusable range
  */
-record RegionFreeBlock(int offset, int length) { }
+record RegionFreeBlock(int offset, int length) {
+
+}

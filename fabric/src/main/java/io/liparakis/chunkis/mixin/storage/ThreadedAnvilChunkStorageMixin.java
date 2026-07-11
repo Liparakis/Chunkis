@@ -19,8 +19,8 @@ import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import io.liparakis.chunkis.world.tracking.load.CisLoadPrefetcher;
 import io.liparakis.chunkis.world.restoration.nbt.StructureMetadataExtractor;
+import io.liparakis.chunkis.world.tracking.load.CisLoadPrefetcher;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
@@ -652,11 +652,9 @@ public abstract class ThreadedAnvilChunkStorageMixin {
                             + ", storageEntryExists="
                             + !delta.isEmpty()
                             + ", metadataKeys="
-                            + (metadata != null
-                            ? metadata
-                              .getKeys()
-                            : List.of())
-                            + ", hasPersistedBaseChunk=" + hasPersistedBaseChunk
+                            + metadata
+                            .getKeys()
+                            + ", hasPersistedBaseChunk=" + true
                             + ", shouldUsePersistedBaseChunk=" + shouldUsePersistedBaseChunk
                             + ", authoritativeFullBaseline=" + authoritativeFullBaseline
                             + ", baseChunkPayloadBytes=" + baseChunkPayload.length

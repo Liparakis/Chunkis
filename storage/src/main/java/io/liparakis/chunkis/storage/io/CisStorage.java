@@ -1,11 +1,13 @@
 package io.liparakis.chunkis.storage.io;
 
-import io.liparakis.chunkis.core.compression.CompressionContext;
-
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.core.codec.CisDecoder;
+import io.liparakis.chunkis.core.codec.CisEncoder;
+import io.liparakis.chunkis.core.compression.CompressionContext;
+import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
@@ -16,11 +18,8 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.model.key.DebugRegionKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.spi.NbtAdapter;
-import io.liparakis.chunkis.core.codec.CisDecoder;
-import io.liparakis.chunkis.core.codec.CisEncoder;
 import io.liparakis.chunkis.storage.io.region.RegionFile;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.core.model.CisConstants;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -87,12 +86,18 @@ public final class CisStorage<B, S, P, N> {
      * Mirrors the HEADER_SIZE constant in AbstractCisDecoder.
      */
     private static final int MIN_DECOMPRESSED_SIZE = 8;
-
+    /**
+     * Stores max prefetches.
+     */
+    private static final int MAX_PREFETCHES = 32;
+    /**
+     * Stores prefetch ttl millis.
+     */
+    private static final long PREFETCH_TTL_MILLIS = 2_000L;
     /**
      * Root directory where {@code .cis} region files are stored.
      */
     private final Path storageDir;
-
     /**
      * Global block/state mapping used by this storage instance.
      *
@@ -100,34 +105,28 @@ public final class CisStorage<B, S, P, N> {
      * after encoding and before the region payload is written.</p>
      */
     private final CisMapping<B, S, P> mapping;
-
     /**
      * Opens, caches, evicts, compacts, and closes region files for this storage instance.
      */
     private final RegionFileCache regionFiles;
-
     /**
      * Per-thread compression state. Compression buffers are reused safely per
      * thread without synchronization.
      */
     private final ThreadLocal<CompressionContext> compressionContext = ThreadLocal.withInitial(CompressionContext::new);
-
     /**
      * Per-thread CIS encoder to avoid allocator churn on saves.
      */
     private final ThreadLocal<CisEncoder<S, N>> encoder;
-
     /**
      * Per-thread CIS decoder to avoid allocator churn on loads.
      */
     private final ThreadLocal<CisDecoder<S, N>> decoder;
-
     /**
      * Bounded decoded-load prefetches keyed by chunk position.
      */
     private final ConcurrentHashMap<CisChunkPos, CompletableFuture<LoadResult<S, N>>> prefetchedLoads =
             new ConcurrentHashMap<>();
-
     /**
      * Single worker keeps speculative disk work from competing with the server.
      */
@@ -136,24 +135,30 @@ public final class CisStorage<B, S, P, N> {
         thread.setDaemon(true);
         return thread;
     });
-
-    /** Stores prefetch requests. */
+    /**
+     * Stores prefetch requests.
+     */
     private final LongAdder prefetchRequests = new LongAdder();
-    /** Stores prefetch accepted. */
+    /**
+     * Stores prefetch accepted.
+     */
     private final LongAdder prefetchAccepted = new LongAdder();
-    /** Stores prefetch hits. */
+    /**
+     * Stores prefetch hits.
+     */
     private final LongAdder prefetchHits = new LongAdder();
-    /** Stores prefetch drops. */
+    /**
+     * Stores prefetch drops.
+     */
     private final LongAdder prefetchDrops = new LongAdder();
-    /** Stores prefetch stored entries. */
+    /**
+     * Stores prefetch stored entries.
+     */
     private final LongAdder prefetchStoredEntries = new LongAdder();
-    /** Stores prefetch non empty deltas. */
+    /**
+     * Stores prefetch non empty deltas.
+     */
     private final LongAdder prefetchNonEmptyDeltas = new LongAdder();
-
-    /** Stores max prefetches. */
-    private static final int MAX_PREFETCHES = 32;
-    /** Stores prefetch ttl millis. */
-    private static final long PREFETCH_TTL_MILLIS = 2_000L;
 
     /**
      * Creates a new CIS storage instance.
@@ -421,7 +426,9 @@ public final class CisStorage<B, S, P, N> {
         return true;
     }
 
-    /** Performs verify paranoid read back. */
+    /**
+     * Performs verify paranoid read back.
+     */
     private void verifyParanoidReadBack(
             final CisChunkPos pos, final RegionFile regionFile,
             final byte[] expectedBytes, final String operationId) {
@@ -508,7 +515,8 @@ public final class CisStorage<B, S, P, N> {
                 if (result.storageEntryPresent()) {
                     prefetchStoredEntries.increment();
                 }
-                if (!result.delta().isEmpty()) {
+                if (!result.delta()
+                        .isEmpty()) {
                     prefetchNonEmptyDeltas.increment();
                 }
                 CompletableFuture.delayedExecutor(PREFETCH_TTL_MILLIS, TimeUnit.MILLISECONDS)
@@ -542,12 +550,16 @@ public final class CisStorage<B, S, P, N> {
         return loadWithPresenceSync(pos, operationId);
     }
 
-    /** Performs load with presence sync. */
+    /**
+     * Performs load with presence sync.
+     */
     private LoadResult<S, N> loadWithPresenceSync(final CisChunkPos pos, final String operationId) {
         return loadWithPresenceSync(pos, operationId, true);
     }
 
-    /** Performs load with presence sync. */
+    /**
+     * Performs load with presence sync.
+     */
     private LoadResult<S, N> loadWithPresenceSync(
             final CisChunkPos pos,
             final String operationId,
@@ -748,7 +760,9 @@ public final class CisStorage<B, S, P, N> {
         return decodeCompressed(pos, readRegion(pos, null).compressedData());
     }
 
-    /** Performs read region. */
+    /**
+     * Performs read region.
+     */
     private RegionRead readRegion(final CisChunkPos pos, final String operationId) throws IOException {
         synchronized (regionFiles) {
             final RegionFile regionFile = getRegionFile(pos, false);
@@ -759,7 +773,9 @@ public final class CisStorage<B, S, P, N> {
         }
     }
 
-    /** Performs decode compressed. */
+    /**
+     * Performs decode compressed.
+     */
     private ChunkDelta<S, N> decodeCompressed(final CisChunkPos pos, final byte[] compressedData) throws IOException {
         if (compressedData == null) {
             return newEmptyDelta();

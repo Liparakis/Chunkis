@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test;
 
 class MigrationScreenTest {
 
-    /** Ensures global ETA never underreports the slowest active worker. */
+    /**
+     * Ensures global ETA never underreports the slowest active worker.
+     */
     @Test
     void globalEtaNeverUndercutsSlowestActiveWorker() {
         final long started = System.nanoTime() - 10_000_000_000L;
@@ -22,7 +24,9 @@ class MigrationScreenTest {
         assertTrue(MigrationScreen.etaSeconds(snapshot) >= 990L);
     }
 
-    /** Ensures queued regions are included in global ETA. */
+    /**
+     * Ensures queued regions are included in global ETA.
+     */
     @Test
     void globalEtaIncludesWorkWaitingBehindActiveWorkers() {
         final long started = System.nanoTime() - 10_000_000_000L;
@@ -39,7 +43,9 @@ class MigrationScreenTest {
         assertTrue(MigrationScreen.etaSeconds(snapshot) >= 100L);
     }
 
-    /** Ensures global ETA is weighted by MCA byte size rather than chunk count alone. */
+    /**
+     * Ensures global ETA is weighted by MCA byte size rather than chunk count alone.
+     */
     @Test
     void globalEtaWeightsMcaFileBytes() {
         final long started = System.nanoTime() - 10_000_000_000L;

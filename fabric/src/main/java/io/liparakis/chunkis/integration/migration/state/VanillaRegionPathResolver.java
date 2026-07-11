@@ -134,7 +134,9 @@ public final class VanillaRegionPathResolver {
          * Stores chunkis internal.
          */
         CHUNKIS_INTERNAL,
-        /** Represents an unknown region classification. */
+        /**
+         * Represents an unknown region classification.
+         */
         UNKNOWN
     }
 }

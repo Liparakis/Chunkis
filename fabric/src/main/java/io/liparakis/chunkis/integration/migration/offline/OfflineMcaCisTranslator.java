@@ -6,10 +6,10 @@ import io.liparakis.chunkis.adapter.FabricBlockStateAdapter;
 import io.liparakis.chunkis.adapter.FabricNbtAdapter;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
+import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.integration.migration.MigrationProgressTracker;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
-import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import java.io.DataInputStream;
@@ -679,7 +679,9 @@ public final class OfflineMcaCisTranslator {
         return matchesMigratedChunkShape(expected, stored);
     }
 
-    /** Performs matches migrated chunk shape. */
+    /**
+     * Performs matches migrated chunk shape.
+     */
     static MigrationValidationResult matchesMigratedChunkShape(final ChunkDelta<BlockState, NbtCompound> expected,
             final ChunkDelta<BlockState, NbtCompound> actual) {
         if (expected == null || actual == null || actual.isEmpty()) {
