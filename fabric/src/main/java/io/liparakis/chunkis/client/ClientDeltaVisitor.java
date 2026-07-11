@@ -39,7 +39,9 @@ final class ClientDeltaVisitor implements ChunkDelta.DeltaVisitor<BlockState, Nb
     private final BlockPos.Mutable mutablePos = new BlockPos.Mutable();
 
     // Mutable context - set by reset() before each delta application.
+    /** Stores block state. */
     private ChunkDelta<BlockState, NbtCompound> clientDelta;
+    /** Stores world. */
     private ClientWorld world;
 
     /**

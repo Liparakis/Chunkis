@@ -679,6 +679,7 @@ public final class OfflineMcaCisTranslator {
         return matchesMigratedChunkShape(expected, stored);
     }
 
+    /** Performs matches migrated chunk shape. */
     static MigrationValidationResult matchesMigratedChunkShape(final ChunkDelta<BlockState, NbtCompound> expected,
             final ChunkDelta<BlockState, NbtCompound> actual) {
         if (expected == null || actual == null || actual.isEmpty()) {

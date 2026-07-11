@@ -28,9 +28,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 class CisStorageTraceTest {
 
+    /** Stores temp dir. */
     @TempDir
     Path tempDir;
 
+    /** Performs tear down. */
     @AfterEach
     void tearDown() {
         ChunkTraceStore.clear();
@@ -38,6 +40,7 @@ class CisStorageTraceTest {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
     }
 
+    /** Performs emits save and load storage events when lifecycle debug is enabled. */
     @Test
     void emitsSaveAndLoadStorageEventsWhenLifecycleDebugIsEnabled() throws Exception {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -97,6 +100,7 @@ class CisStorageTraceTest {
                 );
     }
 
+    /** Performs classifies unknown block id load failure as mapping lookup failure. */
     @Test
     void classifiesUnknownBlockIdLoadFailureAsMappingLookupFailure() throws Exception {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
@@ -149,6 +153,7 @@ class CisStorageTraceTest {
                 .contains(ChunkTraceReason.MAPPING_LOOKUP_FAILED);
     }
 
+    /** Performs consumes prefetched decoded delta on load. */
     @Test
     void consumesPrefetchedDecodedDeltaOnLoad() throws Exception {
         final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
@@ -174,6 +179,7 @@ class CisStorageTraceTest {
         assertThat(loaded.getBlockChangesCount()).isEqualTo(1);
     }
 
+    /** Performs paranoid write verification reads back stored bytes. */
     @Test
     void paranoidWriteVerificationReadsBackStoredBytes() throws Exception {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.PARANOID);
@@ -211,6 +217,7 @@ class CisStorageTraceTest {
 
     private static final class TestBlockRegistryAdapter implements BlockRegistryAdapter<String> {
 
+        /** Stores known blocks. */
         private static final List<String> KNOWN_BLOCKS = List.of("air", "stone");
 
         @Override

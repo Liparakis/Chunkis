@@ -17,13 +17,21 @@ public final class MigrationScreen extends Screen {
      * Panel and progress colors used by the migration overlay.
      */
     private static final int PANEL_BACKGROUND = 0xD0101216;
+    /** Stores panel border. */
     private static final int PANEL_BORDER = 0xFF4C5260;
+    /** Stores track background. */
     private static final int TRACK_BACKGROUND = 0xFF24272C;
+    /** Stores blue. */
     private static final int BLUE = 0xFF2E6BE6;
+    /** Stores green. */
     private static final int GREEN = 0xFF44DD60;
+    /** Stores white. */
     private static final int WHITE = 0xFFF4F6FB;
+    /** Stores muted. */
     private static final int MUTED = 0xFFC3C8D2;
+    /** Stores scroll track. */
     private static final int SCROLL_TRACK = 0xFF20242A;
+    /** Stores scroll thumb. */
     private static final int SCROLL_THUMB = 0xFF8792A6;
 
     /**
@@ -38,13 +46,17 @@ public final class MigrationScreen extends Screen {
      * Cached table bounds used by mouse interaction.
      */
     private int tableX;
+    /** Stores table y. */
     private int tableY;
+    /** Stores table width. */
     private int tableWidth;
+    /** Stores table height. */
     private int tableHeight;
     /**
      * Cached row geometry used to size and scroll the worker table.
      */
     private int rowHeight;
+    /** Stores visible rows. */
     private int visibleRows;
     /**
      * Largest valid scroll index for the current snapshot.

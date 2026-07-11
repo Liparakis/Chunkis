@@ -112,6 +112,7 @@ public final class CisSnapshotCapture {
         return target;
     }
 
+    /** Performs should persist base chunk for snapshot. */
     static boolean shouldPersistBaseChunkForSnapshot(final int blockEntityCount) {
         return blockEntityCount > 0;
     }
@@ -126,6 +127,7 @@ public final class CisSnapshotCapture {
                 .isEmpty() && CisNbtUtil.isMigratedAuthoritativeChunk(target.getChunkMetadata());
     }
 
+    /** Performs restore block entities. */
     static void restoreBlockEntities(final ChunkDelta<BlockState, NbtCompound> target,
             final Long2ObjectMap<NbtCompound> blockEntities) {
         blockEntities.forEach((packedPos, nbt) -> {
@@ -164,6 +166,7 @@ public final class CisSnapshotCapture {
         return target.getBlockChangesCount();
     }
 
+    /** Performs create authoritative snapshot metadata. */
     static NbtCompound createAuthoritativeSnapshotMetadata(final NbtCompound existingMetadata,
             final boolean portalChunk) {
         final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(CisNbtUtil.extractPersistedStructureMetadata(
@@ -172,6 +175,7 @@ public final class CisSnapshotCapture {
         return metadata;
     }
 
+    /** Performs suppress warnings. */
     @SuppressWarnings("unchecked")
     private static void captureAuthoritativeBlockBaseline(final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> target) {
@@ -213,6 +217,7 @@ public final class CisSnapshotCapture {
         }
     }
 
+    /** Performs count non air blocks. */
     private static int countNonAirBlocks(final ChunkSection[] sections) {
         int count = 0;
         for (final ChunkSection section : sections) {

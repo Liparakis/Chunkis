@@ -66,6 +66,7 @@ public final class CisChunk<S> {
                         x & CisConstants.COORD_MASK, y & CisConstants.COORD_MASK, z & CisConstants.COORD_MASK, state);
     }
 
+    /** Performs get or create section. */
     private CisSection<S> getOrCreateSection(final int sectionY) {
         CisSection<S> section;
         if (sectionY == lastSectionY && lastSection != null) {

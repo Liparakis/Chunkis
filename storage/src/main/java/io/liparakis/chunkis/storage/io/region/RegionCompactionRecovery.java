@@ -17,6 +17,7 @@ import java.nio.file.StandardOpenOption;
  */
 final class RegionCompactionRecovery {
 
+    /** Performs region compaction recovery. */
     private RegionCompactionRecovery() {
         throw new AssertionError("Utility class");
     }

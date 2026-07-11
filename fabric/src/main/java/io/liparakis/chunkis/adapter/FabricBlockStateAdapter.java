@@ -32,12 +32,17 @@ public final class FabricBlockStateAdapter
         implements BlockStateAdapter<Block, BlockState, Property<?>>, PropertyValueAdapter<BlockState, Property<?>> {
 
     // Shared immutable sentinels to avoid allocation for blocks with no properties.
+    /** Stores empty properties. */
     private static final List<Property<?>> EMPTY_PROPERTIES = Collections.emptyList();
+    /** Stores empty values. */
     private static final List<Object> EMPTY_VALUES = Collections.emptyList();
+    /** Stores get values method. */
     private static final java.lang.reflect.Method GET_VALUES_METHOD = resolveGetValuesMethod();
     // Caches for immutable block metadata - safe to retain indefinitely since
     // block properties and their values are fixed at registration time.
+    /** Stores block. */
     private final Map<Block, List<Property<?>>> blockPropertiesCache = new ConcurrentHashMap<>(256);
+    /** Stores property values cache. */
     private final Map<Property<?>, List<Object>> propertyValuesCache = new ConcurrentHashMap<>(512);
 
     /**

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class ChunkDeltaTraceTest {
 
+    /** Performs tear down. */
     @AfterEach
     void tearDown() {
         ChunkTraceStore.clear();
@@ -20,6 +21,7 @@ class ChunkDeltaTraceTest {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
     }
 
+    /** Performs emits dirty and clean events when debug lifecycle is enabled. */
     @Test
     void emitsDirtyAndCleanEventsWhenDebugLifecycleIsEnabled() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);

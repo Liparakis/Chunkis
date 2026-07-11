@@ -269,6 +269,7 @@ public final class BlockEntityPayloadTracer {
         }
     }
 
+    /** Performs find block entity nbt. */
     @Nullable
     private static NbtCompound findBlockEntityNbt(
             @Nullable final NbtList blockEntities,

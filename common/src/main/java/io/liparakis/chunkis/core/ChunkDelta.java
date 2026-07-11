@@ -46,7 +46,9 @@ import java.util.function.UnaryOperator;
  */
 public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
+    /** Stores source. */
     private static final String SOURCE = "ChunkDelta";
+    /** Stores section count. */
     private static final int SECTION_COUNT = CisConstants.MAX_SECTION_Y - CisConstants.MIN_SECTION_Y + 1;
 
     /**
@@ -1520,10 +1522,13 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     public interface DeltaVisitor<S, N> {
 
+        /** Performs visit block. */
         void visitBlock(int x, int y, int z, S state);
 
+        /** Performs visit block entity. */
         void visitBlockEntity(int x, int y, int z, N nbt);
 
+        /** Performs visit entity. */
         void visitEntity(N nbt);
     }
 
@@ -1533,6 +1538,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     @FunctionalInterface
     public interface BlockVisitor<S> {
 
+        /** Performs visit block. */
         void visitBlock(int x, int y, int z, S state);
     }
 
@@ -1542,6 +1548,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     @FunctionalInterface
     public interface BlockInstructionVisitor<S> {
 
+        /** Performs visit block. */
         void visitBlock(int x, int y, int z, int paletteId, S state);
     }
 }

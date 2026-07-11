@@ -118,10 +118,23 @@ public final class VanillaRegionPathResolver {
      * Classifies a storage path.
      */
     public enum Classification {
+        /**
+         * Stores vanilla chunk region.
+         */
         VANILLA_CHUNK_REGION,
+        /**
+         * Stores vanilla poi region.
+         */
         VANILLA_POI_REGION,
+        /**
+         * Stores vanilla entity region.
+         */
         VANILLA_ENTITY_REGION,
+        /**
+         * Stores chunkis internal.
+         */
         CHUNKIS_INTERNAL,
+        /** Represents an unknown region classification. */
         UNKNOWN
     }
 }

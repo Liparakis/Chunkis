@@ -65,6 +65,7 @@ final class AsyncCisSaveWorker implements Runnable {
         this.thread.start();
     }
 
+    /** Performs cache encoded chunk metadata. */
     private static void cacheEncodedChunkMetadata(final ChunkDeltaView<BlockState, NbtCompound> snapshot)
             throws IOException {
         if (snapshot.getEncodedChunkMetadata() != null) {

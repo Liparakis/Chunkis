@@ -413,6 +413,7 @@ public final class FabricCisStorageHelper {
             }
         }
 
+        /** Performs prefetch. */
         void prefetch(final CisChunkPos pos, final String operationId) {
             lock.readLock()
                     .lock();

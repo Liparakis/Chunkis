@@ -15,6 +15,7 @@ public final class MigrationProgressTracker {
      */
     private static final AtomicReference<Snapshot> SNAPSHOT = new AtomicReference<>(Snapshot.idle());
 
+    /** Performs migration progress tracker. */
     private MigrationProgressTracker() {
         throw new AssertionError("Utility class");
     }
@@ -173,6 +174,7 @@ public final class MigrationProgressTracker {
      * Lifecycle state shown for one migration worker.
      */
     public enum WorkerState {
+        /** Stores queued. */
         QUEUED, CONVERTING, COMPLETED
     }
 

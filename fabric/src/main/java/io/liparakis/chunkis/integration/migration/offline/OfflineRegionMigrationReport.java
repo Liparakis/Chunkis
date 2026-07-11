@@ -13,6 +13,7 @@ public record OfflineRegionMigrationReport(
         String translatorVersion
 ) {
 
+    /** Performs escape. */
     private static String escape(final String value) {
         return value.replace("\\", "\\\\")
                 .replace("\"", "\\\"");

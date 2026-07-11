@@ -38,6 +38,7 @@ public final class CisStorageMigrator<S, N> {
      * Compiled pattern for validating and parsing {@code r.<x>.<z>.cis} filenames.
      */
     private static final Pattern REGION_FILE_PATTERN = Pattern.compile("r\\.(-?\\d+)\\.(-?\\d+)\\.cis");
+    /** Stores version marker file. */
     private static final String VERSION_MARKER_FILE = ".chunkis-cis-version";
 
     /**
@@ -45,7 +46,9 @@ public final class CisStorageMigrator<S, N> {
      */
     private static final int REGION_SIZE = 32;
 
+    /** Stores s. */
     private final CisStorage<?, S, ?, N> storage;
+    /** Stores logger. */
     private final Logger logger;
 
     /**

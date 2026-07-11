@@ -58,6 +58,7 @@ public final class ChunkTraceStore {
      */
     private static final AtomicLong OPERATION_IDS = new AtomicLong();
 
+    /** Stores monitor. */
     private static final Object MONITOR = new Object();
 
     /**
@@ -77,6 +78,7 @@ public final class ChunkTraceStore {
      */
     private static int writeIndex = 0;
 
+    /** Performs chunk trace store. */
     private ChunkTraceStore() {
         throw new AssertionError("Utility class");
     }
@@ -551,18 +553,21 @@ public final class ChunkTraceStore {
         return false;
     }
 
+    /** Performs is dirty marker event. */
     private static boolean isDirtyMarkerEvent(final ChunkTraceEvent event) {
         return event.eventType() == ChunkTraceEventType.DELTA_MARKED_DIRTY
                 || (event.eventType() == ChunkTraceEventType.TRACKER_STATE_UPDATED
                 && event.reason() == ChunkTraceReason.TRACKER_DIRTY_MAP_PUT);
     }
 
+    /** Performs is save progress event. */
     private static boolean isSaveProgressEvent(final ChunkTraceEvent event) {
         return event.eventType() == ChunkTraceEventType.SAVE_QUEUED
                 || event.eventType() == ChunkTraceEventType.REGION_WRITE_TX_END
                 || event.eventType() == ChunkTraceEventType.SAVE_FLUSH_COMPLETED;
     }
 
+    /** Performs is save flush completed event. */
     private static boolean isSaveFlushCompletedEvent(final ChunkTraceEvent event) {
         return event.eventType() == ChunkTraceEventType.REGION_WRITE_TX_END
                 || event.eventType() == ChunkTraceEventType.SAVE_FLUSH_COMPLETED;

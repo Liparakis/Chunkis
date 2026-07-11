@@ -25,6 +25,7 @@ import java.util.Arrays;
  */
 final class BlockInstructionStorage {
 
+    /** Stores initial capacity. */
     private static final int INITIAL_CAPACITY = 64;
 
     /**
@@ -38,7 +39,9 @@ final class BlockInstructionStorage {
      * have only ever received {@link #addAppendOnly(long)} calls.
      */
     Long2IntOpenHashMap positionMap;
+    /** Stores long. */
     long[] packedInstructions;
+    /** Stores instruction count. */
     int instructionCount;
 
     /**
@@ -49,12 +52,14 @@ final class BlockInstructionStorage {
     boolean positionMapDirty;
 
 
+    /** Performs block instruction storage. */
     BlockInstructionStorage() {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;
         // positionMap intentionally left null - created lazily on first lookup/add.
     }
 
+    /** Performs copy into. */
     void copyInto(final BlockInstructionStorage target) {
         target.packedInstructions = Arrays.copyOf(this.packedInstructions, this.packedInstructions.length);
         target.instructionCount = this.instructionCount;
@@ -77,6 +82,7 @@ final class BlockInstructionStorage {
         }
     }
 
+    /** Performs clear. */
     void clear() {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;
@@ -86,6 +92,7 @@ final class BlockInstructionStorage {
         this.positionMapDirty = false;
     }
 
+    /** Performs ensure capacity. */
     void ensureCapacity() {
         if (instructionCount < packedInstructions.length) {
             return;

@@ -127,6 +127,9 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck {
     @Unique
     private int chunkis$portalBlockCount;
 
+    /**
+     * Stores loaded to world state.
+     */
     @Shadow
     private boolean loadedToWorld;
 

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 public class BitReaderPropertyTest {
 
+    /** Performs test random properties. */
     @Test
     public void testRandomProperties() {
         Random random = new Random(42);

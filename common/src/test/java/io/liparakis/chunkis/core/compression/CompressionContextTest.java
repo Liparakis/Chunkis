@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 class CompressionContextTest {
 
+    /** Performs round trips payloads with zstd level three. */
     @Test
     void roundTripsPayloadsWithZstdLevelThree() throws Exception {
         final CompressionContext context = new CompressionContext();

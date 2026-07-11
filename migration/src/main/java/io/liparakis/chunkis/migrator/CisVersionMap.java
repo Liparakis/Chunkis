@@ -35,6 +35,7 @@ public final class CisVersionMap {
                     "the unreleased v11 section codec.")
     );
 
+    /** Performs cis version map. */
     private CisVersionMap() {
         throw new AssertionError("Utility class");
     }

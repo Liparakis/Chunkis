@@ -30,11 +30,23 @@ final class RegionFileCache {
      */
     private static final int REGION_SHIFT = 5;
 
+    /**
+     * Stores storage dir.
+     */
     private final Path storageDir;
+    /**
+     * Stores region key.
+     */
     private final Object2ObjectLinkedOpenHashMap<RegionKey, RegionFile> regionCache =
             new Object2ObjectLinkedOpenHashMap<>(CisConstants.MAX_CACHED_REGIONS);
+    /**
+     * Stores cache lock.
+     */
     private final ReadWriteLock cacheLock = new ReentrantReadWriteLock();
 
+    /**
+     * Performs region file cache.
+     */
     RegionFileCache(final Path storageDir) {
         this.storageDir = storageDir;
     }

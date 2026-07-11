@@ -137,14 +137,22 @@ public final class CisStorage<B, S, P, N> {
         return thread;
     });
 
+    /** Stores prefetch requests. */
     private final LongAdder prefetchRequests = new LongAdder();
+    /** Stores prefetch accepted. */
     private final LongAdder prefetchAccepted = new LongAdder();
+    /** Stores prefetch hits. */
     private final LongAdder prefetchHits = new LongAdder();
+    /** Stores prefetch drops. */
     private final LongAdder prefetchDrops = new LongAdder();
+    /** Stores prefetch stored entries. */
     private final LongAdder prefetchStoredEntries = new LongAdder();
+    /** Stores prefetch non empty deltas. */
     private final LongAdder prefetchNonEmptyDeltas = new LongAdder();
 
+    /** Stores max prefetches. */
     private static final int MAX_PREFETCHES = 32;
+    /** Stores prefetch ttl millis. */
     private static final long PREFETCH_TTL_MILLIS = 2_000L;
 
     /**
@@ -413,6 +421,7 @@ public final class CisStorage<B, S, P, N> {
         return true;
     }
 
+    /** Performs verify paranoid read back. */
     private void verifyParanoidReadBack(
             final CisChunkPos pos, final RegionFile regionFile,
             final byte[] expectedBytes, final String operationId) {
@@ -533,10 +542,12 @@ public final class CisStorage<B, S, P, N> {
         return loadWithPresenceSync(pos, operationId);
     }
 
+    /** Performs load with presence sync. */
     private LoadResult<S, N> loadWithPresenceSync(final CisChunkPos pos, final String operationId) {
         return loadWithPresenceSync(pos, operationId, true);
     }
 
+    /** Performs load with presence sync. */
     private LoadResult<S, N> loadWithPresenceSync(
             final CisChunkPos pos,
             final String operationId,
@@ -737,6 +748,7 @@ public final class CisStorage<B, S, P, N> {
         return decodeCompressed(pos, readRegion(pos, null).compressedData());
     }
 
+    /** Performs read region. */
     private RegionRead readRegion(final CisChunkPos pos, final String operationId) throws IOException {
         synchronized (regionFiles) {
             final RegionFile regionFile = getRegionFile(pos, false);
@@ -747,6 +759,7 @@ public final class CisStorage<B, S, P, N> {
         }
     }
 
+    /** Performs decode compressed. */
     private ChunkDelta<S, N> decodeCompressed(final CisChunkPos pos, final byte[] compressedData) throws IOException {
         if (compressedData == null) {
             return newEmptyDelta();

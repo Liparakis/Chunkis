@@ -18,6 +18,7 @@ public final class PreLaunchMigrationGate {
     /** State of the one-shot startup gate. */
     private static State state = State.IDLE;
 
+    /** Performs pre launch migration gate. */
     private PreLaunchMigrationGate() {
         throw new AssertionError("Utility class");
     }
@@ -89,6 +90,7 @@ public final class PreLaunchMigrationGate {
 
     /** Internal lifecycle states preventing duplicate startup migrations. */
     private enum State {
+        /** Stores idle. */
         IDLE, RUNNING, RESUMING
     }
 

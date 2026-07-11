@@ -10,6 +10,7 @@ import java.io.IOException;
  */
 public final class CompressionContext {
 
+    /** Performs compression context. */
     public CompressionContext() {
     }
 

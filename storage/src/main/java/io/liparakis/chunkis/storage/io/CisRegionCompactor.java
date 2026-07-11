@@ -27,6 +27,7 @@ public final class CisRegionCompactor {
      */
     private static final String COMPACT_TEMP_SUFFIX = ".tmp";
 
+    /** Performs cis region compactor. */
     private CisRegionCompactor() {
         throw new AssertionError("Utility class");
     }
@@ -152,6 +153,7 @@ public final class CisRegionCompactor {
         }
     }
 
+    /** Performs compact temp path. */
     private static Path compactTempPath(final Path regionPath) {
         return regionPath.resolveSibling(regionPath.getFileName()
                 .toString() + COMPACT_TEMP_SUFFIX);

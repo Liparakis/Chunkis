@@ -57,6 +57,7 @@ public final class ClientDeltaNetworking {
      */
     private static volatile boolean typeWarningLogged = false;
 
+    /** Performs client delta networking. */
     private ClientDeltaNetworking() {
         throw new AssertionError("Utility class");
     }

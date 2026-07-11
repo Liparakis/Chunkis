@@ -16,23 +16,74 @@ public final class ServerHotpathMetrics {
      */
     public static final boolean ENABLED = Boolean.getBoolean("chunkis.server.hotpath.metrics");
 
+    /**
+     * Stores payload count.
+     */
     private static final LongAdder payloadCount = new LongAdder();
+    /**
+     * Stores total encode nanos.
+     */
     private static final LongAdder totalEncodeNanos = new LongAdder();
+    /**
+     * Stores total wrap nanos.
+     */
     private static final LongAdder totalWrapNanos = new LongAdder();
+    /**
+     * Stores total raw bytes.
+     */
     private static final LongAdder totalRawBytes = new LongAdder();
+    /**
+     * Stores total wire bytes.
+     */
     private static final LongAdder totalWireBytes = new LongAdder();
+    /**
+     * Stores total fanout players.
+     */
     private static final LongAdder totalFanoutPlayers = new LongAdder();
+    /**
+     * Stores restore count.
+     */
     private static final LongAdder restoreCount = new LongAdder();
+    /**
+     * Stores total cursor writes.
+     */
     private static final LongAdder totalCursorWrites = new LongAdder();
+    /**
+     * Stores total cursor rebinds.
+     */
     private static final LongAdder totalCursorRebinds = new LongAdder();
+    /**
+     * Stores total last state hits.
+     */
     private static final LongAdder totalLastStateHits = new LongAdder();
+    /**
+     * Stores total palette hits.
+     */
     private static final LongAdder totalPaletteHits = new LongAdder();
+    /**
+     * Stores total palette misses.
+     */
     private static final LongAdder totalPaletteMisses = new LongAdder();
+    /**
+     * Stores total palette invalidations.
+     */
     private static final LongAdder totalPaletteInvalidations = new LongAdder();
+    /**
+     * Stores total array palette lookups.
+     */
     private static final LongAdder totalArrayPaletteLookups = new LongAdder();
+    /**
+     * Stores total bi map palette lookups.
+     */
     private static final LongAdder totalBiMapPaletteLookups = new LongAdder();
+    /**
+     * Stores total singular palette lookups.
+     */
     private static final LongAdder totalSingularPaletteLookups = new LongAdder();
 
+    /**
+     * Performs server hotpath metrics.
+     */
     private ServerHotpathMetrics() {
         throw new AssertionError("Utility class");
     }

@@ -12,6 +12,9 @@ import java.nio.channels.FileChannel;
  */
 final class RegionFooterIO {
 
+    /**
+     * Performs region footer io.
+     */
     private RegionFooterIO() {
         throw new AssertionError("Utility class");
     }

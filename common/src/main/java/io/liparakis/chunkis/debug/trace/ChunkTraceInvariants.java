@@ -28,6 +28,7 @@ public final class ChunkTraceInvariants {
             ChunkTraceReason.NEITHER
     );
 
+    /** Performs chunk trace invariants. */
     private ChunkTraceInvariants() {
         throw new AssertionError("Utility class");
     }

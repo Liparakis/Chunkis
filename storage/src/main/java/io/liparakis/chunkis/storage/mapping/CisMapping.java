@@ -32,6 +32,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public final class CisMapping<B, S, P> implements CisAdapter<S> {
 
+    /** Stores gson. */
     private static final Gson GSON = new Gson();
 
     /**

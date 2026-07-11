@@ -60,6 +60,7 @@ final class BlockIdRegistry<B> {
      */
     private int nextId = 0;
 
+    /** Performs block id registry. */
     BlockIdRegistry() {
         blockToId.defaultReturnValue(MISSING_BLOCK_ID);
     }
@@ -85,11 +86,13 @@ final class BlockIdRegistry<B> {
         }
     }
 
+    /** Performs get id. */
     int getId(B block) {
         final Integer id = idsByBlock.get(block);
         return id != null ? id : MISSING_BLOCK_ID;
     }
 
+    /** Performs get block. */
     B getBlock(int id) {
         final Object[] snapshot = blocksById;
         if (id < 0 || id >= snapshot.length) {

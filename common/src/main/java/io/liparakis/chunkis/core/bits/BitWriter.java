@@ -27,6 +27,7 @@ public final class BitWriter {
      */
     private int bitIndex;
 
+    /** Performs bit writer. */
     public BitWriter(int initialCapacity) {
         this.buffer = new byte[initialCapacity];
     }

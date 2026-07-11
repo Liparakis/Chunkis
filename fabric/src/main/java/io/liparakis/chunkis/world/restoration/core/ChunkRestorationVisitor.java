@@ -123,6 +123,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Tracker instance maintaining failure occurrences during block application loops.
      */
     private final ChunkRestorer.BlockApplyFailureCounters blockApplyFailureCounters;
+    /** Stores section write cursor. */
     private final ChunkRestoreBlockOperations.SectionWriteCursor sectionWriteCursor;
 
     /**

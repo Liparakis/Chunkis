@@ -131,6 +131,9 @@ class RegionFileFreeListTest {
         data[offset + 3] = (byte) value;
     }
 
+    /**
+     * Performs reuses best fit free block after reopen.
+     */
     @Test
     void reusesBestFitFreeBlockAfterReopen() throws Exception {
         final Path regions = Files.createDirectories(tempDir.resolve("regions"));
@@ -162,6 +165,9 @@ class RegionFileFreeListTest {
         }
     }
 
+    /**
+     * Performs reuses gap from legacy footerless region.
+     */
     @Test
     void reusesGapFromLegacyFooterlessRegion() throws Exception {
         final Path regions = Files.createDirectories(tempDir.resolve("legacy-regions"));
@@ -181,6 +187,9 @@ class RegionFileFreeListTest {
         }
     }
 
+    /**
+     * Performs corrupt free list falls back to append only.
+     */
     @Test
     void corruptFreeListFallsBackToAppendOnly() throws Exception {
         final Path regions = Files.createDirectories(tempDir.resolve("corrupt-regions"));

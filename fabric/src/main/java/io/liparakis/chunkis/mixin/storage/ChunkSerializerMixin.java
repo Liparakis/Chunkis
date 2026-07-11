@@ -385,6 +385,7 @@ public class ChunkSerializerMixin {
         );
     }
 
+    /** Performs chunkis should reset proto chunk to empty. */
     @Unique
     private static boolean chunkis$shouldResetProtoChunkToEmpty(final Object chunkMetadata) {
         return !CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(chunkMetadata)

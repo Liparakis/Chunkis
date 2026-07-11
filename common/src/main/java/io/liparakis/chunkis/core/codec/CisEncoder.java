@@ -44,6 +44,7 @@ public final class CisEncoder<S, N> extends AbstractCisEncoder<S, N> {
         return encodeInternal(delta);
     }
 
+    /** Performs encode. */
     public byte[] encode(final ChunkDeltaView<S, N> delta) throws IOException {
         return encodeInternal(delta);
     }

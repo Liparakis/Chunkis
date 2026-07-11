@@ -24,6 +24,7 @@ public final class ChunkTraceJsonl {
      */
     private static final int ESTIMATED_LINE_BYTES = 192;
 
+    /** Performs chunk trace jsonl. */
     private ChunkTraceJsonl() {
         throw new AssertionError("Utility class");
     }

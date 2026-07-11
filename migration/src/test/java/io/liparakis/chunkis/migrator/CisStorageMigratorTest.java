@@ -37,8 +37,11 @@ class CisStorageMigratorTest {
      * Number of chunk slots per region file (32 × 32).
      */
     private static final int REGION_SLOTS = 1024;
+    /** Stores current version. */
     private static final int CURRENT_VERSION = CisConstants.VERSION;
+    /** Stores legacy version. */
     private static final int LEGACY_VERSION = 8;
+    /** Stores version marker file. */
     private static final String VERSION_MARKER_FILE = ".chunkis-cis-version";
     /**
      * Bytes per chunk header entry (offset int + length int).
@@ -344,10 +347,14 @@ class CisStorageMigratorTest {
      */
     private final class TestStorageHarness {
 
+        /** Stores storage root. */
         private final Path storageRoot;
+        /** Stores regions dir. */
         private final Path regionsDir;
+        /** Stores string. */
         private CisStorage<String, String, String, String> storage;
 
+        /** Performs test storage harness. */
         private TestStorageHarness(
                 final Path storageRoot,
                 final Path regionsDir,
@@ -357,12 +364,14 @@ class CisStorageMigratorTest {
             this.storage = storage;
         }
 
+        /** Performs grow. */
         private static byte[] grow(final byte[] source, final int newLength) {
             final byte[] expanded = new byte[newLength];
             System.arraycopy(source, 0, expanded, 0, source.length);
             return expanded;
         }
 
+        /** Performs inflate. */
         private static byte[] inflate(final byte[] compressed) throws Exception {
             final long decompressedSize = com.github.luben.zstd.Zstd.decompressedSize(compressed);
             if (com.github.luben.zstd.Zstd.isError(decompressedSize)) {
@@ -372,10 +381,12 @@ class CisStorageMigratorTest {
             return com.github.luben.zstd.Zstd.decompress(compressed, (int) decompressedSize);
         }
 
+        /** Performs deflate. */
         private static byte[] deflate(final byte[] raw) {
             return com.github.luben.zstd.Zstd.compress(raw, 3);
         }
 
+        /** Performs read int. */
         private static int readInt(final byte[] data, final int offset) {
             return ((data[offset] & 0xFF) << 24)
                     | ((data[offset + 1] & 0xFF) << 16)
@@ -383,6 +394,7 @@ class CisStorageMigratorTest {
                     | (data[offset + 3] & 0xFF);
         }
 
+        /** Performs write int. */
         private static void writeInt(final byte[] data, final int offset, final int value) {
             data[offset] = (byte) (value >>> 24);
             data[offset + 1] = (byte) (value >>> 16);
@@ -429,6 +441,7 @@ class CisStorageMigratorTest {
             rewriteChunkVersion(pos);
         }
 
+        /** Performs rewrite chunk version. */
         void rewriteChunkVersion(final CisChunkPos pos) throws Exception {
             storage.close();
 

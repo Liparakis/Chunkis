@@ -25,6 +25,7 @@ import net.minecraft.world.chunk.Chunk;
 public interface ChunkisApi {
 
     class Holder {
+        /** Stores instance. */
         private static ChunkisApi instance;
     }
 

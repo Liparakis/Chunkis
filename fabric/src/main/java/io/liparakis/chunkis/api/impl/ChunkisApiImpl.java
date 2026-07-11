@@ -26,8 +26,10 @@ import net.minecraft.world.chunk.Chunk;
  */
 public final class ChunkisApiImpl implements ChunkisApi {
 
+    /** Stores instance. */
     private static final ChunkisApiImpl INSTANCE = new ChunkisApiImpl();
 
+    /** Performs chunkis api impl. */
     private ChunkisApiImpl() {
     }
 

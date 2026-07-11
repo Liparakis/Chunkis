@@ -14,8 +14,10 @@ import net.minecraft.util.WorldSavePath;
 /** Removes stale vanilla entity-region files after an authoritative world unload. */
 public final class VanillaEntityRegionCleanup {
 
+    /** Stores pending directories. */
     private static final Set<Path> PENDING_DIRECTORIES = ConcurrentHashMap.newKeySet();
 
+    /** Performs vanilla entity region cleanup. */
     private VanillaEntityRegionCleanup() {
     }
 
@@ -44,6 +46,7 @@ public final class VanillaEntityRegionCleanup {
         PENDING_DIRECTORIES.clear();
     }
 
+    /** Performs delete directory. */
     private static void deleteDirectory(final Path directory) {
         if (!Files.isDirectory(directory)) {
             PENDING_DIRECTORIES.remove(directory);

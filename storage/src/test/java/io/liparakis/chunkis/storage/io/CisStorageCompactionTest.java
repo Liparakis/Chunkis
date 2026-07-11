@@ -62,6 +62,7 @@ class CisStorageCompactionTest {
         data[offset + 3] = (byte) value;
     }
 
+    /** Performs compact regions removes slack without changing live chunks. */
     @Test
     void compactRegionsRemovesSlackWithoutChangingLiveChunks() throws Exception {
         final TestStorageHarness harness = createHarness();
@@ -90,6 +91,7 @@ class CisStorageCompactionTest {
         harness.close();
     }
 
+    /** Performs compaction failure preserves original region file. */
     @Test
     void compactionFailurePreservesOriginalRegionFile() throws Exception {
         final TestStorageHarness harness = createHarness();
@@ -242,6 +244,7 @@ class CisStorageCompactionTest {
          */
         private CisStorage<String, String, String, String> storage;
 
+        /** Performs test storage harness. */
         private TestStorageHarness(
                 final Path storageRoot,
                 final Path regionsDir,

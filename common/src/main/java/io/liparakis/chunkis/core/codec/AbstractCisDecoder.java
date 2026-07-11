@@ -84,6 +84,7 @@ public abstract class AbstractCisDecoder<S, N> {
      */
     protected List<S> globalPalette;
 
+    /** Performs abstract cis decoder. */
     protected AbstractCisDecoder(NbtAdapter<N> nbtAdapter, S airState) {
         this.nbtAdapter = nbtAdapter;
         this.airState = airState;

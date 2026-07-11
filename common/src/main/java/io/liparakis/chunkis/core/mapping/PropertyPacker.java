@@ -265,6 +265,7 @@ public final class PropertyPacker<B, S, P> {
             return (PropertyMeta<P>[]) new PropertyMeta<?>[size];
         }
 
+        /** Performs get value index. */
         int getValueIndex(final Object value) {
             return valueIndices.getOrDefault(value, -1);
         }
