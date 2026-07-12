@@ -4,7 +4,6 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
-import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
@@ -26,6 +25,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.storage.NbtReadView;
 import net.minecraft.storage.ReadView;
 import net.minecraft.util.ErrorReporter;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
@@ -133,25 +133,9 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      */
     private final boolean[] touchedSections;
     /**
-     * Exact final non-empty block counts for clear-to-air restore sections.
-     */
-    private final short[] sectionNonEmptyBlockCounts;
-    /**
-     * Exact final random-tickable block counts for clear-to-air restore sections.
-     */
-    private final short[] sectionRandomTickableBlockCounts;
-    /**
-     * Exact final non-empty fluid counts for clear-to-air restore sections.
-     */
-    private final short[] sectionNonEmptyFluidCounts;
-    /**
      * Whether incremental counts were initialized from the base section.
      */
     private final boolean[] sectionCountsInitialized;
-    /**
-     * Whether incremental counts remain trustworthy for each base-backed section.
-     */
-    private final boolean[] sectionCountsUnavailable;
     /**
      * Tracks touched chunk-local X/Z columns so derived-state refresh can avoid over-escalating.
      */
@@ -207,11 +191,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         this.blockApplyFailureCounters = new ChunkRestorer.BlockApplyFailureCounters();
         this.sectionWriteCursor = new ChunkRestoreBlockOperations.SectionWriteCursor();
         this.touchedSections = new boolean[this.sections.length];
-        this.sectionNonEmptyBlockCounts = new short[this.sections.length];
-        this.sectionRandomTickableBlockCounts = new short[this.sections.length];
-        this.sectionNonEmptyFluidCounts = new short[this.sections.length];
         this.sectionCountsInitialized = new boolean[this.sections.length];
-        this.sectionCountsUnavailable = new boolean[this.sections.length];
         if (this.replayLegacyEntities && this.runtimeDelta != null) {
             this.runtimeDelta.setEntities(sourceDelta.getEntitiesList(), false);
         }
@@ -261,13 +241,6 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     private static String blockEntityTypeId(@Nullable final NbtCompound nbt) {
         return nbt == null ? "<null>" : nbt.getString("id")
                                         .orElse("<missing>");
-    }
-
-    /**
-     * Returns the change from one boolean membership state to another.
-     */
-    private static int countDelta(final boolean previousIncluded, final boolean currentIncluded) {
-        return (currentIncluded ? 1 : 0) - (previousIncluded ? 1 : 0);
     }
 
     /**
@@ -330,7 +303,12 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     }
 
     /**
-     * Rebuilds section counts after restore-time raw container writes.
+     * Rebuilds section counts from the final restored palette state.
+     *
+     * <p>Instruction streams can write the same position more than once, so
+     * incrementally tracked counts may describe writes rather than the final
+     * block states. Vanilla's calculation is required to keep random-tick
+     * metadata consistent for Lithium and vanilla tick selection.</p>
      */
     void recalculateTouchedSectionCounts() {
         for (int sectionIndex = 0; sectionIndex < touchedSections.length; sectionIndex++) {
@@ -338,45 +316,10 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 continue;
             }
             final ChunkSection section = sections[sectionIndex];
-            if (section != null && tryApplyExactClearToAirCounts(section, sectionIndex)) {
-                continue;
-            }
-            if (section != null && tryApplyIncrementalBaseCounts(section, sectionIndex)) {
-                continue;
-            }
             if (section != null) {
                 section.calculateCounts();
             }
         }
-    }
-
-    /**
-     * Applies exact final counts for clear-to-air restore sections when they are cheaply known.
-     */
-    private boolean tryApplyExactClearToAirCounts(final ChunkSection section, final int sectionIndex) {
-        if (!clearedToAir) {
-            return false;
-        }
-        final ChunkSectionAccessor accessor = (ChunkSectionAccessor) section;
-        accessor.chunkis$setNonEmptyBlockCount(sectionNonEmptyBlockCounts[sectionIndex]);
-        accessor.chunkis$setRandomTickableBlockCount(sectionRandomTickableBlockCounts[sectionIndex]);
-        accessor.chunkis$setNonEmptyFluidCount(sectionNonEmptyFluidCounts[sectionIndex]);
-        return true;
-    }
-
-    /**
-     * Applies counts tracked while replaying a sparse delta onto a persisted base section.
-     */
-    private boolean tryApplyIncrementalBaseCounts(final ChunkSection section, final int sectionIndex) {
-        if (clearedToAir || !sectionCountsInitialized[sectionIndex]
-                || sectionCountsUnavailable[sectionIndex]) {
-            return false;
-        }
-        final ChunkSectionAccessor accessor = (ChunkSectionAccessor) section;
-        accessor.chunkis$setNonEmptyBlockCount(sectionNonEmptyBlockCounts[sectionIndex]);
-        accessor.chunkis$setRandomTickableBlockCount(sectionRandomTickableBlockCounts[sectionIndex]);
-        accessor.chunkis$setNonEmptyFluidCount(sectionNonEmptyFluidCounts[sectionIndex]);
-        return true;
     }
 
     /**
@@ -525,10 +468,8 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         final int sectionIndex = (localY - bottomY) >> 4;
         touchedSections[sectionIndex] = true;
         trackTouchedColumn(localX, localZ);
-        if (clearedToAir) {
-            trackExactSectionCounts(sectionIndex, state);
-        } else {
-            trackIncrementalBaseCounts(sectionIndex, previousState, state);
+        if (!clearedToAir) {
+            trackIncrementalBaseCounts(sectionIndex);
         }
         copyBlockToRuntimeDelta(localX, localY, localZ, paletteId, state);
         blockApplyFailureCounters.recordAppliedBlock();
@@ -647,58 +588,14 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     }
 
     /**
-     * Tracks exact final section counters for clear-to-air restores only.
-     */
-    private void trackExactSectionCounts(final int sectionIndex, final BlockState state) {
-        if (!clearedToAir || state.isAir()) {
-            return;
-        }
-        sectionNonEmptyBlockCounts[sectionIndex]++;
-        if (state.hasRandomTicks()) {
-            sectionRandomTickableBlockCounts[sectionIndex]++;
-        }
-        if (!state.getFluidState()
-                .isEmpty()) {
-            sectionNonEmptyFluidCounts[sectionIndex]++;
-        }
-    }
-
-    /**
      * Tracks count changes for a sparse write applied over an existing persisted base section.
      */
     private void trackIncrementalBaseCounts(
-            final int sectionIndex,
-            @Nullable final BlockState previousState,
-            final BlockState currentState
+            final int sectionIndex
     ) {
-        if (previousState == null) {
-            sectionCountsUnavailable[sectionIndex] = true;
-            return;
-        }
         if (!sectionCountsInitialized[sectionIndex]) {
-            final ChunkSectionAccessor accessor = (ChunkSectionAccessor) sections[sectionIndex];
-            sectionNonEmptyBlockCounts[sectionIndex] = accessor.chunkis$getNonEmptyBlockCount();
-            sectionRandomTickableBlockCounts[sectionIndex] = accessor.chunkis$getRandomTickableBlockCount();
-            sectionNonEmptyFluidCounts[sectionIndex] = accessor.chunkis$getNonEmptyFluidCount();
             sectionCountsInitialized[sectionIndex] = true;
         }
-        if (sectionCountsUnavailable[sectionIndex]) {
-            return;
-        }
-        sectionNonEmptyBlockCounts[sectionIndex] += (short) countDelta(
-                !previousState.isAir(),
-                !currentState.isAir()
-        );
-        sectionRandomTickableBlockCounts[sectionIndex] += (short) countDelta(
-                previousState.hasRandomTicks(),
-                currentState.hasRandomTicks()
-        );
-        sectionNonEmptyFluidCounts[sectionIndex] += (short) countDelta(
-                !previousState.getFluidState()
-                        .isEmpty(),
-                !currentState.getFluidState()
-                        .isEmpty()
-        );
     }
 
     /**
@@ -723,6 +620,12 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
             final int localZ,
             final NbtCompound nbt
     ) {
+        if (nbt.getString("id")
+                .map(Identifier::tryParse)
+                .isEmpty()) {
+            return;
+        }
+
         mutableWorldPos.set(chunkStartX + localX, localY, chunkStartZ + localZ);
         final BlockState currentState = chunk.getBlockState(mutableWorldPos);
 

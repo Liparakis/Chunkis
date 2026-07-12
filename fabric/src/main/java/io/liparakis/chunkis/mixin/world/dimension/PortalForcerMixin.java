@@ -123,8 +123,9 @@ public abstract class PortalForcerMixin {
     }
 
     /**
-     * Loads chunks containing portal POI candidates after vanilla has preloaded
-     * POI data for the search area.
+     * Loads chunks containing portal POI candidates before vanilla searches the
+     * POI data. Running at method head keeps this compatible with optimization
+     * mods that rewrite vanilla's internal POI preload call.
      *
      * <p>This makes Chunkis-restored portal blocks visible to vanilla's
      * post-POI block-state validation without forcing the whole Overworld
@@ -135,12 +136,7 @@ public abstract class PortalForcerMixin {
      * @param worldBorder  destination world border
      * @param cir          callback info
      */
-    @Inject(
-            method = "getPortalPos",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/poi/PointOfInterestStorage;preloadChunks(Lnet/minecraft/world/WorldView;Lnet/minecraft/util/math/BlockPos;I)V",
-                    shift = At.Shift.AFTER))
+    @Inject(method = "getPortalPos", at = @At("HEAD"))
     private void chunkis$loadPortalCandidateChunks(final BlockPos pos,
             final boolean destIsNether,
             final WorldBorder worldBorder,

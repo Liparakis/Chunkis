@@ -10,7 +10,6 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
-import io.liparakis.chunkis.network.ChunkisNetworking;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import java.util.List;
 import net.minecraft.block.BlockState;
@@ -29,14 +28,13 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Intercepts chunk packet transmission to piggyback Chunkis delta packets
- * alongside vanilla {@link ChunkDataS2CPacket} sends.
+ * Observes vanilla full-chunk packet transmission to replay pending entities
+ * before a restored chunk becomes visible to players.
  *
  * <p>
  * Injected at {@code HEAD} of {@code ChunkHolder#sendPacketToPlayers}. When a
- * {@link ChunkDataS2CPacket} is detected, {@link ChunkisNetworking#sendDelta} is
- * called for each player. The chunk reference is hoisted outside the player loop
- * to avoid repeated virtual dispatch.
+ * {@link ChunkDataS2CPacket} is detected, pending restored entities are replayed
+ * before the packet is sent.
  *
  * @see ChunkHolder
  */
@@ -63,8 +61,7 @@ public abstract class ChunkHolderMixin {
     public abstract WorldChunk getWorldChunk();
 
     /**
-     * Intercepts packet sends and dispatches a Chunkis delta to each player
-     * when the outgoing packet is a {@link ChunkDataS2CPacket}.
+     * Intercepts full-chunk packet sends to replay pending restored entities.
      *
      * <p>
      * Guards (evaluated in order):
@@ -151,7 +148,6 @@ public abstract class ChunkHolderMixin {
                 null
         );
 
-        ChunkisNetworking.sendDelta(players, chunk);
         PayloadWatchTracer.traceLiveChunkState(
                 chunk,
                 ChunkTraceEventType.WATCH_PRESENT_AFTER_CLIENT_SEND,

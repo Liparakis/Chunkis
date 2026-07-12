@@ -63,6 +63,18 @@ fabricApi {
     }
 }
 
+loom {
+    runs {
+        client {
+            vmArg "-Xmx8G"
+        }
+
+        server {
+            vmArg "-Xmx8G"
+        }
+    }
+}
+
 sourceSets {
     gametest {
         resources.srcDir(file("../migration/src/test/resources"))

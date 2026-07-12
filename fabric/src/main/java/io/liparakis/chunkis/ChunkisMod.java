@@ -7,7 +7,6 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.integration.migration.MigrationProgressTracker;
-import io.liparakis.chunkis.network.ChunkDeltaPayload;
 import io.liparakis.chunkis.portal.PortalChunkIndexManager;
 import io.liparakis.chunkis.portal.PortalLinkManager;
 import io.liparakis.chunkis.storage.io.CisStorage;
@@ -26,7 +25,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
-import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -40,11 +38,10 @@ import net.minecraft.util.math.ChunkPos;
  * Main Fabric entrypoint for Chunkis.
  *
  * <p>This class performs common initialization for both integrated and dedicated
- * servers. Client-only setup belongs in {@link ClientChunkisMod}.</p>
+ * servers.</p>
  *
  * <p>Responsibilities:</p>
  * <ul>
- *   <li>register network payloads</li>
  *   <li>register server commands</li>
  *   <li>register world/server lifecycle hooks</li>
  *   <li>flush pending Chunkis state during shutdown</li>
@@ -56,14 +53,6 @@ import net.minecraft.util.math.ChunkPos;
  * their dedicated classes.</p>
  */
 public final class ChunkisMod implements ModInitializer {
-
-    /**
-     * Registers Chunkis network payloads.
-     */
-    private static void registerPayloads() {
-        PayloadTypeRegistry.playS2C()
-                .register(ChunkDeltaPayload.ID, ChunkDeltaPayload.CODEC);
-    }
 
     /**
      * Registers Chunkis server commands.
@@ -209,7 +198,6 @@ public final class ChunkisMod implements ModInitializer {
     @Override
     public void onInitialize() {
         io.liparakis.chunkis.api.ChunkisApi.setInstance(io.liparakis.chunkis.api.impl.ChunkisApiImpl.getInstance());
-        registerPayloads();
         registerCommands();
         registerEvents();
         if (ServerHotpathMetrics.ENABLED) {

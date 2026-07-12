@@ -12,7 +12,6 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
-import io.liparakis.chunkis.network.ChunkisNetworking;
 import io.liparakis.chunkis.world.entity.replay.EntityReplayCoordinator;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.ArrayList;
@@ -697,7 +696,6 @@ public final class ChunkRestorer {
             }
             player.networkHandler.sendPacket(chunkPacket);
         }
-        ChunkisNetworking.sendDeltaAsync(world, players, chunk);
     }
 
     /**
