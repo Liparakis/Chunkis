@@ -3,6 +3,7 @@ package io.liparakis.chunkis.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.liparakis.chunkis.command.report.StorageMetricsAnalyzer;
 import io.liparakis.chunkis.command.report.StorageReportModels.StorageReport;
 import io.liparakis.chunkis.command.report.StorageReportRenderer;
@@ -15,7 +16,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 
 /**
- * Reports physical and logical Chunkis storage usage for one world/dimension.
+ * Builds the command for reporting physical and logical Chunkis storage usage.
  *
  * <p>Delegates raw analysis to StorageMetricsAnalyzer and rendering to StorageReportRenderer.</p>
  */
@@ -36,22 +37,40 @@ public final class StorageReportCommand {
     }
 
     /**
-     * Registers the {@code /chunkis_storage_report} command.
+     * Builds the {@code /chunkis storage report} command.
+     *
+     * @return the storage command subtree
+     */
+    static LiteralArgumentBuilder<ServerCommandSource> createNode() {
+        return CommandManager.literal("storage")
+                .then(reportNode("report"));
+    }
+
+    /**
+     * Registers the pre-existing command name for compatibility.
      *
      * @param dispatcher command dispatcher registry
      */
-    public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(
-                CommandManager.literal("chunkis_storage_report")
-                        .requires(source -> source.getPermissions()
-                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                        .executes(context -> run(context, DEFAULT_TOP_REGIONS))
-                        .then(CommandManager.argument("topRegions", IntegerArgumentType.integer(1, 32))
-                                .executes(context -> run(
-                                        context,
-                                        IntegerArgumentType.getInteger(context, "topRegions")
-                                )))
-        );
+    static void registerLegacy(final CommandDispatcher<ServerCommandSource> dispatcher) {
+        dispatcher.register(reportNode("chunkis_storage_report"));
+    }
+
+    /**
+     * Builds a storage-report literal for the canonical command or its alias.
+     *
+     * @param literal command literal to use
+     * @return storage-report command node
+     */
+    private static LiteralArgumentBuilder<ServerCommandSource> reportNode(final String literal) {
+        return CommandManager.literal(literal)
+                .requires(source -> source.getPermissions()
+                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                .executes(context -> run(context, DEFAULT_TOP_REGIONS))
+                .then(CommandManager.argument("topRegions", IntegerArgumentType.integer(1, 32))
+                        .executes(context -> run(
+                                context,
+                                IntegerArgumentType.getInteger(context, "topRegions")
+                        )));
     }
 
     /**

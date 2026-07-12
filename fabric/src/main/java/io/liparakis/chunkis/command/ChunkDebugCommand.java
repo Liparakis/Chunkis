@@ -1,8 +1,8 @@
 package io.liparakis.chunkis.command;
 
-import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
 import io.liparakis.chunkis.debug.model.ChunkTraceEvent;
 import io.liparakis.chunkis.debug.model.ChunkTraceSuspect;
@@ -11,13 +11,11 @@ import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import net.minecraft.command.argument.UuidArgumentType;
-import net.minecraft.command.permission.Permission;
-import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 
 /**
- * Registers and handles the {@code /chunkis debug} command tree.
+ * Builds and handles the {@code /chunkis debug} command tree.
  * Delegates actual subcommand execution to {@link ChunkDebugActions}.
  */
 public final class ChunkDebugCommand {
@@ -48,11 +46,11 @@ public final class ChunkDebugCommand {
     }
 
     /**
-     * Registers the {@code /chunkis debug} literal command trees and subnodes.
+     * Builds the {@code /chunkis debug} literal command tree and subnodes.
      *
-     * @param dispatcher command dispatcher registry
+     * @return the debug command subtree
      */
-    public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
+    static LiteralArgumentBuilder<ServerCommandSource> createNode() {
 
         final var watchChunkNode = CommandManager.literal("chunk")
                 .then(CommandManager.argument("x", IntegerArgumentType.integer())
@@ -134,7 +132,7 @@ public final class ChunkDebugCommand {
                                 .executes(ctx -> ChunkDebugActions.exportWatched(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "count")))));
 
-        final var debugCommand = CommandManager.literal("debug")
+        return CommandManager.literal("debug")
                 .then(CommandManager.literal("on")
                         .executes(ctx -> ChunkDebugActions.setLevel(ctx.getSource(),
                                 ChunkisDebugLevel.LIFECYCLE,
@@ -182,11 +180,6 @@ public final class ChunkDebugCommand {
                                                         IntegerArgumentType.getInteger(ctx, "x"),
                                                         IntegerArgumentType.getInteger(ctx, "z")))))))
                 .then(watchCommand);
-
-        dispatcher.register(CommandManager.literal("chunkis")
-                .requires(source -> source.getPermissions()
-                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                .then(debugCommand));
     }
 
     /**

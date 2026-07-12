@@ -1,8 +1,6 @@
 package io.liparakis.chunkis;
 
-import io.liparakis.chunkis.command.ChunkDebugCommand;
-import io.liparakis.chunkis.command.DurabilityTestCommand;
-import io.liparakis.chunkis.command.StorageReportCommand;
+import io.liparakis.chunkis.command.ChunkisCommand;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
@@ -58,11 +56,7 @@ public final class ChunkisMod implements ModInitializer {
      * Registers Chunkis server commands.
      */
     private static void registerCommands() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> DurabilityTestCommand.register(
-                dispatcher));
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> ChunkDebugCommand.register(
-                dispatcher));
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> StorageReportCommand.register(
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> ChunkisCommand.register(
                 dispatcher));
     }
 
@@ -81,7 +75,8 @@ public final class ChunkisMod implements ModInitializer {
         ServerWorldEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.delete(world));
         ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
         ServerTickEvents.START_SERVER_TICK.register(server1 -> BaseChunkCaptureUtil.tick());
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> CisLoadPrefetcher.prefetchAroundPlayer(handler.player));
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> CisLoadPrefetcher.prefetchAroundPlayer(
+                handler.player));
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
         ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> VanillaEntityRegionCleanup.deletePending());

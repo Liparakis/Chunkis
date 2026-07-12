@@ -2,6 +2,7 @@ package io.liparakis.chunkis.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
@@ -28,7 +29,7 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 /**
- * Registers and handles the {@code /durability_test} and {@code /durability_test_stop} commands.
+ * Builds and handles the durability test command tree.
  *
  * <p>Rapidly teleports the player between two positions to stress the chunk load/save pipeline
  * and verify fix durability under high-frequency transitions.
@@ -80,34 +81,62 @@ public final class DurabilityTestCommand {
     }
 
     /**
-     * Registers the {@code /durability_test} and {@code /durability_test_stop} commands.
+     * Builds the {@code /chunkis durability test} command.
      *
-     * <p>{@code /durability_test pos1 pos2 count delayMs} starts a test that teleports the
+     * <p>{@code /chunkis durability test pos1 pos2 count delayMs} starts a test that teleports the
      * executing player between {@code pos1} and {@code pos2}, {@code count} times, with
      * {@code delayMs} milliseconds between each teleport (minimum {@value #MIN_DELAY_MS} ms).
      *
-     * <p>{@code /durability_test_stop} stops any currently-running test.
+     * <p>{@code /chunkis durability stop} stops any currently-running test.
+     *
+     * @return the durability command subtree
+     */
+    static LiteralArgumentBuilder<ServerCommandSource> createNode() {
+        return CommandManager.literal("durability")
+                .then(testNode("test"))
+                .then(stopNode("stop"));
+    }
+
+    /**
+     * Registers the pre-existing command names for compatibility.
      *
      * @param dispatcher the Brigadier command dispatcher to register into
      */
-    public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(
-                CommandManager.literal("durability_test")
-                        .requires(source -> source.getPermissions()
-                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                        .then(CommandManager.argument("pos1", Vec3ArgumentType.vec3())
-                                .then(CommandManager.argument("pos2", Vec3ArgumentType.vec3())
-                                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
-                                                // Note: integer(1) accepts values < MIN_DELAY_MS; the floor
-                                                // is enforced by Math.max in runTest instead.
-                                                .then(CommandManager.argument("delayMs", IntegerArgumentType.integer(1))
-                                                        .executes(DurabilityTestCommand::runTest))))));
+    static void registerLegacy(final CommandDispatcher<ServerCommandSource> dispatcher) {
+        dispatcher.register(testNode("durability_test"));
+        dispatcher.register(stopNode("durability_test_stop"));
+    }
 
-        dispatcher.register(
-                CommandManager.literal("durability_test_stop")
-                        .requires(source -> source.getPermissions()
-                                .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                        .executes(DurabilityTestCommand::stopTest));
+    /**
+     * Builds a durability-test literal for the canonical command or its alias.
+     *
+     * @param literal command literal to use
+     * @return durability-test command node
+     */
+    private static LiteralArgumentBuilder<ServerCommandSource> testNode(final String literal) {
+        return CommandManager.literal(literal)
+                .requires(source -> source.getPermissions()
+                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                .then(CommandManager.argument("pos1", Vec3ArgumentType.vec3())
+                        .then(CommandManager.argument("pos2", Vec3ArgumentType.vec3())
+                                .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
+                                        // Note: integer(1) accepts values < MIN_DELAY_MS; the floor
+                                        // is enforced by Math.max in runTest instead.
+                                        .then(CommandManager.argument("delayMs", IntegerArgumentType.integer(1))
+                                                .executes(DurabilityTestCommand::runTest)))));
+    }
+
+    /**
+     * Builds a durability-stop literal for the canonical command or its alias.
+     *
+     * @param literal command literal to use
+     * @return durability-stop command node
+     */
+    private static LiteralArgumentBuilder<ServerCommandSource> stopNode(final String literal) {
+        return CommandManager.literal(literal)
+                .requires(source -> source.getPermissions()
+                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+                .executes(DurabilityTestCommand::stopTest);
     }
 
     /**
