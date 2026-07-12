@@ -59,8 +59,8 @@ class ChunkSerializerMixinTest {
     @Test
     void identityMarkerSetUsesReferenceEquality() throws ReflectiveOperationException {
         final Set<Object> markers = newIdentityMarkerSet();
-        final Object first = "same";
-        final Object second = "same";
+        final Object first = new String("same");
+        final Object second = new String("same");
 
         assertTrue(markers.add(first));
         assertTrue(markers.add(second));

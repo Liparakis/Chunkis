@@ -43,8 +43,8 @@ class FabricCisStorageHelperTest {
     }
 
     /**
-     * Verifies that non-overworld dimensions (like the Nether) use their respective
-     * dimension-specific directories for Chunkis regions, mapping files, and vanilla regions.
+     * Verifies that non-overworld dimensions use normalized paths for Chunkis data
+     * while vanilla Nether regions retain the legacy {@code DIM-1} directory.
      */
     @Test
     void nonOverworldUsesDimensionLocalChunkisDirectory() {
@@ -63,9 +63,7 @@ class FabricCisStorageHelperTest {
                 dimensionChunkisDir.resolve("global_ids.json"),
                 ChunkisStoragePaths.computeMappingFile(SAVE_ROOT, nether));
         assertEquals(
-                SAVE_ROOT.resolve("dimensions")
-                        .resolve("minecraft")
-                        .resolve("the_nether")
+                SAVE_ROOT.resolve("DIM-1")
                         .resolve("region"),
                 ChunkisStoragePaths.computeVanillaRegionDirectory(SAVE_ROOT, nether));
     }
