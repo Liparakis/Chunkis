@@ -9,7 +9,7 @@ base {
 dependencies {
     api project(":common")
     implementation 'org.slf4j:slf4j-api:2.0.9'
-    compileOnly 'org.jetbrains:annotations:24.1.0'
+    compileOnly 'org.jetbrains:annotations:26.1.0'
 
     testImplementation 'org.mockito:mockito-core:5.23.0'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.23.0'
