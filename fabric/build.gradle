@@ -16,7 +16,7 @@ dependencies {
     implementation project(":common")
     implementation project(":storage")
     implementation project(":migration")
-    include "com.github.luben:zstd-jni:1.5.7-11"
+    include "com.github.luben:zstd-jni:1.5.7-12"
 }
 
 jar {
