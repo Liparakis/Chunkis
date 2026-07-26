@@ -12,7 +12,7 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.9'
     compileOnly 'org.jetbrains:annotations:24.1.0'
 
-    testImplementation 'com.github.luben:zstd-jni:1.5.7-11'
+    testImplementation 'com.github.luben:zstd-jni:1.5.7-12'
     testImplementation 'org.assertj:assertj-core:3.27.7'
     testImplementation 'org.mockito:mockito-core:5.23.0'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.23.0'
