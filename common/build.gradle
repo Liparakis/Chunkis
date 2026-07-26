@@ -7,7 +7,7 @@ base {
 }
 
 dependencies {
-    api 'it.unimi.dsi:fastutil:8.5.12'
+    api 'it.unimi.dsi:fastutil:8.5.19'
     api 'com.google.code.gson:gson:2.14.0'
     implementation 'org.slf4j:slf4j-api:2.0.9'
     implementation 'com.github.luben:zstd-jni:1.5.7-11'
