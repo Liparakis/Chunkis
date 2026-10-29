@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "id": "chunkis",
-    "version": "4.1.0",
+    "version": "${version}",
     "name": "Chunkis",
     "description": "Chunkis is a mod that adds chunk saving and loading to Minecraft.",
     "authors": [
