@@ -17,25 +17,6 @@ with a compact, versioned format built for safety.
 
 <br>
 
-## Why Chunkis
-
-📦 **Compact**<br>
-Context-coded block data and Zstd, packed byte-exact into region files.
-
-⚡ **Off the server thread**<br>
-Saves encode on background workers; loads decode before the server needs them.
-
-🔁 **Fast reloads**<br>
-Unchanged blocks keep their stored bytes, and recently unloaded chunks skip decoding.
-
-🛡️ **Safe by design**<br>
-Explicit chunk ownership, versioned formats, and unreadable entries are never overwritten.
-
-🌱 **Generation-aware**<br>
-Half-generated chunks are kept, not generated again.
-
-<br>
-
 ## Performance
 
 <img src=".github/assets/benchmark.svg" width="760" alt="Benchmark: Chunkis versus vanilla. Disk 42.6 vs 61.5 MB, memory 968 vs 1335 MB, unload 304 vs 411 ms, lag spikes 280 vs 368 ms, CPU 64.9 vs 71.3 s, reload even, median tick even, tick p90 +5%.">
