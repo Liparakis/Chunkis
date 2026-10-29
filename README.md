@@ -1,148 +1,225 @@
-<p align="center">
-  <img src="common/src/main/resources/assets/logo.png" width="150" alt="Chunkis logo">
-</p>
+<div align="center">
 
-<p align="center">
-  A Fabric mod for safe, compact, and predictable Minecraft chunk persistence.
-</p>
+<img src="common/src/main/resources/assets/logo.png" width="180" alt="Chunkis">
 
-Chunkis replaces vanilla chunk storage with its own format, CIS. Chunks are saved as compact, versioned
-CIS entries in dimension-local region files and rebuilt from them on load. The goal is storage that is
-smaller, lighter on memory and the server thread, and never silently loses data.
+**Smaller worlds. Lighter servers. Zero silent data loss.**
 
-Chunkis is a persistence project. It is not a rendering or FPS mod, and it does not change gameplay.
+A Fabric mod that replaces vanilla chunk storage<br>
+with a compact, versioned format built for safety.
 
-## At a glance
+[![CI](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml/badge.svg)](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11-62B47A?logo=minecraft&logoColor=white)
+![Fabric](https://img.shields.io/badge/Fabric-required-DBD0B4)
+![Java](https://img.shields.io/badge/Java-21+-ED8B00?logo=openjdk&logoColor=white)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-| Area          | Current behavior                                                                              |
-|---------------|-----------------------------------------------------------------------------------------------|
-| Platform      | Fabric on Minecraft 1.21.11, Fabric API required                                              |
-| Runtime       | Java 21 or newer                                                                              |
-| Format        | CIS version 12: palettes, packed and context-coded block data, Zstd compression               |
-| Storage       | CIS region files per dimension, a block-id mapping file, portal index files                   |
-| Ownership     | Chunkis takes over a chunk's saves explicitly; vanilla writes are suppressed only for those   |
-| Data safety   | Ownership guards, undecodable entries never overwritten, corruption-aware loading             |
-| Reversibility | Treat Chunkis storage as one-way and keep a tested backup before installing                   |
+**[Install](#install)** · **[Performance](#performance)** · **[How it works](#how-it-works)** · **[Wiki](https://github.com/Liparakis/Chunkis/wiki)** · **[Contribute](CONTRIBUTING.md)**
 
-## How it works
+<br>
 
-Chunkis hooks the save and load paths through Fabric mixins:
+## Why Chunkis
 
-1. Changes to a chunk are tracked in a `ChunkDelta`.
-2. On save, the chunk's blocks are copied on the server thread and encoded on background save workers.
-   Blocks unchanged since the last save reuse their stored bytes instead of being encoded again.
-3. The encoded entry is compressed with Zstd and written through `CisStorage` into region files. Each entry
-   takes exactly its own size, not a whole 4 KiB sector as in vanilla's `.mca` files.
-4. On load, the entry is decoded off the server thread. Vanilla receives finished block containers instead
-   of NBT to parse, and recently unloaded chunks reload from memory without decoding at all.
-5. Chunks that are still generating are kept, compactly, instead of being generated again on the next load.
+📦 **Compact**<br>
+Context-coded block data and Zstd, packed byte-exact into region files.
+
+⚡ **Off the server thread**<br>
+Saves encode on background workers; loads decode before the server needs them.
+
+🔁 **Fast reloads**<br>
+Unchanged blocks keep their stored bytes, and recently unloaded chunks skip decoding.
+
+🛡️ **Safe by design**<br>
+Explicit chunk ownership, versioned formats, and unreadable entries are never overwritten.
+
+🌱 **Generation-aware**<br>
+Half-generated chunks are kept, not generated again.
+
+<br>
 
 ## Performance
 
-Measured with the stress benchmark in [`tools/stress`](tools/stress/README.md): a fixed 64×64-chunk area of
-natural terrain, unloaded, reloaded, 10% of chunks edited and saved, over several rounds, with vanilla run
-alternately on the same machine. Ratios are Chunkis divided by vanilla, so lower is better:
+<img src=".github/assets/benchmark.svg" width="760" alt="Benchmark: Chunkis versus vanilla. Disk 42.6 vs 61.5 MB, memory 968 vs 1335 MB, unload 304 vs 411 ms, lag spikes 280 vs 368 ms, CPU 64.9 vs 71.3 s, reload even, median tick even, tick p90 +5%.">
 
-| Metric                          | Chunkis ÷ vanilla |
-|---------------------------------|-------------------|
-| Disk use                        | 0.69              |
-| Retained heap                   | 0.72              |
-| Chunk unload time (median)      | 0.74              |
-| Worst tick times (99th pct.)    | 0.76              |
-| Total CPU                       | 0.91              |
-| Chunk reload time               | about 1.00        |
-| Typical tick times (median/90th) | 0.99–1.05         |
+<sub>Stress benchmark: a 64×64-chunk area of natural terrain unloaded, reloaded, edited and saved,<br>
+alternating Chunkis and vanilla runs on the same machine (<a href="tools/stress/README.md">details</a>).<br>
+Results vary with world, workload and hardware.</sub>
 
-Results depend on the world, the workload and the hardware. Typical tick times range from even with vanilla
-to somewhat behind on a quiet machine: Chunkis spreads save work evenly across ticks, while vanilla does it
-in fewer, larger spikes.
+<br>
 
-## On-disk layout
+## Install
 
-For the overworld, Chunkis data lives below the world directory:
+**1.** Install [Fabric Loader](https://fabricmc.net/use/) and [Fabric API](https://modrinth.com/mod/fabric-api) for Minecraft **1.21.11**<br>
+**2.** Drop the Chunkis jar into `mods/` (Java 21+)<br>
+**3.** **Back up your world**, then launch
 
-```text
-<world>/
-└── chunkis/
-    ├── global_ids.json        block-id mapping
-    ├── portal_chunks.nbt      portal index
-    ├── portal_links.nbt
-    ├── regions/               CIS region files: r.<x>.<z>.cis
-    └── unfinished/            chunks still generating, in the same region format
+⚠️ **Switching to Chunkis is one-way.** There's no converter back to vanilla storage,<br>
+so keep a backup you can restore without Chunkis.
+
+Existing worlds migrate automatically when opened in singleplayer.<br>
+Dedicated-server migration isn't available yet.
+
+<br>
+
+## How it works
+
+Vanilla saves every chunk as a full NBT tree, compressed into 4 KiB sectors of `.mca` region files,<br>
+and parses that tree again on every load. Chunkis keeps its own compact record of each chunk<br>
+and moves the expensive work off the server thread.
+
+### 1 · Tracking a chunk
+
+Every loaded chunk carries a `ChunkDelta`: its blocks, block entities, entities and metadata.<br>
+Block changes are recorded as they happen. A chunk only counts as Chunkis's once it's explicitly **claimed**,<br>
+and only then does Chunkis take over its saves; anything unclaimed is saved by vanilla as usual.
+
+### 2 · Saving
+
+```mermaid
+flowchart LR
+    A["Server thread<br/>copy block sections"] --> B{"Blocks changed<br/>since last save?"}
+    B -- no --> C["Reuse stored<br/>block bytes"]
+    B -- yes --> D["Save worker<br/>encode blocks"]
+    C --> E["Encode block entities,<br/>entities, metadata"]
+    D --> E
+    E --> F["Zstd"]
+    F --> G[("Region file")]
 ```
 
-Other dimensions use their own directory under `<world>/dimensions/`. The format version is
-`CisConstants.VERSION`; older CIS data is upgraded by the `migration` module. Worlds that kept unfinished
-chunks in vanilla `.mca` files under `unfinished/` are still read, and those entries move to the CIS files
-as they load.
+The server thread does only one cheap thing: it copies the chunk's block sections.<br>
+Everything else happens on background **save workers**. A content fingerprint tells whether the blocks<br>
+changed since the last save. If they didn't, the stored block bytes are reused instead of encoded again.
 
-## Configuration
+The entry is compressed with Zstd and written to the chunk's region file **byte-exact**: a 1 KiB entry<br>
+takes 1 KiB, not a 4 KiB sector. A save never overwrites the live copy. The new entry goes to free space,<br>
+and the old one is released only after the new header is safely on disk.
 
-Chunkis needs no configuration. Optional JVM system properties:
+### 3 · The CIS format
 
-| Property                             | Default | Effect                                                         |
-|--------------------------------------|---------|----------------------------------------------------------------|
-| `-Dchunkis.recentChunkCacheMb=<mb>`  | 256     | Memory for keeping recently unloaded chunks' blocks; 0 disables |
-| `-Dchunkis.portal.fallbackRadius=<n>` | 20      | Search radius for a safe portal arrival spot                   |
+Each entry holds a palette of block states, the chunk's sections, block entities, entities and metadata:<br>
+structures, heightmaps, biomes, light and pending ticks.
 
-## Compatibility and limitations
+Sections are stored **sparse** (just the changed positions) or **dense** (every block).<br>
+Dense sections are **context-coded**: each block is predicted from its neighbors, and only the misses cost bits,<br>
+which suits terrain where stone sits next to stone. Each coded section has its own stream, so they decode in parallel.
 
-Chunkis is a poor fit for tools or mods that assume vanilla `.mca` files hold every chunk. Test carefully
-if a mod:
+The format is versioned. Older versions are upgraded automatically by the migration module,<br>
+and earlier layouts of the current version still decode.
 
-- reads or writes Anvil region files directly;
-- serializes or migrates chunks itself;
-- changes chunks after world generation;
-- replaces the normal world, save or chunk lifecycle.
+### 4 · Loading
 
-There is no supported conversion from Chunkis storage back to vanilla Anvil files. Migrating an existing
-world into Chunkis currently runs on integrated-server startup; there is no dedicated-server migration
-command yet.
+```mermaid
+flowchart LR
+    A["Chunk requested"] --> B{"Recently<br/>unloaded?"}
+    B -- yes --> C["Blocks from<br/>memory"]
+    B -- no --> D["Read + decode<br/>off-thread"]
+    C --> E["Finished block<br/>containers"]
+    D --> E
+    E --> F["Vanilla builds<br/>the chunk"]
+    F --> G["Restore entities<br/>and block entities"]
+```
 
-Always test on a copy of the world, and keep a backup that can be restored without Chunkis.
+Loads first check memory: chunks unloaded a moment ago keep their blocks in a bounded cache,<br>
+so walking back skips decoding entirely. Otherwise the entry is read, under its own region's lock<br>
+so other loads aren't held up, and decoded off the server thread.
 
-## Building
+Instead of NBT for vanilla to parse, Chunkis hands vanilla **finished block containers**,<br>
+together with the stored heightmaps, biomes, light and pending ticks, so vanilla rebuilds none of them.<br>
+The server thread then restores block entities and entities, once per load,<br>
+and vanilla sends the chunk to players as usual.
+
+### 5 · Chunks still generating
+
+Chunks around the loaded area are often only partly generated. Vanilla saves them in that state;<br>
+dropping them would mean generating them again on every visit. Chunkis keeps them too,<br>
+in the same compact region format under `unfinished/`.
+
+### 6 · Safety
+
+A chunk Chunkis hasn't claimed is never kept from being saved by vanilla.<br>
+An entry that fails to decode, for example because a mod is missing, is never overwritten.<br>
+Saves to that chunk are refused until the cause is fixed.
+
+When an existing world is migrated, each vanilla region is backed up and verified before it's retired.<br>
+A chunk that fails to migrate stops the startup instead of leaving a half-migrated world.
+
+<sub>The <a href="https://github.com/Liparakis/Chunkis/wiki">wiki</a> covers each step in depth.</sub>
+
+<br>
+
+<details>
+<summary><b>📁 Where the data lives</b></summary>
+<br>
+
+```text
+<world>/chunkis/
+├── global_ids.json     block-id mapping
+├── portal_chunks.nbt   portal index
+├── portal_links.nbt
+├── regions/            r.<x>.<z>.cis
+└── unfinished/         chunks still generating
+```
+
+Other dimensions use `<world>/dimensions/<namespace>/<path>/chunkis/`.<br>
+Format: CIS v12; older data upgrades automatically.
+
+</details>
+
+<details>
+<summary><b>⚙️ Configuration</b></summary>
+<br>
+
+No configuration needed. Optional JVM flags:
+
+<table>
+<tr><th>Flag</th><th>Default</th><th>Effect</th></tr>
+<tr><td><code>-Dchunkis.recentChunkCacheMb</code></td><td><code>256</code></td><td>Reload cache size; <code>0</code> disables it</td></tr>
+<tr><td><code>-Dchunkis.portal.fallbackRadius</code></td><td><code>20</code></td><td>Safe portal arrival search radius</td></tr>
+</table>
+
+</details>
+
+<details>
+<summary><b>🔨 Building from source</b></summary>
+<br>
 
 ```bash
 ./gradlew build    # Windows: gradlew.bat build
 ```
 
-This compiles every module and runs the unit tests, checkstyle and the Fabric game tests. The mod jar is
-written to `fabric/build/libs/`. See [AGENTS.md](AGENTS.md) for the module layout and project rules.
+Runs unit tests, checkstyle and Fabric game tests.<br>
+The jar lands in `fabric/build/libs/`.
 
-## Reporting issues
+</details>
 
-Before opening an issue:
+<br>
 
-- reproduce it on a copy or backup of the world;
-- check the compatibility limitations above;
-- confirm it happens on the current version;
-- collect the Minecraft, Fabric Loader and Fabric API versions and the complete mod list.
+## Compatibility
 
-Include `latest.log` or the crash report and exact reproduction steps. Attach CIS files only when they are
-safe to share.
+Test carefully with mods or tools that expect vanilla `.mca` files:<br>
+ones that read or write Anvil region files directly, serialize or migrate chunks themselves,<br>
+or edit chunks after world generation.
+
+**Always try Chunkis on a copy of your world first.**
+
+<br>
 
 ## Contributing
 
-Contributions are welcome, including ones written with AI tools, under these rules:
+Pull requests are welcome, including AI-assisted ones,<br>
+as long as a human reviews the code and the author can explain every change.
 
-- **A human reviews all code.** Generated code gets the same scrutiny as handwritten code, and the person
-  opening the pull request is responsible for every line of it.
-- **Describe the change.** A pull request explains what behavior changed, how it was implemented and why
-  this approach was chosen, including what it means for stored data and compatibility.
-- **Be able to explain it.** Whoever opens the pull request must be able to describe and answer questions
-  about the changes without falling back to "the AI wrote it".
-- **Keep it focused and tested.** One concern per pull request. `./gradlew build` must pass, and changes to
-  saving, loading, the codec or storage should include a run of the stress regression check.
+**[Read CONTRIBUTING.md](CONTRIBUTING.md)** · **[Open an issue](https://github.com/Liparakis/Chunkis/issues)**
 
-Project rules for both people and AI agents are in [AGENTS.md](AGENTS.md).
+<br>
 
-## Use of AI in development
+## Built with AI
 
-Chunkis is developed with AI assistance. AI coding assistants were used to write and refactor code, write
-tests, profile and benchmark, and draft documentation. Every change is reviewed, tested and owned by the
-maintainer, under the same rules that apply to contributors.
+Chunkis is developed with the help of AI coding assistants,<br>
+used for writing code, tests, benchmarks and docs.<br>
+Every change is reviewed, tested and owned by the maintainer.
 
-## License
+<br>
 
-MIT
+<sub>Released under the <a href="LICENSE">MIT License</a></sub>
+
+</div>

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="498" viewBox="0 0 760 498" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<style>
+.t{fill:#1f2328}.m{fill:#59636e}.grid{stroke:#d1d9e0}.van{fill:#8c959f}.chk{fill:#2da44e}.up{fill:#1a7f37}.dn{fill:#cf222e}.eq{fill:#59636e}
+@media (prefers-color-scheme:dark){.t{fill:#f0f6fc}.m{fill:#9198a1}.grid{stroke:#3d444d}.van{fill:#656c76}.chk{fill:#3fb950}.up{fill:#3fb950}.dn{fill:#f85149}.eq{fill:#9198a1}}
+text{font-size:13px}.lbl{font-size:13.5px;font-weight:600}.val{font-size:12px}.d{font-size:13px;font-weight:700}
+</style>
+<rect x="200" y="18" width="12" height="12" rx="2" class="van"/><text x="218" y="28.5" class="t">Vanilla</text>
+<rect x="290" y="18" width="12" height="12" rx="2" class="chk"/><text x="308" y="28.5" class="t">Chunkis</text>
+<text x="748" y="28.5" text-anchor="end" class="m">change · lower is better</text>
+<text x="12" y="78.0" class="t lbl">Disk use</text>
+<rect x="200" y="56" width="410.0" height="15" rx="3" class="van"/>
+<text x="616.0" y="67.5" class="m val">61.5 MB</text>
+<rect x="200" y="75" width="284.0" height="15" rx="3" class="chk"/>
+<text x="490.0" y="86.5" class="m val">42.6 MB</text>
+<text x="748" y="78.0" text-anchor="end" class="d up">−31%</text>
+<line x1="12" x2="748" y1="102" y2="102" class="grid" stroke-width="1"/>
+<text x="12" y="132.0" class="t lbl">Memory (retained heap)</text>
+<rect x="200" y="110" width="410.0" height="15" rx="3" class="van"/>
+<text x="616.0" y="121.5" class="m val">1,335 MB</text>
+<rect x="200" y="129" width="297.3" height="15" rx="3" class="chk"/>
+<text x="503.3" y="140.5" class="m val">968 MB</text>
+<text x="748" y="132.0" text-anchor="end" class="d up">−27%</text>
+<line x1="12" x2="748" y1="156" y2="156" class="grid" stroke-width="1"/>
+<text x="12" y="186.0" class="t lbl">Chunk unload time</text>
+<rect x="200" y="164" width="410.0" height="15" rx="3" class="van"/>
+<text x="616.0" y="175.5" class="m val">411 ms</text>
+<rect x="200" y="183" width="303.3" height="15" rx="3" class="chk"/>
+<text x="509.3" y="194.5" class="m val">304 ms</text>
+<text x="748" y="186.0" text-anchor="end" class="d up">−26%</text>
+<line x1="12" x2="748" y1="210" y2="210" class="grid" stroke-width="1"/>
+<text x="12" y="240.0" class="t lbl">Lag spikes (tick p99)</text>
+<rect x="200" y="218" width="410.0" height="15" rx="3" class="van"/>
+<text x="616.0" y="229.5" class="m val">368 ms</text>
+<rect x="200" y="237" width="312.0" height="15" rx="3" class="chk"/>
+<text x="518.0" y="248.5" class="m val">280 ms</text>
+<text x="748" y="240.0" text-anchor="end" class="d up">−24%</text>
+<line x1="12" x2="748" y1="264" y2="264" class="grid" stroke-width="1"/>
+<text x="12" y="294.0" class="t lbl">Total CPU</text>
+<rect x="200" y="272" width="410.0" height="15" rx="3" class="van"/>
+<text x="616.0" y="283.5" class="m val">71.3 s</text>
+<rect x="200" y="291" width="373.2" height="15" rx="3" class="chk"/>
+<text x="579.2" y="302.5" class="m val">64.9 s</text>
+<text x="748" y="294.0" text-anchor="end" class="d up">−9%</text>
+<line x1="12" x2="748" y1="318" y2="318" class="grid" stroke-width="1"/>
+<text x="12" y="348.0" class="t lbl">Chunk reload time</text>
+<rect x="200" y="326" width="410.0" height="15" rx="3" class="van"/>
+<text x="616.0" y="337.5" class="m val">1,143 ms</text>
+<rect x="200" y="345" width="409.6" height="15" rx="3" class="chk"/>
+<text x="615.6" y="356.5" class="m val">1,142 ms</text>
+<text x="748" y="348.0" text-anchor="end" class="d eq">even</text>
+<line x1="12" x2="748" y1="372" y2="372" class="grid" stroke-width="1"/>
+<text x="12" y="402.0" class="t lbl">Median tick</text>
+<rect x="200" y="380" width="410.0" height="15" rx="3" class="van"/>
+<text x="616.0" y="391.5" class="m val">32.1 ms</text>
+<rect x="200" y="399" width="406.2" height="15" rx="3" class="chk"/>
+<text x="612.2" y="410.5" class="m val">31.8 ms</text>
+<text x="748" y="402.0" text-anchor="end" class="d eq">even</text>
+<line x1="12" x2="748" y1="426" y2="426" class="grid" stroke-width="1"/>
+<text x="12" y="456.0" class="t lbl">Tick p90</text>
+<rect x="200" y="434" width="390.1" height="15" rx="3" class="van"/>
+<text x="596.1" y="445.5" class="m val">45.1 ms</text>
+<rect x="200" y="453" width="410.0" height="15" rx="3" class="chk"/>
+<text x="616.0" y="464.5" class="m val">47.4 ms</text>
+<text x="748" y="456.0" text-anchor="end" class="d dn">+5%</text>
+</svg>

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI coding agents, and a quick orientation for human contributors. The contribution rules in [README.md](README.md#contributing) apply to agent-written changes too: a human reviews every change and must be able to explain it.
+Guidance for AI coding agents, and a quick orientation for human contributors. The contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md) apply to agent-written changes too: a human reviews every change and must be able to explain it.
 
 ## Project
 
