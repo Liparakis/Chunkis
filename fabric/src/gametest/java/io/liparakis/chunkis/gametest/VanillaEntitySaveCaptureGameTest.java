@@ -3,7 +3,9 @@ package io.liparakis.chunkis.gametest;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
+import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -12,6 +14,7 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
@@ -20,6 +23,10 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.test.TestContext;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.Heightmap;
+import net.minecraft.world.entity.EntityTrackingStatus;
+import net.minecraft.world.chunk.WorldChunk;
 
 /**
  * Verifies that vanilla's entity save refreshes Chunkis entity payloads.
@@ -175,6 +182,57 @@ public final class VanillaEntitySaveCaptureGameTest {
         context.assertTrue(stillPending[0], Text.literal("Expected unreplayed pending payload to survive entity save."));
 
         anchor.discard();
+        context.complete();
+    }
+
+    /**
+     * Entities of a chunk Chunkis never claimed must reach a delta when vanilla saves them from hidden sections.
+     *
+     * <p>A chunk leaving full level has its entity sections hidden from the world's entity lookup, and vanilla
+     * saves those entities afterwards, before or after the chunk's own unload save. Chunkis counted entities
+     * through that lookup, saw none, and dropped them ("Skipped saving ... chunk has no Chunkis state to
+     * attach them to"), so they were lost in an authoritative world. The cow is loaded the way world
+     * generation and vanilla loads add entities, so no spawn hook claims its chunk first.</p>
+     *
+     * @param context the game test context
+     * @throws ReflectiveOperationException if the entity manager internals are missing
+     */
+    @GameTest(maxTicks = 100)
+    @SuppressWarnings("unchecked")
+    public void entitySaveOfHiddenUnclaimedChunkClaimsIt(final TestContext context)
+            throws ReflectiveOperationException {
+        final ServerWorld world = context.getWorld();
+        final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
+        final ChunkPos target = new ChunkPos(anchor.x + 2700, anchor.z - 2700);
+        world.setChunkForced(target.x, target.z, true);
+        final WorldChunk chunk = world.getChunk(target.x, target.z);
+        final BlockPos pos = world.getTopPosition(Heightmap.Type.MOTION_BLOCKING, target.getBlockPos(8, 0, 8));
+        final MobEntity cow = Objects.requireNonNull(EntityType.COW.create(world, SpawnReason.COMMAND));
+        cow.refreshPositionAndAngles(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
+        cow.setAiDisabled(true);
+        cow.setNoGravity(true);
+        context.assertTrue(world.tryLoadEntity(cow), Text.literal("Could not load the cow into " + target + "."));
+        context.assertFalse(ChunkDeltaOwnership.hasChunkisOwnedState(((ChunkisDeltaDuck) chunk).chunkis$getDelta()),
+                Text.literal("Chunk " + target + " must start unclaimed; pick another chunk."));
+
+        final Field managerField = ServerWorld.class.getDeclaredField("entityManager");
+        managerField.setAccessible(true);
+        final ServerEntityManager<Entity> manager = (ServerEntityManager<Entity>) managerField.get(world);
+        final Field accessField = ServerEntityManager.class.getDeclaredField("dataAccess");
+        accessField.setAccessible(true);
+        final net.minecraft.world.storage.ChunkDataAccess<Entity> dataAccess =
+                (net.minecraft.world.storage.ChunkDataAccess<Entity>) accessField.get(manager);
+        manager.updateTrackingStatus(target, EntityTrackingStatus.HIDDEN);
+        try {
+            dataAccess.writeChunkData(new net.minecraft.world.storage.ChunkDataList<>(target, List.of(cow)));
+        } finally {
+            manager.updateTrackingStatus(target, EntityTrackingStatus.TRACKED);
+        }
+
+        context.assertTrue(storedPayload(world, cow) != null,
+                Text.literal("Expected the hidden cow of unclaimed chunk " + target + " in its delta."));
+        cow.discard();
+        world.setChunkForced(target.x, target.z, false);
         context.complete();
     }
 }

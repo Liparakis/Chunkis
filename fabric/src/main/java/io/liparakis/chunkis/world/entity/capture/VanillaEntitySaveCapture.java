@@ -58,9 +58,11 @@ public final class VanillaEntitySaveCapture {
      * Captures the entities vanilla is saving for {@code chunkPos} into the chunk's
      * delta and registers that delta as dirty.
      *
-     * <p>When the chunk is still loaded its attached delta is used (claiming it
-     * when live entities exist, as the spawn and save hooks do). When the chunk has
-     * already left the loaded set, the tracked delta or, failing that, the stored
+     * <p>While the chunk is still held, its attached delta is used (claiming it
+     * when live entities exist, as the spawn and save hooks do). That includes a
+     * chunk below full level waiting to unload: vanilla saves its entities then,
+     * and an unclaimed chunk has no other state to take them. When the chunk has
+     * already unloaded, the tracked delta or, failing that, the stored
      * CIS entry is updated instead. A chunk with no Chunkis state at all cannot be
      * written safely without its blocks, so its entities are skipped with a
      * warning in authoritative worlds.</p>
@@ -71,7 +73,7 @@ public final class VanillaEntitySaveCapture {
      */
     public static void capture(final ServerWorld world, final ChunkPos chunkPos,
             final List<? extends Entity> entities) {
-        final WorldChunk chunk = LoadedChunks.getIfAccessible(world, chunkPos.x, chunkPos.z);
+        final WorldChunk chunk = LoadedChunks.getHeld(world, chunkPos.x, chunkPos.z);
         if (chunk instanceof ChunkisDeltaDuck deltaDuck) {
             captureLoaded(world, chunk, deltaDuck, entities);
         } else {

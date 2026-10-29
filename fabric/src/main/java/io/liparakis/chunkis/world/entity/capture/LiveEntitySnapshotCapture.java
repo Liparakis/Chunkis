@@ -8,6 +8,8 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
+import io.liparakis.chunkis.mixin.accessor.ServerEntityManagerAccessor;
+import io.liparakis.chunkis.mixin.accessor.ServerWorldAccessor;
 import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,15 +22,15 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.entity.SectionedEntityCache;
 
 /**
  * Captures a snapshot of live, savable entities in a chunk and writes them into
  * a {@link ChunkDelta}.
  *
- * <p>Capture reads entities from the world's spatial index, serializes them to NBT,
+ * <p>Capture reads entities from the chunk's entity sections (hidden ones included), serializes them to NBT,
  * and replaces the active-entity set in the delta. Pending (queued) entities that
  * have not yet materialized in the world are preserved across the capture unless
  * they appear in the live snapshot.</p>
@@ -230,8 +232,8 @@ public final class LiveEntitySnapshotCapture {
     /**
      * Returns the number of savable live entities currently in {@code chunk}.
      *
-     * <p>Performs a direct-count iteration without sorting, avoiding the full list
-     * allocation that {@link #capture} needs for deterministic ordering.</p>
+     * <p>Counts without sorting, unlike {@link #capture}, which needs deterministic
+     * ordering.</p>
      *
      * @param world server world containing the chunk
      * @param chunk chunk to inspect
@@ -239,14 +241,31 @@ public final class LiveEntitySnapshotCapture {
      */
     public static int countSavableLiveEntities(final ServerWorld world, final WorldChunk chunk) {
         final ChunkPos chunkPos = chunk.getPos();
-        final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPos);
         int count = 0;
-        for (final Entity entity : world.getOtherEntities(null, searchBox)) {
+        for (final Entity entity : chunkSectionEntities(world, chunkPos)) {
             if (isSavableLiveEntity(entity, chunkPos)) {
                 count++;
             }
         }
         return count;
+    }
+
+    /**
+     * Returns every entity held in the entity sections of {@code chunkPos}, whatever their tracking status.
+     *
+     * <p>The world's entity lookup skips sections of a chunk below full level ({@code HIDDEN}), yet those
+     * sections keep their entities until vanilla's entity save runs. A chunk saved in that window (its unload
+     * save, usually) must still see them, or the chunk stays unowned and its entities are lost in an
+     * authoritative world, where vanilla entity files are not written.</p>
+     */
+    private static List<Entity> chunkSectionEntities(final ServerWorld world, final ChunkPos chunkPos) {
+        final SectionedEntityCache<?> cache = ((ServerEntityManagerAccessor) ((ServerWorldAccessor) world)
+                .chunkis$getEntityManager()).chunkis$getCache();
+        final List<Entity> entities = new ArrayList<>();
+        cache.getTrackingSections(chunkPos.toLong())
+                .forEach(section -> section.stream()
+                        .forEach(entity -> entities.add((Entity) entity)));
+        return entities;
     }
 
     /**
@@ -272,9 +291,8 @@ public final class LiveEntitySnapshotCapture {
      */
     private static List<Entity> collectSavableLiveEntities(final ServerWorld world, final WorldChunk chunk) {
         final ChunkPos chunkPos = chunk.getPos();
-        final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPos);
         final List<Entity> liveEntities = new ArrayList<>();
-        for (final Entity entity : world.getOtherEntities(null, searchBox)) {
+        for (final Entity entity : chunkSectionEntities(world, chunkPos)) {
             if (isSavableLiveEntity(entity, chunkPos)) {
                 liveEntities.add(entity);
             }
