@@ -1,0 +1,90 @@
+name: Release
+
+# Builds the mod and publishes it as a GitHub release under a new tag.
+# Run it from the Actions tab ("Run workflow"); the tag is required.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'New tag for the release, e.g. v4.2.0 (must not exist yet and must match mod_version)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as a pre-release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAG: ${{ inputs.tag }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag
+        run: |
+          if ! [[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not a version tag like v4.2.0 or v4.2.0-beta.1"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag '$TAG' already exists; releases need a new tag"
+            exit 1
+          fi
+          mod_version=$(sed -n 's/^mod_version=//p' gradle.properties | tr -d '[:space:]')
+          if [ "${TAG#v}" != "$mod_version" ]; then
+            echo "::error::Tag '$TAG' does not match mod_version=$mod_version in gradle.properties; bump the version first"
+            exit 1
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6.2.0
+
+      # Same checks as CI, which skips the Fabric game tests (see ci.yml).
+      - name: Build, test, and check
+        run: ./gradlew build -x runGameTest --no-daemon --stacktrace
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          version="${TAG#v}"
+          jar="fabric/build/libs/chunkis-$version.jar"
+          sources="fabric/build/libs/chunkis-$version-sources.jar"
+          for file in "$jar" "$sources"; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Expected build output $file is missing"
+              ls -l fabric/build/libs || true
+              exit 1
+            fi
+          done
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "$jar" "$sources" \
+            --target "$GITHUB_SHA" \
+            --title "Chunkis $TAG" \
+            --generate-notes \
+            "${flags[@]}"
