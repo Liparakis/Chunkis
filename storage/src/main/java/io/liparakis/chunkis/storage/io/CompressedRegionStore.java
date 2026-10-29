@@ -81,9 +81,12 @@ public final class CompressedRegionStore implements AutoCloseable {
      */
     public void write(final CisChunkPos pos, final byte[] payload) throws IOException {
         final byte[] compressed = compression.compress(payload);
+        final RegionFile region;
         synchronized (this) {
-            regionFiles.get(pos, true).write(pos, compressed);
+            region = regionFiles.get(pos, true);
+            region.write(pos, compressed);
         }
+        region.releaseFreesIfMany();
     }
 
     /**
@@ -96,6 +99,7 @@ public final class CompressedRegionStore implements AutoCloseable {
         final RegionFile region = regionFiles.get(pos, false);
         if (region != null && region.hasChunk(pos)) {
             region.write(pos, null);
+            region.releaseFreesIfMany();
         }
     }
 

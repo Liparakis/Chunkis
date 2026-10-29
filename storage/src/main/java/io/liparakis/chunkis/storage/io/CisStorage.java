@@ -484,15 +484,14 @@ public final class CisStorage<B, S, P, N> {
         );
 
         final byte[] compressedData = compressionContext.compress(preparedSave.rawData());
-        synchronized (regionFiles) {
-            final RegionFile regionFile = getRegionFile(pos, true);
-
-            if (regionFile == null) {
-                return false;
-            }
-
+        final boolean written = inRegion(pos, true, false, regionFile -> {
             regionFile.write(pos, compressedData, operationId);
             verifyParanoidReadBack(pos, regionFile, compressedData, operationId);
+            regionFile.releaseFreesIfMany();
+            return true;
+        });
+        if (!written) {
+            return false;
         }
         prefetchedLoads.remove(pos);
         ChunkTraceStore.trace(
@@ -732,10 +731,7 @@ public final class CisStorage<B, S, P, N> {
     public boolean contains(final CisChunkPos pos) {
         Objects.requireNonNull(pos, "pos");
         try {
-            synchronized (regionFiles) {
-                final RegionFile regionFile = getRegionFile(pos, false);
-                return regionFile != null && regionFile.hasChunk(pos);
-            }
+            return inRegion(pos, false, false, regionFile -> regionFile.hasChunk(pos));
         } catch (final IOException e) {
             return false;
         }
@@ -808,15 +804,12 @@ public final class CisStorage<B, S, P, N> {
      */
     private boolean clearChunk(final CisChunkPos pos) {
         try {
-            synchronized (regionFiles) {
-                prefetchedLoads.remove(pos);
-                final RegionFile regionFile = getRegionFile(pos, false);
-
-                if (regionFile != null) {
-                    regionFile.write(pos, null);
-                }
-            }
-
+            prefetchedLoads.remove(pos);
+            inRegion(pos, false, null, regionFile -> {
+                regionFile.write(pos, null);
+                regionFile.releaseFreesIfMany();
+                return null;
+            });
             return true;
         } catch (final IOException e) {
             Chunkis.LOGGER.warn("Chunkis: Failed to clear CIS chunk {}", pos, e);
@@ -902,26 +895,8 @@ public final class CisStorage<B, S, P, N> {
      * Performs read region.
      */
     private RegionRead readRegion(final CisChunkPos pos, final String operationId) throws IOException {
-        final RegionFile regionFile;
-        synchronized (regionFiles) {
-            regionFile = getRegionFile(pos, false);
-        }
-        if (regionFile == null) {
-            return new RegionRead(false, null);
-        }
-        // Read under the region's own lock only, so loads of other regions, and saves, do not queue behind it.
-        try {
-            return new RegionRead(regionFile.hasChunk(pos), regionFile.read(pos, operationId));
-        } catch (final ClosedChannelException evicted) {
-            // The cache closed the region meanwhile; read it again the serialized way.
-            synchronized (regionFiles) {
-                final RegionFile reopened = getRegionFile(pos, false);
-                if (reopened == null) {
-                    return new RegionRead(false, null);
-                }
-                return new RegionRead(reopened.hasChunk(pos), reopened.read(pos, operationId));
-            }
-        }
+        return inRegion(pos, false, new RegionRead(false, null),
+                regionFile -> new RegionRead(regionFile.hasChunk(pos), regionFile.read(pos, operationId)));
     }
 
     /**
@@ -965,6 +940,62 @@ public final class CisStorage<B, S, P, N> {
         }
         delta.setStoredBlockPartHash(blockPartHash);
         return delta;
+    }
+
+    /**
+     * Times an operation may meet a region file the cache closed meanwhile before it gives up.
+     */
+    private static final int EVICTION_RETRIES = 3;
+
+    /**
+     * One operation on a region file.
+     *
+     * @param <T> result type
+     */
+    @FunctionalInterface
+    private interface RegionOperation<T> {
+
+        /**
+         * Runs the operation.
+         *
+         * @param regionFile the open region file
+         * @return the result
+         * @throws IOException on I/O failure
+         */
+        T apply(RegionFile regionFile) throws IOException;
+    }
+
+    /**
+     * Runs an operation on the region file holding {@code pos}, under that file's own lock only, so operations
+     * on other regions, and their disk syncs, never wait for it.
+     *
+     * <p>The cache may close (evict) the file between lookup and use. Closing waits for an operation in progress,
+     * so an operation that meets a closed file fails before changing anything ({@link RegionFile#close()}); it
+     * then runs again on the file reopened.</p>
+     *
+     * @param pos       chunk position
+     * @param create    whether to create a missing region file
+     * @param absent    result when the region file does not exist and is not created
+     * @param operation the operation
+     * @param <T>       result type
+     * @return the operation's result, or {@code absent}
+     * @throws IOException on I/O failure, or when the file keeps being closed under the operation
+     */
+    private <T> T inRegion(final CisChunkPos pos, final boolean create, final T absent,
+            final RegionOperation<T> operation) throws IOException {
+        for (int attempt = 0; ; attempt++) {
+            final RegionFile regionFile = getRegionFile(pos, create);
+            if (regionFile == null) {
+                return absent;
+            }
+            try {
+                return operation.apply(regionFile);
+            } catch (final ClosedChannelException evicted) {
+                if (attempt >= EVICTION_RETRIES) {
+                    throw evicted;
+                }
+            }
+        }
     }
 
     /**

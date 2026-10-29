@@ -77,7 +77,8 @@ public final class RegionFile implements AutoCloseable {
      */
     private static final int NO_FOOTER = -1;
     /**
-     * Deferred frees that trigger an automatic flush, bounding growth from delayed reuse.
+     * Deferred frees at which {@link #releaseFreesIfMany()} makes them reusable, bounding growth from delayed
+     * reuse.
      */
     private static final int PENDING_FREE_FLUSH_THRESHOLD = 64;
     /**
@@ -338,7 +339,6 @@ public final class RegionFile implements AutoCloseable {
             ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
                     ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region clear completed",
                     null, chunkKey, regionKey(), operationId, null, 0);
-            flushIfManyPendingFrees();
             return;
         }
 
@@ -353,7 +353,6 @@ public final class RegionFile implements AutoCloseable {
         }
         writeMetadata();
         dirty = true;
-        flushIfManyPendingFrees();
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed", null
                 , chunkKey, regionKey(), operationId, null, dataLength);
@@ -399,19 +398,60 @@ public final class RegionFile implements AutoCloseable {
     }
 
     /**
-     * Flushes once enough slots wait for release, bounding file growth from deferred reuse.
+     * Makes slots freed by earlier writes reusable once enough have piled up, bounding file growth from deferred
+     * reuse. Callers invoke it after a write, without holding this file's lock.
+     *
+     * <p>A freed slot may only be reused once the header that stopped pointing at it is on disk. The frees are
+     * taken out under the lock, so the force that follows covers every header update made before them, and that
+     * force runs without the lock: reads and writes of this file go on meanwhile instead of waiting for the disk.
+     * If the force fails, the frees go back and wait for the next flush; if the file closed meanwhile, the slots
+     * stay unused until the next compaction. Neither ever reuses a slot early.</p>
      */
-    private void flushIfManyPendingFrees() {
-        if (pendingFrees.size() >= PENDING_FREE_FLUSH_THRESHOLD) {
-            flush();
+    public void releaseFreesIfMany() {
+        final List<RegionFreeBlock> releasing;
+        synchronized (this) {
+            if (pendingFrees.size() < PENDING_FREE_FLUSH_THRESHOLD || !channel.isOpen()) {
+                return;
+            }
+            releasing = new ArrayList<>(pendingFrees);
+            pendingFrees.clear();
+        }
+        try {
+            channel.force(true);
+        } catch (final IOException e) {
+            synchronized (this) {
+                pendingFrees.addAll(0, releasing);
+            }
+            if (channel.isOpen()) {
+                Chunkis.LOGGER.warn("Failed to sync region file {}; freed slots wait for the next flush", path, e);
+            }
+            return;
+        }
+        synchronized (this) {
+            if (!channel.isOpen()) {
+                return;
+            }
+            for (final RegionFreeBlock block : releasing) {
+                allocationMetadata.addFreeBlock(block.offset(), block.length());
+            }
+            try {
+                truncateFooter();
+                writeMetadata();
+            } catch (final IOException e) {
+                // A torn footer is rebuilt from the header on the next open; the frees above are already safe.
+                Chunkis.LOGGER.warn("Failed to rewrite allocation footer of region file {}", path, e);
+            }
+            dirty = true;
         }
     }
 
     /**
-     * Flushes then closes the backing channel.
+     * Flushes then closes the backing channel. Synchronized like every other operation, so a close (an eviction
+     * from the region cache) never lands in the middle of one: an operation either completes first, or starts on
+     * the closed channel and fails with {@link java.nio.channels.ClosedChannelException} before changing anything.
      */
     @Override
-    public void close() {
+    public synchronized void close() {
         flush();
         try {
             channel.close();

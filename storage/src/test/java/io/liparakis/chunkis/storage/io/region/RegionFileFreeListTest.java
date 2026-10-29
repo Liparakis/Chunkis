@@ -251,4 +251,30 @@ class RegionFileFreeListTest {
             assertEquals(oldOffset, region.offsets[indexOf(new CisChunkPos(2, 0))], "slot reusable after flush");
         }
     }
+
+    /**
+     * Writes alone never release freed slots; {@code releaseFreesIfMany} does once enough have piled up, and a
+     * later write reuses one. Below the threshold it leaves them waiting.
+     */
+    @Test
+    void releaseFreesIfManyMakesFreedSlotsReusableOnlyAtThreshold() throws Exception {
+        final Path regions = Files.createDirectories(tempDir.resolve("release"));
+        try (RegionFile region = new RegionFile(regions, 0, 0)) {
+            for (int i = 0; i < 64; i++) {
+                region.write(new CisChunkPos(i & 31, i >> 5), bytes(100, i));
+            }
+            final int firstOffset = region.offsets[0];
+            for (int i = 0; i < 63; i++) {
+                region.write(new CisChunkPos(i & 31, i >> 5), bytes(100, i + 1));
+            }
+            region.releaseFreesIfMany();
+            region.write(new CisChunkPos(0, 5), bytes(100, 7));
+            assertNotEquals(firstOffset, region.offsets[indexOf(new CisChunkPos(0, 5))], "released below threshold");
+
+            region.write(new CisChunkPos(31, 1), bytes(100, 8));
+            region.releaseFreesIfMany();
+            region.write(new CisChunkPos(1, 5), bytes(100, 9));
+            assertEquals(firstOffset, region.offsets[indexOf(new CisChunkPos(1, 5))], "freed slot not reused");
+        }
+    }
 }

@@ -252,6 +252,59 @@ class CisStorageTraceTest {
     }
 
     /**
+     * Saves chunks of more regions than the cache keeps open from several threads at once, so regions keep being
+     * evicted under writes in progress, and expects every last save to be what a reopened storage reads back: a
+     * write that meets its region closed by eviction is retried, never lost or half-applied.
+     */
+    @Test
+    void concurrentWritesSurviveRegionEviction() throws Exception {
+        final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
+        final CisMapping<String, String, String> mapping = new CisMapping<>(
+                tempDir.resolve("global_ids.json"),
+                new TestBlockRegistryAdapter(),
+                stateAdapter,
+                new PropertyPacker<>(stateAdapter)
+        );
+        final Path regionDir = Files.createDirectories(tempDir.resolve("regions"));
+        final CisStorage<String, String, String, String> storage =
+                new CisStorage<>(regionDir, mapping, new TestNbtAdapter(), "air");
+        final int regions = 80;
+        final int rounds = 6;
+        final java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+        final List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+        for (int t = 0; t < 8; t++) {
+            final int offset = t;
+            futures.add(pool.submit(() -> {
+                for (int round = 1; round <= rounds; round++) {
+                    for (int r = offset; r < regions; r += 8) {
+                        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+                        for (int i = 0; i < round + r % 5; i++) {
+                            delta.addBlockChange(i, 70, 1, "stone");
+                        }
+                        assertThat(storage.save(new CisChunkPos(r * 32, 0), delta, "save")).as("region %d", r).isTrue();
+                    }
+                }
+                return null;
+            }));
+        }
+        for (final java.util.concurrent.Future<?> future : futures) {
+            future.get(60, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        pool.shutdown();
+        storage.close();
+
+        final CisStorage<String, String, String, String> reopened =
+                new CisStorage<>(regionDir, mapping, new TestNbtAdapter(), "air");
+        for (int r = 0; r < regions; r++) {
+            final CisStorage.LoadResult<String, String> result =
+                    reopened.loadWithPresence(new CisChunkPos(r * 32, 0), "verify");
+            assertThat(result.failed()).as("region %d", r).isFalse();
+            assertThat(result.delta().getBlockChangesCount()).as("region %d", r).isEqualTo(rounds + r % 5);
+        }
+        reopened.close();
+    }
+
+    /**
      * A load whose stored block part a block source knows takes the blocks from the source and decodes only the
      * rest; a source that does not know that exact block part leaves the load to decode it.
      */
