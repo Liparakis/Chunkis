@@ -1,0 +1,11 @@
+{
+    "required": false,
+    "package": "io.liparakis.chunkis.mixin.compat",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "C2meReadFromDiskMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 0
+    }
+}

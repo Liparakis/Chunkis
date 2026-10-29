@@ -16,7 +16,8 @@
         ]
     },
     "mixins": [
-        "chunkis.mixins.json"
+        "chunkis.mixins.json",
+        "chunkis.compat.mixins.json"
     ],
     "accessWidener": "chunkis.accesswidener",
     "depends": {

@@ -7,6 +7,7 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.tracking.load.SyntheticLoadNbtProvider;
 import io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinator;
+import io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinatorHolder;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.block.BlockState;
@@ -37,7 +38,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * synthetic load path in {@link SyntheticLoadNbtProvider}, one of each per world.</p>
  */
 @Mixin(ServerChunkLoadingManager.class)
-public abstract class ThreadedAnvilChunkStorageMixin {
+public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordinatorHolder {
 
     /**
      * The server world that owns this chunk loading manager.
@@ -69,8 +70,8 @@ public abstract class ThreadedAnvilChunkStorageMixin {
      *
      * @return the save coordinator
      */
-    @Unique
-    private ChunkSaveCoordinator chunkis$saveCoordinator() {
+    @Override
+    public ChunkSaveCoordinator chunkis$saveCoordinator() {
         if (chunkis$saveCoordinator == null) {
             chunkis$saveCoordinator = new ChunkSaveCoordinator(world);
         }

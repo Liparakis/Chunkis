@@ -87,13 +87,18 @@ tasks.named("runGameTest") {
     if (filter != null && !filter.isBlank()) {
         systemProperty("fabric-api.gametest.filter", filter)
     }
+    // -PgametestJava=<version> runs the game tests on another JDK, e.g. 25 for mods that require it (C2ME).
+    def gametestJava = providers.gradleProperty("gametestJava").orNull
+    if (gametestJava != null) {
+        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(gametestJava as int) }
+    }
     // Stress benchmark: -PchunkisStress=true, optional -PchunkisStressSize/Rounds/EditsPerChunk/ChunksPerTick/Tps/Vanilla,
     // -PchunkisStressNatural=true runs on normally generated terrain (default world preset, fixed seed) and keeps it:
     // touched chunks get edits and a small base instead of synthetic fill. -PchunkisStressHistogram=true writes a
     // live-object class histogram next to the report.
     if (providers.gradleProperty("chunkisStress").orNull == "true") {
         systemProperty("chunkis.stress", "true")
-        ["size", "rounds", "editsPerChunk", "chunksPerTick", "tps", "vanilla", "touchedPercent", "natural", "histogram"].each { key ->
+        ["size", "rounds", "editsPerChunk", "chunksPerTick", "tps", "vanilla", "touchedPercent", "natural", "histogram", "anchorX", "anchorZ"].each { key ->
             def value = providers.gradleProperty("chunkisStress" + key.capitalize()).orNull
             if (value != null) {
                 systemProperty("chunkis.stress." + key, value)

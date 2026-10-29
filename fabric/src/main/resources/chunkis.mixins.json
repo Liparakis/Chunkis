@@ -10,6 +10,7 @@
         "network.ChunkHolderMixin",
         "storage.ChunkSerializerMixin",
         "storage.EntityChunkDataAccessMixin",
+        "storage.RegionFileMixin",
         "storage.RegionBasedStorageMixin",
         "storage.ThreadedAnvilChunkStorageMixin",
         "world.ChunkRegionMixin",
