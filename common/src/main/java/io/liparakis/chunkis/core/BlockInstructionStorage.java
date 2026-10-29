@@ -1,6 +1,5 @@
 package io.liparakis.chunkis.core;
 
-import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import java.util.Arrays;
 
 /**
@@ -40,7 +39,7 @@ final class BlockInstructionStorage {
      * or {@link #ensurePositionMap()}. {@code null} on decode-only instances that
      * have only ever received {@link #addAppendOnly(long)} calls.
      */
-    Long2IntOpenHashMap positionMap;
+    PositionIndex positionMap;
     /**
      * Stores long.
      */
@@ -57,6 +56,13 @@ final class BlockInstructionStorage {
      */
     boolean positionMapDirty;
 
+    /**
+     * Incremented by every change that rewrites instructions in bulk (clear, append-only decode,
+     * palette rewrite, retain). The upserts used for live block edits leave it unchanged, so a
+     * caller can tell whether the instructions it built are still the ones it built.
+     */
+    long bulkEpoch;
+
 
     /**
      * Performs block instruction storage.
@@ -65,6 +71,17 @@ final class BlockInstructionStorage {
         this.packedInstructions = new long[INITIAL_CAPACITY];
         this.instructionCount = 0;
         // positionMap intentionally left null - created lazily on first lookup/add.
+    }
+
+    /**
+     * Drops every instruction and the position index, keeping no capacity behind.
+     */
+    void release() {
+        this.packedInstructions = new long[INITIAL_CAPACITY];
+        this.instructionCount = 0;
+        this.positionMap = null;
+        this.positionMapDirty = false;
+        this.bulkEpoch++;
     }
 
     /**
@@ -77,6 +94,7 @@ final class BlockInstructionStorage {
             this.positionMap.clear();
         }
         this.positionMapDirty = false;
+        this.bulkEpoch++;
     }
 
     /**
@@ -86,7 +104,20 @@ final class BlockInstructionStorage {
         if (instructionCount < packedInstructions.length) {
             return;
         }
-        packedInstructions = Arrays.copyOf(packedInstructions, packedInstructions.length << 1);
+        // Grows by half: an edit to a loaded full baseline would otherwise double an array of tens of thousands
+        // of instructions for one extra entry.
+        packedInstructions = Arrays.copyOf(packedInstructions,
+                packedInstructions.length + Math.max(1, packedInstructions.length >> 1));
+    }
+
+    /**
+     * Shrinks the instruction array to its contents when more than a quarter of it is unused, so a long-lived
+     * delta does not keep the slack of its last growth.
+     */
+    void trimToSize() {
+        if (packedInstructions.length - instructionCount > instructionCount >> 2) {
+            packedInstructions = Arrays.copyOf(packedInstructions, Math.max(instructionCount, 1));
+        }
     }
 
     /**
@@ -106,17 +137,10 @@ final class BlockInstructionStorage {
         }
         final int requiredCapacity = instructionCount + additionalBlocks;
         if (requiredCapacity > packedInstructions.length) {
-            int newCapacity = packedInstructions.length;
-            while (newCapacity < requiredCapacity) {
-                newCapacity <<= 1;
-            }
-            packedInstructions = Arrays.copyOf(packedInstructions, newCapacity);
-        }
-        // Only pre-size the map if it already exists and is being actively maintained
-        // (not dirty). When dirty or null, ensurePositionMap() will size it correctly
-        // at rebuild time.
-        if (positionMap != null && !positionMapDirty) {
-            positionMap.ensureCapacity(requiredCapacity);
+            // One large reservation is sized exactly (a full chunk baseline would otherwise sit in an array up to
+            // twice its size for as long as the chunk is loaded); repeated small ones still grow geometrically.
+            packedInstructions = Arrays.copyOf(packedInstructions,
+                    Math.max(requiredCapacity, packedInstructions.length << 1));
         }
     }
 
@@ -133,12 +157,10 @@ final class BlockInstructionStorage {
         ensureCapacity();
         packedInstructions[instructionCount] = instruction;
         if (positionMap == null) {
-            positionMap = new Long2IntOpenHashMap(INITIAL_CAPACITY);
-            positionMap.defaultReturnValue(-1);
+            positionMap = new PositionIndex();
             // Map was null: any prior addAppendOnly entries are not in the map yet.
             // Rebuild from scratch so this new keyed insert is consistent.
             if (positionMapDirty) {
-                positionMap.ensureCapacity(instructionCount + 1);
                 for (int i = 0; i < instructionCount; i++) {
                     positionMap.put(packedInstructions[i] & POSITION_MASK, i);
                 }
@@ -147,6 +169,35 @@ final class BlockInstructionStorage {
         }
         positionMap.put(posKey, instructionCount);
         instructionCount++;
+    }
+
+    /**
+     * Appends {@code count} packed instructions, in order, without updating the position map.
+     *
+     * @param packed packed instructions (high 32 bits = palette id, low 32 bits = packed position)
+     * @param count  number of leading entries of {@code packed} to append
+     */
+    void addAllAppendOnly(final long[] packed, final int count) {
+        ensureBlockCapacity(count);
+        System.arraycopy(packed, 0, packedInstructions, instructionCount, count);
+        instructionCount += count;
+        positionMapDirty = true;
+        bulkEpoch++;
+    }
+
+    /**
+     * Appends every instruction of {@code source}, in order, without updating the position map.
+     *
+     * <p>The palette ids are copied as they are, so both storages must use the same palette.</p>
+     *
+     * @param source storage to copy from; not modified
+     */
+    void addAllAppendOnly(final BlockInstructionStorage source) {
+        ensureBlockCapacity(source.instructionCount);
+        System.arraycopy(source.packedInstructions, 0, packedInstructions, instructionCount, source.instructionCount);
+        instructionCount += source.instructionCount;
+        positionMapDirty = true;
+        bulkEpoch++;
     }
 
     /**
@@ -164,6 +215,7 @@ final class BlockInstructionStorage {
         packedInstructions[instructionCount] = instruction;
         instructionCount++;
         positionMapDirty = true;
+        bulkEpoch++;
     }
 
     /**
@@ -178,17 +230,32 @@ final class BlockInstructionStorage {
             return;
         }
         if (positionMap == null) {
-            // First-time creation: size the map precisely to avoid any rehash.
-            positionMap = new Long2IntOpenHashMap(instructionCount);
-            positionMap.defaultReturnValue(-1);
+            positionMap = new PositionIndex();
         } else {
             positionMap.clear();
-            positionMap.ensureCapacity(instructionCount);
         }
         for (int i = 0; i < instructionCount; i++) {
             positionMap.put(packedInstructions[i] & POSITION_MASK, i);
         }
         positionMapDirty = false;
+    }
+
+    /**
+     * Keeps only the instructions whose packed position passes {@code keepPosition}, preserving order.
+     *
+     * @param keepPosition test on the packed position (low 32 bits of an instruction)
+     */
+    void retain(final java.util.function.LongPredicate keepPosition) {
+        int kept = 0;
+        for (int i = 0; i < instructionCount; i++) {
+            final long instruction = packedInstructions[i];
+            if (keepPosition.test(instruction & POSITION_MASK)) {
+                packedInstructions[kept++] = instruction;
+            }
+        }
+        instructionCount = kept;
+        positionMapDirty = true;
+        bulkEpoch++;
     }
 
     /**
@@ -230,5 +297,6 @@ final class BlockInstructionStorage {
     void updatePalette(final int index, final int paletteId) {
         assert hasIndex(index) : "Index " + index + " out of bounds for instructionCount " + instructionCount;
         packedInstructions[index] = ((long) paletteId << 32) | (packedInstructions[index] & POSITION_MASK);
+        bulkEpoch++;
     }
 }

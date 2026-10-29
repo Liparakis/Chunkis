@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
 final class ThreadedAnvilChunkStorageMixinSavePathTest {
 
     /**
-     * Helper method to invoke the private static method {@code chunkis$claimEntityCapturedDelta} in
-     * {@code ThreadedAnvilChunkStorageMixin} via reflection.
+     * Helper method to invoke the private static method {@code claimEntityCapturedDelta} in
+     * {@code ChunkSaveCoordinator} via reflection.
      *
      * @param delta the {@link ChunkDelta} to claim ownership of
      * @return the claimed {@link ChunkDelta}
@@ -26,9 +26,9 @@ final class ThreadedAnvilChunkStorageMixinSavePathTest {
      */
     private static ChunkDelta<BlockState, NbtCompound> invokeClaimAfterEntityCapture(
             final ChunkDelta<BlockState, NbtCompound> delta) throws Exception {
-        final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.mixin.storage.ThreadedAnvilChunkStorageMixin");
+        final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinator");
         final Method method = mixinClass.getDeclaredMethod(
-                "chunkis$claimEntityCapturedDelta",
+                "claimEntityCapturedDelta",
                 ChunkDelta.class,
                 String.class,
                 String.class

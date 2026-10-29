@@ -3,8 +3,6 @@ package io.liparakis.chunkis.storage.mapping;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.objects.Reference2IntMap;
-import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -32,10 +30,6 @@ final class BlockIdRegistry<B> {
     private static final int MAX_BLOCK_ID = 0xFFFF;
 
     /**
-     * Identity-based mapping from currently loaded block instances to persisted numeric ids.
-     */
-    private final Reference2IntMap<B> blockToId = new Reference2IntOpenHashMap<>();
-    /**
      * Reverse lookup from persisted numeric ids to currently loaded block instances.
      */
     private final Int2ObjectMap<B> idToBlock = new Int2ObjectOpenHashMap<>();
@@ -61,10 +55,38 @@ final class BlockIdRegistry<B> {
     private int nextId = 0;
 
     /**
-     * Performs block id registry.
+     * While set, registrations skip republishing the lookup tables; {@link #endBatch()}
+     * publishes once. Avoids an O(n) table copy per block during startup population.
      */
-    BlockIdRegistry() {
-        blockToId.defaultReturnValue(MISSING_BLOCK_ID);
+    private boolean batching;
+
+    /**
+     * Live block-to-id lookup used while {@link #batching}, when the published tables are stale.
+     */
+    private final IdentityHashMap<B, Integer> batchIds = new IdentityHashMap<>();
+
+    /**
+     * Starts a bulk registration. Only for single-threaded construction.
+     */
+    void beginBatch() {
+        batching = true;
+        batchIds.putAll(idsByBlock);
+    }
+
+    /**
+     * Ends a bulk registration and publishes the lookup tables once.
+     */
+    void endBatch() {
+        batching = false;
+        batchIds.clear();
+        final Object[] table = new Object[nextId];
+        final IdentityHashMap<B, Integer> ids = new IdentityHashMap<>(idToBlock.size());
+        for (Int2ObjectMap.Entry<B> entry : idToBlock.int2ObjectEntrySet()) {
+            table[entry.getIntKey()] = entry.getValue();
+            ids.put(entry.getValue(), entry.getIntKey());
+        }
+        blocksById = table;
+        idsByBlock = ids;
     }
 
     /**
@@ -92,7 +114,7 @@ final class BlockIdRegistry<B> {
      * Performs get id.
      */
     int getId(B block) {
-        final Integer id = idsByBlock.get(block);
+        final Integer id = batching ? batchIds.get(block) : idsByBlock.get(block);
         return id != null ? id : MISSING_BLOCK_ID;
     }
 
@@ -114,10 +136,13 @@ final class BlockIdRegistry<B> {
      */
     void registerResolved(B block, int id) {
         validateId(id);
-        blockToId.put(block, id);
         idToBlock.put(id, block);
-        publishBlockLookup(id, block);
         advanceNextId(id);
+        if (batching) {
+            batchIds.put(block, id);
+        } else {
+            publishBlockLookup(id, block);
+        }
     }
 
     /**

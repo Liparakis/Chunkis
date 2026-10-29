@@ -182,6 +182,10 @@ public enum ChunkTraceReason {
      */
     RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
     /**
+     * Stores a settled chunk nobody changed, so it reloads from storage instead of regenerating.
+     */
+    SETTLED_CHUNK_BASELINE,
+    /**
      * Stores base capture for existing chunkis chunk.
      */
     BASE_CAPTURE_FOR_EXISTING_CHUNKIS_CHUNK, // TODO: emit when existing-Chunkis base-capture boundaries are traced

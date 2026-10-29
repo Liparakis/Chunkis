@@ -37,14 +37,17 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
                 .map(UUID::toString)
                 .collect(java.util.stream.Collectors.toSet());
 
+        final List<NbtCompound> pending = new java.util.ArrayList<>();
+        existingDelta.forEachPendingEntity(pending::add);
         final Method method = LiveEntitySnapshotCapture.class.getDeclaredMethod(
                 "copyUnresolvedPendingEntities",
-                ChunkDelta.class,
+                net.minecraft.server.world.ServerWorld.class,
+                List.class,
                 Set.class,
                 ChunkDelta.class
         );
         method.setAccessible(true);
-        method.invoke(null, existingDelta, liveEntityUuids, targetDelta);
+        method.invoke(null, null, pending, liveEntityUuids, targetDelta);
         return targetDelta.getEntitiesList();
     }
 

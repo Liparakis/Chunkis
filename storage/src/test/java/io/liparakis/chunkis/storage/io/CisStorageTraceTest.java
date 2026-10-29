@@ -150,10 +150,24 @@ class CisStorageTraceTest {
                         "air"
                 );
 
-        final ChunkDelta<String, String> loaded = readerStorage.load(pos, "load-op-mapping");
+        final CisStorage.LoadResult<String, String> loadResult = readerStorage.loadWithPresence(pos,
+                "load-op-mapping");
+        final ChunkDelta<String, String> loaded = loadResult.delta();
+        final ChunkDelta<String, String> regenerated = new ChunkDelta<>("air"::equals);
+        regenerated.addBlockChange(2, 70, 2, "stone");
+        final boolean overwriteAccepted = readerStorage.save(pos, regenerated, "save-op-after-failed-load");
+        final boolean entryKept = readerStorage.contains(pos);
         readerStorage.close();
 
+        assertThat(overwriteAccepted).as("save over an undecodable entry must be refused").isFalse();
+
         assertThat(loaded.isEmpty()).isTrue();
+        assertThat(loadResult.failed()).isTrue();
+        assertThat(entryKept).as("undecodable entry must not be deleted").isTrue();
+        try (var quarantined = Files.list(tempDir.resolve("regions")
+                .resolve("quarantine"))) {
+            assertThat(quarantined.toList()).hasSize(1);
+        }
         assertThat(ChunkTraceStore.latest(20))
                 .filteredOn(event -> "load-op-mapping".equals(event.operationId()))
                 .filteredOn(event -> event.eventType() == ChunkTraceEventType.LOAD_TX_END)
@@ -187,6 +201,96 @@ class CisStorageTraceTest {
         storage.close();
 
         assertThat(loaded.getBlockChangesCount()).isEqualTo(1);
+    }
+
+    /**
+     * Reads chunks of more regions than the cache keeps open from several threads while saves keep evicting
+     * regions, and expects every read to return its chunk: a read that finds its region closed by eviction is
+     * retried, never reported as a failed load.
+     */
+    @Test
+    void concurrentReadsSurviveRegionEviction() throws Exception {
+        final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
+        final CisMapping<String, String, String> mapping = new CisMapping<>(
+                tempDir.resolve("global_ids.json"),
+                new TestBlockRegistryAdapter(),
+                stateAdapter,
+                new PropertyPacker<>(stateAdapter)
+        );
+        Files.createDirectories(tempDir.resolve("regions"));
+        final CisStorage<String, String, String, String> storage =
+                new CisStorage<>(tempDir.resolve("regions"), mapping, new TestNbtAdapter(), "air");
+        final int regions = 80;
+        for (int r = 0; r < regions; r++) {
+            final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+            for (int i = 0; i <= r % 7; i++) {
+                delta.addBlockChange(i, 70, 1, "stone");
+            }
+            assertThat(storage.save(new CisChunkPos(r * 32, 0), delta, "save-" + r)).isTrue();
+        }
+        final java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+        final List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+        for (int t = 0; t < 8; t++) {
+            final int offset = t;
+            futures.add(pool.submit(() -> {
+                for (int round = 0; round < 25; round++) {
+                    for (int r = offset; r < regions; r += 3) {
+                        final CisStorage.LoadResult<String, String> result =
+                                storage.loadWithPresence(new CisChunkPos(r * 32, 0), "read");
+                        assertThat(result.failed()).as("region %d", r).isFalse();
+                        assertThat(result.delta().getBlockChangesCount()).as("region %d", r).isEqualTo(r % 7 + 1);
+                    }
+                }
+                return null;
+            }));
+        }
+        for (final java.util.concurrent.Future<?> future : futures) {
+            future.get(60, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        pool.shutdown();
+        storage.close();
+    }
+
+    /**
+     * A load whose stored block part a block source knows takes the blocks from the source and decodes only the
+     * rest; a source that does not know that exact block part leaves the load to decode it.
+     */
+    @Test
+    void blockPartSourceSuppliesKnownBlocksOnly() throws Exception {
+        final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
+        final CisMapping<String, String, String> mapping = new CisMapping<>(
+                tempDir.resolve("global_ids.json"),
+                new TestBlockRegistryAdapter(),
+                stateAdapter,
+                new PropertyPacker<>(stateAdapter)
+        );
+        Files.createDirectories(tempDir.resolve("regions"));
+        final CisStorage<String, String, String, String> storage =
+                new CisStorage<>(tempDir.resolve("regions"), mapping, new TestNbtAdapter(), "air");
+        final CisChunkPos pos = new CisChunkPos(4, 4);
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 70, 1, "stone");
+        delta.addBlockChange(2, 71, 3, "stone");
+        assertThat(storage.save(pos, delta, "save")).isTrue();
+        final long[] storedHash = storage.load(pos).getStoredBlockPartHash();
+        assertThat(storedHash).isNotNull();
+
+        final int[] supplied = {0};
+        storage.setBlockPartSource((at, hash) -> java.util.Arrays.equals(hash, storedHash)
+                ? loaded -> {
+                    supplied[0]++;
+                    loaded.addBlockChange(1, 70, 1, "stone", false);
+                    loaded.addBlockChange(2, 71, 3, "stone", false);
+                }
+                : null);
+        final ChunkDelta<String, String> fromSource = storage.load(pos);
+        assertThat(supplied[0]).isEqualTo(1);
+        assertThat(fromSource.getBlockChangesCount()).isEqualTo(2);
+        assertThat(fromSource.isDirty()).isFalse();
+
+        storage.setBlockPartSource((at, hash) -> null);
+        assertThat(storage.load(pos).getBlockChangesCount()).isEqualTo(2);
+        storage.close();
     }
 
     /**

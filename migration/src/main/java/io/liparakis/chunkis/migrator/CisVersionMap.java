@@ -32,7 +32,10 @@ public final class CisVersionMap {
             new CisVersionEdge(9, 10, "Replaced per-payload compressed NBT blobs with raw length-prefixed NBT inside " +
                     "the outer CIS compression stream."),
             new CisVersionEdge(10, 11, "Promoted CIS payloads to authoritative compact chunk snapshots and finalized " +
-                    "the unreleased v11 section codec.")
+                    "the unreleased v11 section codec."),
+            new CisVersionEdge(11, 12, "Moved dense-section block indices of up to 8 bits out of the section bit " +
+                    "stream: predictable sections are context-coded from their neighbours, others stored one byte per " +
+                    "block for the outer Zstd compression.")
     );
 
     /**

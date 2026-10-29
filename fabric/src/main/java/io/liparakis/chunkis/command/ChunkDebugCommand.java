@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.command;
 
+import net.minecraft.command.permission.Permission;
+import net.minecraft.command.permission.PermissionLevel;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -173,6 +175,9 @@ public final class ChunkDebugCommand {
                                                         IntegerArgumentType.getInteger(ctx, "x"),
                                                         IntegerArgumentType.getInteger(ctx, "z"))))))
                         .then(CommandManager.literal("remigrate")
+                                // Destructive: replaces the stored chunk with pre-migration data. Owners only.
+                                .requires(source -> source.getPermissions()
+                                        .hasPermission(new Permission.Level(PermissionLevel.OWNERS)))
                                 .executes(ctx -> ChunkDebugActions.remigrateCurrentChunkFromMca(ctx.getSource()))
                                 .then(CommandManager.argument("x", IntegerArgumentType.integer())
                                         .then(CommandManager.argument("z", IntegerArgumentType.integer())

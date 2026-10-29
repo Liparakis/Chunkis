@@ -1,0 +1,14 @@
+{
+    "required": true,
+    "package": "io.liparakis.chunkis.gametest.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "MinecraftServerAccessor",
+        "TestServerMixin",
+        "TestServerWorldPresetMixin",
+        "VanillaStorageModeMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

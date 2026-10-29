@@ -281,6 +281,49 @@ public final class CisFixtureMigrationGameTest {
     }
 
     /**
+     * Describes the first chunk whose snapshot changed, for a readable failure message.
+     *
+     * @param before snapshots taken before migration
+     * @param after  snapshots taken after migration
+     * @return first differing chunk and the differing parts
+     */
+    private static String describeFirstDifference(
+            final Map<CisChunkPos, ChunkSnapshot> before,
+            final Map<CisChunkPos, ChunkSnapshot> after) {
+        for (final Map.Entry<CisChunkPos, ChunkSnapshot> entry : before.entrySet()) {
+            final ChunkSnapshot expected = entry.getValue();
+            final ChunkSnapshot actual = after.get(entry.getKey());
+            if (expected.equals(actual)) {
+                continue;
+            }
+            if (actual == null) {
+                return "chunk " + entry.getKey() + " missing after migration";
+            }
+            final StringBuilder diff = new StringBuilder("chunk ").append(entry.getKey());
+            if (!expected.blocks().equals(actual.blocks())) {
+                final List<String> missing = new ArrayList<>(expected.blocks());
+                missing.removeAll(actual.blocks());
+                final List<String> extra = new ArrayList<>(actual.blocks());
+                extra.removeAll(expected.blocks());
+                diff.append(" blocks: missing=").append(missing.stream().limit(5).toList())
+                        .append(" extra=").append(extra.stream().limit(5).toList())
+                        .append(" sizes=").append(expected.blocks().size()).append("/").append(actual.blocks().size());
+            }
+            if (!expected.blockEntities().equals(actual.blockEntities())) {
+                diff.append(" blockEntities differ");
+            }
+            if (!expected.entities().equals(actual.entities())) {
+                diff.append(" entities differ");
+            }
+            if (!expected.chunkMetadata().equals(actual.chunkMetadata())) {
+                diff.append(" metadata: ").append(expected.chunkMetadata()).append(" -> ").append(actual.chunkMetadata());
+            }
+            return diff.toString();
+        }
+        return "no per-chunk difference found";
+    }
+
+    /**
      * Verifies that the real V8 fixture set migrates losslessly to the current
      * CIS version when processed through the Fabric runtime adapters.
      *
@@ -328,10 +371,12 @@ public final class CisFixtureMigrationGameTest {
                     CisConstants.VERSION);
             context.assertTrue(
                     before.equals(after),
-                    Text.literal("Migrated chunk contents did not match the original fixture snapshot."));
+                    Text.literal("Migrated chunk contents did not match the original fixture snapshot. "
+                            + describeFirstDifference(before, after)));
             context.complete();
         } finally {
-            ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
+            // The debug level is global and gametests run concurrently: resetting it to OFF here
+            // disabled tracing mid-run for tests that assert on the trace store.
             storage.close();
             deleteRecursively(storageRoot);
         }

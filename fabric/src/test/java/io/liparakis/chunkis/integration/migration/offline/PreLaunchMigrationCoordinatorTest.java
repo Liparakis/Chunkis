@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.integration.migration.offline;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.file.Path;
@@ -58,5 +59,35 @@ class PreLaunchMigrationCoordinatorTest {
                 ),
                 Path.of("migration")
         ));
+    }
+
+    /**
+     * CIS files plus leftover vanilla regions without the completion marker mean an
+     * interrupted migration: the remaining regions must be migrated, never deleted.
+     */
+    @Test
+    void interruptedMigrationResumesInsteadOfDeletingSources() {
+        assertEquals(PreLaunchMigrationCoordinator.DimensionAction.MIGRATE,
+                PreLaunchMigrationCoordinator.decide(false, true, true));
+    }
+
+    /**
+     * Vanilla files appearing after a completed migration are set aside, not imported.
+     */
+    @Test
+    void completedMigrationSetsAsideReappearedSources() {
+        assertEquals(PreLaunchMigrationCoordinator.DimensionAction.SET_ASIDE_STALE_SOURCES,
+                PreLaunchMigrationCoordinator.decide(true, true, true));
+    }
+
+    /**
+     * With no vanilla files left the dimension is authoritative either way.
+     */
+    @Test
+    void noVanillaFilesIsAuthoritative() {
+        assertEquals(PreLaunchMigrationCoordinator.DimensionAction.AUTHORITATIVE,
+                PreLaunchMigrationCoordinator.decide(false, true, false));
+        assertEquals(PreLaunchMigrationCoordinator.DimensionAction.AUTHORITATIVE,
+                PreLaunchMigrationCoordinator.decide(false, false, false));
     }
 }

@@ -89,6 +89,12 @@ public final class CisPayloadDiagnosticsReader {
 
         final ChunkSectionPayloadAccumulator sections = inspectSectionPayloads(sectionData, sectionCount, version,
                 calculateBitsNeeded(globalPaletteSize));
+        if (version >= CisConstants.CODED_DENSE_MIN_VERSION) {
+            cursor.skip(cursor.readNonNegativeInt("raw dense block length"), "raw dense block bytes");
+            final int codedPrefix = cursor.readInt("coded dense block length");
+            // Negative: per-section coded streams; the magnitude is the length either way.
+            cursor.skip(codedPrefix < 0 ? -(codedPrefix + 1) : codedPrefix, "coded dense block bytes");
+        }
 
         final int blockEntities = cursor.readNonNegativeInt("block entity count");
         final ChunkEncodingKind kind = chunkEncodingKind(sections.sawUniform, sections.sawDefaultSparse,
@@ -124,7 +130,8 @@ public final class CisPayloadDiagnosticsReader {
             if (mode == CisConstants.SECTION_ENCODING_SPARSE) {
                 inspectSparseLikeSection(reader, accumulator, sectionY, globalBits);
             } else {
-                inspectDensePayloadSection(reader, accumulator, sectionY, globalBits, paletteBits);
+                inspectDensePayloadSection(reader, accumulator, sectionY, globalBits, paletteBits,
+                        version >= CisConstants.CODED_DENSE_MIN_VERSION);
             }
         }
 
@@ -172,11 +179,12 @@ public final class CisPayloadDiagnosticsReader {
      * @param sectionY    the section's vertical Y coordinate
      * @param globalBits  global palette bits count
      * @param paletteBits palette size bit count
+     * @param byteDense   whether indices of up to 8 bits are in the streams after the bitstream
      * @throws IOException if reading the bitstream fails
      */
     private static void inspectDensePayloadSection(final BitReader reader,
             final ChunkSectionPayloadAccumulator accumulator,
-            final int sectionY, final int globalBits, final int paletteBits)
+            final int sectionY, final int globalBits, final int paletteBits, final boolean byteDense)
             throws IOException {
         final int localSize = (int) readBits(reader, paletteBits, "local palette size");
         for (int entry = 0; entry < localSize; entry++) {
@@ -184,8 +192,14 @@ public final class CisPayloadDiagnosticsReader {
         }
 
         final int bitsPerBlock = calculateBitsNeeded(localSize + 1);
-        for (int block = 0; block < SECTION_BLOCKS; block++) {
-            readBits(reader, bitsPerBlock, "dense block palette index");
+        // Indices of up to 8 bits live in the streams after the section bits, skipped by the caller; a bit here
+        // says raw or coded.
+        if (byteDense && bitsPerBlock > 0 && bitsPerBlock <= CisConstants.MAX_CODED_DENSE_BITS) {
+            readBits(reader, 1, "dense block encoding");
+        } else {
+            for (int block = 0; block < SECTION_BLOCKS; block++) {
+                readBits(reader, bitsPerBlock, "dense block palette index");
+            }
         }
 
         accumulator.addDense(sectionY, localSize, bitsPerBlock, paletteBits);

@@ -1,24 +1,35 @@
 package io.liparakis.chunkis.world.tracking.save;
 
+import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.adapter.FabricBlockRegistryAdapter;
 import io.liparakis.chunkis.adapter.FabricBlockStateAdapter;
 import io.liparakis.chunkis.adapter.FabricNbtAdapter;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.core.mapping.PropertyPacker;
+import io.liparakis.chunkis.core.model.CisConstants;
+import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
 import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
+import io.liparakis.chunkis.world.entity.capture.StoredEntityFingerprints;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.UnaryOperator;
+import java.util.stream.IntStream;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -138,6 +149,19 @@ public final class FabricCisStorageHelper {
     }
 
     /**
+     * Returns whether CIS storage for {@code world} is currently open, without
+     * opening it. Late callers (e.g. vanilla entity saves during world close)
+     * use this to avoid reopening storage that shutdown already closed.
+     *
+     * @param world target server world
+     * @return {@code true} if an open storage instance exists
+     */
+    public static boolean isStorageOpen(final ServerWorld world) {
+        final StorageWrapper wrapper = storageMap.get(world.getRegistryKey());
+        return wrapper != null && wrapper.isOpen();
+    }
+
+    /**
      * Starts a speculative load only when this world's storage is already open.
      * This avoids creating CIS storage for worlds with no Chunkis data.
      *
@@ -171,6 +195,7 @@ public final class FabricCisStorageHelper {
         final RegistryKey<World> key = world.getRegistryKey();
         final StorageWrapper wrapper = storageMap.remove(key);
         pathCache.remove(key);
+        RecentChunkBlocks.of(key).clear();
 
         if (wrapper == null) {
             return;
@@ -204,6 +229,10 @@ public final class FabricCisStorageHelper {
             final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta) {
+        if (delta != null && delta.isBlockPayloadReleased()) {
+            return saveWithStoredBlocks(world, storage, pos, delta, ChunkTraceStore.nextOperationId("save"));
+        }
+        StoredEntityFingerprints.forget(world, pos);
         if (storage.save(toStoragePos(pos), delta)) {
             GlobalChunkTracker.markSaved(world, pos);
             return true;
@@ -229,11 +258,124 @@ public final class FabricCisStorageHelper {
             final ChunkPos pos,
             final ChunkDelta<BlockState, NbtCompound> delta,
             final String operationId) {
+        if (delta != null && delta.isBlockPayloadReleased()) {
+            return saveWithStoredBlocks(world, storage, pos, delta, operationId);
+        }
+        StoredEntityFingerprints.forget(world, pos);
         if (storage.save(toStoragePos(pos), delta, operationId)) {
             GlobalChunkTracker.markSaved(world, pos);
             return true;
         }
         return false;
+    }
+
+    /**
+     * Saves a released delta ({@link ChunkDelta#isBlockPayloadReleased()}) with its blocks read back from the
+     * stored entry and its recorded edits applied on top, and clears the tracker entry when the write succeeds. A
+     * missing or unreadable entry fails the save and keeps the entry as it is.
+     *
+     * @param world       owning world
+     * @param storage     target storage
+     * @param pos         chunk position
+     * @param delta       delta to save
+     * @param operationId trace/storage operation id
+     * @return {@code true} when the payload was written and the tracker entry was cleared
+     */
+    private static boolean saveWithStoredBlocks(
+            final ServerWorld world,
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId) {
+        StoredEntityFingerprints.forget(world, pos);
+        if (!writeDelta(world, storage, pos, delta, operationId)) {
+            return false;
+        }
+        markWritten(world, pos, delta);
+        return true;
+    }
+
+    /**
+     * Saves every delta of a shutdown sweep, encoding and writing them in parallel while the calling thread
+     * waits, then marks the written ones saved on the calling thread. Each delta is read by one thread only and
+     * nothing changes them meanwhile; storage, block mapping and encoders are safe for concurrent use.
+     *
+     * <p>Callers apply their persistence guards first: every delta passed is written as it is, a released one
+     * with its blocks read back from its stored entry. A failed write keeps that delta dirty and its entry as
+     * it is.</p>
+     *
+     * @param world   owning world
+     * @param storage target storage
+     * @param deltas  deltas to save, by chunk position
+     */
+    public static void saveTrackedDeltas(
+            final ServerWorld world,
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> deltas) {
+        final List<Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>>> entries = new ArrayList<>(
+                deltas.entrySet());
+        final boolean[] written = new boolean[entries.size()];
+        IntStream.range(0, entries.size())
+                .parallel()
+                .forEach(i -> written[i] = writeDelta(world, storage, entries.get(i).getKey(),
+                        entries.get(i).getValue(), ChunkTraceStore.nextOperationId("save")));
+        for (int i = 0; i < written.length; i++) {
+            if (written[i]) {
+                StoredEntityFingerprints.forget(world, entries.get(i).getKey());
+                markWritten(world, entries.get(i).getKey(), entries.get(i).getValue());
+            }
+        }
+    }
+
+    /**
+     * Encodes and writes one delta, a released one with its blocks read back from its stored entry and its
+     * recorded edits on top. Touches no shared state but the storage, so it may run off the server thread.
+     *
+     * @param world       owning world, for logging
+     * @param storage     target storage
+     * @param pos         chunk position
+     * @param delta       delta to write
+     * @param operationId trace/storage operation id
+     * @return {@code true} when the payload was written
+     */
+    private static boolean writeDelta(
+            final ServerWorld world,
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta,
+            final String operationId) {
+        final CisChunkPos cisPos = toStoragePos(pos);
+        try {
+            final ChunkDeltaView<BlockState, NbtCompound> payload;
+            if (delta.isBlockPayloadReleased()) {
+                final StoredBlocksSnapshotView stored = new StoredBlocksSnapshotView(
+                        delta.snapshotView(UnaryOperator.identity(), CisNbtUtil::copySharingStoredSections), storage,
+                        cisPos);
+                stored.loadStoredBlocks();
+                payload = stored;
+            } else {
+                payload = delta;
+            }
+            return storage.writePrepared(cisPos, storage.prepareSave(cisPos, payload), operationId);
+        } catch (final IOException | RuntimeException e) {
+            Chunkis.LOGGER.error("Chunkis: Failed to save chunk {} in {}; its stored entry is kept", pos,
+                    world.getRegistryKey().getValue(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Marks a delta whose payload was just written saved, and drops its tracker entry.
+     *
+     * @param world owning world
+     * @param pos   chunk position
+     * @param delta written delta
+     */
+    private static void markWritten(final ServerWorld world, final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta) {
+        delta.setSourceVersion(CisConstants.VERSION);
+        delta.markSaved();
+        GlobalChunkTracker.markSaved(world, pos);
     }
 
     /**
@@ -306,7 +448,10 @@ public final class FabricCisStorageHelper {
         final CisMapping<Block, BlockState, Property<?>> mapping =
                 new CisMapping<>(mappingFile, REGISTRY_ADAPTER, STATE_ADAPTER, packer);
 
-        return new CisStorage<>(storageDir, mapping, NBT_ADAPTER, DEFAULT_BLOCK_STATE);
+        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+                new CisStorage<>(storageDir, mapping, NBT_ADAPTER, DEFAULT_BLOCK_STATE);
+        storage.setBlockPartSource(RecentChunkBlocks.of(world.getRegistryKey()));
+        return storage;
     }
 
     /**

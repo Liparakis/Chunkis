@@ -20,6 +20,7 @@ import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -38,7 +39,6 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.GameMode;
 import net.minecraft.world.chunk.WorldChunk;
 import java.util.List;
 import java.util.UUID;
@@ -192,7 +192,7 @@ public final class PersistedBaseChunkReloadGameTest {
                 .setBlockState(scenario.primary(), Blocks.DIAMOND_BLOCK.getDefaultState());
         return new AirDeletionTestSetup(
                 scenario,
-                (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE)
+                GameTestPlayers.createServerPlayer(context)
         );
     }
 
@@ -323,12 +323,14 @@ public final class PersistedBaseChunkReloadGameTest {
     /**
      * Checks if the trace store contains a MUTATION_ACCEPTED_REAL_EDIT event for the given chunk.
      *
-     * @param chunkPos the chunk position
+     * @param chunkPos     the chunk position
+     * @param afterEventId only events with a larger id count
      * @return true if the event exists in the store
      */
-    private static boolean containsUnexpectedRealEditTrace(final ChunkPos chunkPos) {
+    private static boolean containsUnexpectedRealEditTrace(final ChunkPos chunkPos, final long afterEventId) {
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
                 isEventForChunk(event, chunkPos)
+                        && event.eventId() > afterEventId
                         && event.eventType()
                         == ChunkTraceEventType.MUTATION_ACCEPTED_REAL_EDIT
         );
@@ -465,6 +467,20 @@ public final class PersistedBaseChunkReloadGameTest {
     }
 
     /**
+     * Reports whether CIS storage holds the entity for the chunk.
+     *
+     * @param world      world whose storage is read
+     * @param chunkPos   chunk to load
+     * @param entityUuid entity to look for
+     * @return true when the stored delta contains the entity
+     */
+    private static boolean storedDeltaContainsEntity(final ServerWorld world, final ChunkPos chunkPos,
+            final UUID entityUuid) {
+        return containsEntityUuid(FabricCisStorageHelper.getStorage(world)
+                .load(new CisChunkPos(chunkPos.x, chunkPos.z)), entityUuid);
+    }
+
+    /**
      * Asserts that the stored ChunkDelta in the CIS database contains the entity with the specified UUID.
      *
      * @param context    the game test context
@@ -581,10 +597,9 @@ public final class PersistedBaseChunkReloadGameTest {
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
                 isEventForChunk(event, chunkPos)
                         && (
-                        "ThreadedAnvilChunkStorageMixin#chunkis$captureLiveEntities".equals(event.source())
-                                || "ThreadedAnvilChunkStorageMixin#chunkis$onSave".equals(event.source())
-                                || "ServerWorldMixin#chunkis$afterSpawnEntity".equals(event.source())
-                                || "WorldChunkMixin#addEntity".equals(event.source()))
+                        "ChunkSaveCoordinator#captureLiveEntities".equals(event.source())
+                                || "ChunkSaveCoordinator#save".equals(event.source())
+                                || "ServerWorldMixin#chunkis$afterSpawnEntity".equals(event.source()))
         );
         if (events.isEmpty()) {
             return "no save trace events";
@@ -656,7 +671,7 @@ public final class PersistedBaseChunkReloadGameTest {
         }
         final UUID pigUuid = pig.getUuid();
         watchEntity(pigUuid);
-        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
+        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
         context.assertTrue(world.spawnEntity(pig), Text.literal("Expected pig spawn to succeed."));
 
         context.runAtTick(60, () -> {
@@ -667,12 +682,26 @@ public final class PersistedBaseChunkReloadGameTest {
                             + describeEntityState(world, targetChunk, pig, pigUuid))
             );
             teleportPlayer(player, world, targetArrival);
-            world.getChunkManager()
-                    .save(false);
-            AsyncCisSaveManager.flushAndClose(world);
-            assertStoredDeltaContainsEntity(context, world, targetChunk, pigUuid, "initial persisted pig save");
-            world.setChunkForced(targetChunk.x, targetChunk.z, false);
         });
+        // Vanilla skips saving a chunk whose holder still has pending work (neighbour generation under
+        // concurrent tests), so retry the save each tick instead of assuming one pass writes it.
+        final java.util.concurrent.atomic.AtomicBoolean saved = new java.util.concurrent.atomic.AtomicBoolean();
+        for (long tick = 60L; tick <= 80L; tick++) {
+            context.runAtTick(tick, () -> {
+                if (saved.get()) {
+                    return;
+                }
+                world.getChunkManager()
+                        .save(false);
+                AsyncCisSaveManager.flushAndClose(world);
+                if (storedDeltaContainsEntity(world, targetChunk, pigUuid)) {
+                    saved.set(true);
+                    world.setChunkForced(targetChunk.x, targetChunk.z, false);
+                }
+            });
+        }
+        context.runAtTick(81L, () -> assertStoredDeltaContainsEntity(context, world, targetChunk, pigUuid,
+                "initial persisted pig save"));
 
         context.runAtTick(85, () -> teleportPlayer(player, world, farArrival));
         context.runAtTick(110, () -> context.assertTrue(
@@ -823,7 +852,7 @@ public final class PersistedBaseChunkReloadGameTest {
      *
      * @param context the game test context
      */
-    @GameTest(maxTicks = 120)
+    @GameTest(maxTicks = 300)
     public void persistedBaseChunkReloadDoesNotRestoreEmpty(final TestContext context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
@@ -857,37 +886,57 @@ public final class PersistedBaseChunkReloadGameTest {
                 Text.literal("Expected base capture to clear sparse block payloads.")
         );
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
-                FabricCisStorageHelper.getStorage(world);
-        storage.save(new CisChunkPos(targetChunk.x, targetChunk.z), delta);
-        GlobalChunkTracker.forgetChunk(world, targetChunk);
-
-        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
+        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
         teleportPlayer(player, world, targetArrival);
-        world.getChunkManager()
-                .save(false);
         world.setChunkForced(targetChunk.x, targetChunk.z, false);
 
-        context.runAtTick(20, () -> teleportPlayer(player, world, farArrival));
-        context.runAtTick(50, () -> teleportPlayer(player, world, targetArrival));
-        context.runAtTick(60, () -> {
-            world.getChunk(targetChunk.x, targetChunk.z);
-
-            context.assertTrue(
-                    isMarkerPatternPresent(world, primary, secondary, chestPos),
-                    Text.literal("Reloaded chunk restored empty instead of from persisted base chunk NBT.")
-            );
-            context.assertTrue(
-                    hasMatchingChestBlockEntity(world, chestPos),
-                    Text.literal("Expected chest block entity to match its restored chest block state.")
-            );
-            context.assertTrue(
-                    containsBaseChunkAppliedTrace(targetChunk),
-                    Text.literal("Expected BASE_NBT_APPLIED trace event on reload.")
-            );
-
-            context.complete();
+        // Wait for vanilla to really unload the chunk instead of assuming a tick count. A chunk that only
+        // dropped below FULL is still in memory and returning re-promotes it without a storage load, so the
+        // BASE_NBT_APPLIED check would test nothing. The legacy base-chunk entry is written only after the
+        // unload: the unload save itself stores the chunk in the current full-baseline form.
+        final java.util.concurrent.atomic.AtomicBoolean unloaded = new java.util.concurrent.atomic.AtomicBoolean();
+        ServerChunkEvents.CHUNK_UNLOAD.register((unloadWorld, unloadChunk) -> {
+            if (unloadWorld == world && unloadChunk.getPos().equals(targetChunk)) {
+                unloaded.set(true);
+            }
         });
+        context.runAtTick(20, () -> teleportPlayer(player, world, farArrival));
+        context.createTimedTaskRunner()
+                .createAndAdd(() -> context.assertTrue(unloaded.get(),
+                        Text.literal("Waiting for target chunk " + targetChunk + " to unload.")))
+                .createAndAdd(() -> {
+                    // The unload's own save stores the chunk in the current form; wait for it to land so it
+                    // cannot overwrite the legacy entry written next.
+                    AsyncCisSaveManager.flushAndClose(world);
+                    // flushAndClose closes the storage instance; look it up again rather than reuse one.
+                    context.assertTrue(CisNbtUtil.hasFullBlockBaseline(FabricCisStorageHelper.getStorage(world)
+                                    .load(new CisChunkPos(targetChunk.x, targetChunk.z)).getChunkMetadata()),
+                            Text.literal("Waiting for the unload save of " + targetChunk + "."));
+                })
+                .createAndAdd(() -> {
+                    context.assertTrue(FabricCisStorageHelper.getStorage(world)
+                                    .save(new CisChunkPos(targetChunk.x, targetChunk.z), delta),
+                            Text.literal("Failed writing the legacy base-chunk entry."));
+                    GlobalChunkTracker.forgetChunk(world, targetChunk);
+                    teleportPlayer(player, world, targetArrival);
+                })
+                .createAndAdd(() -> {
+                    world.getChunk(targetChunk.x, targetChunk.z);
+
+                    context.assertTrue(
+                            isMarkerPatternPresent(world, primary, secondary, chestPos),
+                            Text.literal("Reloaded chunk restored empty instead of from persisted base chunk NBT.")
+                    );
+                    context.assertTrue(
+                            hasMatchingChestBlockEntity(world, chestPos),
+                            Text.literal("Expected chest block entity to match its restored chest block state.")
+                    );
+                    context.assertTrue(
+                            containsBaseChunkAppliedTrace(targetChunk),
+                            Text.literal("Expected BASE_NBT_APPLIED trace event on reload.")
+                    );
+                })
+                .completeIfSuccessful();
     }
 
     /**
@@ -919,7 +968,7 @@ public final class PersistedBaseChunkReloadGameTest {
         final UUID pigUuid = pig.getUuid();
         watchBlocks(primary, secondary);
         watchEntity(pigUuid);
-        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
+        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
         context.assertTrue(world.spawnEntity(pig), Text.literal("Expected pig spawn to succeed."));
 
         context.runAtTick(5, () -> {
@@ -930,15 +979,35 @@ public final class PersistedBaseChunkReloadGameTest {
                             + describeEntityState(world, targetChunk, pig, pigUuid))
             );
             teleportPlayer(player, world, targetArrival);
-            world.getChunkManager()
-                    .save(false);
-            AsyncCisSaveManager.flushAndClose(world);
-            assertStoredDeltaContainsEntity(context, world, targetChunk, pigUuid, "full-baseline churn seed save");
-            world.setChunkForced(targetChunk.x, targetChunk.z, false);
         });
 
+        // Vanilla skips saving a chunk whose holder still has pending work (neighbour generation under
+        // concurrent tests), so retry the seed save each tick instead of assuming one pass writes it.
+        final java.util.concurrent.atomic.AtomicBoolean seeded = new java.util.concurrent.atomic.AtomicBoolean();
+        final java.util.concurrent.atomic.AtomicLong seedEventId = new java.util.concurrent.atomic.AtomicLong();
+        for (long tick = 5L; tick <= 60L; tick++) {
+            context.runAtTick(tick, () -> {
+                if (seeded.get()) {
+                    return;
+                }
+                // A world save, which also saves entities: an autosave of a loaded chunk leaves its entities to
+                // vanilla's entity saves, as vanilla does.
+                world.save(null, false, false);
+                AsyncCisSaveManager.flushAndClose(world);
+                if (storedDeltaContainsEntity(world, targetChunk, pigUuid)) {
+                    seeded.set(true);
+                    // The seed edits above are real edits by design; only edits after the seed save count.
+                    seedEventId.set(ChunkTraceStore.snapshotMatching(event -> true).stream()
+                            .mapToLong(ChunkTraceEvent::eventId).max().orElse(-1L));
+                    world.setChunkForced(targetChunk.x, targetChunk.z, false);
+                }
+            });
+        }
+        context.runAtTick(61L, () -> assertStoredDeltaContainsEntity(context, world, targetChunk, pigUuid,
+                "full-baseline churn seed save"));
+
         for (int i = 0; i < churnCycles; i++) {
-            final long cycleStart = 30L + (long) i * 14L;
+            final long cycleStart = 65L + (long) i * 14L;
             context.runAtTick(cycleStart, () -> teleportPlayer(player, world, farArrival));
             context.runAtTick(cycleStart + 4L, () -> teleportPlayer(player, world, targetArrival));
             context.runAtTick(cycleStart + 8L, () -> {
@@ -948,7 +1017,7 @@ public final class PersistedBaseChunkReloadGameTest {
             });
         }
 
-        context.runAtTick(30L + churnCycles * 14L + 30L, () -> {
+        context.runAtTick(65L + churnCycles * 14L + 30L, () -> {
             world.getChunk(targetChunk.x, targetChunk.z);
             context.assertTrue(
                     world.getBlockState(primary)
@@ -974,7 +1043,7 @@ public final class PersistedBaseChunkReloadGameTest {
                 );
             }
             context.assertFalse(
-                    containsUnexpectedRealEditTrace(targetChunk),
+                    containsUnexpectedRealEditTrace(targetChunk, seedEventId.get()),
                     Text.literal("Repeated full-baseline churn accepted post-restore real edits for the restored chunk.")
             );
 
@@ -1052,7 +1121,7 @@ public final class PersistedBaseChunkReloadGameTest {
         GlobalChunkTracker.forgetChunk(world, leftChunkPos);
         GlobalChunkTracker.forgetChunk(world, rightChunkPos);
 
-        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
+        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
         teleportPlayer(player, world, leftArrival);
         world.setChunkForced(leftChunkPos.x, leftChunkPos.z, false);
         world.setChunkForced(rightChunkPos.x, rightChunkPos.z, false);

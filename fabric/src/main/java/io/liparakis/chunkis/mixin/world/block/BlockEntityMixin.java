@@ -9,8 +9,7 @@ import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.restoration.capture.ChunkBlockEntityCapture;
-import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
-import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
+import io.liparakis.chunkis.world.tracking.ownership.OwnedDeltaAccess;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
@@ -113,31 +112,11 @@ public abstract class BlockEntityMixin {
     @Unique
     @SuppressWarnings("unchecked")
     private void handleChunkDelta(final WorldChunk chunk, final ServerWorld serverWorld) {
-        if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)) {
+        if (!(chunk instanceof ChunkisDeltaDuck)) {
             return;
         }
-        ChunkDelta<BlockState, NbtCompound> delta =
-                (ChunkDelta<BlockState, NbtCompound>) deltaDuck.chunkis$getDelta();
-        if (delta == null) {
-            delta = new ChunkDelta<>(BlockState::isAir);
-            deltaDuck.chunkis$setDelta(delta);
-        }
-        if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
-            delta.claimOwnership(
-                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT.name(),
-                    "BlockEntityMixin#handleChunkDelta"
-            );
-            ChunkOwnershipTraceHelper.traceDecision(
-                    chunk.getWorld()
-                            .getRegistryKey(),
-                    chunk.getPos(),
-                    "CLAIMED",
-                    ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
-                    "BlockEntityMixin#handleChunkDelta",
-                    delta,
-                    PendingChunkMutationSuppression.currentCause(chunk)
-            );
-        }
+        final ChunkDelta<BlockState, NbtCompound> delta = OwnedDeltaAccess.getOrClaim(chunk,
+                ChunkTraceReason.PLAYER_OR_COMMAND_EDIT, "BlockEntityMixin#handleChunkDelta");
 
         BaseChunkCaptureUtil.captureBaseChunkIfMissing(serverWorld, chunk, delta);
         delta.markDirty("BlockEntityMixin#handleChunkDelta");

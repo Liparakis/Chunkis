@@ -1,5 +1,16 @@
 package io.liparakis.chunkis.mixin.storage;
 
+import net.minecraft.world.biome.Biome;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.world.chunk.ReadableContainer;
+import net.minecraft.world.chunk.PalettedContainer;
+import net.minecraft.world.chunk.ChunkSection;
+import java.util.Optional;
+import io.liparakis.chunkis.world.restoration.nbt.PreloadedBlockSections;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import io.liparakis.chunkis.world.tracking.settle.FreshChunkDuck;
+import io.liparakis.chunkis.world.tracking.save.UnfinishedChunkStore;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
@@ -13,9 +24,9 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.load.ColdLoadDeltaHandoff;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
@@ -28,7 +39,6 @@ import java.util.Set;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Uuids;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.ProtoChunk;
@@ -77,9 +87,49 @@ public class ChunkSerializerMixin {
             chunkis$newIdentityMarkerSet();
 
     /**
+     * Serialized chunks read back from the unfinished-chunk store mid-generation; see
+     * {@link UnfinishedChunkStore#markIfGenerating}.
+     */
+    @Unique
+    private static final Set<SerializedChunk> chunkis$generatingLoadMarker = chunkis$newIdentityMarkerSet();
+
+    /**
      * Default constructor for ChunkSerializerMixin.
      */
     public ChunkSerializerMixin() {
+    }
+
+    /**
+     * Skips parsing a section's {@code block_states} when the Chunkis load already built its container.
+     *
+     * @param section  section NBT compound
+     * @param key      key vanilla reads
+     * @param original vanilla's read
+     * @return vanilla's value, or nothing for a section whose container is built
+     */
+    @WrapOperation(method = "fromNbt", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/nbt/NbtCompound;getCompound(Ljava/lang/String;)Ljava/util/Optional;"))
+    private static Optional<NbtCompound> chunkis$skipBuiltBlockStates(final NbtCompound section, final String key,
+            final Operation<Optional<NbtCompound>> original) {
+        return "block_states".equals(key) && PreloadedBlockSections.take(section)
+                ? Optional.empty()
+                : original.call(section, key);
+    }
+
+    /**
+     * Gives a section the block container the Chunkis load built for it.
+     *
+     * @param blocks   container vanilla read (empty when built)
+     * @param biomes   biome container
+     * @param original vanilla's section constructor
+     * @return the section
+     */
+    @WrapOperation(method = "fromNbt", at = @At(value = "NEW", target = "(Lnet/minecraft/world/chunk/PalettedContainer;"
+            + "Lnet/minecraft/world/chunk/ReadableContainer;)Lnet/minecraft/world/chunk/ChunkSection;"))
+    private static ChunkSection chunkis$useBuiltBlocks(final PalettedContainer<BlockState> blocks,
+            final ReadableContainer<RegistryEntry<Biome>> biomes, final Operation<ChunkSection> original) {
+        final PalettedContainer<BlockState> built = PreloadedBlockSections.takeBuilt();
+        return original.call(built != null ? built : blocks, biomes);
     }
 
     /**
@@ -103,6 +153,9 @@ public class ChunkSerializerMixin {
 
         if (CisNbtUtil.hasSyntheticChunkisLoadMarker(nbt)) {
             chunkis$syntheticLoadMarker.add(serializedChunk);
+        }
+        if (nbt.getBoolean(UnfinishedChunkStore.GENERATING_MARKER_KEY, false)) {
+            chunkis$generatingLoadMarker.add(serializedChunk);
         }
     }
 
@@ -483,8 +536,11 @@ public class ChunkSerializerMixin {
             final String operationId) {
         final ChunkDelta<?, ?> memoryDelta = GlobalChunkTracker.getDelta(world, pos);
         if (!chunkis$isDeltaAbsent(memoryDelta)) {
+            ColdLoadDeltaHandoff.take(world, pos);
+            final ChunkDelta<BlockState, NbtCompound> trackedDelta = chunkis$castBlockDelta(memoryDelta);
+            PayloadWatchTracer.traceTrackedLoadSelected(world, pos, trackedDelta, operationId);
             return new ResolvedDelta(
-                    chunkis$castBlockDelta(memoryDelta),
+                    trackedDelta,
                     ChunkTraceReason.TRACKER_MEMORY
             );
         }
@@ -514,6 +570,12 @@ public class ChunkSerializerMixin {
             final ChunkPos pos,
             final String operationId) {
         final var storage = FabricCisStorageHelper.getStorage(world);
+        final ChunkDelta<BlockState, NbtCompound> handedOff = ColdLoadDeltaHandoff.take(world, pos);
+        // A handed-off tracked delta can have released its blocks since the load hook used it.
+        if (handedOff != null && !handedOff.isBlockPayloadReleased()) {
+            PayloadWatchTracer.traceDecodeOutcome(world, pos, handedOff, operationId, true);
+            return handedOff;
+        }
         final var cisPos = FabricCisStorageHelper.toStoragePos(pos);
         final var loaded = storage.loadWithPresence(cisPos, operationId);
         PayloadWatchTracer.traceDecodeOutcome(
@@ -610,8 +672,21 @@ public class ChunkSerializerMixin {
                 operationId,
                 SOURCE + "#chunkis$restoreWrappedFullChunk"
         );
-        ChunkRestorer.restore(world, wrappedChunk, protoDelta, runtimeDelta, operationId);
-        chunkis$schedulePendingEntityReplay(world, wrappedChunk, runtimeDelta);
+        try {
+            // Just converted by vanilla, so not yet post-processed: vanilla builds the block entities later.
+            ChunkRestorer.restore(world, wrappedChunk, protoDelta, runtimeDelta, operationId, true);
+            // The chunk holder keeps this wrapper as long as the chunk is loaded; left on it, the decoded delta
+            // would be a second full copy of the chunk's blocks. The live chunk's delta is the current state.
+            ((ChunkisDeltaDuck) chunk).chunkis$setDelta(runtimeDelta);
+        } catch (final RuntimeException e) {
+            // The live chunk does not reflect the stored entry; never let it overwrite storage.
+            FabricCisStorageHelper.getStorage(world)
+                    .protectFromOverwrite(FabricCisStorageHelper.toStoragePos(wrappedChunk.getPos()));
+            throw e;
+        } finally {
+            // A leaked restore id marks the chunk snapshot-unsafe for its whole lifetime.
+            wrappedDuck.chunkis$setRestoreOperationId(null);
+        }
         PayloadWatchTracer.traceLiveChunkState(
                 wrappedChunk,
                 ChunkTraceEventType.WATCH_PRESENT_AFTER_RESTORE,
@@ -628,7 +703,6 @@ public class ChunkSerializerMixin {
                 operationId,
                 protoDelta
         );
-        wrappedDuck.chunkis$setRestoreOperationId(null);
         if (world.getServer() != null) {
             world.getServer()
                     .execute(() -> ChunkRestorer.replayPendingEntitiesIfNeeded(
@@ -642,30 +716,6 @@ public class ChunkSerializerMixin {
             protoDelta.markSaved();
         }
         return true;
-    }
-
-    /**
-     * Schedules the entity replay logic queue for pending loaded entities.
-     *
-     * @param world        server world context
-     * @param chunk        target world chunk
-     * @param runtimeDelta target runtime delta mapping updates
-     */
-    @Unique
-    private static void chunkis$schedulePendingEntityReplay(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta
-    ) {
-        if (runtimeDelta == null || runtimeDelta.countPendingEntities() == 0) {
-            return;
-        }
-        runtimeDelta.forEachPendingEntity(entityNbt -> entityNbt.getIntArray("UUID")
-                .map(Uuids::toUuid)
-                .ifPresent(uuid -> ScheduledEntityReplayQueue.schedule(world,
-                        chunk.getPos(),
-                        uuid.toString(),
-                        entityNbt)));
     }
 
     /**
@@ -691,7 +741,8 @@ public class ChunkSerializerMixin {
      */
     @Unique
     private static boolean chunkis$isDeltaAbsent(final ChunkDelta<?, ?> delta) {
-        return delta == null || !ChunkDeltaOwnership.hasRestorableChunkisState(delta);
+        // A released block payload (ChunkDelta#releaseBlockPayload) holds no blocks to restore.
+        return delta == null || !ChunkDeltaOwnership.hasRestorableChunkisState(delta) || delta.isBlockPayloadReleased();
     }
 
     /**
@@ -734,6 +785,10 @@ public class ChunkSerializerMixin {
         final ProtoChunk chunk = cir.getReturnValue();
         if (chunk == null) {
             return;
+        }
+        if (chunkis$generatingLoadMarker.remove((SerializedChunk) (Object) this)
+                && !(chunk instanceof WrapperProtoChunk)) {
+            ((FreshChunkDuck) chunk).chunkis$markFreshlyGenerated();
         }
         final boolean syntheticChunkisLoad =
                 chunkis$consumeSyntheticLoadMarker((SerializedChunk) (Object) this);

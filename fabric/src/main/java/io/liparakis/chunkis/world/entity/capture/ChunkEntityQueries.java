@@ -22,6 +22,11 @@ import org.jetbrains.annotations.Nullable;
 public final class ChunkEntityQueries {
 
     /**
+     * Margin added to an entity's bounds for the visibility query, in blocks.
+     */
+    private static final double BOUNDS_MARGIN = 1.0E-4;
+
+    /**
      * Private constructor to prevent utility class instantiation.
      *
      * @throws AssertionError always
@@ -102,12 +107,13 @@ public final class ChunkEntityQueries {
     }
 
     /**
-     * Returns {@code true} if an alive, non-removed entity with {@code uuid} appears
-     * in a spatial query over {@code searchBox}.
+     * Returns {@code true} if the alive, non-removed entity registered under {@code uuid} lies within
+     * {@code searchBox} and appears in a spatial query.
      *
      * <p>This is a secondary confirmation on top of {@link ServerWorld#getEntity};
      * it verifies the entity is present in the world's spatial index, not just
-     * registered by UUID.</p>
+     * registered by UUID. The spatial query covers only the entity's own bounds: a query over a whole chunk
+     * column walks every entity section in it and cost far more than the replay it confirmed.</p>
      *
      * @param world     world to query
      * @param uuid      UUID of the entity to look for
@@ -119,8 +125,18 @@ public final class ChunkEntityQueries {
             final UUID uuid,
             final Box searchBox
     ) {
-        for (final Entity entity : world.getOtherEntities(null, searchBox)) {
-            if (uuid.equals(entity.getUuid()) && entity.isAlive() && !entity.isRemoved()) {
+        final Entity registered = world.getEntity(uuid);
+        if (registered == null || !registered.isAlive() || registered.isRemoved()) {
+            return false;
+        }
+        // Grown a hair so zero-size entities such as markers still intersect their own bounds.
+        final Box bounds = registered.getBoundingBox()
+                .expand(BOUNDS_MARGIN);
+        if (!searchBox.intersects(bounds)) {
+            return false;
+        }
+        for (final Entity entity : world.getOtherEntities(null, bounds)) {
+            if (entity == registered) {
                 return true;
             }
         }

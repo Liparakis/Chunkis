@@ -67,6 +67,17 @@ public final class CisChunk<S> {
     }
 
     /**
+     * Sets a whole section from its 4096 states, as {@link #addUniqueBlock} would for each non-null state in
+     * position order.
+     *
+     * @param sectionY section coordinate
+     * @param blocks   4096 states, {@code null} where unchanged; kept by reference
+     */
+    public void putDenseSection(final int sectionY, final Object[] blocks) {
+        getOrCreateSection(sectionY).useDenseBlocks(blocks);
+    }
+
+    /**
      * Performs get or create section.
      */
     private CisSection<S> getOrCreateSection(final int sectionY) {

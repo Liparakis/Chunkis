@@ -50,17 +50,17 @@ public final class RestorePayloadTracer {
         }
 
         final String worldId = PayloadWatchSummaries.worldId(world);
-        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+        WatchPayloadMatcher.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
             final PayloadWatchTarget target = match.target();
             final BlockState expectedState = match.expectedState();
-            final String resolvedOperationId = PayloadWatchTracer.resolveOperationId(worldId,
+            final String resolvedOperationId = WatchTraceEmitter.resolveOperationId(worldId,
                     chunkPos,
                     target,
                     operationId);
             final BlockPos pos = new BlockPos(target.blockX(), target.blockY(), target.blockZ());
             final BlockState actualState = chunk.getBlockState(pos);
-            PayloadWatchTracer.markVisibilitySeen(worldId, chunkPos, target, resolvedOperationId);
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.markVisibilitySeen(worldId, chunkPos, target, resolvedOperationId);
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -69,7 +69,7 @@ public final class RestorePayloadTracer {
                     "ChunkRestorer#restore",
                     chunk
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_RESTORE_STARTED,
                     "restore-start",
                     "PayloadWatchTracer#traceRestoreStarted",
@@ -112,7 +112,7 @@ public final class RestorePayloadTracer {
             final String operationId,
             final String source
     ) {
-        PayloadWatchTracer.traceRestoreMutationStage(
+        WatchTraceEmitter.traceRestoreMutationStage(
                 ChunkTraceEventType.WATCH_RESTORE_INSTRUCTION_VISITED,
                 "restore-instruction-visited",
                 chunk,
@@ -143,7 +143,7 @@ public final class RestorePayloadTracer {
             final String operationId,
             final String source
     ) {
-        PayloadWatchTracer.traceRestoreMutationStage(
+        WatchTraceEmitter.traceRestoreMutationStage(
                 ChunkTraceEventType.WATCH_RESTORE_APPLY_ATTEMPT,
                 "restore-apply-attempt",
                 chunk,
@@ -174,7 +174,7 @@ public final class RestorePayloadTracer {
             final String operationId,
             final String source
     ) {
-        PayloadWatchTracer.traceRestoreSetBlockReturned(
+        WatchTraceEmitter.traceRestoreSetBlockReturned(
                 ChunkTraceEventType.WATCH_RESTORE_SETBLOCK_RETURNED,
                 "restore-setblock-returned",
                 chunk,
@@ -205,7 +205,7 @@ public final class RestorePayloadTracer {
             final String operationId,
             final String source
     ) {
-        PayloadWatchTracer.traceRestoreMutationStage(
+        WatchTraceEmitter.traceRestoreMutationStage(
                 ChunkTraceEventType.WATCH_RESTORE_STATE_AFTER_SETBLOCK,
                 "restore-state-after-setblock",
                 chunk,
@@ -217,8 +217,10 @@ public final class RestorePayloadTracer {
                 null
         );
         final String worldId = PayloadWatchSummaries.worldId(chunk);
-        final PayloadWatchTarget target = PayloadWatchTracer.watchedBlockTarget(worldId, pos);
-        if (target == null || expectedState == null || Objects.equals(chunk.getBlockState(pos), expectedState)) {
+        final PayloadWatchTarget target = WatchPayloadMatcher.watchedBlockTarget(worldId, pos);
+        // Read the section directly: restore writes raw palette storage and recalculates section counts only
+        // after the batch, so chunk.getBlockState reports air for a section still counted as empty.
+        if (target == null || expectedState == null || Objects.equals(sectionStateAt(chunk, pos), expectedState)) {
             return;
         }
         io.liparakis.chunkis.debug.trace.ChunkTraceStore.trace(
@@ -235,6 +237,22 @@ public final class RestorePayloadTracer {
                 null,
                 null
         );
+    }
+
+    /**
+     * Reads a block straight from its section, ignoring the section's cached non-empty count.
+     *
+     * @param chunk chunk holding the block
+     * @param pos   block position
+     * @return block state stored in the section, or {@code null} outside the chunk's sections
+     */
+    private static BlockState sectionStateAt(final WorldChunk chunk, final BlockPos pos) {
+        final int sectionIndex = chunk.getSectionIndex(pos.getY());
+        final net.minecraft.world.chunk.ChunkSection[] sections = chunk.getSectionArray();
+        if (sectionIndex < 0 || sectionIndex >= sections.length) {
+            return null;
+        }
+        return sections[sectionIndex].getBlockState(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15);
     }
 
     /**
@@ -257,7 +275,7 @@ public final class RestorePayloadTracer {
             final String source,
             final String reason
     ) {
-        PayloadWatchTracer.traceRestoreMutationStage(
+        WatchTraceEmitter.traceRestoreMutationStage(
                 ChunkTraceEventType.WATCH_RESTORE_APPLY_FAILED,
                 "restore-apply-failed",
                 chunk,
@@ -289,16 +307,16 @@ public final class RestorePayloadTracer {
         }
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachResolvedWatchedBlockState(chunk, expectedDelta, operationId, match -> {
+        WatchPayloadMatcher.forEachResolvedWatchedBlockState(chunk, expectedDelta, operationId, match -> {
             final PayloadWatchTarget target = match.target();
             final BlockState expectedState = match.expectedState();
             final String resolvedOperationId = match.operationId();
-            if (PayloadWatchTracer.isRestoreDecisionSeen(worldId, chunkPos, target, resolvedOperationId)) {
+            if (WatchTraceEmitter.isRestoreDecisionSeen(worldId, chunkPos, target, resolvedOperationId)) {
                 return;
             }
-            PayloadWatchTracer.markRestoreDecisionSeen(worldId, chunkPos, target, resolvedOperationId);
-            PayloadWatchTracer.markVisibilitySeen(worldId, chunkPos, target, resolvedOperationId);
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.markRestoreDecisionSeen(worldId, chunkPos, target, resolvedOperationId);
+            WatchTraceEmitter.markVisibilitySeen(worldId, chunkPos, target, resolvedOperationId);
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -307,7 +325,7 @@ public final class RestorePayloadTracer {
                     source,
                     chunk
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_RESTORE_SKIPPED,
                     "restore-skipped",
                     source,
@@ -350,19 +368,19 @@ public final class RestorePayloadTracer {
             return;
         }
         final String worldId = PayloadWatchSummaries.worldId(chunk);
-        final PayloadWatchTarget target = PayloadWatchTracer.watchedBlockTarget(worldId, pos);
+        final PayloadWatchTarget target = WatchPayloadMatcher.watchedBlockTarget(worldId, pos);
         if (target == null) {
             return;
         }
         final BlockState actualState = chunk.getBlockState(pos);
-        final String resolvedOperationId = PayloadWatchTracer.resolveOperationId(worldId,
+        final String resolvedOperationId = WatchTraceEmitter.resolveOperationId(worldId,
                 chunk.getPos(),
                 target,
                 operationId);
-        PayloadWatchTracer.markRestoreDecisionSeen(worldId, chunk.getPos(), target, resolvedOperationId);
-        PayloadWatchTracer.markVisibilitySeen(worldId, chunk.getPos(), target, resolvedOperationId);
-        PayloadWatchTracer.recordAppliedChunkInstance(worldId, chunk.getPos(), target, resolvedOperationId, chunk);
-        PayloadWatchTracer.traceChunkIdentityAndStatus(
+        WatchTraceEmitter.markRestoreDecisionSeen(worldId, chunk.getPos(), target, resolvedOperationId);
+        WatchTraceEmitter.markVisibilitySeen(worldId, chunk.getPos(), target, resolvedOperationId);
+        WatchTraceEmitter.recordAppliedChunkInstance(worldId, chunk.getPos(), target, resolvedOperationId, chunk);
+        WatchTraceEmitter.traceChunkIdentityAndStatus(
                 worldId,
                 chunk.getPos(),
                 target,
@@ -371,7 +389,7 @@ public final class RestorePayloadTracer {
                 "ChunkRestorer.RestorationVisitor#visitBlock",
                 chunk
         );
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_RESTORE_APPLIED,
                 "restore-applied",
                 "PayloadWatchTracer#traceRestoredBlock",
@@ -423,7 +441,7 @@ public final class RestorePayloadTracer {
         if (target == null) {
             return;
         }
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_FAILED,
                 "restore",
                 "PayloadWatchTracer#traceRestoreBlockFailure",

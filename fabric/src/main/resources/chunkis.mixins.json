@@ -5,22 +5,26 @@
     "mixins": [
         "accessor.ChunkBlockEntityNbtAccessor",
         "accessor.ChunkSectionAccessor",
+        "accessor.WorldChunkAccessor",
         "accessor.PalettedContainerAccessor",
         "network.ChunkHolderMixin",
         "storage.ChunkSerializerMixin",
+        "storage.EntityChunkDataAccessMixin",
         "storage.RegionBasedStorageMixin",
-        "storage.StoragePreventionMixin",
         "storage.ThreadedAnvilChunkStorageMixin",
         "world.ChunkRegionMixin",
+        "world.ServerLightingProviderMixin",
         "world.SpawnHelperMixin",
         "world.block.BlockEntityMixin",
         "world.block.LeavesBlockMixin",
         "world.block.NetherPortalBlockMixin",
         "world.chunk.CommonChunkMixin",
+        "world.chunk.ProtoChunkMixin",
         "world.chunk.WorldChunkMixin",
         "world.dimension.PortalForcerMixin",
         "world.entity.EntityMixin",
-        "world.server.ServerWorldMixin"
+        "world.server.ServerWorldMixin",
+        "world.tick.ChunkTickSchedulerMixin"
     ],
     "client": [
         "client.screen.SplashOverlayMixin",

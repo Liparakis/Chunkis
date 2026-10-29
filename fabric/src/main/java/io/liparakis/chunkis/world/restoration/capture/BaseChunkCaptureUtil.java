@@ -246,7 +246,7 @@ public final class BaseChunkCaptureUtil {
         final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 CisNbtUtil.extractPersistedStructureMetadata(delta.getChunkMetadata()), true, false,
                 serializedBaseChunkNbt, portalChunk);
-        CisNbtUtil.preserveMigratedAuthoritativeMetadata(delta.getChunkMetadata(), metadata);
+        CisNbtUtil.preserveCarriedMetadata(delta.getChunkMetadata(), metadata);
 
         delta.setChunkMetadata(metadata);
         traceLifecycle(world, chunk, delta, ChunkTraceEventType.BASE_METADATA_ATTACHED,

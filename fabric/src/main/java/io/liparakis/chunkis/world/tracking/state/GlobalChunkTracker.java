@@ -1,5 +1,8 @@
 package io.liparakis.chunkis.world.tracking.state;
 
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
@@ -85,16 +88,19 @@ public final class GlobalChunkTracker {
                 .getRegistryKey(), chunk.getPos(), delta, source)) {
             return;
         }
-        ChunkOwnershipTraceHelper.traceDecision(
-                chunk.getWorld()
-                        .getRegistryKey(),
-                chunk.getPos(),
-                "CLAIMED",
-                ChunkTraceReason.valueOf(delta.getOwnershipReason()),
-                source,
-                delta,
-                null
-        );
+        // Runs on every block mutation: resolve the reason enum only when tracing is enabled.
+        if (ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
+            ChunkOwnershipTraceHelper.traceDecision(
+                    chunk.getWorld()
+                            .getRegistryKey(),
+                    chunk.getPos(),
+                    "CLAIMED",
+                    ChunkTraceReason.valueOf(delta.getOwnershipReason()),
+                    source,
+                    delta,
+                    null
+            );
+        }
         putDeltaIfNeeded(keyOf(chunk.getWorld()
                 .getRegistryKey(), chunk.getPos()), delta, source, chunk);
     }

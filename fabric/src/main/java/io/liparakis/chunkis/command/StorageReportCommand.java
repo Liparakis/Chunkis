@@ -5,9 +5,12 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import io.liparakis.chunkis.command.report.StorageMetricsAnalyzer;
-import io.liparakis.chunkis.command.report.StorageReportModels.StorageReport;
 import io.liparakis.chunkis.command.report.StorageReportRenderer;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.Util;
 import net.minecraft.command.permission.Permission;
 import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.server.command.CommandManager;
@@ -74,23 +77,39 @@ public final class StorageReportCommand {
     }
 
     /**
-     * Executes the storage report and sends the formatted result to the caller.
+     * Starts the storage report on a background thread and sends the formatted
+     * result to the caller from the server thread.
+     *
+     * <p>The report decodes every stored chunk of the dimension; doing that on the
+     * server thread stalled the tick loop long enough to trip the watchdog.</p>
      *
      * @param context    command context information
      * @param topRegions number of top region sizing entries to highlight
-     * @return 1 on success, 0 on IO failure
+     * @return 1 once the report has been started
      */
     private static int run(final CommandContext<ServerCommandSource> context, final int topRegions) {
         final ServerCommandSource source = context.getSource();
         final ServerWorld world = source.getWorld();
+        final MinecraftServer server = source.getServer();
 
-        try {
-            final StorageReport report = StorageMetricsAnalyzer.inspectWorld(world, topRegions);
-            StorageReportRenderer.sendReport(source, world, report, topRegions);
-            return 1;
-        } catch (final IOException e) {
-            source.sendError(Text.literal("[Chunkis] Storage report failed: " + e.getMessage()));
-            return 0;
-        }
+        source.sendFeedback(() -> Text.literal("[Chunkis] Building storage report in the background..."), false);
+        CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return StorageMetricsAnalyzer.inspectWorld(world, topRegions);
+                    } catch (final IOException e) {
+                        throw new CompletionException(e);
+                    }
+                }, Util.getIoWorkerExecutor())
+                .whenComplete((report, error) -> server.execute(() -> {
+                    if (error != null) {
+                        final Throwable cause = error instanceof CompletionException && error.getCause() != null
+                                ? error.getCause()
+                                : error;
+                        source.sendError(Text.literal("[Chunkis] Storage report failed: " + cause.getMessage()));
+                        return;
+                    }
+                    StorageReportRenderer.sendReport(source, world, report, topRegions);
+                }));
+        return 1;
     }
 }

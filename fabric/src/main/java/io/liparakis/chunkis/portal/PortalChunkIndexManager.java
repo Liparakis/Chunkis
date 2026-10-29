@@ -3,10 +3,7 @@ package io.liparakis.chunkis.portal;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -15,7 +12,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtIo;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.WorldSavePath;
 import net.minecraft.util.math.ChunkPos;
@@ -116,6 +112,15 @@ public final class PortalChunkIndexManager {
     }
 
     /**
+     * Writes every index changed since the last flush. Called once per server tick
+     * so a burst of portal-chunk changes costs one file write, not one per chunk.
+     */
+    public static void flushDirty() {
+        INDICES.values()
+                .forEach(PortalChunkIndex::flushDirty);
+    }
+
+    /**
      * Closes all active manager indices.
      */
     public static void clear() {
@@ -205,20 +210,14 @@ public final class PortalChunkIndexManager {
         private static LongOpenHashSet load(final Path path) {
             final LongOpenHashSet chunks = new LongOpenHashSet();
 
-            if (!Files.isRegularFile(path)) {
-                return chunks;
-            }
-
-            try (DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
-                final NbtCompound root = NbtIo.readCompound(input);
+            final NbtCompound root = PortalNbtFiles.read(path, "portal index");
+            if (root != null) {
                 root.getLongArray(PORTAL_CHUNKS_KEY)
                         .ifPresent(values -> {
                             for (final long value : values) {
                                 chunks.add(value);
                             }
                         });
-            } catch (final Exception e) {
-                Chunkis.LOGGER.warn("Chunkis: Failed to load portal index {}", path, e);
             }
 
             return chunks;
@@ -240,8 +239,8 @@ public final class PortalChunkIndexManager {
                 return;
             }
 
+            // Written by flushDirty() at most once per tick, not once per changed chunk.
             dirty = true;
-            save();
         }
 
         /**
@@ -283,19 +282,22 @@ public final class PortalChunkIndexManager {
         }
 
         /**
-         * Saves index long array coordinates back to NBT file structure.
+         * Writes the index if it changed since the last write.
+         */
+        synchronized void flushDirty() {
+            if (dirty) {
+                save();
+            }
+        }
+
+        /**
+         * Atomically writes the index file.
          */
         private void save() {
             try {
-                Files.createDirectories(path.getParent());
-
                 final NbtCompound root = new NbtCompound();
                 root.putLongArray(PORTAL_CHUNKS_KEY, portalChunks.toLongArray());
-
-                try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(path))) {
-                    NbtIo.writeCompound(root, output);
-                }
-
+                PortalNbtFiles.write(path, root);
                 dirty = false;
             } catch (final IOException e) {
                 Chunkis.LOGGER.error("Chunkis: Failed to save portal index {}", path, e);

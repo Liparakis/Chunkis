@@ -1,11 +1,17 @@
 package io.liparakis.chunkis.world.entity.replay;
 
+import io.liparakis.chunkis.debug.config.ChunkisDebugLevel;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
-import java.util.Iterator;
+import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,11 +42,27 @@ import net.minecraft.world.chunk.WorldChunk;
 public final class ScheduledEntityReplayQueue {
 
     /**
+     * How long an entry may wait for its chunk to load before it is dropped; the payload
+     * itself stays in the chunk's delta and is rescheduled on the next load.
+     */
+    private static final long UNLOADED_ENTRY_GRACE_MILLIS = 60_000L;
+
+    /**
      * Map from composite key ({@code worldId|chunkX,chunkZ|entityUuid}) to the
      * scheduled replay entry. {@link ConcurrentHashMap} allows concurrent
      * {@link #schedule}/{@link #acknowledge} calls while {@link #tick} iterates.
      */
     private static final ConcurrentHashMap<String, ScheduledEntityReplay> QUEUE = new ConcurrentHashMap<>();
+
+    /**
+     * Server-thread time one tick may spend replaying entities before the rest wait for the next tick.
+     */
+    private static final long DRAIN_BUDGET_NANOS = 2_000_000L;
+
+    /**
+     * Position in the queue where the next drain starts, so entries past a budget cut get their turn first.
+     */
+    private static int drainCursor;
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -54,9 +76,9 @@ public final class ScheduledEntityReplayQueue {
     /**
      * Schedules an entity for replay, optionally with a fallback NBT payload.
      *
-     * <p>If an entry for the same key already exists it is replaced, making this
-     * call idempotent for re-schedules. The NBT is deep-copied so the caller's
-     * compound can be safely mutated after this call.</p>
+     * <p>An entry for the same key is kept when it already holds this payload, as on the repeated schedules of
+     * one reload's several replay passes, and replaced otherwise. The payload is kept, not copied: entity payloads
+     * are only ever replaced in a delta, never changed in place, and replay only reads them.</p>
      *
      * @param world      world the entity belongs to; null-checked
      * @param chunkPos   chunk the entity should appear in; null-checked
@@ -77,24 +99,21 @@ public final class ScheduledEntityReplayQueue {
                 .getValue()
                 .toString();
         final int before = QUEUE.size();
-        QUEUE.put(
-                key(worldId, chunkPos, entityUuid),
-                new ScheduledEntityReplay(
-                        worldId, chunkPos.x, chunkPos.z,
-                        entityUuid,
-                        entityNbt == null ? null : entityNbt.copy()
-                )
-        );
+        QUEUE.compute(key(worldId, chunkPos, entityUuid), (key, existing) -> existing != null
+                && existing.entityNbt == entityNbt
+                ? existing
+                : new ScheduledEntityReplay(worldId, chunkPos.x, chunkPos.z, entityUuid, entityNbt,
+                        System.currentTimeMillis()));
         final int after = QUEUE.size();
 
-        // Build the diagnostic message only when at least one consumer will use it.
-        // String.format + Thread.currentThread().getName() are non-trivial on hot paths.
+        // Build the diagnostic message only for an enabled trace: every entity of a restored chunk is scheduled,
+        // and a debug log file (enabled in development) would make each schedule pay the message.
         final boolean traceEnabled = io.liparakis.chunkis.debug.config.ChunkisDebugConfig.allows(
                 io.liparakis.chunkis.debug.model.ChunkisDebugDomain.ENTITY_REPLAY,
                 io.liparakis.chunkis.debug.model.ChunkTraceSeverity.INFO
         );
-        final boolean debugLogEnabled = Chunkis.LOGGER.isDebugEnabled();
-        if (traceEnabled || debugLogEnabled) {
+        final boolean debugLogEnabled = traceEnabled && Chunkis.LOGGER.isDebugEnabled();
+        if (traceEnabled) {
             final String threadName = Thread.currentThread()
                     .getName();
             final String message = "entity replay scheduled: uuid=" + entityUuid
@@ -153,11 +172,15 @@ public final class ScheduledEntityReplayQueue {
         final int queueBefore = QUEUE.size();
         int visited = 0;
 
-        final Iterator<Map.Entry<String, ScheduledEntityReplay>> iterator = QUEUE.entrySet()
-                .iterator();
-        while (iterator.hasNext()) {
-            final ScheduledEntityReplay replay = iterator.next()
-                    .getValue();
+        // Replays cost a tick about 0.1 ms each, and every entity of a batch of reloaded chunks becomes ready in
+        // the same tick: past a time budget the rest wait for the next tick, starting where this one stopped.
+        final List<Map.Entry<String, ScheduledEntityReplay>> entries = new ArrayList<>(QUEUE.entrySet());
+        final int size = entries.size();
+        final int start = Math.floorMod(drainCursor, size);
+        final long deadline = System.nanoTime() + DRAIN_BUDGET_NANOS;
+        for (int step = 0; step < size; step++) {
+            final Map.Entry<String, ScheduledEntityReplay> entry = entries.get((start + step) % size);
+            final ScheduledEntityReplay replay = entry.getValue();
             if (!worldId.equals(replay.worldId)) {
                 continue;
             }
@@ -169,7 +192,7 @@ public final class ScheduledEntityReplayQueue {
             try {
                 UUID.fromString(replay.entityUuid);
             } catch (final IllegalArgumentException ignored) {
-                iterator.remove();
+                QUEUE.remove(entry.getKey(), replay);
                 Chunkis.LOGGER.warn(
                         "Chunkis entity replay: removed entry with malformed UUID dimension={} chunk={},{} uuid={}",
                         replay.worldId, replay.chunkX, replay.chunkZ, replay.entityUuid
@@ -177,10 +200,19 @@ public final class ScheduledEntityReplayQueue {
                 continue;
             }
 
-            final WorldChunk liveChunk = world.getChunkManager()
-                    .getWorldChunk(replay.chunkX, replay.chunkZ, false);
+            final WorldChunk liveChunk = LoadedChunks.getIfAccessible(world, replay.chunkX, replay.chunkZ);
             if (liveChunk == null) {
-                traceDrain(world, replay, "CHUNK_NOT_LOADED_RETRY", queueBefore);
+                // The payload stays in the chunk's pending list and is rescheduled when the chunk
+                // loads again, so an unloaded chunk's entry is dropped instead of being iterated forever.
+                // A grace period covers entries queued while the chunk is still being promoted.
+                if (System.currentTimeMillis() - replay.scheduledAtMillis() > UNLOADED_ENTRY_GRACE_MILLIS) {
+                    QUEUE.remove(entry.getKey(), replay);
+                    traceDrain(world, replay, "CHUNK_NOT_LOADED_DROPPED", queueBefore);
+                } else if (ChunkisDebugConfig.level() == ChunkisDebugLevel.VERBOSE) {
+                    // Repeats every tick until the chunk is accessible; at lower levels it would crowd every
+                    // other event out of the trace store.
+                    traceDrain(world, replay, "CHUNK_NOT_LOADED_RETRY", queueBefore);
+                }
                 continue;
             }
 
@@ -203,6 +235,10 @@ public final class ScheduledEntityReplayQueue {
                 continue;
             }
 
+            if (System.nanoTime() > deadline) {
+                drainCursor = start + step;
+                break;
+            }
             final ChunkRestorer.ReplayResult result = ChunkRestorer.replayPendingEntityIfNeeded(
                     world, liveChunk, delta, deltaDuck.chunkis$getRestoreOperationId(),
                     replay.entityUuid, replay.entityNbt
@@ -211,7 +247,7 @@ public final class ScheduledEntityReplayQueue {
             if (result.status() == ChunkRestorer.ReplayStatus.SPAWNED
                     || result.status() == ChunkRestorer.ReplayStatus.ALREADY_PRESENT) {
                 removeMaterializedPendingEntity(liveChunk, replay.entityUuid);
-                iterator.remove();
+                QUEUE.remove(entry.getKey(), replay);
                 traceDrain(world, replay, result.status() + "_CONSUMED", queueBefore);
             } else {
                 traceDrain(world, replay,
@@ -220,7 +256,7 @@ public final class ScheduledEntityReplayQueue {
             }
         }
 
-        if (visited != 0) {
+        if (visited != 0 && ChunkisDebugConfig.allows(ChunkisDebugDomain.ENTITY_REPLAY, ChunkTraceSeverity.INFO)) {
             final int queueAfter = QUEUE.size();
             final boolean serverThread = world.getServer() == null || world.getServer()
                     .isOnThread();
@@ -367,6 +403,9 @@ public final class ScheduledEntityReplayQueue {
             final String decision,
             final int queueBefore
     ) {
+        if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.ENTITY_REPLAY, ChunkTraceSeverity.INFO)) {
+            return;
+        }
         final int queueAfter = QUEUE.size();
         final boolean serverThread = world.getServer() == null || world.getServer()
                 .isOnThread();
@@ -423,13 +462,15 @@ public final class ScheduledEntityReplayQueue {
      * @param entityUuid UUID string of the entity to replay
      * @param entityNbt  fallback entity NBT, or {@code null} if the chunk delta
      *                   should be consulted at retry time
+     * @param scheduledAtMillis wall-clock time the entry was queued
      */
     private record ScheduledEntityReplay(
             String worldId,
             int chunkX,
             int chunkZ,
             String entityUuid,
-            NbtCompound entityNbt
+            NbtCompound entityNbt,
+            long scheduledAtMillis
     ) {
 
     }

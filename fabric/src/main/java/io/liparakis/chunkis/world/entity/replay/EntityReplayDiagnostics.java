@@ -3,10 +3,14 @@ package io.liparakis.chunkis.world.entity.replay;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
+import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
+import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
+import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
 import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
@@ -58,6 +62,10 @@ final class EntityReplayDiagnostics {
             final String decision,
             final Box searchBox
     ) {
+        // Gathering the details costs a world query and a large format per replay: only for an enabled trace.
+        if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.ENTITY_REPLAY, ChunkTraceSeverity.INFO)) {
+            return;
+        }
         final ChunkPos chunkPos = chunk.getPos();
         final UUID uuid = ChunkEntityQueries.parseUuid(entityUuid)
                 .orElse(null);
@@ -66,8 +74,7 @@ final class EntityReplayDiagnostics {
                 .orElse(null);
         final BlockPos nbtBlockPos = EntityPayloadNbt.findBlockPos(entityNbt)
                 .orElse(null);
-        final boolean chunkLoaded = world.getChunkManager()
-                .getWorldChunk(chunkPos.x, chunkPos.z, false) != null;
+        final boolean chunkLoaded = LoadedChunks.getIfAccessible(world, chunkPos.x, chunkPos.z) != null;
         final boolean entityTicking = nbtBlockPos != null && world.shouldTickEntityAt(nbtBlockPos);
         final ChunkMutationTrackingScope.Cause pendingSuppression =
                 PendingChunkMutationSuppression.currentCause(world.getRegistryKey(), chunkPos);

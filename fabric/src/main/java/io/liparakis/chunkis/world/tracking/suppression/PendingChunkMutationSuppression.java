@@ -171,6 +171,15 @@ public final class PendingChunkMutationSuppression {
     }
 
     /**
+     * Drops every pending suppression scope. Called when the server stops: a scope
+     * leaked by a failed load would otherwise silently stop edits in that chunk from
+     * being tracked in the next session (singleplayer reuses the JVM).
+     */
+    public static void clear() {
+        PENDING.clear();
+    }
+
+    /**
      * Ends a pending suppression scope.
      *
      * @param worldKey registry key mapping levels

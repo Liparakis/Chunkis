@@ -31,9 +31,9 @@ class WorldChunkMixinTest {
      */
     private static String invokeTakeRestoreOperationId(final ChunkisDeltaDuck duck) {
         try {
-            final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.mixin.world.chunk.WorldChunkMixin");
+            final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.world.restoration.core.WorldChunkPromotion");
             final Method method = mixinClass
-                    .getDeclaredMethod("chunkis$takeRestoreOperationId", ChunkisDeltaDuck.class);
+                    .getDeclaredMethod("takeRestoreOperationId", ChunkisDeltaDuck.class);
             method.setAccessible(true);
             return (String) method.invoke(null, duck);
         } catch (final Exception e) {
@@ -57,9 +57,9 @@ class WorldChunkMixinTest {
             final String failedStage
     ) {
         try {
-            final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.mixin.world.chunk.WorldChunkMixin");
+            final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.world.restoration.core.WorldChunkPromotion");
             final Method method = mixinClass.getDeclaredMethod(
-                    "chunkis$tracePostRestoreFailure",
+                    "tracePostRestoreFailure",
                     String.class,
                     DebugChunkKey.class,
                     String.class,
@@ -84,9 +84,9 @@ class WorldChunkMixinTest {
             final ChunkDelta<?, ?> delta
     ) {
         try {
-            final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.mixin.world.chunk.WorldChunkMixin");
+            final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.world.restoration.core.WorldChunkPromotion");
             final Method method = mixinClass.getDeclaredMethod(
-                    "chunkis$shouldMarkRestoredDeltaSaved",
+                    "shouldMarkRestoredDeltaSaved",
                     ChunkisDeltaDuck.class,
                     ChunkDelta.class
             );

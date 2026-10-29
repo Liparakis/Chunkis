@@ -58,7 +58,7 @@ public final class EntityPayloadTracer {
                 continue;
             }
 
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_CAPTURED,
                     "capture",
                     "PayloadWatchTracer#traceCapturedEntities",
@@ -99,7 +99,7 @@ public final class EntityPayloadTracer {
         if (target == null) {
             return;
         }
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_RESTORE_APPLIED,
                 "restore",
                 "PayloadWatchTracer#traceRestoredEntity",
@@ -129,7 +129,7 @@ public final class EntityPayloadTracer {
             final String operationId,
             final String source
     ) {
-        PayloadWatchTracer.traceEntityRestoreStage(
+        WatchTraceEmitter.traceEntityRestoreStage(
                 world,
                 chunkPos,
                 nbt,
@@ -158,7 +158,7 @@ public final class EntityPayloadTracer {
             final String operationId,
             final String source
     ) {
-        PayloadWatchTracer.traceEntityRestoreStage(
+        WatchTraceEmitter.traceEntityRestoreStage(
                 world,
                 chunkPos,
                 nbt,
@@ -197,7 +197,7 @@ public final class EntityPayloadTracer {
         if (target == null) {
             return;
         }
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_SKIPPED,
                 "restore",
                 "PayloadWatchTracer#traceRestoreEntitySkipped",
@@ -233,7 +233,7 @@ public final class EntityPayloadTracer {
 
         final String worldId = PayloadWatchSummaries.worldId(world);
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachWatchedEntityState(world, chunk, expectedDelta, operationId, match -> {
+        WatchPayloadMatcher.forEachWatchedEntityState(world, chunk, expectedDelta, operationId, match -> {
             final PayloadWatchTarget target = match.target();
             final String resolvedOperationId = match.operationId();
             final Entity liveEntity = match.liveEntity();
@@ -245,7 +245,7 @@ public final class EntityPayloadTracer {
                     resolvedOperationId,
                     liveEntity
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     liveEntity != null
                             ? ChunkTraceEventType.WATCH_PRESENT_AFTER_CHUNK_FULL
                             : ChunkTraceEventType.WATCH_FAILED,
@@ -292,12 +292,12 @@ public final class EntityPayloadTracer {
 
         final String worldId = PayloadWatchSummaries.worldId(world);
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachWatchedEntityState(world, chunk, expectedDelta, operationId, match -> {
+        WatchPayloadMatcher.forEachWatchedEntityState(world, chunk, expectedDelta, operationId, match -> {
             final PayloadWatchTarget target = match.target();
             final String resolvedOperationId = match.operationId();
             final Entity liveEntity = match.liveEntity();
             final NbtCompound expectedNbt = match.expectedNbt();
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     eventType,
                     stage,
                     source,
@@ -341,7 +341,7 @@ public final class EntityPayloadTracer {
         }
 
         final ChunkPos chunkPos = entity.getChunkPos();
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_ENTITY_REMOVED,
                 "live-remove",
                 source,
@@ -386,7 +386,7 @@ public final class EntityPayloadTracer {
         }
         EntityWatchTracker.markTransfer(target, stage, entity.getChunkPos());
 
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_CAPTURED,
                 stage,
                 source,
@@ -434,7 +434,7 @@ public final class EntityPayloadTracer {
         }
         EntityWatchTracker.rememberChunk(target, entity.getChunkPos());
 
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_CAPTURED,
                 stage,
                 source,
@@ -473,11 +473,11 @@ public final class EntityPayloadTracer {
 
         final String worldId = PayloadWatchSummaries.worldId(world);
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachWatchedEntityState(world, chunk, null, null, match -> {
+        WatchPayloadMatcher.forEachWatchedEntityState(world, chunk, null, null, match -> {
             final PayloadWatchTarget target = match.target();
             final Entity liveEntity = match.liveEntity();
             EntityWatchTracker.assertReloadedAfterUnload(worldId, chunkPos, target, null, liveEntity);
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     liveEntity != null
                             ? ChunkTraceEventType.WATCH_CAPTURED
                             : ChunkTraceEventType.WATCH_FAILED,

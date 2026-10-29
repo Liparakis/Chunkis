@@ -46,7 +46,7 @@ class OfflineMcaCisTranslatorTest {
 
         final NbtCompound auxiliary = new NbtCompound();
         auxiliary.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
-        final NbtCompound metadata = OfflineMcaCisTranslator.createMigratedChunkMetadata(
+        final NbtCompound metadata = ChunkSnapshotBuilder.createMigratedChunkMetadata(
                 null,
                 auxiliary,
                 false
@@ -65,9 +65,9 @@ class OfflineMcaCisTranslatorTest {
         final ChunkDelta<BlockState, NbtCompound> matching = migratedDelta("minecraft:pig");
         final ChunkDelta<BlockState, NbtCompound> mismatched = migratedDelta("minecraft:cow");
 
-        assertTrue(OfflineMcaCisTranslator.matchesMigratedChunkShape(expected, matching)
+        assertTrue(MigrationChunkValidator.matchesMigratedChunkShape(expected, matching)
                 .valid());
-        assertFalse(OfflineMcaCisTranslator.matchesMigratedChunkShape(expected, mismatched)
+        assertFalse(MigrationChunkValidator.matchesMigratedChunkShape(expected, mismatched)
                 .valid());
     }
 
@@ -80,8 +80,8 @@ class OfflineMcaCisTranslatorTest {
         final ChunkDelta<BlockState, NbtCompound> entityOnly = new ChunkDelta<>(BlockState::isAir);
         entityOnly.addPendingEntity(new NbtCompound());
 
-        assertTrue(OfflineMcaCisTranslator.isOmittableEmptyChunk(empty));
-        assertFalse(OfflineMcaCisTranslator.isOmittableEmptyChunk(entityOnly));
+        assertTrue(ChunkSnapshotBuilder.isOmittableEmptyChunk(empty));
+        assertFalse(ChunkSnapshotBuilder.isOmittableEmptyChunk(entityOnly));
     }
 
     /**
@@ -94,10 +94,42 @@ class OfflineMcaCisTranslatorTest {
         final Path mcaPath = tempDir.resolve("r.0.0.mca");
         Files.writeString(mcaPath, "chunkis");
 
-        OfflineMcaCisTranslator.retireRegionFile(mcaPath);
+        assertTrue(RegionFileRetirement.retire(mcaPath));
 
         assertFalse(Files.exists(mcaPath));
         assertTrue(Files.exists(tempDir.resolve("r.0.0.mca.backup")));
+    }
+
+    /**
+     * A crash between backup copy and source delete leaves an identical backup;
+     * retiring again must complete instead of leaving the source live.
+     *
+     * @throws IOException if a file IO operation fails
+     */
+    @Test
+    void retireRegionFileCompletesWhenIdenticalBackupExists() throws IOException {
+        final Path mcaPath = tempDir.resolve("r.1.0.mca");
+        Files.writeString(mcaPath, "chunkis");
+        Files.writeString(tempDir.resolve("r.1.0.mca.backup"), "chunkis");
+
+        assertTrue(RegionFileRetirement.retire(mcaPath));
+        assertFalse(Files.exists(mcaPath));
+    }
+
+    /**
+     * A different existing backup is never overwritten and the source stays live.
+     *
+     * @throws IOException if a file IO operation fails
+     */
+    @Test
+    void retireRegionFileKeepsSourceWhenDifferentBackupExists() throws IOException {
+        final Path mcaPath = tempDir.resolve("r.2.0.mca");
+        Files.writeString(mcaPath, "newer");
+        Files.writeString(tempDir.resolve("r.2.0.mca.backup"), "older");
+
+        assertFalse(RegionFileRetirement.retire(mcaPath));
+        assertTrue(Files.exists(mcaPath));
+        assertEquals("older", Files.readString(tempDir.resolve("r.2.0.mca.backup")));
     }
 
     /**
@@ -115,10 +147,10 @@ class OfflineMcaCisTranslatorTest {
         root.put("Entities", entities);
 
         assertEquals(1,
-                OfflineMcaCisTranslator.extractEntityPayloads(root)
+                ChunkSnapshotBuilder.extractEntityPayloads(root)
                         .size());
         assertEquals("minecraft:villager",
-                OfflineMcaCisTranslator.extractEntityPayloads(root)
+                ChunkSnapshotBuilder.extractEntityPayloads(root)
                         .getFirst()
                         .getString("id")
                         .orElseThrow());
@@ -135,7 +167,7 @@ class OfflineMcaCisTranslatorTest {
         root.put("Level", level);
 
         assertEquals("level-root",
-                OfflineMcaCisTranslator.chunkPayloadRoot(root)
+                ChunkSnapshotBuilder.chunkPayloadRoot(root)
                         .getString("marker")
                         .orElseThrow());
     }

@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.world.tracking.save;
 
+import io.liparakis.chunkis.integration.migration.offline.RegionFileRetirement;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder;
 import java.io.IOException;
@@ -13,7 +14,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.WorldSavePath;
 
 /**
- * Removes stale vanilla entity-region files after an authoritative world unload.
+ * Retires stale vanilla entity-region files to {@code .backup} after an authoritative world unload.
  */
 public final class VanillaEntityRegionCleanup {
 
@@ -29,11 +30,11 @@ public final class VanillaEntityRegionCleanup {
     }
 
     /**
-     * Deletes vanilla external entity MCA files for a CIS-authoritative world.
+     * Retires vanilla external entity MCA files of a CIS-authoritative world to {@code .backup}.
      *
      * @param world world being unloaded
      */
-    public static void delete(final ServerWorld world) {
+    public static void retire(final ServerWorld world) {
         if (!MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey())) {
             return;
         }
@@ -42,44 +43,45 @@ public final class VanillaEntityRegionCleanup {
                 Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT),
                 world.getRegistryKey());
         PENDING_DIRECTORIES.add(directory);
-        deleteDirectory(directory);
+        retireDirectory(directory);
     }
 
     /**
      * Retries cleanup after the server has closed vanilla storage handles.
      */
-    public static void deletePending() {
+    public static void retirePending() {
         for (final Path directory : Set.copyOf(PENDING_DIRECTORIES)) {
-            deleteDirectory(directory);
+            retireDirectory(directory);
         }
         PENDING_DIRECTORIES.clear();
     }
 
     /**
-     * Performs delete directory.
+     * Retires every vanilla entity region file in one directory.
      */
-    private static void deleteDirectory(final Path directory) {
+    private static void retireDirectory(final Path directory) {
         if (!Files.isDirectory(directory)) {
             PENDING_DIRECTORIES.remove(directory);
             return;
         }
 
-        int deleted = 0;
+        int retired = 0;
         try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "r.*.*.mca")) {
             for (final Path file : files) {
-                if (Files.deleteIfExists(file)) {
-                    deleted++;
+                // Entity data not imported by migration must stay recoverable: back up, never delete.
+                if (RegionFileRetirement.retire(file)) {
+                    retired++;
                 }
             }
         } catch (final IOException e) {
-            Chunkis.LOGGER.warn("Chunkis: Failed to delete vanilla entity regions in {}", directory, e);
+            Chunkis.LOGGER.warn("Chunkis: Failed to retire vanilla entity regions in {}", directory, e);
             return;
         }
 
         PENDING_DIRECTORIES.remove(directory);
 
-        if (deleted > 0) {
-            Chunkis.LOGGER.info("Chunkis: Deleted {} vanilla entity region file(s) from {}", deleted, directory);
+        if (retired > 0) {
+            Chunkis.LOGGER.info("Chunkis: Retired {} vanilla entity region file(s) to .backup in {}", retired, directory);
         }
     }
 }

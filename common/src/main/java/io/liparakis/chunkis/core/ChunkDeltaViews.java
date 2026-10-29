@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.core;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import io.liparakis.chunkis.core.model.CisConstants;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import java.util.List;
 import java.util.Objects;
@@ -24,6 +25,42 @@ final class ChunkDeltaViews {
      * Utility class.
      */
     private ChunkDeltaViews() {
+    }
+
+    /**
+     * Counts the distinct chunk sections touched by block instructions or block-entity
+     * payloads. Computed on demand: only diagnostics need it, so it is not maintained
+     * on every block change.
+     *
+     * @param packedInstructions dense instruction buffer
+     * @param instructionCount   number of valid entries in {@code packedInstructions}
+     * @param blockEntities      block-entity payloads keyed by packed position; may be {@code null}
+     * @return number of touched sections
+     */
+    static int touchedSectionCount(final long[] packedInstructions, final int instructionCount,
+            final Long2ObjectMap<?> blockEntities) {
+        long mask = 0L;
+        for (int i = 0; i < instructionCount; i++) {
+            mask |= sectionBit(BlockInstruction.unpackY(packedInstructions[i] & POSITION_MASK));
+        }
+        if (blockEntities != null) {
+            for (final long posKey : blockEntities.keySet()) {
+                mask |= sectionBit(BlockInstruction.unpackY(posKey));
+            }
+        }
+        return Long.bitCount(mask);
+    }
+
+    /**
+     * Maps an absolute block Y to a one-hot section bit, or {@code 0} when outside the
+     * legal chunk range.
+     */
+    private static long sectionBit(final int y) {
+        final int sectionY = y >> 4;
+        if (sectionY < CisConstants.MIN_SECTION_Y || sectionY > CisConstants.MAX_SECTION_Y) {
+            return 0L;
+        }
+        return 1L << (sectionY - CisConstants.MIN_SECTION_Y);
     }
 
     /**

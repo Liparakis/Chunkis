@@ -1,7 +1,9 @@
 package io.liparakis.chunkis.world.tracking.save;
 
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import net.minecraft.world.chunk.PalettedContainer;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.core.ChunkDelta;
-import io.liparakis.chunkis.core.ChunkDeltaSnapshotView;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
@@ -11,8 +13,10 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.storage.io.CisStorage;
+import io.liparakis.chunkis.world.entity.capture.StoredEntityFingerprints;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.UnaryOperator;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
@@ -67,13 +71,54 @@ public final class AsyncCisSaveManager {
             final ChunkDelta<BlockState, NbtCompound> liveDelta,
             final String operationId
     ) {
+        submit(world, storage, pos, liveDelta, null, false, operationId);
+    }
+
+    /**
+     * Snapshots a live delta and queues it for background persistence, taking its blocks from copied section
+     * containers when given ({@code CisSnapshotCapture#captureDeferringBlocks}).
+     *
+     * @param world          world that owns the chunk
+     * @param storage        storage instance used to encode and persist the snapshot
+     * @param pos            chunk position being saved
+     * @param liveDelta      mutable live delta to snapshot
+     * @param deferredBlocks copied block containers by section index, or {@code null} to save the delta's own
+     *                       block instructions
+     * @param unloading      whether the chunk is unloading (its blocks are then kept for a quick reload)
+     * @param operationId    trace correlation id
+     */
+    public static void submit(
+            final ServerWorld world,
+            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> liveDelta,
+            final PalettedContainer<BlockState>[] deferredBlocks,
+            final boolean unloading,
+            final String operationId
+    ) {
         if (!liveDelta.isDirty()) {
             return;
         }
+        StoredEntityFingerprints.forget(world, pos);
 
         final var cisPos = FabricCisStorageHelper.toStoragePos(pos);
         final long generation = liveDelta.getMutationGeneration();
-        final ChunkDeltaSnapshotView<BlockState, NbtCompound> snapshot = liveDelta.snapshotView(NbtCompound::copy);
+        // Block-entity and entity payloads are only ever replaced in a delta, never changed in place, so the
+        // snapshot shares them; the metadata is copied, all but its stored sections.
+        final UnaryOperator<NbtCompound> sharePayloads = UnaryOperator.identity();
+        final ChunkDeltaView<BlockState, NbtCompound> snapshot;
+        if (deferredBlocks != null) {
+            snapshot = new DeferredBlocksSnapshotView(
+                    liveDelta.snapshotViewWithoutBlocks(sharePayloads, CisNbtUtil::copySharingStoredSections), deferredBlocks,
+                    world.getBottomY(), liveDelta.getWrittenBlocksPrint(), unloading);
+        } else if (liveDelta.isBlockPayloadReleased()) {
+            // No chunk to copy the blocks from (it unloaded): they are the stored entry's plus the recorded edits,
+            // read on the worker.
+            snapshot = new StoredBlocksSnapshotView(
+                    liveDelta.snapshotView(sharePayloads, CisNbtUtil::copySharingStoredSections), storage, cisPos);
+        } else {
+            snapshot = liveDelta.snapshotView(sharePayloads, CisNbtUtil::copySharingStoredSections);
+        }
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -112,12 +157,15 @@ public final class AsyncCisSaveManager {
                 liveDelta,
                 snapshot,
                 generation,
+                liveDelta.getBlockEditStamp(),
                 operationId
         ));
     }
 
     /**
-     * Drains the worker queue for one world and waits for the worker to stop.
+     * Drains the worker queue for one world and waits for the worker to stop. Called on the server thread, it
+     * also applies the completions of the saves just written, which the server thread could not run while it
+     * waited, so their deltas are clean for whatever runs next (the close sweep in particular).
      *
      * @param world the world whose worker should be flushed; {@code null} is a no-op
      */
@@ -128,6 +176,9 @@ public final class AsyncCisSaveManager {
         final AsyncCisSaveWorker worker = WORKERS.remove(world.getRegistryKey());
         if (worker != null) {
             worker.close();
+            if (world.getServer() != null && world.getServer().isOnThread()) {
+                worker.applyWrittenCompletions();
+            }
         }
     }
 

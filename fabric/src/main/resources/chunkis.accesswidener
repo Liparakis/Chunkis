@@ -1,0 +1,5 @@
+accessWidener v2 named
+# Lets ServerLightingProviderMixin queue a batch of light checks in the same stage vanilla uses.
+accessible class net/minecraft/server/world/ServerLightingProvider$Stage
+# Lets PreloadedBlockSections pick the bit width vanilla's own container serializer uses.
+accessible method net/minecraft/world/chunk/PaletteProvider createTypeFromSize (I)Lnet/minecraft/world/chunk/PaletteType;

@@ -25,6 +25,13 @@ public abstract class RegionBasedStorageMixin {
     private Path chunkis$directory;
 
     /**
+     * Dimension whose vanilla chunk or entity regions this storage holds, or {@code null}
+     * when it is some other region storage (POI, etc.) that Chunkis never blocks.
+     */
+    @Unique
+    private net.minecraft.registry.RegistryKey<net.minecraft.world.World> chunkis$guardedDimension;
+
+    /**
      * Derives the owning MCA filename for a chunk position.
      *
      * @param pos chunk position
@@ -53,6 +60,13 @@ public abstract class RegionBasedStorageMixin {
         final var cls = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.classify(directory);
         final var dimOpt = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(
                 directory);
+        // The directory never changes, so classify once instead of on every region read/write/scan.
+        this.chunkis$guardedDimension = cls
+                == io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification.VANILLA_CHUNK_REGION
+                || cls
+                == io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification.VANILLA_ENTITY_REGION
+                ? dimOpt.orElse(null)
+                : null;
         final boolean auth = dimOpt.isPresent()
                 && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
         Chunkis.LOGGER.info(
@@ -86,14 +100,16 @@ public abstract class RegionBasedStorageMixin {
             final CallbackInfo ci
     ) throws IOException {
         if (chunkis$shouldBlockVanillaStorage()) {
-            final Path regionFile = chunkis$directory.resolve(chunkis$regionFileName(pos));
-            Chunkis.LOGGER.debug(
-                    "POST_CIS_ANVIL_ACCESS path={} pos={} sizeBefore={} operation=RegionBasedStorage.write stack={}",
-                    chunkis$directory, pos,
-                    java.nio.file.Files.exists(regionFile) ? java.nio.file.Files.size(regionFile) : -1,
-                    java.util.Arrays.toString(Thread.currentThread()
-                            .getStackTrace())
-            );
+            if (Chunkis.LOGGER.isDebugEnabled()) {
+                final Path regionFile = chunkis$directory.resolve(chunkis$regionFileName(pos));
+                Chunkis.LOGGER.debug(
+                        "POST_CIS_ANVIL_ACCESS path={} pos={} sizeBefore={} operation=RegionBasedStorage.write stack={}",
+                        chunkis$directory, pos,
+                        java.nio.file.Files.exists(regionFile) ? java.nio.file.Files.size(regionFile) : -1,
+                        java.util.Arrays.toString(Thread.currentThread()
+                                .getStackTrace())
+                );
+            }
             ci.cancel();
         }
     }
@@ -144,21 +160,9 @@ public abstract class RegionBasedStorageMixin {
      */
     @Unique
     private boolean chunkis$shouldBlockVanillaStorage() {
-        if (chunkis$directory == null) {
-            return false;
-        }
-        final io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification classification =
-                io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.classify(chunkis$directory);
-        if (classification
-                != io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification.VANILLA_CHUNK_REGION
-                && classification
-                != io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification.VANILLA_ENTITY_REGION) {
-            return false;
-        }
-        final java.util.Optional<net.minecraft.registry.RegistryKey<net.minecraft.world.World>> dimOpt =
-                io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(
-                        chunkis$directory);
-        return dimOpt.isPresent()
-                && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
+        // Authority can change after construction (migration finishes), so only it is re-checked.
+        return chunkis$guardedDimension != null
+                && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(
+                chunkis$guardedDimension);
     }
 }

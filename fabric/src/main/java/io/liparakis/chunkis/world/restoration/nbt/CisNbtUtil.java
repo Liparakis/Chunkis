@@ -1,19 +1,13 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
-import net.minecraft.registry.Registries;
 import net.minecraft.util.math.ChunkPos;
 
 /**
@@ -135,6 +129,29 @@ public final class CisNbtUtil {
      * tree on every load. Legacy worlds may still carry the compound form.</p>
      */
     public static final String BASE_CHUNK_PAYLOAD_KEY = "base_chunk_payload";
+
+    /**
+     * Per-section biomes and light stored with a full block baseline ({@link StoredSections}), so the chunk
+     * can be loaded as a finished chunk without regenerating terrain. Absent on older entries, which load
+     * through terrain generation as before.
+     */
+    public static final String STORED_SECTIONS_KEY = "stored_sections";
+
+    /**
+     * Whether {@link #STORED_SECTIONS_KEY} holds the chunk's complete light. Always written next to the
+     * sections, so a later unlit capture never inherits an earlier capture's flag.
+     */
+    public static final String STORED_LIGHT_KEY = "stored_light";
+
+    /**
+     * Metadata key for a stored chunk's pending block and fluid ticks; see {@link PendingTicksNbt}.
+     */
+    public static final String PENDING_TICKS_KEY = "pending_ticks";
+
+    /**
+     * Metadata key for a stored chunk's heightmaps, in vanilla's {@code Heightmaps} form, captured with its blocks.
+     */
+    public static final String STORED_HEIGHTMAPS_KEY = "stored_heightmaps";
     /**
      * Synthetic NBT marker indicating that a chunk has CIS delta data stored
      * outside vanilla chunk NBT.
@@ -145,14 +162,6 @@ public final class CisNbtUtil {
      * used to build the temporary chunk NBT passed into vanilla deserialization.
      */
     public static final String LOAD_BASE_CHUNK_USAGE_KEY = "LoadBaseChunkUsage";
-    /**
-     * NBT key required by Minecraft's entity deserializer.
-     */
-    private static final String ENTITY_ID_KEY = "id";
-    /**
-     * Initial buffer size for small metadata serialization.
-     */
-    private static final int RAW_METADATA_INITIAL_CAPACITY = 256;
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -423,118 +432,6 @@ public final class CisNbtUtil {
     }
 
     /**
-     * Serializes one raw metadata payload using CIS' length-prefixed framing.
-     *
-     * <p>The returned byte array contains:</p>
-     * <ol>
-     *   <li>a four-byte big-endian payload length</li>
-     *   <li>the raw NBT compound payload</li>
-     * </ol>
-     *
-     * <p>This avoids the old double-buffer path. It writes a placeholder length,
-     * serializes the payload once, patches the first four bytes, then returns one
-     * compact byte array.</p>
-     *
-     * @param metadata metadata payload to serialize
-     * @return encoded length-prefixed payload
-     * @throws IOException if NBT serialization fails
-     */
-    public static byte[] serializeRawPayload(final NbtCompound metadata) throws IOException {
-        Objects.requireNonNull(metadata, "metadata");
-
-        final LengthPrefixedByteArrayOutputStream buffer =
-                new LengthPrefixedByteArrayOutputStream(RAW_METADATA_INITIAL_CAPACITY);
-
-        try (DataOutputStream output = new DataOutputStream(buffer)) {
-            output.writeInt(0);
-            NbtIo.writeCompound(metadata, output);
-            output.flush();
-        }
-
-        buffer.patchLengthPrefix();
-        return buffer.toSizedByteArray();
-    }
-
-    /**
-     * Serializes one raw NBT compound without CIS' outer length prefix.
-     *
-     * <p>Used for nested payloads that Chunkis wants to keep opaque inside larger
-     * metadata structures, such as persisted base chunks.</p>
-     *
-     * @param payload target compound
-     * @return raw serialized compound bytes
-     * @throws IOException if serialization fails
-     */
-    static byte[] serializeRawCompound(final NbtCompound payload) throws IOException {
-        Objects.requireNonNull(payload, "payload");
-
-        try (java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream(4096);
-                java.io.DataOutputStream output = new java.io.DataOutputStream(buffer)) {
-            NbtIo.writeCompound(payload, output);
-            output.flush();
-            return buffer.toByteArray();
-        }
-    }
-
-    /**
-     * Parses one raw serialized NBT compound without a length prefix.
-     *
-     * @param payload raw compound bytes
-     * @return parsed compound
-     * @throws IOException if parsing fails
-     */
-    static NbtCompound deserializeRawCompound(final byte[] payload) throws IOException {
-        Objects.requireNonNull(payload, "payload");
-
-        try (java.io.ByteArrayInputStream input = new java.io.ByteArrayInputStream(payload);
-                java.io.DataInputStream dataInput = new java.io.DataInputStream(input)) {
-            return NbtIo.readCompound(dataInput);
-        }
-    }
-
-    /**
-     * Serializes chunk metadata for CIS persistence, packing any embedded base
-     * chunk compound into the opaque byte-array form used by newer saves.
-     *
-     * <p>This keeps the server-thread mutation path on the simple in-memory
-     * compound shape while still writing the cheaper-to-load on-disk shape.</p>
-     *
-     * @param metadata in-memory metadata envelope
-     * @return encoded CIS metadata payload including length prefix
-     * @throws IOException if serialization fails
-     */
-    public static byte[] serializeChunkMetadataForStorage(final NbtCompound metadata) throws IOException {
-        return serializeRawPayload(packPersistedBaseChunkPayload(metadata));
-    }
-
-    /**
-     * Returns metadata ready for persistence, rewriting only the persisted base
-     * chunk child from compound form to opaque bytes when needed.
-     *
-     * @param metadata in-memory metadata envelope
-     * @return original metadata when no rewrite is needed, otherwise a packed copy
-     * @throws IOException if base chunk serialization fails
-     */
-    static NbtCompound packPersistedBaseChunkPayload(final NbtCompound metadata) throws IOException {
-        Objects.requireNonNull(metadata, "metadata");
-
-        if (metadata.getByteArray(BASE_CHUNK_PAYLOAD_KEY)
-                .isPresent()) {
-            return metadata;
-        }
-
-        final NbtCompound baseChunkNbt = getCompoundOrNull(metadata, BASE_CHUNK_NBT_KEY);
-        if (baseChunkNbt == null || baseChunkNbt.isEmpty()) {
-            return metadata;
-        }
-
-        final NbtCompound packed = metadata.copy();
-        packed.remove(BASE_CHUNK_NBT_KEY);
-        packed.putByteArray(BASE_CHUNK_PAYLOAD_KEY, serializeRawCompound(baseChunkNbt));
-        return packed;
-    }
-
-    /**
      * Returns copied vanilla structure metadata from a persisted metadata payload.
      *
      * <p>Supports both formats:</p>
@@ -609,6 +506,93 @@ public final class CisNbtUtil {
     }
 
     /**
+     * Reports whether rebuilding the metadata envelope from {@code structureData} would reproduce
+     * {@code existingMetadata}: same structures compound, repopulation already suppressed, and the same
+     * portal flag. The base chunk, full-baseline flag and carried keys are copied over unchanged by a
+     * rebuild, so they cannot differ.
+     *
+     * @param existingMetadata current enveloped metadata, possibly {@code null}
+     * @param structureData    freshly extracted structures compound
+     * @param portalChunk      whether the live chunk contains portal blocks
+     * @return true when no rebuild is needed
+     */
+    public static boolean isStructureMetadataCurrent(final NbtCompound existingMetadata,
+            final NbtCompound structureData, final boolean portalChunk) {
+        final NbtCompound existingStructures = getCompoundOrNull(existingMetadata, STRUCTURES_KEY);
+        final Boolean suppressed = existingMetadata == null ? null : readSuppressInitialRepopulationFlag(existingMetadata);
+        final Boolean portal = existingMetadata == null ? null : readPortalChunkFlag(existingMetadata);
+        return existingStructures != null
+                && Boolean.TRUE.equals(suppressed)
+                && portal != null && portal == portalChunk
+                && existingStructures.equals(structureData);
+    }
+
+    /**
+     * Copies a delta payload for an async-save snapshot, sharing its stored sections instead of copying them.
+     *
+     * <p>A capture always puts a new {@link #STORED_SECTIONS_KEY} list into new metadata and nothing modifies the
+     * list afterwards ({@link #getStoredSections} hands out copies), so the snapshot can share it; it holds a
+     * chunk's light, the largest part of the metadata.</p>
+     *
+     * @param payload block-entity, entity or metadata payload
+     * @return a copy that may share the stored sections list
+     */
+    public static NbtCompound copySharingStoredSections(final NbtCompound payload) {
+        final NbtElement storedSections = payload.get(STORED_SECTIONS_KEY);
+        if (storedSections == null) {
+            return payload.copy();
+        }
+        final NbtCompound copy = new NbtCompound();
+        for (final String key : payload.getKeys()) {
+            final NbtElement element = payload.get(key);
+            copy.put(key, element == storedSections ? element : element.copy());
+        }
+        return copy;
+    }
+
+    /**
+     * Returns the stored per-section biomes and light, if this entry has them.
+     *
+     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @return a copy of the vanilla-format section list, or {@code null} when absent
+     */
+    public static NbtList getStoredSections(final Object chunkMetadata) {
+        if (!(chunkMetadata instanceof NbtCompound metadata)) {
+            return null;
+        }
+        return metadata.getList(STORED_SECTIONS_KEY)
+                .filter(list -> !list.isEmpty())
+                .map(NbtList::copy)
+                .orElse(null);
+    }
+
+    /**
+     * Returns whether this entry loads as a finished chunk: its blocks come from the full block baseline and
+     * its biomes from the stored sections, so no terrain is generated for it. A full baseline also means no
+     * persisted base chunk supplies blocks ({@link #shouldUsePersistedBaseChunkForBlockBaseline}).
+     *
+     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @return true when the entry loads without terrain generation
+     */
+    public static boolean loadsAsFinishedChunk(final Object chunkMetadata) {
+        return hasFullBlockBaseline(chunkMetadata)
+                && chunkMetadata instanceof NbtCompound metadata
+                && !metadata.getListOrEmpty(STORED_SECTIONS_KEY).isEmpty();
+    }
+
+    /**
+     * Returns whether this entry loads as a finished chunk whose light is stored too, so its light already
+     * matches the restored blocks and nothing needs relighting.
+     *
+     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @return true when the entry loads lit
+     */
+    public static boolean loadsWithStoredLight(final Object chunkMetadata) {
+        return loadsAsFinishedChunk(chunkMetadata)
+                && ((NbtCompound) chunkMetadata).getBoolean(STORED_LIGHT_KEY, false);
+    }
+
+    /**
      * Returns whether metadata says the chunk currently contains portal blocks.
      *
      * @param chunkMetadata metadata object, usually an {@link NbtCompound}
@@ -675,17 +659,20 @@ public final class CisNbtUtil {
     }
 
     /**
-     * Copies migrated-authoritative markers and preserved auxiliary vanilla NBT
-     * from one metadata envelope into another.
+     * Carries every key a freshly rebuilt metadata envelope does not own over from
+     * the previous envelope.
      *
-     * <p>This keeps offline-translated authoritative chunks authoritative across
-     * later save-time recapture paths that rebuild the metadata envelope from
-     * explicit runtime state.</p>
+     * <p>Save-time recapture rebuilds the envelope from runtime state, which only
+     * knows the structures, base chunk and the three {@code chunkis} flags. Everything
+     * else (the migrated-authoritative marker, preserved auxiliary vanilla NBT, keys
+     * written by a newer build or by future features) is copied from {@code
+     * sourceMetadata} so a recapture never discards it. The envelope-owned root keys
+     * are left as rebuilt, because their absence there is an intentional removal.</p>
      *
      * @param sourceMetadata metadata to read from, may be {@code null}
-     * @param targetMetadata metadata to mutate
+     * @param targetMetadata freshly rebuilt metadata to mutate
      */
-    public static void preserveMigratedAuthoritativeMetadata(
+    public static void preserveCarriedMetadata(
             final NbtCompound sourceMetadata,
             final NbtCompound targetMetadata
     ) {
@@ -695,14 +682,31 @@ public final class CisNbtUtil {
             return;
         }
 
-        if (isMigratedAuthoritativeChunk(sourceMetadata)) {
-            markMigratedAuthoritativeChunk(targetMetadata);
+        for (final String key : sourceMetadata.getKeys()) {
+            // The base chunk, in either form, is only ever re-added on purpose; carrying it would keep a full
+            // vanilla copy of the chunk inside entries that no longer need it.
+            // Pending ticks are re-captured with every snapshot; carrying them would replay ticks that already ran.
+            if (STRUCTURES_KEY.equals(key) || BASE_CHUNK_NBT_KEY.equals(key) || BASE_CHUNK_PAYLOAD_KEY.equals(key)
+                    || CHUNKIS_METADATA_KEY.equals(key) || PENDING_TICKS_KEY.equals(key)
+                    || STORED_HEIGHTMAPS_KEY.equals(key)
+                    || targetMetadata.contains(key)) {
+                continue;
+            }
+            targetMetadata.put(key, sourceMetadata.get(key)
+                    .copy());
         }
 
-        final NbtCompound preservedAuxiliary =
-                extractPreservedAuxiliaryChunkNbt(sourceMetadata);
-        if (preservedAuxiliary != null && !preservedAuxiliary.isEmpty()) {
-            putPreservedAuxiliaryChunkNbt(targetMetadata, preservedAuxiliary);
+        final NbtCompound sourceChunkis = sourceMetadata.getCompound(CHUNKIS_METADATA_KEY)
+                .orElse(null);
+        if (sourceChunkis == null) {
+            return;
+        }
+        final NbtCompound targetChunkis = getOrCreateChunkisMetadata(targetMetadata);
+        for (final String key : sourceChunkis.getKeys()) {
+            if (!targetChunkis.contains(key)) {
+                targetChunkis.put(key, sourceChunkis.get(key)
+                        .copy());
+            }
         }
     }
 
@@ -824,39 +828,6 @@ public final class CisNbtUtil {
     }
 
     /**
-     * Ensures an entity NBT compound contains the required {@code "id"} field.
-     *
-     * <p>Minecraft's entity deserializer requires the registry ID string, for
-     * example {@code "minecraft:pig"}. Some serialization paths omit it, so this
-     * inserts the ID from the live entity type when missing.</p>
-     *
-     * @param nbt    entity NBT compound
-     * @param entity source entity
-     */
-    public static void ensureEntityIdPresent(
-            final NbtCompound nbt,
-            final Entity entity
-    ) {
-        Objects.requireNonNull(nbt, "nbt");
-        Objects.requireNonNull(entity, "entity");
-
-        if (!nbt.contains(ENTITY_ID_KEY)) {
-            nbt.putString(ENTITY_ID_KEY, resolveEntityId(entity));
-        }
-    }
-
-    /**
-     * Resolves the registry ID string for an entity type.
-     *
-     * @param entity entity whose type should be resolved
-     * @return registry ID string
-     */
-    private static String resolveEntityId(final Entity entity) {
-        return Registries.ENTITY_TYPE.getId(entity.getType())
-                .toString();
-    }
-
-    /**
      * Reads the explicit persisted suppression flag.
      *
      * @param chunkMetadata persisted metadata payload
@@ -955,46 +926,4 @@ public final class CisNbtUtil {
 
     }
 
-    /**
-     * Byte-array output stream whose first four bytes can be patched with the
-     * payload length after serialization.
-     *
-     * <p>This avoids serializing metadata into a second temporary payload buffer
-     * just to discover its size.</p>
-     */
-    private static final class LengthPrefixedByteArrayOutputStream
-            extends ByteArrayOutputStream {
-
-        /**
-         * Constructor.
-         *
-         * @param size initial capacity
-         */
-        private LengthPrefixedByteArrayOutputStream(final int size) {
-            super(size);
-        }
-
-        /**
-         * Patches the first four bytes with the payload length.
-         *
-         * <p>The payload begins immediately after the four-byte length prefix.</p>
-         */
-        private void patchLengthPrefix() {
-            final int payloadLength = count - Integer.BYTES;
-
-            buf[0] = (byte) (payloadLength >>> 24);
-            buf[1] = (byte) (payloadLength >>> 16);
-            buf[2] = (byte) (payloadLength >>> 8);
-            buf[3] = (byte) payloadLength;
-        }
-
-        /**
-         * Returns a compact byte array containing only written bytes.
-         *
-         * @return compact serialized byte array
-         */
-        private byte[] toSizedByteArray() {
-            return count == buf.length ? buf : Arrays.copyOf(buf, count);
-        }
-    }
 }

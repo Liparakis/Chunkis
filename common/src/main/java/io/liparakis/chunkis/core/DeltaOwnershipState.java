@@ -1,9 +1,17 @@
 package io.liparakis.chunkis.core;
 
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+
 /**
  * Tracks the ownership and dirty state metadata for a ChunkDelta.
  */
 final class DeltaOwnershipState {
+
+    /**
+     * Atomic increment for {@link #mutationGeneration}, which stays a plain volatile field for reads.
+     */
+    private static final AtomicLongFieldUpdater<DeltaOwnershipState> MUTATION_GENERATION =
+            AtomicLongFieldUpdater.newUpdater(DeltaOwnershipState.class, "mutationGeneration");
 
     /**
      * Stores ownership reason.
@@ -22,13 +30,14 @@ final class DeltaOwnershipState {
      */
     String pendingMutationSource;
     /**
-     * Stores mutation generation.
+     * Generation bumped by every dirtying mutation (server thread). Volatile because the
+     * async save worker reads it for its staleness pre-check; all writes stay on the server thread.
      */
-    long mutationGeneration;
+    volatile long mutationGeneration;
     /**
-     * Stores saved generation.
+     * Generation last persisted; written only on the server thread.
      */
-    long savedGeneration;
+    volatile long savedGeneration;
 
     /**
      * Performs delta ownership state.
@@ -40,5 +49,13 @@ final class DeltaOwnershipState {
         this.pendingMutationSource = null;
         this.mutationGeneration = 0L;
         this.savedGeneration = 0L;
+    }
+
+    /**
+     * Bumps {@link #mutationGeneration} atomically, so no increment is lost even if a second writer
+     * thread ever appears.
+     */
+    void incrementMutationGeneration() {
+        MUTATION_GENERATION.incrementAndGet(this);
     }
 }

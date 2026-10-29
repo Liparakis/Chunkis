@@ -147,7 +147,7 @@ class CisNbtUtilTest {
         assertFalse(delta.getChunkMetadata()
                 .contains(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY));
 
-        final NbtCompound packedMetadata = CisNbtUtil.packPersistedBaseChunkPayload(delta.getChunkMetadata());
+        final NbtCompound packedMetadata = CisMetadataCodec.packPersistedBaseChunkPayload(delta.getChunkMetadata());
         assertTrue(packedMetadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
                 .orElseThrow().length > 0);
         assertFalse(packedMetadata.contains(CisNbtUtil.BASE_CHUNK_NBT_KEY));
@@ -285,5 +285,40 @@ class CisNbtUtilTest {
                 result.root()
                         .getInt(CisNbtUtil.Z_POS_KEY)
                         .orElseThrow());
+    }
+
+    /**
+     * Recapture rebuilds the envelope; keys it does not own (migrated marker, unknown
+     * root keys, unknown chunkis flags) must survive, while rebuilt keys win.
+     */
+    @Test
+    void preserveCarriedMetadataKeepsUnknownKeysAndRebuiltValues() {
+        final NbtCompound previous = CisNbtUtil.createChunkMetadata(null, true);
+        CisNbtUtil.markMigratedAuthoritativeChunk(previous);
+        previous.putString("future_root_key", "kept");
+        previous.getCompound(CisNbtUtil.CHUNKIS_METADATA_KEY)
+                .orElseThrow()
+                .putInt("future_flag", 7);
+        final NbtCompound oldBase = new NbtCompound();
+        oldBase.putString("marker", "old-base");
+        previous.put(CisNbtUtil.BASE_CHUNK_NBT_KEY, oldBase);
+
+        final NbtCompound rebuilt = CisNbtUtil.createChunkMetadata(null, false);
+        CisNbtUtil.preserveCarriedMetadata(previous, rebuilt);
+
+        assertEquals("kept", rebuilt.getString("future_root_key")
+                .orElseThrow());
+        assertEquals(7, rebuilt.getCompound(CisNbtUtil.CHUNKIS_METADATA_KEY)
+                .orElseThrow()
+                .getInt("future_flag")
+                .orElseThrow());
+        assertTrue(CisNbtUtil.isMigratedAuthoritativeChunk(rebuilt));
+        assertFalse(rebuilt.getCompound(CisNbtUtil.CHUNKIS_METADATA_KEY)
+                        .orElseThrow()
+                        .getBoolean(CisNbtUtil.SUPPRESS_INITIAL_REPOPULATION_KEY)
+                        .orElseThrow(),
+                "rebuilt flag must not be overwritten by the previous value");
+        assertFalse(rebuilt.contains(CisNbtUtil.BASE_CHUNK_NBT_KEY),
+                "an envelope-owned key absent from the rebuild is an intentional removal");
     }
 }

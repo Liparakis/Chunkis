@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -157,8 +158,10 @@ public final class CisStorageMigrator<S, N> {
      */
     private void writeTargetVersionMarker(final Path storageDir) {
         final Path markerPath = storageDir.resolve(VERSION_MARKER_FILE);
+        final Path tempPath = markerPath.resolveSibling(VERSION_MARKER_FILE + ".tmp");
         try {
-            Files.writeString(markerPath, Integer.toString(targetVersion), StandardCharsets.UTF_8);
+            Files.writeString(tempPath, Integer.toString(targetVersion), StandardCharsets.UTF_8);
+            Files.move(tempPath, markerPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (final IOException e) {
             logger.warn("Failed to write CIS migration marker {}", markerPath, e);
         }
@@ -235,7 +238,11 @@ public final class CisStorageMigrator<S, N> {
                 return report.addSkipped();
             }
 
-            storage.save(pos, delta);
+            if (!storage.save(pos, delta)) {
+                logger.error("Failed to save migrated CIS chunk {} (v{} -> v{}); it stays at its old version",
+                        pos, sourceVersion, targetVersion);
+                return report.addFailure();
+            }
             logger.info("Migrated CIS chunk {} from v{} to v{} via {} step(s)",
                     pos,
                     sourceVersion,

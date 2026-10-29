@@ -32,6 +32,112 @@ class ChunkDeltaTest {
     }
 
     /**
+     * A bulk copy carries every instruction across and leaves the target usable for later upserts.
+     */
+    @Test
+    void appendDecodedBlocksFromCopiesEveryInstructionAndKeepsLaterUpsertsWorking() {
+        final ChunkDelta<String, String> source = new ChunkDelta<>("air"::equals);
+        source.addBlockChange(1, 64, 1, "stone");
+        source.addBlockChange(2, 65, 3, "dirt");
+        final ChunkDelta<String, String> target = new ChunkDelta<>("air"::equals);
+
+        target.copyBlockPaletteFrom(source);
+        target.appendDecodedBlocksFrom(source);
+        final Map<Long, String> copied = new LinkedHashMap<>();
+        target.forEachBlock((x, y, z, state) -> copied.put(BlockInstruction.packPos(x, y, z), state));
+
+        assertThat(copied).containsExactly(
+                Map.entry(BlockInstruction.packPos(1, 64, 1), "stone"),
+                Map.entry(BlockInstruction.packPos(2, 65, 3), "dirt"));
+        target.addBlockChange(1, 64, 1, "gravel");
+        assertThat(target.getBlockChangesCount()).isEqualTo(2);
+        assertThat(source.getBlockChangesCount()).isEqualTo(2);
+    }
+
+    /**
+     * Releasing drops the block instructions of a clean delta and keeps recording later edits, until a capture
+     * clears the payload and ends the released state.
+     */
+    @Test
+    void releasedBlockPayloadRecordsLaterEditsUntilCleared() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.markSaved();
+
+        delta.releaseBlockPayload();
+        assertThat(delta.isBlockPayloadReleased()).isTrue();
+        assertThat(delta.getBlockChangesCount()).isZero();
+        assertThat(delta.isDirty()).isFalse();
+
+        delta.addBlockChange(2, 64, 2, "dirt");
+        assertThat(delta.getBlockChangesCount()).isEqualTo(1);
+        assertThat(delta.isBlockPayloadReleased()).isTrue();
+
+        delta.clearBlockPayloads(false);
+        assertThat(delta.isBlockPayloadReleased()).isFalse();
+    }
+
+    /**
+     * Only a clean delta may release its instructions: a dirty one may hold changes found nowhere else.
+     */
+    @Test
+    void releasingADirtyBlockPayloadIsRefused() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 64, 1, "stone");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(delta::releaseBlockPayload)
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(delta.getBlockChangesCount()).isEqualTo(1);
+    }
+
+    /**
+     * Blocks appended in bulk read back exactly like blocks appended one at a time.
+     */
+    @Test
+    void appendDecodedBlocksMatchesSingleAppends() {
+        final ChunkDelta<String, String> single = new ChunkDelta<>("air"::equals);
+        final ChunkDelta<String, String> bulk = new ChunkDelta<>("air"::equals);
+        single.addBlockChange(0, 0, 0, "stone");
+        final int[] stoneId = {-1};
+        single.forEachBlockInstruction((x, y, z, paletteId, state) -> stoneId[0] = paletteId);
+        bulk.copyBlockPaletteFrom(single);
+        single.clearBlockPayloads(false);
+        single.appendDecodedBlockFast(1, -64, 2, stoneId[0]);
+        single.appendDecodedBlockFast(15, 319, 0, stoneId[0]);
+
+        bulk.appendDecodedBlocks(new long[] {ChunkDelta.packDecodedBlock(1, -64, 2, stoneId[0]),
+                ChunkDelta.packDecodedBlock(15, 319, 0, stoneId[0]), 0L}, 2);
+        final Map<Long, String> expected = new LinkedHashMap<>();
+        single.forEachBlock((x, y, z, state) -> expected.put(BlockInstruction.packPos(x, y, z), state));
+        final Map<Long, String> actual = new LinkedHashMap<>();
+        bulk.forEachBlock((x, y, z, state) -> actual.put(BlockInstruction.packPos(x, y, z), state));
+
+        assertThat(actual).containsExactlyEntriesOf(expected).hasSize(2);
+    }
+
+    /**
+     * Trimming spare capacity keeps every block and leaves the delta usable for later edits.
+     */
+    @Test
+    void trimBlockCapacityKeepsBlocksAndLaterEdits() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.ensureBlockCapacity(1000);
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.addBlockChange(2, 65, 3, "dirt");
+
+        delta.trimBlockCapacity();
+        delta.addBlockChange(1, 64, 1, "gravel");
+        delta.addBlockChange(4, 70, 4, "sand");
+        final Map<Long, String> blocks = new LinkedHashMap<>();
+        delta.forEachBlock((x, y, z, state) -> blocks.put(BlockInstruction.packPos(x, y, z), state));
+
+        assertThat(blocks).containsExactly(
+                Map.entry(BlockInstruction.packPos(1, 64, 1), "gravel"),
+                Map.entry(BlockInstruction.packPos(2, 65, 3), "dirt"),
+                Map.entry(BlockInstruction.packPos(4, 70, 4), "sand"));
+    }
+
+    /**
      * Performs snapshot append stores blocks without needing the general mutation path.
      */
     @Test

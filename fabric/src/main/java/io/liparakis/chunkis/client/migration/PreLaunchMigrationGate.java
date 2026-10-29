@@ -68,7 +68,8 @@ public final class PreLaunchMigrationGate {
                     pendingStart.saveLoader(),
                     pendingStart.newWorld());
             client.execute(() -> resumeStartup(client, pendingStart));
-        } catch (final Exception e) {
+        } catch (final Exception | Error e) {
+            // Errors (e.g. OutOfMemoryError) must also leave the progress screen, or the client hangs on it.
             Chunkis.LOGGER.error("Chunkis pre-launch migration failed", e);
             client.execute(() -> showFailure(client, e));
         }
@@ -91,7 +92,7 @@ public final class PreLaunchMigrationGate {
     /**
      * Displays a user-visible migration failure and resets the gate.
      */
-    private static synchronized void showFailure(final MinecraftClient client, final Exception error) {
+    private static synchronized void showFailure(final MinecraftClient client, final Throwable error) {
         state = State.IDLE;
         client.setScreenAndRender(new MessageScreen(Text.literal(
                 "Chunkis migration failed: " + (error.getMessage() == null ? error.getClass()

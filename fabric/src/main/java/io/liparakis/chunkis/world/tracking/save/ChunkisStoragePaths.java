@@ -35,6 +35,11 @@ public final class ChunkisStoragePaths {
     private static final String REGIONS_DIR = "regions";
 
     /**
+     * Subdirectory holding unfinished chunks ({@link UnfinishedChunkStore}).
+     */
+    private static final String UNFINISHED_DIR = "unfinished";
+
+    /**
      * Folder label namespace mapped for vanilla regional MCA blocks.
      */
     private static final String VANILLA_REGION_DIR = "region";
@@ -108,6 +113,19 @@ public final class ChunkisStoragePaths {
      */
     public static Path computeRegionsDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
         return computeChunkisDirectory(saveRoot, worldKey).resolve(REGIONS_DIR);
+    }
+
+    /**
+     * Resolves the dimension-local directory of {@link UnfinishedChunkStore}: chunks an authoritative world keeps
+     * while they are not stored as Chunkis entries. It sits apart from vanilla's
+     * {@code region} directory, so the pre-launch check for stray vanilla region files never sees it.
+     *
+     * @param saveRoot the world save root
+     * @param worldKey the registry key identifying the target dimension
+     * @return the resolved directory path
+     */
+    public static Path computeUnfinishedChunksDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
+        return computeChunkisDirectory(saveRoot, worldKey).resolve(UNFINISHED_DIR);
     }
 
     /**

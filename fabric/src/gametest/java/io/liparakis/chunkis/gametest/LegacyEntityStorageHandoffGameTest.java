@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.gametest;
 
+import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.storage.io.CisStorage;
@@ -62,7 +63,7 @@ public final class LegacyEntityStorageHandoffGameTest {
             entity.saveSelfData(writeView);
 
             final NbtCompound nbt = writeView.getNbt();
-            CisNbtUtil.ensureEntityIdPresent(nbt, entity);
+            EntityPayloadNbt.ensureEntityIdPresent(nbt, entity);
             return new SerializedEntity(entity.getUuid(), nbt);
         }
     }

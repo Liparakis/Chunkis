@@ -11,7 +11,6 @@ import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.storage.io.CisStorage;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
@@ -30,7 +29,6 @@ import net.minecraft.test.TestContext;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.GameMode;
 import net.minecraft.world.chunk.Chunk;
 
 /**
@@ -184,6 +182,8 @@ public final class AsyncSaveDataLossGameTest {
      */
     private static void flushChunkisState(final ServerWorld world) {
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
+        // Same order as shutdown: drain async saves before the synchronous sweep.
+        AsyncCisSaveManager.flushAndClose(world);
         final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending = GlobalChunkTracker.getPendingDeltas(world);
 
         for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
@@ -192,11 +192,10 @@ public final class AsyncSaveDataLossGameTest {
                 FabricCisStorageHelper.saveTrackedDelta(world, storage, entry.getKey(), delta);
             }
         }
-        AsyncCisSaveManager.flushAndClose(world);
     }
 
     /**
-     * Asserts that CIS storage contains a persisted delta with base chunk NBT for
+     * Asserts that CIS storage contains a persisted delta with a persistence anchor for
      * {@code chunkPos}.
      *
      * <p>Two assertions are made in order:</p>
@@ -223,8 +222,12 @@ public final class AsyncSaveDataLossGameTest {
         context.assertTrue(true,
                 Text.literal("Expected a persisted Chunkis delta for the " + label + " chunk at " + chunkPos
                         + " but storage returned null."));
-        context.assertTrue(CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata()),
-                Text.literal("Expected persisted base chunk NBT for the " + label + " chunk at " + chunkPos + "."));
+        // Either anchor makes a delta restorable: persisted base NBT, or a full block baseline
+        // written by a full snapshot (block-entity-free chunks get the latter by design).
+        context.assertTrue(io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership
+                        .hasChunkisPersistenceAnchor(delta),
+                Text.literal("Expected a persistence anchor (base chunk NBT or full baseline) for the " + label
+                        + " chunk at " + chunkPos + "."));
     }
 
     /**
@@ -408,7 +411,7 @@ public final class AsyncSaveDataLossGameTest {
         world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
         world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
 
-        final ServerPlayerEntity player = (ServerPlayerEntity) context.createMockPlayer(GameMode.CREATIVE);
+        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
         teleportPlayer(player, world, targets.nearArrival());
 
         for (int i = 0; i < ROUND_TRIPS; i++) {
@@ -442,6 +445,10 @@ public final class AsyncSaveDataLossGameTest {
             context.assertTrue(isMarkerPatternPresent(world, targets.farPrimary(), targets.farSecondary()),
                     Text.literal("Far chunk edits disappeared after 100 far round trips."));
 
+            // Vanilla throttles autosave per chunk (10s); dirtying both chunks guarantees this final
+            // save runs, so the trace assertions below see fresh evidence instead of evicted events.
+            markChunkDirty(world, targets.nearChunk());
+            markChunkDirty(world, targets.farChunk());
             world.getChunkManager()
                     .save(false);
             flushChunkisState(world);

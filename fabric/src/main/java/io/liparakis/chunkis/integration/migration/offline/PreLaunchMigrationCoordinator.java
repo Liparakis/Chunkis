@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.registry.DynamicRegistryManager;
@@ -32,6 +33,16 @@ public final class PreLaunchMigrationCoordinator {
      * Logger for migration-stage startup decisions and cleanup actions.
      */
     private static final Logger LOGGER = LoggerFactory.getLogger(PreLaunchMigrationCoordinator.class);
+
+    /**
+     * File in a dimension's CIS directory written only after a verified migration.
+     */
+    static final String MIGRATION_COMPLETE_MARKER = ".migration-complete";
+
+    /**
+     * Suffix given to vanilla region files found after migration completed.
+     */
+    static final String STALE_SUFFIX = ".stale";
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -77,41 +88,41 @@ public final class PreLaunchMigrationCoordinator {
                 final List<Path> liveMca = collectFiles(regionDir, "r.*.*.mca");
                 final List<Path> liveEntityMca = collectFiles(entityDir, "r.*.*.mca");
                 final Path cisDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, worldKey);
+                final Path completionMarker = cisDir.resolve(MIGRATION_COMPLETE_MARKER);
                 final boolean hasCisData = Files.isDirectory(cisDir) && !collectFiles(cisDir, "*.cis").isEmpty();
 
-                if (liveMca.isEmpty() && liveEntityMca.isEmpty()) {
-                    if (shouldTreatDimensionAsAuthoritative(false, hasCisData)) {
+                switch (decide(Files.exists(completionMarker), hasCisData,
+                        !liveMca.isEmpty() || !liveEntityMca.isEmpty())) {
+                    case AUTHORITATIVE -> {
+                        writeCompletionMarker(completionMarker);
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
                         LOGGER.info("Chunkis storage is authoritative for {}", worldKey.getValue());
                     }
-                    continue;
-                }
-
-                if (shouldDeleteVanillaSourcesAsStale(hasCisData)) {
-                    for (final Path staleMca : liveMca) {
-                        Files.deleteIfExists(staleMca);
+                    case SET_ASIDE_STALE_SOURCES -> {
+                        setAside(liveMca);
+                        setAside(liveEntityMca);
+                        MigrationStateServiceHolder.markAuthoritative(worldKey);
+                        LOGGER.warn("Chunkis: {} vanilla region file(s) and {} entity region file(s) appeared in {} "
+                                        + "after migration completed; renamed to *{} (not deleted, not imported)",
+                                liveMca.size(), liveEntityMca.size(), worldKey.getValue(), STALE_SUFFIX);
                     }
-                    for (final Path staleEntityMca : liveEntityMca) {
-                        Files.deleteIfExists(staleEntityMca);
+                    case MIGRATE -> {
+                        if (hasCisData) {
+                            LOGGER.warn("Chunkis: Resuming interrupted migration for {} ({} region file(s) left)",
+                                    worldKey.getValue(), liveMca.size());
+                        }
+                        final OfflineWorldMigrationReport report = OfflineMcaCisTranslator.translateWorld(
+                                saveRoot,
+                                worldKey,
+                                registryManager,
+                                dimensionType
+                        );
+                        verifyMigrationSucceeded(report, saveRoot.resolve("chunkis"));
+                        writeCompletionMarker(completionMarker);
+                        MigrationStateServiceHolder.markAuthoritative(worldKey);
+                        LOGGER.info("Chunkis migration completed; CIS is authoritative for {}", worldKey.getValue());
                     }
-                    MigrationStateServiceHolder.markAuthoritative(worldKey);
-                    LOGGER.warn(
-                            "Deleted {} stale vanilla region file(s) and {} stale entity region file(s) after CIS takeover for {}",
-                            liveMca.size(),
-                            liveEntityMca.size(),
-                            worldKey.getValue());
-                    continue;
                 }
-
-                final OfflineWorldMigrationReport report = OfflineMcaCisTranslator.translateWorld(
-                        saveRoot,
-                        worldKey,
-                        registryManager,
-                        dimensionType
-                );
-                verifyMigrationSucceeded(report, saveRoot.resolve("chunkis"));
-                MigrationStateServiceHolder.markAuthoritative(worldKey);
-                LOGGER.info("Chunkis migration completed; CIS is authoritative for {}", worldKey.getValue());
             }
         } catch (final IOException e) {
             throw new IllegalStateException("Chunkis pre-launch migration failed for " + saveRoot, e);
@@ -136,25 +147,73 @@ public final class PreLaunchMigrationCoordinator {
                             .getValue()
                             + " under "
                             + saveRoot
+                            + ": " + report.failedChunks() + " chunk(s) failed, " + report.handledChunks()
+                            + " converted, " + report.retiredRegions() + " region(s) retired. Failed regions were"
+                            + " kept in place and will be retried on the next launch; see the log for chunk coordinates."
             );
         }
     }
 
     /**
-     * Returns whether existing Chunkis storage is authoritative enough to skip
-     * vanilla-region migration, or whether a fresh world should start under
-     * Chunkis authority immediately.
+     * Returns whether a fresh world should start under Chunkis authority immediately.
      */
     static boolean shouldTreatDimensionAsAuthoritative(final boolean newWorld, final boolean hasCisData) {
         return newWorld || hasCisData;
     }
 
     /**
-     * Returns whether live vanilla region files should be deleted as stale after
-     * Chunkis takeover.
+     * Decides what to do with one existing dimension.
+     *
+     * <p>Only the persisted completion marker proves a finished migration. CIS files
+     * alone do not: an interrupted or failed run leaves both CIS files and
+     * un-migrated vanilla regions, which must be resumed, never deleted.</p>
+     *
+     * @param migrationComplete   whether the completion marker exists
+     * @param hasCisData          whether any {@code .cis} region exists
+     * @param hasLiveVanillaFiles whether any vanilla region or entity file remains
+     * @return the action to take
      */
-    static boolean shouldDeleteVanillaSourcesAsStale(final boolean hasCisData) {
-        return hasCisData;
+    static DimensionAction decide(final boolean migrationComplete, final boolean hasCisData,
+            final boolean hasLiveVanillaFiles) {
+        if (!hasLiveVanillaFiles) {
+            return DimensionAction.AUTHORITATIVE;
+        }
+        return migrationComplete ? DimensionAction.SET_ASIDE_STALE_SOURCES : DimensionAction.MIGRATE;
+    }
+
+    /**
+     * Writes the completion marker atomically.
+     */
+    private static void writeCompletionMarker(final Path marker) throws IOException {
+        if (Files.exists(marker)) {
+            return;
+        }
+        Files.createDirectories(marker.getParent());
+        final Path temp = marker.resolveSibling(marker.getFileName() + ".tmp");
+        Files.writeString(temp, "complete\n");
+        Files.move(temp, marker, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /**
+     * Renames vanilla region files out of the {@code r.*.*.mca} glob without deleting them.
+     */
+    private static void setAside(final List<Path> files) throws IOException {
+        for (final Path file : files) {
+            Files.move(file, file.resolveSibling(file.getFileName() + STALE_SUFFIX),
+                    StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /**
+     * Per-dimension migration action.
+     */
+    enum DimensionAction {
+        /** Nothing vanilla remains; CIS is the store. */
+        AUTHORITATIVE,
+        /** Migration finished earlier but vanilla files reappeared; keep them aside. */
+        SET_ASIDE_STALE_SOURCES,
+        /** First migration or resume of an interrupted one. */
+        MIGRATE
     }
 
     /**

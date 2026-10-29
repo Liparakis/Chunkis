@@ -95,6 +95,55 @@ class CisMappingTest {
     }
 
     /**
+     * A truncated mapping file must never be treated as "no mapping", which would
+     * re-number every block.
+     */
+    @Test
+    void refusesToRenumberWhenMappingFileIsEmptyAndNoBackupExists() throws IOException {
+        Path mappingFile = tempDir.resolve("global_ids.json");
+        Files.writeString(mappingFile, "");
+
+        assertThatThrownBy(() -> newMapping(mappingFile))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("refusing to re-number");
+    }
+
+    /**
+     * Each flush keeps the previous table as a backup that recovers a damaged file.
+     */
+    @Test
+    void recoversIdsFromBackupWhenMappingFileIsTruncated() throws IOException {
+        Path mappingFile = writeMapping(Map.of(
+                "minecraft:air", 0,
+                "known:stone", 7,
+                "known:dirt", 8));
+        Files.copy(mappingFile, tempDir.resolve("global_ids.json.bak"));
+        Files.writeString(mappingFile, "{\"minecraft:ai");
+
+        CisMapping<String, String, String> recovered = newMapping(mappingFile);
+
+        assertThat(recovered.getBlockId("known:stone")).isEqualTo(7);
+        assertThat(readMapping(mappingFile)).containsEntry("known:stone", 7)
+                .containsEntry("known:dirt", 8);
+    }
+
+    /**
+     * Flush replaces the file without leaving temp files and keeps a backup.
+     */
+    @Test
+    void flushWritesAtomicallyAndKeepsBackup() throws IOException {
+        Path mappingFile = writeMapping(Map.of(
+                "minecraft:air", 0,
+                "known:stone", 1));
+
+        newMapping(mappingFile);
+
+        assertThat(readMapping(mappingFile)).containsEntry("known:dirt", 2);
+        assertThat(readMapping(tempDir.resolve("global_ids.json.bak"))).doesNotContainKey("known:dirt");
+        assertThat(tempDir.resolve("global_ids.json.tmp")).doesNotExist();
+    }
+
+    /**
      * Performs write mapping.
      */
     private Path writeMapping(Map<String, Integer> mapping) throws IOException {

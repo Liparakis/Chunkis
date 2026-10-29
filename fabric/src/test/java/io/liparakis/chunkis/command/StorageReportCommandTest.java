@@ -21,14 +21,17 @@ class StorageReportCommandTest {
      * Builds a minimal raw CIS payload that exercises uniform, sparse,
      * default-sparse, and dense section accounting.
      *
+     * @param version CIS version to write; from {@link CisConstants#CODED_DENSE_MIN_VERSION} on, the dense
+     *                section's indices go to the byte stream after the section bits
      * @return a byte array containing the raw chunk payload
      * @throws Exception if payload generation fails
      */
-    private static byte[] buildChunkPayload() throws Exception {
+    private static byte[] buildChunkPayload(final int version) throws Exception {
+        final boolean byteDense = version >= CisConstants.CODED_DENSE_MIN_VERSION;
         final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (DataOutputStream data = new DataOutputStream(out)) {
             data.writeInt(CisConstants.MAGIC);
-            data.writeInt(CisConstants.VERSION);
+            data.writeInt(version);
 
             data.writeInt(3);
             data.writeShort(0);
@@ -66,7 +69,10 @@ class StorageReportCommandTest {
             writer.write(2, CisConstants.PALETTE_SIZE_BITS);
             writer.write(1, 2);
             writer.write(2, 2);
-            for (int i = 0; i < 4096; i++) {
+            if (byteDense) {
+                writer.write(0, 1);
+            }
+            for (int i = 0; !byteDense && i < 4096; i++) {
                 writer.write(1, 2);
             }
 
@@ -76,6 +82,13 @@ class StorageReportCommandTest {
             data.writeShort(4);
             data.writeInt(sectionData.length);
             data.write(sectionData);
+            if (byteDense) {
+                data.writeInt(4096);
+                for (int i = 0; i < 4096; i++) {
+                    data.writeByte(1);
+                }
+                data.writeInt(0);
+            }
 
             data.writeInt(2);
         }
@@ -91,7 +104,26 @@ class StorageReportCommandTest {
      */
     @Test
     void inspectsSectionEncodingsAndBlockEntitiesFromRawChunkPayload() throws Exception {
-        final byte[] payload = buildChunkPayload();
+        assertDiagnostics(buildChunkPayload(CisConstants.CODED_DENSE_MIN_VERSION - 1));
+    }
+
+    /**
+     * Tests the same accounting on a payload whose dense section stores its indices in the byte stream.
+     *
+     * @throws Exception if payload build or inspection fails
+     */
+    @Test
+    void inspectsByteAlignedDenseSectionsFromCurrentPayload() throws Exception {
+        assertDiagnostics(buildChunkPayload(CisConstants.VERSION));
+    }
+
+    /**
+     * Inspects a payload built by {@link #buildChunkPayload} and checks every count.
+     *
+     * @param payload raw chunk payload
+     * @throws Exception if inspection fails
+     */
+    private static void assertDiagnostics(final byte[] payload) throws Exception {
 
         final ChunkPayloadDiagnostics diagnostics =
                 CisPayloadDiagnosticsReader.inspectChunkPayload(payload);

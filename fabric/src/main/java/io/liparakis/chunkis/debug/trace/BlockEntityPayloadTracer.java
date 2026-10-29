@@ -58,7 +58,7 @@ public final class BlockEntityPayloadTracer {
 
         final String summary = PayloadWatchSummaries.summarizeBlockEntity(target, blockEntity, nbt);
         if (blockEntity == null || nbt == null || nbt.isEmpty()) {
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_SKIPPED,
                     "capture",
                     "PayloadWatchTracer#traceCapturedBlockEntity",
@@ -73,7 +73,7 @@ public final class BlockEntityPayloadTracer {
             return;
         }
 
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_CAPTURED,
                 "capture",
                 "PayloadWatchTracer#traceCapturedBlockEntity",
@@ -114,7 +114,7 @@ public final class BlockEntityPayloadTracer {
             return;
         }
 
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_SKIPPED,
                 "capture",
                 "PayloadWatchTracer#traceSkippedBlockEntityCapture",
@@ -158,7 +158,7 @@ public final class BlockEntityPayloadTracer {
         if (target == null) {
             return;
         }
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_RESTORE_APPLIED,
                 "restore",
                 "PayloadWatchTracer#traceRestoredBlockEntity",
@@ -200,7 +200,7 @@ public final class BlockEntityPayloadTracer {
         if (target == null) {
             return;
         }
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_SKIPPED,
                 "restore",
                 "PayloadWatchTracer#traceRestoreBlockEntitySkipped",
@@ -250,7 +250,7 @@ public final class BlockEntityPayloadTracer {
             }
 
             final NbtCompound matched = findBlockEntityNbt(blockEntities, target);
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     matched != null ? ChunkTraceEventType.WATCH_CAPTURED : ChunkTraceEventType.WATCH_FAILED,
                     stage,
                     source,

@@ -15,6 +15,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -76,6 +77,10 @@ public final class RegionFile implements AutoCloseable {
      */
     private static final int NO_FOOTER = -1;
     /**
+     * Deferred frees that trigger an automatic flush, bounding growth from delayed reuse.
+     */
+    private static final int PENDING_FREE_FLUSH_THRESHOLD = 64;
+    /**
      * Chunk payload offsets indexed by local region slot. Package-private for tests/compaction.
      */
     final int[] offsets = new int[CHUNKS_PER_REGION];
@@ -95,6 +100,10 @@ public final class RegionFile implements AutoCloseable {
      * Reusable direct buffer for single-entry header writes.
      */
     private final ByteBuffer headerBuffer = ByteBuffer.allocateDirect(HEADER_ENTRY_SIZE);
+    /**
+     * Slots freed since the last flush; held back from reuse until the new header is durable.
+     */
+    private final List<RegionFreeBlock> pendingFrees = new ArrayList<>();
     /**
      * Open channel for all reads, writes, compaction swaps, and header updates.
      */
@@ -216,6 +225,7 @@ public final class RegionFile implements AutoCloseable {
      * Loads the header and allocation metadata from an existing region file.
      */
     private void loadHeader() throws IOException {
+        pendingFrees.clear();
         final ByteBuffer header = ByteBuffer.allocate(HEADER_SIZE);
         readFully(channel, header, 0);
         header.flip();
@@ -258,7 +268,7 @@ public final class RegionFile implements AutoCloseable {
         }
 
         final int dataEnd = dataEndWithoutMetadata();
-        if (offsets[index] < HEADER_SIZE || offsets[index] + lengths[index] > dataEnd) {
+        if (offsets[index] < HEADER_SIZE || lengths[index] < 0 || (long) offsets[index] + lengths[index] > dataEnd) {
             throw new IOException("Chunk " + pos + " points outside live region payload area");
         }
 
@@ -281,12 +291,13 @@ public final class RegionFile implements AutoCloseable {
     /**
      * Writes chunk data to the region file, or clears the entry when {@code data} is null.
      *
-     * <p>Three allocation strategies in priority order:
+     * <p>The live slot is never overwritten. Allocation strategies in priority order:
      * <ol>
-     *   <li><b>In-place</b> new data fits within the old slot; old tail bytes become a free block.</li>
-     *   <li><b>Best-fit reuse</b> a free hole large enough is found; old slot becomes a free block.</li>
+     *   <li><b>Best-fit reuse</b> a free hole large enough is found.</li>
      *   <li><b>Append</b> no hole fits; data is appended at end of file.</li>
      * </ol>
+     * The old slot becomes reusable only after the next {@link #flush()}, so a crash
+     * always leaves the previous payload intact behind the previous header.
      *
      * <p>The footer is always truncated before any payload write and rewritten
      * afterward. If the metadata write is interrupted, the next open rebuilds
@@ -320,59 +331,79 @@ public final class RegionFile implements AutoCloseable {
         if (dataLength == 0) {
             if (oldLength > 0) {
                 updateHeader(index, 0, 0);
-                allocationMetadata.addFreeBlock(oldOffset, oldLength);
+                deferFree(oldOffset, oldLength);
             }
             writeMetadata();
             dirty = true;
             ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
                     ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region clear completed",
                     null, chunkKey, regionKey(), operationId, null, 0);
+            flushIfManyPendingFrees();
             return;
         }
 
-        if (oldLength > 0 && dataLength <= oldLength) {
-            // In-place: new data fits inside the existing slot.
-            writeFully(channel, ByteBuffer.wrap(data), oldOffset);
-            updateHeader(index, oldOffset, dataLength);
-            if (oldLength > dataLength) {
-                allocationMetadata.addFreeBlock(oldOffset + dataLength, oldLength - dataLength);
-            }
-            writeMetadata();
-            dirty = true;
-            ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
-                    ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed",
-                    null, chunkKey, regionKey(), operationId, null, dataLength);
-            return;
-        }
-
-        // Best-fit or append.
+        // Never overwrite the live slot: a torn write there would corrupt the only copy.
+        // The payload goes to a free hole or the end of the file, and the old slot is only
+        // released for reuse after the next flush has made the new header durable.
         final Allocation allocation = allocate(dataLength);
         writeFully(channel, ByteBuffer.wrap(data), allocation.offset());
         updateHeader(index, allocation.offset(), dataLength);
         if (oldLength > 0) {
-            allocationMetadata.addFreeBlock(oldOffset, oldLength);
+            deferFree(oldOffset, oldLength);
         }
         writeMetadata();
         dirty = true;
+        flushIfManyPendingFrees();
         ChunkTraceStore.trace(ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.REGION_WRITE_TX_END,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "region write completed", null
                 , chunkKey, regionKey(), operationId, null, dataLength);
     }
 
     /**
-     * Forces pending writes to disk. Silently no-ops if already clean.
+     * Forces pending writes to disk, then releases slots freed since the last flush
+     * for reuse. Silently no-ops if already clean.
+     *
+     * <p>Order matters for power-loss safety: payloads and header entries are forced
+     * first, so the durable header never points at a slot that was freed and then
+     * reused. Only then do deferred frees enter the allocator, and the footer is
+     * rewritten to include them.</p>
      */
-    public void flush() {
+    public synchronized void flush() {
         if (!dirty) {
             return;
         }
         try {
             if (channel.isOpen()) {
-                channel.force(false);
+                channel.force(true);
+                if (!pendingFrees.isEmpty()) {
+                    for (final RegionFreeBlock block : pendingFrees) {
+                        allocationMetadata.addFreeBlock(block.offset(), block.length());
+                    }
+                    pendingFrees.clear();
+                    truncateFooter();
+                    writeMetadata();
+                    channel.force(true);
+                }
             }
             dirty = false;
         } catch (final IOException e) {
             Chunkis.LOGGER.warn("Failed to flush region file {}", path, e);
+        }
+    }
+
+    /**
+     * Records a slot that became unreferenced; it is reused only after the next flush.
+     */
+    private void deferFree(final int offset, final int length) {
+        pendingFrees.add(new RegionFreeBlock(offset, length));
+    }
+
+    /**
+     * Flushes once enough slots wait for release, bounding file growth from deferred reuse.
+     */
+    private void flushIfManyPendingFrees() {
+        if (pendingFrees.size() >= PENDING_FREE_FLUSH_THRESHOLD) {
+            flush();
         }
     }
 
@@ -411,9 +442,8 @@ public final class RegionFile implements AutoCloseable {
      * @throws IOException if compaction or validation fails
      */
     public synchronized RegionCompactReport compactWithReport() throws IOException {
-        flush();
-
         final long physicalBytesBefore = channel.size();
+        flush();
         final long liveBytes = sumLiveBytes();
         final Path tempPath = writeCompactedTempFile(liveBytes);
 
@@ -485,7 +515,9 @@ public final class RegionFile implements AutoCloseable {
 
         metadataOffset = footerStart;
         if (!readFooterMetadata(footerStart)) {
-            // Footer was present but invalid; start with an empty free list.
+            // Safe (append-only until compaction), but never silent: it hides an unknown or damaged footer.
+            Chunkis.LOGGER.warn("Chunkis: Ignoring unreadable allocation footer in {} (expected metadata v{}); "
+                    + "free space will not be reused until compaction", path, METADATA_VERSION);
             allocationMetadata.reset();
         }
     }

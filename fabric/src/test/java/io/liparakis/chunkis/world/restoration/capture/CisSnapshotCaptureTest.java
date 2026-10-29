@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -53,7 +53,7 @@ class CisSnapshotCaptureTest {
                 true
         );
 
-        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false);
+        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false, null, false, null);
 
         assertTrue(CisNbtUtil.hasFullBlockBaseline(metadata));
         assertNull(CisNbtUtil.extractPersistedBaseChunkNbt(metadata));
@@ -80,7 +80,7 @@ class CisSnapshotCaptureTest {
         CisNbtUtil.putPreservedAuxiliaryChunkNbt(existingMetadata, auxiliary);
         CisNbtUtil.markMigratedAuthoritativeChunk(existingMetadata);
 
-        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false);
+        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false, null, false, null);
 
         assertTrue(CisNbtUtil.isMigratedAuthoritativeChunk(metadata));
         final NbtCompound preservedAuxiliary = CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
@@ -94,61 +94,79 @@ class CisSnapshotCaptureTest {
     }
 
     /**
-     * Verifies that the decision to persist base chunk info is made correctly based on block entity count.
+     * A full-baseline snapshot stores the sections it is given, loads as a finished chunk, and never carries a
+     * base chunk forward, whether the previous entry held it as NBT or as a raw payload.
      */
     @Test
-    void snapshotKeepsPersistedBaseForChunksWithBlockEntities() {
-        assertTrue(CisSnapshotCapture.shouldPersistBaseChunkForSnapshot(1));
-        assertFalse(CisSnapshotCapture.shouldPersistBaseChunkForSnapshot(0));
+    void authoritativeSnapshotMetadataStoresSectionsAndDropsBasePayload() {
+        final NbtCompound existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(null, true, false, null, false);
+        existingMetadata.putByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY, new byte[] {1, 2, 3});
+        final NbtList sections = oneSection();
+
+        final NbtCompound metadata =
+                CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false, sections, true, null);
+
+        assertEquals(sections, CisNbtUtil.getStoredSections(metadata));
+        assertTrue(CisNbtUtil.loadsAsFinishedChunk(metadata));
+        assertTrue(CisNbtUtil.loadsWithStoredLight(metadata));
+        assertFalse(metadata.contains(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY));
+        assertFalse(CisNbtUtil.hasPersistedBaseChunkNbt(metadata));
     }
 
     /**
-     * Verifies that migrated block entities are preserved when the live chunk has not instantiated them yet.
+     * An unlit capture must not inherit the stored-light flag of the entry it replaces, or the chunk would load
+     * with light that does not match its blocks.
      */
     @Test
-    void preservesMigratedBlockEntitiesWhenLiveChunkHasNotInstantiatedAnyYet() {
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
-                null,
-                true,
-                true,
-                null,
-                false
-        );
-        CisNbtUtil.markMigratedAuthoritativeChunk(metadata);
+    void unlitSnapshotDoesNotInheritStoredLight() {
+        final NbtCompound lit =
+                CisSnapshotCapture.createAuthoritativeSnapshotMetadata(null, false, oneSection(), true, null);
 
-        final io.liparakis.chunkis.core.ChunkDelta<net.minecraft.block.BlockState, NbtCompound> delta =
-                new io.liparakis.chunkis.core.ChunkDelta<>(net.minecraft.block.BlockState::isAir);
-        delta.setChunkMetadata(metadata, false);
-        final NbtCompound chest = new NbtCompound();
-        chest.putString("id", "minecraft:chest");
-        delta.addBlockEntityData(1, 70, 2, chest, false);
+        final NbtCompound unlit =
+                CisSnapshotCapture.createAuthoritativeSnapshotMetadata(lit, false, oneSection(), false, null);
 
-        assertTrue(CisSnapshotCapture.shouldPreserveMigratedBlockEntities(delta, true));
-        assertFalse(CisSnapshotCapture.shouldPreserveMigratedBlockEntities(delta, false));
+        assertTrue(CisNbtUtil.loadsAsFinishedChunk(unlit));
+        assertFalse(CisNbtUtil.loadsWithStoredLight(unlit));
     }
 
     /**
-     * Verifies that block entities are rehydrated and restored back into the chunk delta after a snapshot clear.
+     * An entry written before sections were stored still loads through terrain generation.
      */
     @Test
-    void restoreBlockEntitiesRehydratesPayloadAfterSnapshotClear() {
-        final io.liparakis.chunkis.core.ChunkDelta<net.minecraft.block.BlockState, NbtCompound> delta =
-                new io.liparakis.chunkis.core.ChunkDelta<>(net.minecraft.block.BlockState::isAir);
-        final NbtCompound chest = new NbtCompound();
-        chest.putString("id", "minecraft:chest");
-        delta.addBlockEntityData(1, 70, 2, chest, false);
+    void entryWithoutStoredSectionsDoesNotLoadAsFinishedChunk() {
+        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(null, false, null, true, null);
 
-        final Long2ObjectOpenHashMap<NbtCompound> preserved =
-                new Long2ObjectOpenHashMap<>(delta.getBlockEntities());
-        delta.clearBlockPayloads(false);
-        CisSnapshotCapture.restoreBlockEntities(delta, preserved);
+        assertFalse(CisNbtUtil.loadsAsFinishedChunk(metadata));
+        assertFalse(CisNbtUtil.loadsWithStoredLight(metadata));
+    }
 
-        assertEquals(1,
-                delta.getBlockEntities()
-                        .size());
-        assertEquals("minecraft:chest", delta.getBlockEntities()
-                .get(io.liparakis.chunkis.core.BlockInstruction.packPos(1, 70, 2))
-                .getString("id")
-                .orElseThrow());
+    /**
+     * A snapshot stores the chunk's pending ticks, and one without pending ticks drops the previous snapshot's,
+     * which already ran.
+     */
+    @Test
+    void pendingTicksAreStoredAndNeverCarriedOver() {
+        final NbtCompound ticks = new NbtCompound();
+        ticks.put("fluid_ticks", new NbtList());
+        final NbtCompound withTicks =
+                CisSnapshotCapture.createAuthoritativeSnapshotMetadata(null, false, oneSection(), true, ticks);
+        assertTrue(withTicks.contains(CisNbtUtil.PENDING_TICKS_KEY));
+
+        final NbtCompound next =
+                CisSnapshotCapture.createAuthoritativeSnapshotMetadata(withTicks, false, oneSection(), true, null);
+        assertFalse(next.contains(CisNbtUtil.PENDING_TICKS_KEY));
+    }
+
+    /**
+     * Builds a one-entry section list.
+     *
+     * @return section list
+     */
+    private static NbtList oneSection() {
+        final NbtList sections = new NbtList();
+        final NbtCompound section = new NbtCompound();
+        section.putByte("Y", (byte) 0);
+        sections.add(section);
+        return sections;
     }
 }

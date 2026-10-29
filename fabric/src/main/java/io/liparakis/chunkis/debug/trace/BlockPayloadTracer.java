@@ -62,12 +62,12 @@ public final class BlockPayloadTracer {
             @Nullable final String message
     ) {
         final String worldId = PayloadWatchSummaries.worldId(chunk);
-        final PayloadWatchTarget target = PayloadWatchTracer.watchedBlockTarget(worldId, pos);
+        final PayloadWatchTarget target = WatchPayloadMatcher.watchedBlockTarget(worldId, pos);
         if (target == null) {
             return;
         }
 
-        PayloadWatchTracer.traceWatch(
+        WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_BLOCK_SETSTATE_ENTERED,
                 "mutation",
                 caller,
@@ -83,7 +83,7 @@ public final class BlockPayloadTracer {
                         + " caller=" + caller
                         + " thread=" + Thread.currentThread()
                         .getName()
-                        + " classification=" + PayloadWatchTracer.classifySetBlockStateEvent(chunk)
+                        + " classification=" + WatchTraceEmitter.classifySetBlockStateEvent(chunk)
                         + " authoritative=" + !chunk.getWorld()
                         .isClient()
                         + " passiveContext=" + passiveCause
@@ -121,7 +121,7 @@ public final class BlockPayloadTracer {
             final BlockPos pos = new BlockPos(target.blockX(), target.blockY(), target.blockZ());
             final BlockState state = chunk.getBlockState(pos);
             if (state.isAir()) {
-                PayloadWatchTracer.traceWatch(
+                WatchTraceEmitter.traceWatch(
                         ChunkTraceEventType.WATCH_SKIPPED,
                         "capture",
                         "PayloadWatchTracer#traceCapturedBlocks",
@@ -136,7 +136,7 @@ public final class BlockPayloadTracer {
                 continue;
             }
 
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_CAPTURED,
                     "capture",
                     "PayloadWatchTracer#traceCapturedBlocks",

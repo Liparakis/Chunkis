@@ -159,10 +159,11 @@ final class GlobalChunkTrackerTrace {
             final ChunkDelta<?, ?> delta,
             final String source
     ) {
-        if (!DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta)) {
+        // Cheap level check first: the payload scan below runs on every dirty mutation otherwise.
+        if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.ASSERTIONS, ChunkTraceSeverity.ERROR)) {
             return;
         }
-        if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.ASSERTIONS, ChunkTraceSeverity.ERROR)) {
+        if (!DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta)) {
             return;
         }
 

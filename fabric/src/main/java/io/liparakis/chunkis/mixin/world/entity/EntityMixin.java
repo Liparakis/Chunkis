@@ -1,11 +1,12 @@
 package io.liparakis.chunkis.mixin.world.entity;
 
+import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
-import java.util.UUID;
+import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -137,21 +138,18 @@ public abstract class EntityMixin {
     @SuppressWarnings("unchecked")
     private void chunkis$removeEntityPayload(final ServerWorld world, final Entity entity) {
         final ChunkPos chunkPos = entity.getChunkPos();
-        final WorldChunk chunk = world.getChunkManager()
-                .getWorldChunk(chunkPos.x, chunkPos.z, false);
+        final WorldChunk chunk = LoadedChunks.getIfAccessible(world, chunkPos.x, chunkPos.z);
         if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)
                 || !(deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta)) {
             ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
             return;
         }
         final ChunkDelta<?, NbtCompound> delta = (ChunkDelta<?, NbtCompound>) rawDelta;
-        final UUID targetUuid = entity.getUuid();
+        final String targetUuid = entity.getUuidAsString();
         delta.removeEntity(entity.getId());
-        delta.removeEntitiesMatching(nbt -> nbt != null
-                && nbt.getIntArray("UUID")
-                .map(net.minecraft.util.Uuids::toUuid)
-                .map(targetUuid::equals)
-                .orElse(false));
+        delta.removeEntitiesMatching(nbt -> EntityPayloadNbt.hasUuid(nbt, targetUuid));
+        // Without this, autosave skips an already-saved chunk and the removed entity comes back.
+        chunk.markNeedsSaving();
         GlobalChunkTracker.markDirty(chunk, REMOVE_SOURCE);
         ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
     }

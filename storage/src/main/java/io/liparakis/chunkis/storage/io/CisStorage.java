@@ -21,10 +21,12 @@ import io.liparakis.chunkis.spi.NbtAdapter;
 import io.liparakis.chunkis.storage.io.region.RegionFile;
 import io.liparakis.chunkis.storage.mapping.CisMapping;
 import java.io.IOException;
+import java.nio.channels.ClosedChannelException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -83,7 +85,7 @@ public final class CisStorage<B, S, P, N> {
 
     /**
      * Minimum valid decompressed CIS payload size (magic + version = 8 bytes).
-     * Mirrors the HEADER_SIZE constant in AbstractCisDecoder.
+     * Mirrors the HEADER_SIZE constant in CisDecoder.
      */
     private static final int MIN_DECOMPRESSED_SIZE = 8;
     /**
@@ -110,10 +112,9 @@ public final class CisStorage<B, S, P, N> {
      */
     private final RegionFileCache regionFiles;
     /**
-     * Per-thread compression state. Compression buffers are reused safely per
-     * thread without synchronization.
+     * Stateless compression helper shared by all threads.
      */
-    private final ThreadLocal<CompressionContext> compressionContext = ThreadLocal.withInitial(CompressionContext::new);
+    private final CompressionContext compressionContext = new CompressionContext();
     /**
      * Per-thread CIS encoder to avoid allocator churn on saves.
      */
@@ -135,6 +136,20 @@ public final class CisStorage<B, S, P, N> {
         thread.setDaemon(true);
         return thread;
     });
+    /**
+     * Entries that failed to open or decode this session. Writes to them are refused
+     * (except an explicit {@link #replace}) so a chunk rebuilt without their data can
+     * never overwrite them.
+     */
+    private final Set<CisChunkPos> unreadableEntries = ConcurrentHashMap.newKeySet();
+    /**
+     * Set by {@link #close()}; later prefetches are ignored and writes fail loudly.
+     */
+    private volatile boolean closed;
+    /**
+     * Unreadable entries already reported as write-protected, to log once per chunk.
+     */
+    private final Set<CisChunkPos> reportedProtectedWrites = ConcurrentHashMap.newKeySet();
     /**
      * Stores prefetch requests.
      */
@@ -259,34 +274,7 @@ public final class CisStorage<B, S, P, N> {
      * @return {@code true} if the save or clear succeeded
      */
     public boolean save(final CisChunkPos pos, final ChunkDelta<S, N> delta, final String operationId) {
-        Objects.requireNonNull(pos, "pos");
-        Objects.requireNonNull(delta, "delta");
-
-        ChunkTraceStore.trace(
-                ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.SAVE_TX_START,
-                ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, SAVE_SOURCE, "save requested", null, toChunkKey(pos),
-                toRegionKey(pos), operationId, delta.isDirty(), null
-        );
-
-        try {
-            final PreparedSave preparedSave = prepareSave(pos, delta);
-
-            if (!writePrepared(pos, preparedSave, operationId)) {
-                return false;
-            }
-
-            delta.setSourceVersion(CisConstants.VERSION);
-            delta.markSaved();
-            return true;
-        } catch (final IOException e) {
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.SAVE_FLUSH_FAILED,
-                    ChunkTraceSeverity.ERROR, ChunkTraceReason.IO_EXCEPTION, SAVE_SOURCE, "save failed", null,
-                    toChunkKey(pos), toRegionKey(pos), operationId, delta.isDirty(), null
-            );
-            Chunkis.LOGGER.error("Chunkis: Failed to save CIS chunk {}", pos, e);
-            return false;
-        }
+        return persist(pos, delta, operationId, "save");
     }
 
     /**
@@ -314,36 +302,45 @@ public final class CisStorage<B, S, P, N> {
      */
     public boolean replace(final CisChunkPos pos, final ChunkDelta<S, N> delta, final String operationId) {
         Objects.requireNonNull(pos, "pos");
+        // An explicit authoritative replace (migration) may overwrite an entry that failed to decode.
+        unreadableEntries.remove(pos);
+        return persist(pos, delta, operationId, "replace");
+    }
+
+    /**
+     * Encodes and writes {@code delta}, marking it saved on success.
+     *
+     * <p>A region write replaces the whole entry, so no pre-clear is needed; clearing
+     * first would lose the old payload whenever the write fails.</p>
+     *
+     * @param kind {@code "save"} or {@code "replace"}, used in traces and logs
+     * @return {@code true} if the write (or clear, for an empty delta) succeeded
+     */
+    private boolean persist(final CisChunkPos pos, final ChunkDelta<S, N> delta, final String operationId,
+            final String kind) {
+        Objects.requireNonNull(pos, "pos");
         Objects.requireNonNull(delta, "delta");
 
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.SAVE_TX_START,
-                ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, SAVE_SOURCE,
-                "replace requested (authoritative)", null, toChunkKey(pos), toRegionKey(pos),
-                operationId, delta.isDirty(), null
+                ChunkTraceSeverity.INFO, ChunkTraceReason.NONE, SAVE_SOURCE, kind + " requested", null,
+                toChunkKey(pos), toRegionKey(pos), operationId, delta.isDirty(), null
         );
 
         try {
-            // First clear any stale entry so the new payload cannot merge with old data
-            clearChunk(pos);
-
-            final PreparedSave preparedSave = prepareSave(pos, delta);
-
-            if (!writePrepared(pos, preparedSave, operationId)) {
+            if (!writePrepared(pos, prepareSave(pos, delta), operationId)) {
                 return false;
             }
-
             delta.setSourceVersion(CisConstants.VERSION);
             delta.markSaved();
             return true;
         } catch (final IOException e) {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.SAVE_FLUSH_FAILED,
-                    ChunkTraceSeverity.ERROR, ChunkTraceReason.IO_EXCEPTION, SAVE_SOURCE,
-                    "replace failed", null, toChunkKey(pos), toRegionKey(pos), operationId,
-                    delta.isDirty(), null
+                    ChunkTraceSeverity.ERROR, ChunkTraceReason.IO_EXCEPTION, SAVE_SOURCE, kind + " failed", null,
+                    toChunkKey(pos), toRegionKey(pos), operationId, delta.isDirty(), null
             );
-            Chunkis.LOGGER.error("Chunkis: Failed to replace CIS chunk {}", pos, e);
+            Chunkis.LOGGER.error("Chunkis: Failed to {} CIS chunk {} in {}", kind, pos, storageDir, e);
             return false;
         }
     }
@@ -375,6 +372,72 @@ public final class CisStorage<B, S, P, N> {
     }
 
     /**
+     * Supplies the blocks of a stored block part without decoding it, when they are known.
+     *
+     * @param <S> block state type
+     * @param <N> NBT type
+     */
+    public interface BlockPartSource<S, N> {
+
+        /**
+         * Returns how to fill a delta with exactly the blocks a block part encodes, if known.
+         *
+         * @param pos           chunk position
+         * @param blockPartHash hash of the stored block part ({@code CisBlockPart#hash})
+         * @return a filler appending those blocks to a delta decoded without blocks, or {@code null}
+         */
+        java.util.function.Consumer<ChunkDelta<S, N>> blocksFor(CisChunkPos pos, long[] blockPartHash);
+    }
+
+    /**
+     * Source of known blocks consulted by every load, or {@code null}.
+     */
+    private volatile BlockPartSource<S, N> blockPartSource;
+
+    /**
+     * Installs, or removes, the source of known blocks loads consult.
+     *
+     * @param source the source, or {@code null}
+     */
+    public void setBlockPartSource(final BlockPartSource<S, N> source) {
+        this.blockPartSource = source;
+    }
+
+    /**
+     * Prepares a save of a chunk whose blocks are exactly the stored entry's, copying the entry's block part
+     * instead of encoding the blocks again. The entry must still be the one written: its block part has to hash to
+     * {@code storedBlockPartHash}.
+     *
+     * @param pos                 chunk position
+     * @param delta               the chunk; only its block entities, entities and metadata are encoded
+     * @param storedBlockPartHash hash of the block part the stored entry was written with
+     * @return the prepared save, or {@code null} when the entry is missing, not current-version or not that one;
+     *         the caller then encodes everything
+     * @throws IOException when the entry cannot be read
+     */
+    public PreparedSave prepareSaveReusingStoredBlocks(final CisChunkPos pos, final ChunkDeltaView<S, N> delta,
+            final long[] storedBlockPartHash) throws IOException {
+        Objects.requireNonNull(storedBlockPartHash, "storedBlockPartHash");
+        final byte[] compressed = readRegion(pos, null).compressedData();
+        if (compressed == null) {
+            return null;
+        }
+        final byte[] stored = compressionContext.decompress(compressed);
+        final int length = io.liparakis.chunkis.core.codec.CisBlockPart.length(stored);
+        if (length < 0) {
+            return null;
+        }
+        final long[] hash = io.liparakis.chunkis.core.codec.CisBlockPart.hash(stored, 0, length);
+        if (hash[0] != storedBlockPartHash[0] || hash[1] != storedBlockPartHash[1]) {
+            return null;
+        }
+        final byte[] rawData = encoder.get()
+                .encodeWithBlockPart(Arrays.copyOf(stored, length), delta);
+        mapping.flush();
+        return PreparedSave.write(rawData);
+    }
+
+    /**
      * Compresses and writes a prepared save payload to its owning region file.
      *
      * <p>This is the second half of the split save pipeline used by async save
@@ -393,7 +456,22 @@ public final class CisStorage<B, S, P, N> {
             throws IOException {
         Objects.requireNonNull(pos, "pos");
         Objects.requireNonNull(preparedSave, "preparedSave");
+        if (closed) {
+            // A write after close would reopen a region nobody closes again.
+            throw new IOException("CIS storage " + storageDir + " is closed; refusing write for " + pos);
+        }
         prefetchedLoads.remove(pos);
+
+        if (unreadableEntries.contains(pos)) {
+            // The live chunk was rebuilt without this entry's data; writing it back would
+            // permanently replace the undecodable (but possibly recoverable) payload.
+            if (reportedProtectedWrites.add(pos)) {
+                Chunkis.LOGGER.error("Chunkis: Refusing to overwrite undecodable CIS chunk {} in {}; changes to this "
+                        + "chunk are not saved this session (fix the cause, e.g. restore the missing mod)", pos,
+                        storageDir);
+            }
+            return false;
+        }
 
         if (preparedSave.clearChunk()) {
             return clearChunk(pos);
@@ -405,8 +483,7 @@ public final class CisStorage<B, S, P, N> {
                 toChunkKey(pos), toRegionKey(pos), operationId, null, preparedSave.rawData().length
         );
 
-        final byte[] compressedData = compressionContext.get()
-                .compress(preparedSave.rawData());
+        final byte[] compressedData = compressionContext.compress(preparedSave.rawData());
         synchronized (regionFiles) {
             final RegionFile regionFile = getRegionFile(pos, true);
 
@@ -461,8 +538,9 @@ public final class CisStorage<B, S, P, N> {
     /**
      * Loads a chunk delta from CIS storage.
      *
-     * <p>Missing regions or missing entries return a fresh empty delta. Corrupted
-     * entries are cleared from storage and also return an empty delta.</p>
+     * <p>Missing regions or missing entries return a fresh empty delta. Entries that
+     * cannot be decoded also return an empty delta but are never removed from
+     * storage; their raw bytes are additionally copied to {@code quarantine/}.</p>
      *
      * @param pos chunk position
      * @return loaded chunk delta, or an empty delta if missing or corrupt
@@ -474,7 +552,7 @@ public final class CisStorage<B, S, P, N> {
     /**
      * Loads a chunk delta using a caller-supplied operation id for trace correlation.
      *
-     * <p>Missing, invalid, or self-healed entries still return an empty delta; the
+     * <p>Missing or undecodable entries still return an empty delta; the
      * caller-supplied id only affects observability.</p>
      *
      * @param pos         chunk position
@@ -495,6 +573,9 @@ public final class CisStorage<B, S, P, N> {
      */
     public void prefetch(final CisChunkPos pos, final String operationId) {
         Objects.requireNonNull(pos, "pos");
+        if (closed) {
+            return;
+        }
         prefetchRequests.increment();
         if (prefetchedLoads.size() >= MAX_PREFETCHES && !prefetchedLoads.containsKey(pos)) {
             prefetchDrops.increment();
@@ -542,28 +623,30 @@ public final class CisStorage<B, S, P, N> {
         if (prefetched != null) {
             prefetchHits.increment();
             try {
-                return prefetched.join();
+                final LoadResult<S, N> result = prefetched.join();
+                if (!result.failed()) {
+                    return result;
+                }
+                // Re-run synchronously so the failure is logged and quarantined on this path.
             } catch (final CompletionException ignored) {
                 // Fall back to the established synchronous recovery path.
             }
         }
-        return loadWithPresenceSync(pos, operationId);
-    }
-
-    /**
-     * Performs load with presence sync.
-     */
-    private LoadResult<S, N> loadWithPresenceSync(final CisChunkPos pos, final String operationId) {
         return loadWithPresenceSync(pos, operationId, true);
     }
 
     /**
-     * Performs load with presence sync.
+     * Loads one chunk entry without ever modifying storage.
+     *
+     * <p>A region that cannot be opened or an entry that cannot be decoded yields an
+     * empty delta flagged {@link LoadResult#failed()}. The stored bytes are left in
+     * place; when {@code reportFailure} is set the failure is logged and the raw
+     * entry is copied to {@code quarantine/} so it survives a later overwrite.</p>
      */
     private LoadResult<S, N> loadWithPresenceSync(
             final CisChunkPos pos,
             final String operationId,
-            final boolean clearOnFailure
+            final boolean reportFailure
     ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_START,
@@ -579,19 +662,15 @@ public final class CisStorage<B, S, P, N> {
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_END,
                     ChunkTraceSeverity.ERROR, reason, LOAD_SOURCE,
-                    "load failed and entry will be cleared: " + e.getMessage(), null, toChunkKey(pos),
+                    "load failed; stored entry left untouched: " + e.getMessage(), null, toChunkKey(pos),
                     toRegionKey(pos), operationId, null, null
             );
-            Chunkis.LOGGER.error(
-                    "Chunkis: Failed to open CIS region for {}.{} Error: {}",
-                    pos,
-                    clearOnFailure ? " Clearing corrupted data." : "",
-                    e.getMessage()
-            );
-            if (clearOnFailure) {
-                clearChunk(pos);
+            if (reportFailure) {
+                unreadableEntries.add(pos);
+                Chunkis.LOGGER.error("Chunkis: Failed to open CIS region for chunk {} in {}; stored data left untouched",
+                        pos, storageDir, e);
             }
-            return new LoadResult<>(newEmptyDelta(), false);
+            return new LoadResult<>(newEmptyDelta(), false, true);
         }
         final boolean storageEntryPresent = regionRead.entryPresent();
 
@@ -621,24 +700,23 @@ public final class CisStorage<B, S, P, N> {
                     delta.isDirty(),
                     null
             );
-            return new LoadResult<>(delta, storageEntryPresent);
+            return new LoadResult<>(delta, storageEntryPresent, false);
         } catch (final Exception e) {
             final ChunkTraceReason reason = classifyLoadFailure(e);
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_END,
                     ChunkTraceSeverity.ERROR, reason, LOAD_SOURCE,
-                    "load failed and entry will be cleared: " + e.getMessage(), null, toChunkKey(pos),
+                    "load failed; stored entry left untouched: " + e.getMessage(), null, toChunkKey(pos),
                     toRegionKey(pos), operationId, null, null
             );
-            Chunkis.LOGGER.error(
-                    "Chunkis: Failed to decode CIS chunk at {}.{} Error: {}", pos,
-                    clearOnFailure ? " Clearing corrupted data." : "",
-                    e.getMessage()
-            );
-            if (clearOnFailure) {
-                clearChunk(pos);
+            if (reportFailure) {
+                unreadableEntries.add(pos);
+                final Path quarantined = quarantine(pos, regionRead.compressedData());
+                Chunkis.LOGGER.error("Chunkis: Failed to decode CIS chunk {} in {} (reason {}); stored entry left "
+                                + "untouched, raw copy at {}", pos, storageDir, reason,
+                        quarantined != null ? quarantined : "<quarantine failed>", e);
             }
-            return new LoadResult<>(newEmptyDelta(), storageEntryPresent);
+            return new LoadResult<>(newEmptyDelta(), storageEntryPresent, true);
         }
     }
 
@@ -689,6 +767,7 @@ public final class CisStorage<B, S, P, N> {
      * after this method returns.</p>
      */
     public void close() {
+        closed = true;
         prefetchExecutor.shutdown();
         try {
             if (!prefetchExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -717,7 +796,6 @@ public final class CisStorage<B, S, P, N> {
             regionFiles.closeAll();
         }
 
-        compressionContext.remove();
         encoder.remove();
         decoder.remove();
     }
@@ -747,6 +825,66 @@ public final class CisStorage<B, S, P, N> {
     }
 
     /**
+     * Copies the stored raw entry for {@code pos} to {@code quarantine/} before a
+     * caller overwrites it with a suspicious payload, so the previous state stays
+     * recoverable.
+     *
+     * @param pos    chunk position
+     * @param reason short label included in the backup file name
+     * @return the backup file, or {@code null} when there was no entry or the copy failed (logged)
+     */
+    public Path backupEntry(final CisChunkPos pos, final String reason) {
+        try {
+            final byte[] raw = readRegion(pos, null).compressedData();
+            return raw == null ? null : quarantine(pos, raw, reason);
+        } catch (final IOException e) {
+            Chunkis.LOGGER.error("Chunkis: Failed to back up CIS chunk {} before {}", pos, reason, e);
+            return null;
+        }
+    }
+
+    /**
+     * Refuses further writes to {@code pos} for the rest of this session, as for an
+     * entry that failed to decode. Callers use this when the live chunk could not be
+     * rebuilt from a stored entry, so its in-memory state must never replace it.
+     *
+     * @param pos chunk position to protect
+     */
+    public void protectFromOverwrite(final CisChunkPos pos) {
+        unreadableEntries.add(Objects.requireNonNull(pos, "pos"));
+    }
+
+    /**
+     * Copies an undecodable entry's raw bytes to {@code quarantine/} under the
+     * storage directory so the data survives a later overwrite of the slot.
+     *
+     * @return the written file, or {@code null} when there was nothing to copy or
+     *         the copy failed (logged)
+     */
+    private Path quarantine(final CisChunkPos pos, final byte[] rawData) {
+        return quarantine(pos, rawData, "undecodable");
+    }
+
+    /**
+     * Writes {@code rawData} to {@code quarantine/c.<x>.<z>.<reason>.<millis>.cisraw}.
+     */
+    private Path quarantine(final CisChunkPos pos, final byte[] rawData, final String reason) {
+        if (rawData == null) {
+            return null;
+        }
+        final Path target = storageDir.resolve("quarantine")
+                .resolve("c." + pos.x() + "." + pos.z() + "." + reason + "." + System.currentTimeMillis() + ".cisraw");
+        try {
+            Files.createDirectories(target.getParent());
+            Files.write(target, rawData);
+            return target;
+        } catch (final IOException e) {
+            Chunkis.LOGGER.error("Chunkis: Failed to quarantine undecodable CIS chunk {} to {}", pos, target, e);
+            return null;
+        }
+    }
+
+    /**
      * Shared load implementation used by both {@link #load} and
      * {@link #loadWithoutClearing}.
      *
@@ -764,12 +902,25 @@ public final class CisStorage<B, S, P, N> {
      * Performs read region.
      */
     private RegionRead readRegion(final CisChunkPos pos, final String operationId) throws IOException {
+        final RegionFile regionFile;
         synchronized (regionFiles) {
-            final RegionFile regionFile = getRegionFile(pos, false);
-            if (regionFile == null) {
-                return new RegionRead(false, null);
-            }
+            regionFile = getRegionFile(pos, false);
+        }
+        if (regionFile == null) {
+            return new RegionRead(false, null);
+        }
+        // Read under the region's own lock only, so loads of other regions, and saves, do not queue behind it.
+        try {
             return new RegionRead(regionFile.hasChunk(pos), regionFile.read(pos, operationId));
+        } catch (final ClosedChannelException evicted) {
+            // The cache closed the region meanwhile; read it again the serialized way.
+            synchronized (regionFiles) {
+                final RegionFile reopened = getRegionFile(pos, false);
+                if (reopened == null) {
+                    return new RegionRead(false, null);
+                }
+                return new RegionRead(reopened.hasChunk(pos), reopened.read(pos, operationId));
+            }
         }
     }
 
@@ -783,8 +934,7 @@ public final class CisStorage<B, S, P, N> {
 
         final byte[] decompressed;
         try {
-            decompressed = compressionContext.get()
-                    .decompress(compressedData);
+            decompressed = compressionContext.decompress(compressedData);
         } catch (final IOException e) {
             throw e;
         } catch (final Exception e) {
@@ -796,8 +946,25 @@ public final class CisStorage<B, S, P, N> {
                     " bytes (compressed size: " + compressedData.length + ")");
         }
 
-        return decoder.get()
-                .decode(decompressed);
+        final int blockPartLength = io.liparakis.chunkis.core.codec.CisBlockPart.length(decompressed);
+        final long[] blockPartHash = blockPartLength < 0 ? null
+                : io.liparakis.chunkis.core.codec.CisBlockPart.hash(decompressed, 0, blockPartLength);
+        final BlockPartSource<S, N> source = blockPartSource;
+        final java.util.function.Consumer<ChunkDelta<S, N>> knownBlocks =
+                source != null && blockPartHash != null ? source.blocksFor(pos, blockPartHash) : null;
+        final ChunkDelta<S, N> delta;
+        if (knownBlocks != null) {
+            // The exact blocks this block part encodes are at hand: decode the rest, take the blocks as they are.
+            delta = decoder.get()
+                    .decodeWithoutBlocks(decompressed, blockPartLength);
+            knownBlocks.accept(delta);
+            delta.markSaved();
+        } else {
+            delta = decoder.get()
+                    .decode(decompressed);
+        }
+        delta.setStoredBlockPartHash(blockPartHash);
+        return delta;
     }
 
     /**
@@ -818,33 +985,15 @@ public final class CisStorage<B, S, P, N> {
     }
 
     /**
-     * Drains and returns all cached region files.
-     * Package-private for use by maintenance / test helpers.
-     *
-     * @return cached region files previously held open by this storage instance
-     */
-    List<RegionFile> drainRegionCache() {
-        synchronized (regionFiles) {
-            return regionFiles.drain();
-        }
-    }
-
-    /**
-     * Returns the backing region directory for package-local maintenance helpers.
-     *
-     * @return root directory containing this storage instance's {@code .cis} files
-     */
-    Path storageDir() {
-        return storageDir;
-    }
-
-    /**
      * Result of a load together with storage presence observed before decoding.
      *
      * @param delta               decoded delta
      * @param storageEntryPresent whether the region contained an entry before decode
+     * @param failed              whether the region could not be opened or the entry
+     *                            could not be decoded; {@code delta} is then empty and
+     *                            is not the chunk's real state
      */
-    public record LoadResult<S, N>(ChunkDelta<S, N> delta, boolean storageEntryPresent) {
+    public record LoadResult<S, N>(ChunkDelta<S, N> delta, boolean storageEntryPresent, boolean failed) {
 
     }
 

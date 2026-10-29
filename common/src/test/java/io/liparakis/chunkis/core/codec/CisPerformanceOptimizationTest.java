@@ -152,9 +152,9 @@ class CisPerformanceOptimizationTest {
      */
     @Test
     void coarseBlockCapacityReserveScalesBySectionCount() {
-        assertThat(AbstractCisDecoder.coarseBlockCapacityReserve(0)).isZero();
-        assertThat(AbstractCisDecoder.coarseBlockCapacityReserve(1)).isEqualTo(4096);
-        assertThat(AbstractCisDecoder.coarseBlockCapacityReserve(4)).isEqualTo(16384);
+        assertThat(CisDecoder.coarseBlockCapacityReserve(0)).isZero();
+        assertThat(CisDecoder.coarseBlockCapacityReserve(1)).isEqualTo(4096);
+        assertThat(CisDecoder.coarseBlockCapacityReserve(4)).isEqualTo(16384);
     }
 
     /**

@@ -14,6 +14,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -76,8 +77,49 @@ public final class LiveEntitySnapshotCapture {
             , final String operationId, final String source) {
         final ChunkPos chunkPos = chunk.getPos();
         final List<Entity> liveEntities = collectSavableLiveEntities(world, chunk);
+        return capture(world, chunkPos, liveEntities, SnapshotSafetyChecker.isSnapshotUnsafe(chunk), false,
+                existingDelta,
+                operationId, source);
+    }
 
-        if (shouldSkipEntityCapture(chunk, existingDelta, liveEntities)) {
+    /**
+     * Captures an explicit entity list for {@code chunkPos} into a {@link ChunkDelta}.
+     *
+     * <p>Used when the {@link WorldChunk} may already be gone but its entities are
+     * still live, such as vanilla's entity-section save during chunk unload. The list
+     * is treated as authoritative: unlike the world-scan overload, an empty list
+     * replaces stored entities instead of being preserved as "suspiciously empty".
+     * Callers must check snapshot safety themselves when the chunk is loaded.</p>
+     *
+     * @param world         server world owning the entities
+     * @param chunkPos      chunk the entities belong to
+     * @param entities      candidate entities; non-savable ones are filtered out
+     * @param existingDelta existing delta for this chunk; may be {@code null}
+     * @param operationId   correlation ID for debug tracing; may be {@code null}
+     * @param source        caller label used in trace output
+     * @return updated delta containing the captured entity snapshot
+     */
+    public static ChunkDelta<BlockState, NbtCompound> capture(final ServerWorld world, final ChunkPos chunkPos,
+            final Iterable<? extends Entity> entities, final ChunkDelta<BlockState, NbtCompound> existingDelta,
+            final String operationId, final String source) {
+        final List<Entity> liveEntities = new ArrayList<>();
+        for (final Entity entity : entities) {
+            if (isSavableLiveEntity(entity, chunkPos)) {
+                liveEntities.add(entity);
+            }
+        }
+        liveEntities.sort(ENTITY_UUID_COMPARATOR);
+        return capture(world, chunkPos, liveEntities, false, true, existingDelta, operationId, source);
+    }
+
+    /**
+     * Shared capture body for both public entry points.
+     */
+    private static ChunkDelta<BlockState, NbtCompound> capture(final ServerWorld world, final ChunkPos chunkPos,
+            final List<Entity> liveEntities, final boolean snapshotUnsafe, final boolean authoritativeList,
+            final ChunkDelta<BlockState, NbtCompound> existingDelta, final String operationId, final String source) {
+        // An explicit vanilla entity list is authoritative: an empty one means the entities really left.
+        if (snapshotUnsafe || (!authoritativeList && isSuspiciouslyEmpty(existingDelta, liveEntities))) {
             PayloadWatchTracer.traceDeltaStage(world.getRegistryKey()
                             .getValue()
                             .toString(),
@@ -95,28 +137,45 @@ public final class LiveEntitySnapshotCapture {
 
         final ChunkDelta<BlockState, NbtCompound> delta = existingDelta != null ? existingDelta : new ChunkDelta<>();
 
-        // Serialize live entities in a single pass: clear the active set first so
-        // putEntity calls can be interleaved with serialization, eliminating the
-        // need for a separate capturedEntities list.
+        // Serialize first without touching the delta, so an unchanged entity set leaves it clean.
         final List<NbtCompound> capturedNbts = new ArrayList<>(liveEntities.size());
+        final List<Integer> capturedIds = new ArrayList<>(liveEntities.size());
         final Set<String> liveEntityUuids = new HashSet<>();
-
-        delta.clearActiveEntities();
         for (final Entity entity : liveEntities) {
             final NbtCompound nbt = ChunkEntityNbtCapture.serializeEntityNbt(entity);
             if (nbt == null || nbt.isEmpty()) {
                 continue;
             }
-            delta.putEntity(entity.getId(), nbt);
             capturedNbts.add(nbt);
+            capturedIds.add(entity.getId());
             final String uuid = ChunkEntityNbtCapture.entityUuid(nbt);
             if (uuid != null) {
                 liveEntityUuids.add(uuid);
             }
         }
 
+        // delta is usually existingDelta itself: copy the pending list before clearing it, or the
+        // unresolved (not yet replayed) entity payloads would all be dropped here.
+        final List<NbtCompound> previousPending = new ArrayList<>();
+        if (existingDelta != null) {
+            existingDelta.forEachPendingEntity(previousPending::add);
+        }
+        final ChunkDelta<BlockState, NbtCompound> keptPending = new ChunkDelta<>();
+        copyUnresolvedPendingEntities(world, previousPending, liveEntityUuids, keptPending);
+        final List<NbtCompound> pendingToKeep = new ArrayList<>();
+        keptPending.forEachPendingEntity(pendingToKeep::add);
+
+        if (existingDelta != null && sameEntities(existingDelta, previousPending, capturedNbts, pendingToKeep)) {
+            // Static entities (item frames, armor stands) serialize identically; skip the rewrite.
+            return existingDelta;
+        }
+
+        delta.clearActiveEntities();
+        for (int i = 0; i < capturedNbts.size(); i++) {
+            delta.putEntity(capturedIds.get(i), capturedNbts.get(i));
+        }
         delta.clearPendingEntities();
-        copyUnresolvedPendingEntities(existingDelta, liveEntityUuids, delta);
+        pendingToKeep.forEach(delta::addPendingEntity);
 
         ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
                 ChunkTraceEventType.SAVE_TX_START,
@@ -147,6 +206,28 @@ public final class LiveEntitySnapshotCapture {
     }
 
     /**
+     * Fingerprints the payloads {@link #capture} would serialize from an explicit entity list, so
+     * the result can be compared with {@link StoredEntityFingerprints}.
+     *
+     * @param chunkPos chunk the entities are saved for
+     * @param entities vanilla's entity list for that chunk
+     * @return fingerprint of the savable entity payloads
+     */
+    public static long[] fingerprintSavable(final ChunkPos chunkPos, final Iterable<? extends Entity> entities) {
+        return StoredEntityFingerprints.of(sink -> {
+            for (final Entity entity : entities) {
+                if (!isSavableLiveEntity(entity, chunkPos)) {
+                    continue;
+                }
+                final NbtCompound nbt = ChunkEntityNbtCapture.serializeEntityNbt(entity);
+                if (nbt != null && !nbt.isEmpty()) {
+                    sink.accept(nbt);
+                }
+            }
+        });
+    }
+
+    /**
      * Returns the number of savable live entities currently in {@code chunk}.
      *
      * <p>Performs a direct-count iteration without sorting, avoiding the full list
@@ -161,13 +242,20 @@ public final class LiveEntitySnapshotCapture {
         final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPos);
         int count = 0;
         for (final Entity entity : world.getOtherEntities(null, searchBox)) {
-            if (entity != null && !(entity instanceof PlayerEntity) && entity.isAlive()
-                    && entity.getChunkPos()
-                    .equals(chunkPos)) {
+            if (isSavableLiveEntity(entity, chunkPos)) {
                 count++;
             }
         }
         return count;
+    }
+
+    /**
+     * Returns {@code true} for alive, non-player entities currently in {@code chunkPos}.
+     */
+    private static boolean isSavableLiveEntity(final Entity entity, final ChunkPos chunkPos) {
+        return entity != null && !(entity instanceof PlayerEntity) && entity.isAlive()
+                && entity.getChunkPos()
+                .equals(chunkPos);
     }
 
     /**
@@ -187,70 +275,91 @@ public final class LiveEntitySnapshotCapture {
         final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPos);
         final List<Entity> liveEntities = new ArrayList<>();
         for (final Entity entity : world.getOtherEntities(null, searchBox)) {
-            if (entity == null || entity instanceof PlayerEntity || !entity.isAlive()
-                    || !entity.getChunkPos()
-                    .equals(chunkPos)) {
-                continue;
+            if (isSavableLiveEntity(entity, chunkPos)) {
+                liveEntities.add(entity);
             }
-            liveEntities.add(entity);
         }
         liveEntities.sort(ENTITY_UUID_COMPARATOR);
         return liveEntities;
     }
 
     /**
-     * Returns {@code true} when entity capture should be skipped and the existing
-     * delta preserved.
+     * Returns {@code true} when the existing delta has known entities but the live
+     * scan found none - a suspicious transient empty state that would otherwise
+     * overwrite valid persisted data.
      *
-     * <p>Two conditions trigger a skip:</p>
-     * <ul>
-     *   <li>The chunk fails the safety check (e.g. chunk is in a transitional
-     *       state where entity data would be unreliable).</li>
-     *   <li>The existing delta has known entities but the live scan found none -
-     *       this is treated as a suspicious transient empty state that would
-     *       otherwise overwrite valid persisted data.</li>
-     * </ul>
-     *
-     * @param chunk         chunk being captured
      * @param existingDelta delta currently held for this chunk; may be {@code null}
      * @param liveEntities  entities returned by the live scan
      * @return {@code true} when capture should be skipped
      */
-    private static boolean shouldSkipEntityCapture(final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> existingDelta,
+    private static boolean isSuspiciouslyEmpty(final ChunkDelta<BlockState, NbtCompound> existingDelta,
             final List<Entity> liveEntities) {
-        if (SnapshotSafetyChecker.isSnapshotUnsafe(chunk)) {
-            return true;
-        }
         return existingDelta != null && existingDelta.countNonNullEntities() > 0 && liveEntities.isEmpty();
     }
 
     /**
-     * Copies pending entities from {@code existingDelta} to {@code targetDelta},
-     * skipping any whose UUID is already live in the world.
+     * Returns whether the delta already holds exactly the captured entities and the
+     * pending payloads to keep, so the capture would change nothing.
      *
-     * <p>A pending entity is considered "unresolved" if its UUID is not present in
-     * {@code liveEntityUuids} - meaning it has not yet materialized as a live entity.
-     * These are retained so the replay queue can attempt to spawn them later.</p>
-     *
-     * @param existingDelta   source delta; does nothing when {@code null} or empty
-     * @param liveEntityUuids UUIDs of entities that are currently alive in the world
-     * @param targetDelta     delta to write unresolved entries into
+     * <p>Compares as multisets: active-entity map order follows runtime ids, which
+     * carry no meaning for persistence.</p>
      */
-    private static void copyUnresolvedPendingEntities(final ChunkDelta<BlockState, NbtCompound> existingDelta,
-            final Set<String> liveEntityUuids, final ChunkDelta<BlockState,
-                    NbtCompound> targetDelta) {
-        if (existingDelta == null || existingDelta.countPendingEntities() == 0) {
-            return;
+    static boolean sameEntities(final ChunkDelta<BlockState, NbtCompound> existing,
+            final List<NbtCompound> previousPending, final List<NbtCompound> captured,
+            final List<NbtCompound> pendingToKeep) {
+        if (!previousPending.equals(pendingToKeep)) {
+            return false;
         }
-        existingDelta.forEachPendingEntity(entityNbt -> {
-            if (entityNbt == null) {
-                return;
-            }
-            final String uuid = ChunkEntityNbtCapture.entityUuid(entityNbt);
-            if (uuid == null || !liveEntityUuids.contains(uuid)) {
-                targetDelta.addPendingEntity(entityNbt);
+        final java.util.Map<NbtCompound, Integer> counts = new java.util.HashMap<>();
+        existing.forEachEntity(nbt -> {
+            if (nbt != null) {
+                counts.merge(nbt, 1, Integer::sum);
             }
         });
+        for (final NbtCompound nbt : pendingToKeep) {
+            if (counts.merge(nbt, -1, Integer::sum) < 0) {
+                return false;
+            }
+        }
+        for (final NbtCompound nbt : captured) {
+            if (counts.merge(nbt, -1, Integer::sum) < 0) {
+                return false;
+            }
+        }
+        for (final int remaining : counts.values()) {
+            if (remaining != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Re-adds pending entity payloads to {@code targetDelta} unless they are resolved.
+     *
+     * <p>A pending payload is resolved once its UUID is live: either captured from this
+     * chunk ({@code liveEntityUuids}) or live anywhere in the world (it materialized and
+     * walked into another chunk, which now owns it). Keeping a resolved payload would
+     * resurrect or duplicate the entity when this chunk reloads. Unresolved payloads are
+     * kept so the replay queue can still spawn them.</p>
+     *
+     * @param world           world used to look entities up by UUID
+     * @param pending         pending payloads stored before this capture
+     * @param liveEntityUuids UUIDs captured live from this chunk
+     * @param targetDelta     delta to write unresolved entries into
+     */
+    static void copyUnresolvedPendingEntities(final ServerWorld world, final List<NbtCompound> pending,
+            final Set<String> liveEntityUuids, final ChunkDelta<BlockState, NbtCompound> targetDelta) {
+        for (final NbtCompound entityNbt : pending) {
+            if (entityNbt == null) {
+                continue;
+            }
+            final UUID uuid = ChunkEntityNbtCapture.parseEntityUuid(entityNbt);
+            final boolean resolved = uuid != null
+                    && (liveEntityUuids.contains(uuid.toString()) || (world != null && world.getEntity(uuid) != null));
+            if (!resolved) {
+                targetDelta.addPendingEntity(entityNbt);
+            }
+        }
     }
 }

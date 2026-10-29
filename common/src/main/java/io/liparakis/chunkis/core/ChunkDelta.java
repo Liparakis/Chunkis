@@ -50,10 +50,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * Stores source.
      */
     private static final String SOURCE = "ChunkDelta";
-    /**
-     * Stores section count.
-     */
-    private static final int SECTION_COUNT = CisConstants.MAX_SECTION_Y - CisConstants.MIN_SECTION_Y + 1;
 
     /**
      * Mask for the low 32 bits containing the packed local block position.
@@ -84,10 +80,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * Predicate used to identify states that should clear block entity payloads.
      */
     private final Predicate<S> isEmptyState;
-    /**
-     * Per-section block entity counts used to clear mask bits on removal.
-     */
-    private final short[] blockEntitySectionCounts;
     /**
      * Lazily allocated block entity payloads keyed by packed position.
      */
@@ -128,14 +120,22 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * Whether restored loads should suppress one-time vanilla repopulation work.
      */
     private boolean suppressInitialRepopulation;
+
     /**
-     * Bitset of sections containing sparse block changes.
+     * Whether the block instructions were released ({@link #releaseBlockPayload}); in-memory state only.
      */
-    private int blockSectionMask;
+    private boolean blockPayloadReleased;
+
     /**
-     * Bitset of sections containing block entity payloads.
+     * Live block edits applied to the instructions; with the bulk epoch it stamps the block payload state.
      */
-    private int blockEntitySectionMask;
+    private long liveBlockEdits;
+
+    /**
+     * For a delta rebuilt from its stored entry with a released delta's edits on top, those edits; consumed by
+     * the restore, never stored.
+     */
+    private ChunkDeltaView<S, N> storedEntryEdits;
 
     /**
      * Creates an empty delta with an explicit empty-state predicate.
@@ -154,9 +154,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         this.ownershipState = new DeltaOwnershipState();
         this.sourceVersion = CisConstants.VERSION;
         this.suppressInitialRepopulation = false;
-        this.blockSectionMask = 0;
-        this.blockEntitySectionMask = 0;
-        this.blockEntitySectionCounts = new short[SECTION_COUNT];
         this.isEmptyState = Objects.requireNonNull(isEmptyState, "isEmptyState");
     }
 
@@ -197,39 +194,26 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
-     * Maps an absolute block Y coordinate to this delta's touched-section bitset.
-     *
-     * <p>Out-of-range coordinates return {@code 0} so corrupted or legacy payloads
-     * do not poison the cached section-count state.</p>
-     *
-     * @param y absolute block Y coordinate
-     * @return one-hot section bit, or {@code 0} when outside the legal chunk range
-     */
-    private static int sectionBit(final int y) {
-        final int sectionY = y >> 4;
-        if (sectionY < CisConstants.MIN_SECTION_Y || sectionY > CisConstants.MAX_SECTION_Y) {
-            return 0;
-        }
-        return 1 << (sectionY - CisConstants.MIN_SECTION_Y);
-    }
-
-    /**
-     * Resolves the touched-section bit for a packed block position key.
-     *
-     * @param posKey packed local block position
-     * @return one-hot section bit, or {@code 0} when outside the legal chunk range
-     */
-    private static int blockSectionBit(final long posKey) {
-        return sectionBit(BlockInstruction.unpackY(posKey));
-    }
-
-    /**
      * Creates a detached read-only snapshot tailored for async encode/save work.
      *
      * @param payloadCopier copies each stored payload value
      * @return read-only snapshot view of this delta
      */
     public ChunkDeltaSnapshotView<S, N> snapshotView(final UnaryOperator<N> payloadCopier) {
+        return snapshotView(payloadCopier, payloadCopier);
+    }
+
+    /**
+     * Same as {@link #snapshotView(UnaryOperator)}, copying block-entity and entity payloads and the chunk
+     * metadata with separate strategies: a caller that knows payloads are never changed in place, only replaced,
+     * can share them and copy just the metadata.
+     *
+     * @param payloadCopier  copies each block-entity and entity payload
+     * @param metadataCopier copies the chunk metadata
+     * @return read-only snapshot view of this delta
+     */
+    public ChunkDeltaSnapshotView<S, N> snapshotView(final UnaryOperator<N> payloadCopier,
+            final UnaryOperator<N> metadataCopier) {
         return new ChunkDeltaSnapshotView<>(
                 this.instructions.packedInstructions,
                 this.instructions.instructionCount,
@@ -243,8 +227,47 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
                 this.ownershipState.mutationGeneration,
                 this.suppressInitialRepopulation,
                 isDirty(),
-                getTouchedSectionCount(),
-                payloadCopier
+                payloadCopier,
+                metadataCopier
+        );
+    }
+
+    /**
+     * Same as {@link #snapshotView}, without block instructions, for a save whose blocks come from elsewhere;
+     * skips copying an instruction array the save would not read.
+     *
+     * @param payloadCopier copies block-entity, entity and metadata payloads
+     * @return snapshot holding no block instructions
+     */
+    public ChunkDeltaSnapshotView<S, N> snapshotViewWithoutBlocks(final UnaryOperator<N> payloadCopier) {
+        return snapshotViewWithoutBlocks(payloadCopier, payloadCopier);
+    }
+
+    /**
+     * Same as {@link #snapshotViewWithoutBlocks(UnaryOperator)}, with separate copy strategies for payloads and
+     * metadata ({@link #snapshotView(UnaryOperator, UnaryOperator)}).
+     *
+     * @param payloadCopier  copies each block-entity and entity payload
+     * @param metadataCopier copies the chunk metadata
+     * @return snapshot holding no block instructions
+     */
+    public ChunkDeltaSnapshotView<S, N> snapshotViewWithoutBlocks(final UnaryOperator<N> payloadCopier,
+            final UnaryOperator<N> metadataCopier) {
+        return new ChunkDeltaSnapshotView<>(
+                new long[0],
+                0,
+                this.blockPalette,
+                this.blockEntities,
+                this.activeEntities,
+                this.pendingEntities,
+                this.chunkMetadata,
+                this.encodedChunkMetadata,
+                this.sourceVersion,
+                this.ownershipState.mutationGeneration,
+                this.suppressInitialRepopulation,
+                isDirty(),
+                payloadCopier,
+                metadataCopier
         );
     }
 
@@ -260,68 +283,32 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     public void copyBlockPaletteFrom(final ChunkDelta<S, ?> source) {
         Objects.requireNonNull(source, "source");
         blockPalette.replaceWith(source.blockPalette);
+        instructions.bulkEpoch++;
     }
 
     /**
-     * Marks the section containing a sparse block instruction as touched.
+     * Traces a dirty/clean transition when dirty-tracking diagnostics are enabled.
      *
-     * <p>Block instructions never decrement this mask because the current delta
-     * mutation model only appends or rewrites sparse entries until block payloads
-     * are cleared wholesale.</p>
-     *
-     * @param posKey packed local block position
+     * @param becameDirty {@code true} for clean-to-dirty, {@code false} for dirty-to-clean
      */
-    private void trackBlockSection(final long posKey) {
-        blockSectionMask |= blockSectionBit(posKey);
-    }
-
-    /**
-     * Increments block-entity section occupancy for the section containing {@code posKey}.
-     *
-     * <p>Unlike block instructions, block entities can be removed individually, so
-     * this cache keeps per-section counts in addition to the one-hot mask.</p>
-     *
-     * @param posKey packed local block position
-     */
-    private void addBlockEntitySection(final long posKey) {
-        final int bit = blockSectionBit(posKey);
-        if (bit == 0) {
+    private static void traceDirtyTransition(final boolean becameDirty) {
+        if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.DIRTY_TRACKING, ChunkTraceSeverity.INFO)) {
             return;
         }
-
-        final int index = Integer.numberOfTrailingZeros(bit);
-        if (blockEntitySectionCounts[index]++ == 0) {
-            blockEntitySectionMask |= bit;
-        }
-    }
-
-    /**
-     * Decrements block-entity section occupancy for the section containing {@code posKey}.
-     *
-     * @param posKey packed local block position
-     */
-    private void removeBlockEntitySection(final long posKey) {
-        final int bit = blockSectionBit(posKey);
-        if (bit == 0) {
-            return;
-        }
-
-        final int index = Integer.numberOfTrailingZeros(bit);
-        if (blockEntitySectionCounts[index] == 0) {
-            return;
-        }
-
-        if (--blockEntitySectionCounts[index] == 0) {
-            blockEntitySectionMask &= ~bit;
-        }
-    }
-
-    /**
-     * Resets the block-entity section occupancy cache after a wholesale payload clear.
-     */
-    private void clearBlockEntitySections() {
-        blockEntitySectionMask = 0;
-        Arrays.fill(blockEntitySectionCounts, (short) 0);
+        ChunkTraceStore.trace(
+                ChunkisDebugDomain.DIRTY_TRACKING,
+                becameDirty ? ChunkTraceEventType.DELTA_MARKED_DIRTY : ChunkTraceEventType.DELTA_MARKED_CLEAN,
+                ChunkTraceSeverity.INFO,
+                becameDirty ? ChunkTraceReason.DELTA_BECAME_DIRTY : ChunkTraceReason.DELTA_MARKED_SAVED,
+                SOURCE,
+                becameDirty ? "delta became dirty" : "delta marked clean",
+                null,
+                null,
+                null,
+                null,
+                becameDirty,
+                null
+        );
     }
 
     /**
@@ -329,28 +316,13 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     private void markDirtyInternal() {
         final boolean wasDirty = isDirty();
-        ownershipState.mutationGeneration++;
+        ownershipState.incrementMutationGeneration();
         if (!wasDirty) {
             if (ownershipState.firstMutationSource == null) {
                 ownershipState.firstMutationSource =
                         ownershipState.pendingMutationSource != null ? ownershipState.pendingMutationSource : SOURCE;
             }
-            if (ChunkisDebugConfig.allows(ChunkisDebugDomain.DIRTY_TRACKING, ChunkTraceSeverity.INFO)) {
-                ChunkTraceStore.trace(
-                        ChunkisDebugDomain.DIRTY_TRACKING,
-                        ChunkTraceEventType.DELTA_MARKED_DIRTY,
-                        ChunkTraceSeverity.INFO,
-                        ChunkTraceReason.DELTA_BECAME_DIRTY,
-                        SOURCE,
-                        "delta became dirty",
-                        null,
-                        null,
-                        null,
-                        null,
-                        true,
-                        null
-                );
-            }
+            traceDirtyTransition(true);
         }
         ownershipState.pendingMutationSource = null;
     }
@@ -403,7 +375,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
             addNewInstruction(paletteId, posKey, markDirty);
         }
 
-        cleanupBlockEntityIfEmpty(newState, posKey);
+        cleanupBlockEntityIfEmpty(newState, posKey, markDirty);
     }
 
     /**
@@ -427,6 +399,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         }
 
         instructions.packedInstructions[index] = newInstruction;
+        liveBlockEdits++;
 
         if (markDirty) {
             markDirtyInternal();
@@ -446,7 +419,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
             final boolean markDirty
     ) {
         instructions.add(packInstruction(paletteId, posKey), posKey);
-        trackBlockSection(posKey);
+        liveBlockEdits++;
 
         if (markDirty) {
             markDirtyInternal();
@@ -458,12 +431,12 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      *
      * @param state  new block state
      * @param posKey packed local position
+     * @param markDirty whether a removed payload marks the delta dirty, so the removal
+     *                  is persisted even when the block instruction itself was unchanged
      */
-    private void cleanupBlockEntityIfEmpty(final S state, final long posKey) {
-        if (blockEntities != null && isEmptyState.test(state)) {
-            if (blockEntities.remove(posKey) != null) {
-                removeBlockEntitySection(posKey);
-            }
+    private void cleanupBlockEntityIfEmpty(final S state, final long posKey, final boolean markDirty) {
+        if (blockEntities != null && isEmptyState.test(state) && blockEntities.remove(posKey) != null && markDirty) {
+            markDirtyInternal();
         }
     }
 
@@ -499,7 +472,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         final long posKey = BlockInstruction.packPos(x, y, z);
 
         if (blockEntities.remove(posKey) != null) {
-            removeBlockEntitySection(posKey);
             if (markDirty) {
                 markDirtyInternal();
             }
@@ -516,21 +488,41 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * @param markDirty whether to mark dirty if payloads were cleared
      */
     public void clearBlockPayloads(final boolean markDirty) {
+        blockPayloadReleased = false;
         if (instructions.instructionCount == 0 && (blockEntities == null || blockEntities.isEmpty())) {
             return;
         }
 
         instructions.clear();
-        blockSectionMask = 0;
 
         if (blockEntities != null) {
             blockEntities.clear();
         }
-        clearBlockEntitySections();
 
         if (markDirty) {
             markDirtyInternal();
         }
+    }
+
+    /**
+     * Returns a counter that changes whenever block instructions are rewritten in bulk (cleared,
+     * decoded, appended without a position lookup, palette-rewritten or retained). Live block
+     * edits through {@link #addBlockChange} do not change it.
+     *
+     * @return current bulk-change counter
+     */
+    public long getBlockPayloadEpoch() {
+        return instructions.bulkEpoch;
+    }
+
+    /**
+     * Keeps only the block instructions whose packed position passes {@code keepPosition}, in their
+     * original order. Does not touch block entities, the palette or the dirty flag.
+     *
+     * @param keepPosition test on a packed position as produced by {@link BlockInstruction#packPos}
+     */
+    public void retainBlockInstructions(final java.util.function.LongPredicate keepPosition) {
+        instructions.retain(keepPosition);
     }
 
     /**
@@ -540,6 +532,292 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     public void ensureBlockCapacity(final int additionalBlocks) {
         instructions.ensureBlockCapacity(additionalBlocks);
+    }
+
+    /**
+     * Drops the block instructions of a clean delta whose blocks are on disk and held by a loaded chunk, so a
+     * loaded chunk does not keep a second copy of its blocks. Block entities, entities and metadata stay.
+     *
+     * <p>Until a capture rebuilds them from the live chunk ({@link #clearBlockPayloads} ends the released
+     * state), the instructions are only an overlay on the stored entry ({@link #isBlockPayloadReleased()}):
+     * the delta must not be encoded or used to rebuild a chunk as it is. Later edits are still recorded, on top
+     * of the stored blocks.</p>
+     *
+     * @throws IllegalStateException if the delta has unsaved changes, which only its instructions may hold
+     */
+    public void releaseBlockPayload() {
+        if (isDirty()) {
+            throw new IllegalStateException("Refusing to release the block payload of a dirty delta");
+        }
+        instructions.release();
+        blockPayloadReleased = true;
+    }
+
+    /**
+     * Reports whether {@link #releaseBlockPayload} dropped the block instructions and no capture has rebuilt
+     * them since.
+     *
+     * <p>A released delta's instructions are an overlay on its stored entry: the entry's blocks with the
+     * instructions applied on top are the chunk's blocks. The release needs a clean delta, so the entry then
+     * held the blocks; every later edit is recorded; and every later write of the entry writes the chunk's
+     * whole blocks, which already contain the edits. Callers that need the blocks of a released delta whose
+     * chunk is gone read the entry and apply the instructions.</p>
+     *
+     * @return true while the delta's blocks are its stored entry's plus its instructions
+     */
+    public boolean isBlockPayloadReleased() {
+        return blockPayloadReleased;
+    }
+
+    /**
+     * Releases the block payload of a delta whose instructions are its stored entry's blocks with {@code edits}
+     * on top, keeping only those edits, which then form the overlay ({@link #isBlockPayloadReleased()}). Unlike
+     * {@link #releaseBlockPayload()} it accepts a dirty delta: its only block changes the entry lacks are the
+     * edits it keeps. Other unsaved changes stay, with the dirty flag.
+     *
+     * @param edits view whose block instructions are the edits over the stored entry
+     */
+    public void releaseBlockPayloadKeeping(final ChunkDeltaView<S, N> edits) {
+        Objects.requireNonNull(edits, "edits");
+        instructions.release();
+        blockPayloadReleased = true;
+        edits.forEachBlock((x, y, z, state) -> addBlockChange(x, y, z, state, false));
+    }
+
+    /**
+     * Marks this delta as rebuilt from its stored entry with {@code edits}, a released delta's recorded edits,
+     * applied on top, so the restore can release it again keeping only those edits.
+     *
+     * @param edits view whose block instructions are the edits over the stored entry
+     */
+    public void markRebuiltFromStoredEntry(final ChunkDeltaView<S, N> edits) {
+        storedEntryEdits = Objects.requireNonNull(edits, "edits");
+    }
+
+    /**
+     * Returns and forgets the edits set by {@link #markRebuiltFromStoredEntry}.
+     *
+     * @return the edits over the stored entry, or {@code null} when the delta was not rebuilt from it
+     */
+    public ChunkDeltaView<S, N> takeStoredEntryEdits() {
+        final ChunkDeltaView<S, N> edits = storedEntryEdits;
+        storedEntryEdits = null;
+        return edits;
+    }
+
+    /**
+     * Fingerprint of the blocks this chunk's stored entry was last written with from copied sections: their content
+     * hash then the written block part's hash; {@code null} when unknown. Lets a later save whose sections hash the
+     * same copy the stored block part instead of encoding the blocks again.
+     */
+    private long[] writtenBlocksPrint;
+
+    /**
+     * The blocks this delta was filled with, in a form a chunk load can use as is (opaque here), valid only while
+     * no block changes; see {@link #attachLoadedBlocks}.
+     */
+    private Object loadedBlocks;
+
+    /**
+     * Block state stamp when {@link #loadedBlocks} was attached.
+     */
+    private long loadedBlocksStamp;
+
+    /**
+     * Attaches the form the blocks this delta was just filled with came in, for the chunk load to use instead of
+     * rebuilding it from the instructions.
+     *
+     * @param blocks the blocks in that form
+     */
+    public void attachLoadedBlocks(final Object blocks) {
+        this.loadedBlocks = blocks;
+        this.loadedBlocksStamp = blockStateStamp();
+    }
+
+    /**
+     * Takes the attached form of the blocks, once, and only while the delta still holds exactly those blocks: any
+     * block change since voids it.
+     *
+     * @return the attached blocks, or {@code null}
+     */
+    public Object takeLoadedBlocks() {
+        final Object blocks = loadedBlocks;
+        loadedBlocks = null;
+        return blocks != null && loadedBlocksStamp == blockStateStamp() ? blocks : null;
+    }
+
+    /**
+     * Combines every counter a block change moves.
+     *
+     * @return the current block state stamp
+     */
+    private long blockStateStamp() {
+        return (getBlockEditStamp() * 31 + instructions.instructionCount) * 31 + ownershipState.mutationGeneration;
+    }
+
+    /**
+     * Hash of the block part of the stored entry this delta was decoded from ({@code CisBlockPart}), or
+     * {@code null} when it was not decoded from a current-version entry.
+     */
+    private long[] storedBlockPartHash;
+
+    /**
+     * Returns the hash of the block part of the entry this delta was decoded from.
+     *
+     * @return two longs, or {@code null}
+     */
+    public long[] getStoredBlockPartHash() {
+        return storedBlockPartHash;
+    }
+
+    /**
+     * Records the hash of the block part of the entry this delta was decoded from; storage calls this.
+     *
+     * @param hash two longs, or {@code null}
+     */
+    public void setStoredBlockPartHash(final long[] hash) {
+        this.storedBlockPartHash = hash;
+    }
+
+    /**
+     * Returns the fingerprint of the blocks last written from copied sections.
+     *
+     * @return section hash then block part hash (four longs), or {@code null}
+     */
+    public long[] getWrittenBlocksPrint() {
+        return writtenBlocksPrint;
+    }
+
+    /**
+     * Records, or clears, the fingerprint of the blocks the stored entry was just written with.
+     *
+     * @param print section hash then block part hash (four longs), or {@code null} when unknown
+     */
+    public void setWrittenBlocksPrint(final long[] print) {
+        this.writtenBlocksPrint = print;
+    }
+
+    /**
+     * Returns a stamp of the block payload: it changes whenever block instructions change, through a live edit
+     * or a bulk rewrite, and never otherwise.
+     *
+     * @return current block payload stamp
+     */
+    public long getBlockEditStamp() {
+        return instructions.bulkEpoch + liveBlockEdits;
+    }
+
+    /**
+     * Releases the block payload once a save wrote every block of the chunk as it was at {@code stamp}, and no
+     * block changed since: the stored entry then holds the delta's blocks. A full payload is released; a released
+     * one drops the edits it recorded since its release, leaving an empty overlay
+     * ({@link #isBlockPayloadReleased()}). Unlike {@link #releaseBlockPayload()} this accepts a dirty delta: the
+     * entry holds every block, so only non-block changes stay unsaved, with the dirty flag.
+     *
+     * @param stamp {@link #getBlockEditStamp()} when the save took the blocks
+     */
+    public void releaseBlocksSavedAt(final long stamp) {
+        if (getBlockEditStamp() != stamp || (blockPayloadReleased && instructions.instructionCount == 0)) {
+            return;
+        }
+        instructions.release();
+        blockPayloadReleased = true;
+    }
+
+    /**
+     * Copies a payload, keeping {@code null} as it is.
+     *
+     * @param payload       payload, may be {@code null}
+     * @param payloadCopier copier for non-null payloads
+     * @param <N>           payload type
+     * @return the copy, or {@code null}
+     */
+    private static <N> N copyPayload(final N payload, final UnaryOperator<N> payloadCopier) {
+        return payload == null ? null : payloadCopier.apply(payload);
+    }
+
+    /**
+     * Replaces everything but the block payload with copies of {@code source}'s: block entities, active and
+     * pending entities, chunk metadata and the repopulation flag. Blocks, palette and source version stay.
+     * Marks this delta dirty when {@code source} is dirty, so its unsaved changes are saved again.
+     *
+     * <p>Used to rebuild a released delta ({@link #isBlockPayloadReleased()}) from its stored entry: the entry
+     * and the delta's overlay supply the blocks, the newer delta everything else.</p>
+     *
+     * @param source        delta whose non-block state is taken
+     * @param payloadCopier copies each block-entity, entity and metadata payload
+     */
+    public void adoptNonBlockStateFrom(final ChunkDelta<S, N> source, final UnaryOperator<N> payloadCopier) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(payloadCopier, "payloadCopier");
+        blockEntities = null;
+        if (source.blockEntities != null && !source.blockEntities.isEmpty()) {
+            blockEntities = new Long2ObjectOpenHashMap<>(source.blockEntities.size());
+            for (final Long2ObjectMap.Entry<N> entry : source.blockEntities.long2ObjectEntrySet()) {
+                blockEntities.put(entry.getLongKey(), copyPayload(entry.getValue(), payloadCopier));
+            }
+        }
+        activeEntities = null;
+        if (source.activeEntities != null && !source.activeEntities.isEmpty()) {
+            activeEntities = new Int2ObjectOpenHashMap<>(source.activeEntities.size());
+            source.activeEntities.int2ObjectEntrySet()
+                    .forEach(entry -> activeEntities.put(entry.getIntKey(), copyPayload(entry.getValue(), payloadCopier)));
+        }
+        pendingEntities = Collections.emptyList();
+        if (!source.pendingEntities.isEmpty()) {
+            pendingEntities = new ArrayList<>(source.pendingEntities.size());
+            source.pendingEntities.forEach(nbt -> pendingEntities.add(copyPayload(nbt, payloadCopier)));
+        }
+        chunkMetadata = copyPayload(source.chunkMetadata, payloadCopier);
+        encodedChunkMetadata = null;
+        encodedChunkMetadataHash = 0;
+        suppressInitialRepopulation = source.suppressInitialRepopulation;
+        if (source.isDirty()) {
+            markDirtyInternal();
+        }
+    }
+
+    /**
+     * Releases unused block-instruction capacity; the stored blocks and their order are unchanged.
+     */
+    public void trimBlockCapacity() {
+        instructions.trimToSize();
+    }
+
+    /**
+     * Appends every block instruction of {@code source}, in order, as {@link #appendDecodedBlockFast} would one
+     * by one. The palette ids are copied as they are, so call {@link #copyBlockPaletteFrom} first.
+     *
+     * @param source delta to copy block instructions from; not modified
+     */
+    public void appendDecodedBlocksFrom(final ChunkDelta<S, ?> source) {
+        Objects.requireNonNull(source, "source");
+        instructions.addAllAppendOnly(source.instructions);
+    }
+
+    /**
+     * Packs one decoded block the way {@link #appendDecodedBlockFast} stores it, for
+     * {@link #appendDecodedBlocks}.
+     *
+     * @param x         local chunk X coordinate
+     * @param y         block Y coordinate
+     * @param z         local chunk Z coordinate
+     * @param paletteId palette id in this delta's block palette
+     * @return packed instruction
+     */
+    public static long packDecodedBlock(final int x, final int y, final int z, final int paletteId) {
+        return packInstruction(paletteId, BlockInstruction.packPos(x, y, z));
+    }
+
+    /**
+     * Appends blocks packed by {@link #packDecodedBlock}, in order, as {@link #appendDecodedBlockFast} would one
+     * by one; positions must not already be present.
+     *
+     * @param packed packed blocks
+     * @param count  number of leading entries of {@code packed} to append
+     */
+    public void appendDecodedBlocks(final long[] packed, final int count) {
+        instructions.addAllAppendOnly(packed, count);
     }
 
     /**
@@ -559,7 +837,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     ) {
         final long posKey = BlockInstruction.packPos(x, y, z);
         instructions.addAppendOnly(packInstruction(paletteId, posKey));
-        trackBlockSection(posKey);
     }
 
     /**
@@ -569,8 +846,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * Rather than issuing 4096 individual {@link #appendDecodedBlockFast} calls,
      * this method precomputes the constant upper 32 bits (palette id), iterates
      * the y/z/x positions in the canonical order, and writes directly into
-     * the packed instruction array. {@link #trackBlockSection} is called once
-     * for the whole section instead of once per block.</p>
+     * the packed instruction array.</p>
      *
      * <p>Packed position layout (matches {@link BlockInstruction#packPos}):</p>
      * <pre>
@@ -598,7 +874,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         // Write directly into the backing array, bypassing per-block method calls.
         // The inner loop is intentionally tight: no capacity check per iteration
         // (guaranteed by ensureBlockCapacity above), no dirty flag update per
-        // iteration (set once at end), no trackBlockSection per block (done once).
+        // iteration (set once at end).
         final long[] arr = instructions.packedInstructions;
         int count = instructions.instructionCount;
 
@@ -615,9 +891,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
         instructions.instructionCount = count;
         instructions.positionMapDirty = true;
-
-        // Track the section once: use any position in the section (y=baseY, x=0, z=0).
-        blockSectionMask |= sectionBit(baseY);
+        instructions.bulkEpoch++;
     }
 
     /**
@@ -627,15 +901,15 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * <p>This is the inner-loop fast-path used by {@code readDenseBlocks}.
      * Instead of calling {@link #appendDecodedBlockFast} per block (which
      * traverses a method-call chain per entry), this method writes directly
-     * into the backing array in a single tight loop. {@link #trackBlockSection}
-     * is called once for the whole section.</p>
+     * into the backing array in a single tight loop.</p>
      *
      * <p>The {@code globalIndices} array must be indexed in y->z->x order
      * (same as the dense section storage format), length exactly 4096.</p>
      *
      * @param baseY         absolute block Y of this section's bottom (sectionY << 4)
-     * @param globalIndices 4096-element array of global palette ids; entry is
-     *                      {@code 0} (air/no-change) to skip, or the palette id to write
+     * @param globalIndices 4096-element array of global palette ids; a negative entry
+     *                      means "no change" and is skipped, any other value (including
+     *                      {@code 0}, air) is written as an instruction
      */
     public void appendDecodedDenseSection(final int baseY, final int[] globalIndices) {
         // Upper bound: at most 4096 new instructions. Pre-size to avoid any
@@ -653,7 +927,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
                 final long yzBits = yBits | ((long) z << 4);
                 for (int x = 0; x < 16; x++) {
                     final int globalIndex = globalIndices[flatIdx++];
-                    if (globalIndex == 0) {
+                    if (globalIndex < 0) {
                         continue;
                     }
                     arr[count++] = ((long) globalIndex << Integer.SIZE) | yzBits | ((long) x << 8);
@@ -665,7 +939,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         instructions.instructionCount = count;
         if (written > 0) {
             instructions.positionMapDirty = true;
-            blockSectionMask |= sectionBit(baseY);
+            instructions.bulkEpoch++;
         }
     }
 
@@ -715,7 +989,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         final int paletteId = blockPalette.getOrAdd(state);
         final long posKey = BlockInstruction.packPos(x, y, z);
         instructions.addAppendOnly(packInstruction(paletteId, posKey));
-        trackBlockSection(posKey);
     }
 
     /**
@@ -764,9 +1037,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
             return;
         }
 
-        if (existing == null) {
-            addBlockEntitySection(key);
-        }
         entities.put(key, nbt);
 
         if (markDirty) {
@@ -796,7 +1066,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         }
 
         blockEntities.clear();
-        clearBlockEntitySections();
 
         if (markDirty) {
             markDirtyInternal();
@@ -1062,7 +1331,9 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * @param markDirty whether to mark dirty if changed
      */
     public void setChunkMetadata(final N metadata, final boolean markDirty) {
-        if (Objects.equals(chunkMetadata, metadata)) {
+        // Only a dirtying set needs equal content to stay quiet; a quiet one compared every save's metadata,
+        // stored light included, in full just to keep an encoding cache the save worker rebuilds cheaply.
+        if (markDirty ? Objects.equals(chunkMetadata, metadata) : chunkMetadata == metadata) {
             return;
         }
 
@@ -1163,23 +1434,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
-     * Returns the raw instruction count from the underlying storage.
-     *
-     * <p>Unlike {@link #getBlockChangesCount()}, this method is intended for
-     * internal use by codec paths that need a pre-fill baseline offset.
-     * Specifically, the decoder optimisation in {@code decodeDefaultSparseSection}
-     * captures this value before calling {@code fillSection} so that exception
-     * blocks can be patched in-place at a known index without consulting or
-     * rebuilding the position map.</p>
-     *
-     * @return the number of packed instructions currently stored
-     * @see BlockInstructionStorage#updatePalette(int, int)
-     */
-    public int getInstructionCount() {
-        return instructions.instructionCount;
-    }
-
-    /**
      * Returns the number of stored block changes without materializing instructions.
      *
      * @return block change count
@@ -1194,7 +1448,8 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * @return touched section count
      */
     public int getTouchedSectionCount() {
-        return Integer.bitCount(blockSectionMask | blockEntitySectionMask);
+        return ChunkDeltaViews.touchedSectionCount(instructions.packedInstructions, instructions.instructionCount,
+                blockEntities);
     }
 
     /**
@@ -1219,40 +1474,6 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
                 pendingEntities,
                 chunkMetadata
         );
-    }
-
-    /**
-     * Visits blocks, block entities, and entities.
-     *
-     * @param visitor visitor to receive delta contents
-     */
-    public void accept(final DeltaVisitor<S, N> visitor) {
-        Objects.requireNonNull(visitor, "visitor");
-
-        forEachBlock(visitor::visitBlock);
-
-        if (blockEntities != null && !blockEntities.isEmpty()) {
-            for (final Long2ObjectMap.Entry<N> entry : blockEntities.long2ObjectEntrySet()) {
-                final long posKey = entry.getLongKey();
-
-                visitor.visitBlockEntity(
-                        BlockInstruction.unpackX(posKey),
-                        BlockInstruction.unpackY(posKey),
-                        BlockInstruction.unpackZ(posKey),
-                        entry.getValue()
-                );
-            }
-        }
-
-        if (activeEntities != null) {
-            for (final N nbt : activeEntities.values()) {
-                visitor.visitEntity(nbt);
-            }
-        }
-
-        for (final N nbt : pendingEntities) {
-            visitor.visitEntity(nbt);
-        }
     }
 
     /**
@@ -1356,21 +1577,8 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     public void markSaved() {
         final boolean wasDirty = isDirty();
         ownershipState.savedGeneration = ownershipState.mutationGeneration;
-        if (wasDirty && ChunkisDebugConfig.allows(ChunkisDebugDomain.DIRTY_TRACKING, ChunkTraceSeverity.INFO)) {
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.DIRTY_TRACKING,
-                    ChunkTraceEventType.DELTA_MARKED_CLEAN,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.DELTA_MARKED_SAVED,
-                    SOURCE,
-                    "delta marked clean",
-                    null,
-                    null,
-                    null,
-                    null,
-                    false,
-                    null
-            );
+        if (wasDirty) {
+            traceDirtyTransition(false);
         }
     }
 
@@ -1392,21 +1600,8 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
 
         final boolean wasDirty = isDirty();
         ownershipState.savedGeneration = generation;
-        if (wasDirty && ChunkisDebugConfig.allows(ChunkisDebugDomain.DIRTY_TRACKING, ChunkTraceSeverity.INFO)) {
-            ChunkTraceStore.trace(
-                    ChunkisDebugDomain.DIRTY_TRACKING,
-                    ChunkTraceEventType.DELTA_MARKED_CLEAN,
-                    ChunkTraceSeverity.INFO,
-                    ChunkTraceReason.DELTA_MARKED_SAVED,
-                    SOURCE,
-                    "delta marked clean",
-                    null,
-                    null,
-                    null,
-                    null,
-                    false,
-                    null
-            );
+        if (wasDirty) {
+            traceDirtyTransition(false);
         }
         return true;
     }

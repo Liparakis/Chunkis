@@ -20,6 +20,13 @@ import java.io.IOException;
 public final class CisCompression {
 
     /**
+     * Upper bound for one decompressed chunk payload. A corrupt frame header can claim
+     * up to 2 GB; rejecting it here turns that into a decode error instead of an
+     * out-of-memory allocation.
+     */
+    static final long MAX_DECOMPRESSED_BYTES = 256L * 1024 * 1024;
+
+    /**
      * Per-thread reusable Zstd decompression context.
      *
      * <p>{@link ZstdDecompressCtx} holds decompression state and may use native
@@ -59,7 +66,7 @@ public final class CisCompression {
         if (Zstd.isError(decompressedSize)) {
             throw new IOException("Failed to read CIS Zstd size: " + Zstd.getErrorName(decompressedSize));
         }
-        if (decompressedSize <= 0L || decompressedSize > Integer.MAX_VALUE) {
+        if (decompressedSize <= 0L || decompressedSize > MAX_DECOMPRESSED_BYTES) {
             throw new IOException("Invalid CIS Zstd payload size: " + decompressedSize);
         }
         return DECOMPRESS_CTX.get()

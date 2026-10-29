@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.world.tracking.save;
 
+import java.util.Set;
+import java.util.HashSet;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,6 +20,12 @@ final class PendingSaveQueue {
      * Backing insertion-ordered map coalescing pending saves by chunk coordinates posKey.
      */
     private final LinkedHashMap<Long, AsyncCisSaveWorker.PendingSave> pending = new LinkedHashMap<>();
+
+    /**
+     * Positions a worker thread is saving right now. A newer save of the same chunk waits for it, so two saves of
+     * one chunk never run at once and the older can never overwrite the newer.
+     */
+    private final Set<Long> inFlight = new HashSet<>();
 
     /**
      * True if the queue has been closed and should reject further saves.
@@ -42,7 +50,7 @@ final class PendingSaveQueue {
             }
             pending.remove(save.posKey());
             pending.put(save.posKey(), save);
-            monitor.notify();
+            monitor.notifyAll();
         }
     }
 
@@ -53,8 +61,14 @@ final class PendingSaveQueue {
      */
     AsyncCisSaveWorker.PendingSave poll() {
         synchronized (monitor) {
-            while (pending.isEmpty()) {
-                if (closed) {
+            while (true) {
+                for (final Map.Entry<Long, AsyncCisSaveWorker.PendingSave> entry : pending.entrySet()) {
+                    if (inFlight.add(entry.getKey())) {
+                        pending.remove(entry.getKey());
+                        return entry.getValue();
+                    }
+                }
+                if (pending.isEmpty() && closed) {
                     return null;
                 }
                 try {
@@ -65,13 +79,18 @@ final class PendingSaveQueue {
                     return null;
                 }
             }
+        }
+    }
 
-            final Map.Entry<Long, AsyncCisSaveWorker.PendingSave> head =
-                    pending.entrySet()
-                            .iterator()
-                            .next();
-            pending.remove(head.getKey());
-            return head.getValue();
+    /**
+     * Marks a polled save finished, letting a newer save of the same chunk run.
+     *
+     * @param posKey chunk position key of the finished save
+     */
+    void done(final long posKey) {
+        synchronized (monitor) {
+            inFlight.remove(posKey);
+            monitor.notifyAll();
         }
     }
 

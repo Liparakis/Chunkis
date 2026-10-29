@@ -1,9 +1,8 @@
 package io.liparakis.chunkis.core;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 
 /**
  * Bidirectional mapping between objects of type T and compact integer IDs.
@@ -43,6 +42,11 @@ public class Palette<T> {
     private static final int INITIAL_CAPACITY = 32;
 
     /**
+     * Value the reverse map returns for entries not in the palette.
+     */
+    private static final int MISSING_ID = -1;
+
+    /**
      * Sequential list mapping IDs to entries (ID -> Entry)
      */
     private final List<T> idToEntry = new ArrayList<>(INITIAL_CAPACITY);
@@ -50,7 +54,11 @@ public class Palette<T> {
     /**
      * Reverse lookup mapping entries to their assigned IDs (Entry -> ID)
      */
-    private final Map<T, Integer> entryToId = new HashMap<>(INITIAL_CAPACITY);
+    private final Object2IntOpenHashMap<T> entryToId = new Object2IntOpenHashMap<>(INITIAL_CAPACITY);
+
+    {
+        entryToId.defaultReturnValue(MISSING_ID);
+    }
 
     /**
      * Retrieves the ID for the given entry, adding it to the palette if not present.
@@ -78,12 +86,12 @@ public class Palette<T> {
             throw new IllegalArgumentException("Cannot add null to Palette");
         }
 
-        Integer existingId = entryToId.get(entry);
-        if (existingId != null) {
+        final int existingId = entryToId.getInt(entry);
+        if (existingId != MISSING_ID) {
             return existingId;
         }
 
-        int id = idToEntry.size();
+        final int id = idToEntry.size();
         idToEntry.add(entry);
         entryToId.put(entry, id);
         return id;

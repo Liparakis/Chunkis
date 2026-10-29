@@ -1,7 +1,9 @@
 package io.liparakis.chunkis.world.entity.capture;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
@@ -168,4 +170,37 @@ public final class EntityPayloadNbt {
             return Optional.empty();
         }
     }
+    /**
+     * Ensures an entity NBT compound contains the required {@code "id"} field.
+     *
+     * <p>Minecraft's entity deserializer requires the registry ID string, for
+     * example {@code "minecraft:pig"}. Some serialization paths omit it, so this
+     * inserts the ID from the live entity type when missing.</p>
+     *
+     * @param nbt    entity NBT compound
+     * @param entity source entity
+     */
+    public static void ensureEntityIdPresent(
+            final NbtCompound nbt,
+            final Entity entity
+    ) {
+        Objects.requireNonNull(nbt, "nbt");
+        Objects.requireNonNull(entity, "entity");
+
+        if (!nbt.contains(ENTITY_ID_KEY)) {
+            nbt.putString(ENTITY_ID_KEY, resolveEntityId(entity));
+        }
+    }
+
+    /**
+     * Resolves the registry ID string for an entity type.
+     *
+     * @param entity entity whose type should be resolved
+     * @return registry ID string
+     */
+    private static String resolveEntityId(final Entity entity) {
+        return Registries.ENTITY_TYPE.getId(entity.getType())
+                .toString();
+    }
+
 }

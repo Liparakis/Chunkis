@@ -64,6 +64,7 @@ fabricApi {
 }
 
 loom {
+    accessWidenerPath = file("src/main/resources/chunkis.accesswidener")
     runs {
         client {
             vmArg "-Xmx8G"
@@ -85,5 +86,23 @@ tasks.named("runGameTest") {
     def filter = providers.gradleProperty("gametestFilter").orNull
     if (filter != null && !filter.isBlank()) {
         systemProperty("fabric-api.gametest.filter", filter)
+    }
+    // Stress benchmark: -PchunkisStress=true, optional -PchunkisStressSize/Rounds/EditsPerChunk/ChunksPerTick/Tps/Vanilla,
+    // -PchunkisStressNatural=true runs on normally generated terrain (default world preset, fixed seed) and keeps it:
+    // touched chunks get edits and a small base instead of synthetic fill. -PchunkisStressHistogram=true writes a
+    // live-object class histogram next to the report.
+    if (providers.gradleProperty("chunkisStress").orNull == "true") {
+        systemProperty("chunkis.stress", "true")
+        ["size", "rounds", "editsPerChunk", "chunksPerTick", "tps", "vanilla", "touchedPercent", "natural", "histogram"].each { key ->
+            def value = providers.gradleProperty("chunkisStress" + key.capitalize()).orNull
+            if (value != null) {
+                systemProperty("chunkis.stress." + key, value)
+            }
+        }
+        // -PchunkisStressJfr=<file.jfr> records a JFR profile of the run.
+        def jfr = providers.gradleProperty("chunkisStressJfr").orNull
+        if (jfr != null) {
+            jvmArgs("-XX:StartFlightRecording=filename=" + jfr + ",settings=profile")
+        }
     }
 }

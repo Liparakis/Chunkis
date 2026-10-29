@@ -27,7 +27,28 @@ public final class CisConstants {
      * before normal runtime load.
      * Increment when making breaking changes to the serialization format.
      */
-    public static final int VERSION = 11;
+    public static final int VERSION = 12;
+
+    /**
+     * First version whose dense sections of at most {@link #MAX_CODED_DENSE_BITS} bits per block store their block
+     * indices outside the section bit stream: after the section's palette, one bit chooses raw (one byte per block,
+     * in a byte stream that Zstd compresses) or context-coded (each block predicted from its neighbours, the misses
+     * range-coded, in a second stream). The encoder codes sections whose blocks mostly match their prediction,
+     * as natural terrain does, and leaves noisy ones raw, where coding would cost decode time for little gain.
+     */
+    public static final int CODED_DENSE_MIN_VERSION = 12;
+
+    /**
+     * Share of a section's blocks, out of 4096, that must match their prediction for the encoder to context-code
+     * it rather than store it raw.
+     */
+    public static final int CODED_DENSE_MIN_PREDICTED = 3072;
+
+    /**
+     * Widest dense-section block index, in bits, context-coded from {@link #CODED_DENSE_MIN_VERSION} on; wider
+     * sections stay bit-packed.
+     */
+    public static final int MAX_CODED_DENSE_BITS = 8;
 
     /**
      * Size of one dimension of a chunk section (16 blocks).

@@ -166,6 +166,19 @@ public final class CisSection<S> {
     }
 
     /**
+     * Makes the section dense with the given states, as if each non-null one had been appended in position order.
+     *
+     * @param blocks 4096 states, {@code null} where unchanged; kept by reference, not copied
+     */
+    public void useDenseBlocks(final Object[] blocks) {
+        denseBlocks = blocks;
+        sparseKeys = null;
+        sparseValues = null;
+        sparseSize = 0;
+        mode = MODE_DENSE;
+    }
+
+    /**
      * Converts the section from sparse to dense storage mode.
      * Occurs when the number of modified blocks exceeds the sparse threshold.
      */

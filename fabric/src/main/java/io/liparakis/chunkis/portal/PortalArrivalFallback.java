@@ -17,6 +17,7 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.TeleportTarget;
+import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.world.World;
 import net.minecraft.world.dimension.NetherPortal;
 import net.minecraft.world.poi.PointOfInterestStorage;
@@ -225,8 +226,9 @@ public final class PortalArrivalFallback {
      * Searches the destination area for the best candidate site to place a new portal.
      *
      * <p>Each column is sampled at the clamped target Y, the surface Y, and within
-     * {@code PORTAL_VERTICAL_RANGE} blocks vertically of the target Y. The lowest-scoring
-     * valid site is returned.</p>
+     * {@code PORTAL_VERTICAL_RANGE} blocks vertically of the target Y. Rings are scanned
+     * outward and the search stops after the first ring that contains a valid site; the
+     * lowest-scoring site seen so far is returned.</p>
      *
      * @param world  destination world
      * @param target vanilla-scaled arrival position
@@ -241,9 +243,16 @@ public final class PortalArrivalFallback {
         final int minY = world.getBottomY() + 1;
         final int maxY = worldCeilingY(world) - PORTAL_INTERIOR_HEIGHT - 1;
         final PortalSite[] best = {null};
+        final int[] foundRing = {-1};
 
         searchColumns(
                 world, target, PORTAL_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
+                    // Rings are visited by distance: once the ring holding the first valid site is
+                    // complete, farther rings cannot be closer, so stop instead of scanning all of them.
+                    final int ring = Math.max(Math.abs(worldX - target.getX()), Math.abs(worldZ - target.getZ()));
+                    if (foundRing[0] >= 0 && ring > foundRing[0]) {
+                        return true;
+                    }
                     best[0] = chooseBetter(
                             best[0],
                             validatePortalSiteBothAxes(world, target, worldX, startY, worldZ, axis)
@@ -258,7 +267,9 @@ public final class PortalArrivalFallback {
 
                     best[0] = searchVerticalPortalSites(
                             world, target, worldX, startY, worldZ, minY, maxY, axis, best[0]);
-
+                    if (best[0] != null && foundRing[0] < 0) {
+                        foundRing[0] = ring;
+                    }
                     return false;
                 }
         );
@@ -447,17 +458,36 @@ public final class PortalArrivalFallback {
     }
 
     /**
-     * Returns {@code true} if a block is considered indestructible by portal generation.
-     * Only bedrock and reinforced deepslate cannot be overwritten by a portal frame.
+     * Returns {@code true} if a portal frame must not overwrite this block.
+     *
+     * <p>Only air, replaceable blocks (grass, snow layers, fluids) and natural terrain
+     * may be overwritten, which is what makes the fallback non-destructive: player-placed
+     * blocks such as planks, iron blocks, doors or redstone reject the site instead of
+     * being silently deleted.</p>
      *
      * @param state       block state to check
      * @param blockEntity block entity at the position, if any
      * @return {@code true} if the block cannot be replaced
      */
-    private static boolean isUnsafeToReplace(final BlockState state, final BlockEntity blockEntity) {
-        return blockEntity != null
-                || state.isOf(Blocks.BEDROCK)
-                || state.isOf(Blocks.REINFORCED_DEEPSLATE);
+    static boolean isUnsafeToReplace(final BlockState state, final BlockEntity blockEntity) {
+        if (blockEntity != null) {
+            return true;
+        }
+        if (state.isAir() || state.isReplaceable()) {
+            return false;
+        }
+        return !(state.isIn(BlockTags.BASE_STONE_OVERWORLD)
+                || state.isIn(BlockTags.BASE_STONE_NETHER)
+                || state.isIn(BlockTags.STONE_ORE_REPLACEABLES)
+                || state.isIn(BlockTags.DEEPSLATE_ORE_REPLACEABLES)
+                || state.isIn(BlockTags.DIRT)
+                || state.isIn(BlockTags.SAND)
+                || state.isIn(BlockTags.NYLIUM)
+                || state.isIn(BlockTags.SOUL_SPEED_BLOCKS)
+                || state.isIn(BlockTags.TERRACOTTA)
+                || state.isIn(BlockTags.ICE)
+                || state.isIn(BlockTags.SNOW)
+                || state.isOf(Blocks.GRAVEL));
     }
 
     /**

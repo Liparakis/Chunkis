@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.world.restoration.core;
 
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.debug.config.ChunkisDebugConfig;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
@@ -13,16 +14,22 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.entity.replay.EntityReplayCoordinator;
+import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.restoration.nbt.PreloadedBlockSections;
+import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ChunkHolder;
 import net.minecraft.server.world.ServerLightingProvider;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
@@ -30,6 +37,8 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.PalettedContainer;
+import net.minecraft.world.chunk.light.ChunkLightProvider;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.WorldChunk;
 
@@ -62,6 +71,11 @@ public final class ChunkRestorer {
      * Minimum number of chunk-local columns that must be touched before full bulk rebuild is worthwhile.
      */
     private static final int BULK_REFRESH_TOUCHED_COLUMNS_THRESHOLD = 96;
+
+    /**
+     * Opacity of a block no light passes through.
+     */
+    private static final int MAX_OPACITY = 15;
 
     /**
      * Log source tag identifier mapping for restoration operations.
@@ -120,26 +134,38 @@ public final class ChunkRestorer {
             final ChunkDelta<BlockState, NbtCompound> protoDelta,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
             final String operationId) {
+        restore(world, chunk, protoDelta, runtimeDelta, operationId, false);
+    }
+
+    /**
+     * Restores a chunk from persisted delta data, optionally leaving block entities for vanilla to build.
+     *
+     * <p>A chunk vanilla has just converted and not yet post-processed builds pending block entities itself, in
+     * {@code WorldChunk#runPostProcessing} or on first access, as it does for its own loads; handing them over
+     * keeps their decoding off the load path. Any other chunk gets them built here.</p>
+     *
+     * @param world                  server world context
+     * @param chunk                  chunk to restore into
+     * @param protoDelta             source delta loaded from disk/proto state
+     * @param runtimeDelta           runtime delta to populate with validated changes
+     * @param operationId            optional execution/operation trace ID label, may be null
+     * @param freshlyConvertedChunk  whether vanilla has yet to post-process {@code chunk}
+     */
+    public static void restore(final ServerWorld world,
+            final WorldChunk chunk,
+            final ChunkDelta<BlockState, NbtCompound> protoDelta,
+            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
+            final String operationId,
+            final boolean freshlyConvertedChunk) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(chunk, "chunk");
         Objects.requireNonNull(protoDelta, "protoDelta");
-        if (runtimeDelta != null) {
-            runtimeDelta.clearBlockPayloads(false);
-            runtimeDelta.clearBlockEntityPayloads(false);
-            runtimeDelta.clearActiveEntities();
-            runtimeDelta.setEntities(List.of(), false);
-            runtimeDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
-            runtimeDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());
-            runtimeDelta.copyBlockPaletteFrom(protoDelta);
-            runtimeDelta.ensureBlockCapacity(protoDelta.getBlockChangesCount());
-            seedMigratedAuthoritativeBlockEntities(protoDelta, runtimeDelta);
+        if (protoDelta.isBlockPayloadReleased()) {
+            // Its blocks live only in another loaded chunk and on disk; restoring it would clear this chunk.
+            throw new IllegalStateException("Chunkis: Refusing to restore chunk " + chunk.getPos()
+                    + " from a delta whose block payload was released");
         }
 
-        final ChunkRestorationVisitor visitor = new ChunkRestorationVisitor(world,
-                chunk,
-                protoDelta,
-                runtimeDelta,
-                operationId);
         final ChunkPos chunkPos = chunk.getPos();
         final boolean hasPersistedBaseChunk = CisNbtUtil.hasPersistedBaseChunkNbt(protoDelta.getChunkMetadata());
         final boolean usePersistedBaseChunkForBlocks = CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(protoDelta.getChunkMetadata());
@@ -214,18 +240,64 @@ public final class ChunkRestorer {
             return;
         }
 
+        // The load NBT already carried exactly these blocks, parsed by vanilla off the server thread.
+        final boolean blocksPreloaded = PreloadedBlockSections.consume(protoDelta);
+        final long[] loadedContentPrint = PreloadedBlockSections.takeContentPrint(protoDelta);
+        // Set when the load rebuilt the delta from its stored entry plus a released delta's edits: its only block
+        // changes the entry lacks are those edits.
+        final ChunkDeltaView<BlockState, NbtCompound> storedEntryEdits = protoDelta.takeStoredEntryEdits();
+        // A clean preloaded baseline is released as soon as the restore marks the runtime delta saved, and a
+        // rebuilt one released keeping its edits, so copying its instructions would only be undone.
+        final boolean releaseAfterFinish = blocksPreloaded && runtimeDelta != null
+                && (!protoDelta.isDirty() || storedEntryEdits != null)
+                && !usePersistedBaseChunkForBlocks && CisNbtUtil.hasFullBlockBaseline(protoDelta.getChunkMetadata());
+
+        // Reset the runtime delta only once the payload is known to be restorable; resetting it
+        // before the early return above would leave an empty delta that could overwrite storage.
+        if (runtimeDelta != null) {
+            runtimeDelta.clearBlockPayloads(false);
+            runtimeDelta.clearBlockEntityPayloads(false);
+            runtimeDelta.clearActiveEntities();
+            runtimeDelta.setEntities(List.of(), false);
+            runtimeDelta.setChunkMetadata(protoDelta.getChunkMetadata(), false);
+            runtimeDelta.setSuppressInitialRepopulation(protoDelta.shouldSuppressInitialRepopulation());
+            runtimeDelta.copyBlockPaletteFrom(protoDelta);
+            if (!releaseAfterFinish) {
+                runtimeDelta.ensureBlockCapacity(protoDelta.getBlockChangesCount());
+            }
+            seedMigratedAuthoritativeBlockEntities(protoDelta, runtimeDelta);
+        }
+        final ChunkRestorationVisitor visitor = new ChunkRestorationVisitor(world,
+                chunk,
+                protoDelta,
+                runtimeDelta,
+                operationId,
+                freshlyConvertedChunk);
+
+        // Only the light diff of a written restore reads this copy.
+        @SuppressWarnings("unchecked")
+        final PalettedContainer<BlockState>[] blocksBefore = blocksPreloaded
+                ? new PalettedContainer[0]
+                : copySectionBlocks(chunk);
         try {
-            if (!usePersistedBaseChunkForBlocks) {
+            if (!usePersistedBaseChunkForBlocks && !blocksPreloaded) {
                 ChunkRestoreBlockOperations.clearChunkToAir(chunk);
             }
             visitor.cleanupReplayedEntities(protoDelta);
-            // ponytail: keep restore traversal explicit so the hot block path skips generic delta dispatch.
-            if (runtimeDelta != null) {
-                protoDelta.forEachBlockInstruction(visitor);
+            if (blocksPreloaded) {
+                visitor.acceptPreloadedBlocks(protoDelta);
+                if (runtimeDelta != null && !releaseAfterFinish) {
+                    runtimeDelta.appendDecodedBlocksFrom(protoDelta);
+                }
             } else {
-                protoDelta.forEachBlock(visitor::visitBlock);
+                // ponytail: keep restore traversal explicit so the hot block path skips generic delta dispatch.
+                if (runtimeDelta != null) {
+                    protoDelta.forEachBlockInstruction(visitor);
+                } else {
+                    protoDelta.forEachBlock(visitor::visitBlock);
+                }
+                visitor.recalculateTouchedSectionCounts();
             }
-            visitor.recalculateTouchedSectionCounts();
             protoDelta.getBlockEntities()
                     .forEach((packedPos, nbt) -> visitor.visitBlockEntity(io.liparakis.chunkis.core.BlockInstruction.unpackX(
                                     packedPos),
@@ -235,11 +307,39 @@ public final class ChunkRestorer {
             if (visitor.replayLegacyEntities()) {
                 protoDelta.forEachEntity(visitor::visitEntity);
             }
-            visitor.finishRestoration();
+            visitor.finishRestoration(blocksBefore);
+            if (releaseAfterFinish && storedEntryEdits != null) {
+                // The stored entry plus the edits are exactly these blocks; dirty only for the delta's other
+                // unsaved changes.
+                runtimeDelta.releaseBlockPayloadKeeping(storedEntryEdits);
+            } else if (releaseAfterFinish) {
+                // Clean here: finishRestoration marks the runtime delta saved for a clean source.
+                runtimeDelta.releaseBlockPayload();
+                // The chunk holds exactly the stored entry's blocks: a later save that still finds them may copy
+                // the entry's block part instead of encoding them again.
+                final long[] storedBlockPart = protoDelta.getStoredBlockPartHash();
+                if (loadedContentPrint != null && storedBlockPart != null) {
+                    runtimeDelta.setWrittenBlocksPrint(new long[]{loadedContentPrint[0], loadedContentPrint[1],
+                            storedBlockPart[0], storedBlockPart[1]});
+                }
+            }
+            final boolean holdsExactBaseline = runtimeDelta != null && !usePersistedBaseChunkForBlocks
+                    && CisNbtUtil.hasFullBlockBaseline(protoDelta.getChunkMetadata())
+                    && visitor.blockApplyFailureCounters().appliedEveryInstruction();
             replayPendingEntitiesIfNeeded(world, chunk, runtimeDelta, operationId);
             if (runtimeDelta != null && runtimeDelta.shouldSuppressInitialRepopulation()
                     && EntityReplayCoordinator.allPendingEntitiesVisible(world, chunk.getPos(), runtimeDelta)) {
                 runtimeDelta.clearPendingEntities();
+            }
+            // A delta released after finishing stays released even if entity replay made it dirty since; a save
+            // then captures its blocks from the chunk.
+            if (!releaseAfterFinish && holdsExactBaseline && !runtimeDelta.isDirty()) {
+                // The loaded chunk holds exactly the stored blocks; keeping them again as instructions would
+                // double them in memory. The next save after an edit captures them back from the chunk.
+                runtimeDelta.releaseBlockPayload();
+            } else if (!releaseAfterFinish && holdsExactBaseline) {
+                // The chunk now holds exactly the restored baseline, so the first save can skip unchanged sections.
+                CisSnapshotCapture.recordRestoredBaseline(chunk, runtimeDelta);
             }
         } catch (final RuntimeException e) {
             ChunkTraceStore.trace(ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -588,6 +688,151 @@ public final class ChunkRestorer {
     }
 
     /**
+     * Copies every section's block container so the restore's light changes can be found afterwards.
+     *
+     * @param chunk chunk about to be restored
+     * @return per-section copies; {@code null} where the section is missing
+     */
+    @SuppressWarnings("unchecked")
+    static PalettedContainer<BlockState>[] copySectionBlocks(final WorldChunk chunk) {
+        final ChunkSection[] sections = chunk.getSectionArray();
+        final PalettedContainer<BlockState>[] copies = new PalettedContainer[sections.length];
+        for (int i = 0; i < sections.length; i++) {
+            copies[i] = sections[i] == null ? null : sections[i].getBlockStateContainer().copy();
+        }
+        return copies;
+    }
+
+    /**
+     * Pulls light in from the neighbours of a chunk that vanilla lit from scratch, once it is fully loaded.
+     *
+     * <p>Vanilla's light pass for a chunk only pushes its own light outwards; light spilling in from a
+     * neighbour that was lit earlier is normally restored from the saved light data, which Chunkis does not
+     * store. Re-checking the chunk's transparent border cells makes the engine re-propagate that light.</p>
+     *
+     * @param world    world
+     * @param chunkPos chunk being loaded
+     */
+    private static void pullNeighbourLightOnceLoaded(final ServerWorld world, final ChunkPos chunkPos) {
+        world.getServer().execute(() -> {
+            final ChunkHolder holder = world.getChunkManager().chunkLoadingManager
+                    .getCurrentChunkHolder(chunkPos.toLong());
+            if (holder == null) {
+                return;
+            }
+            holder.getAccessibleFuture().thenAcceptAsync(loaded -> loaded.ifPresent(chunk -> {
+                final ServerLightingProvider lightingProvider = world.getChunkManager().getLightingProvider();
+                ((BatchedLightChecks) lightingProvider).chunkis$checkBlocks(chunkPos.x, chunkPos.z,
+                        transparentBorderCells(chunk));
+            }), world.getServer());
+        });
+    }
+
+    /**
+     * Lists the cells on a chunk's four vertical faces that light can pass through.
+     *
+     * @param chunk loaded chunk
+     * @return packed {@code BlockPos} longs
+     */
+    private static LongArrayList transparentBorderCells(final WorldChunk chunk) {
+        final LongArrayList cells = new LongArrayList();
+        final ChunkSection[] sections = chunk.getSectionArray();
+        final int startX = chunk.getPos().getStartX();
+        final int startZ = chunk.getPos().getStartZ();
+        for (int i = 0; i < sections.length; i++) {
+            final int baseY = chunk.getBottomY() + (i << 4);
+            for (int y = 0; y < 16; y++) {
+                for (int a = 0; a < 16; a++) {
+                    addIfTransparent(cells, sections[i], startX, baseY, startZ, 0, y, a);
+                    addIfTransparent(cells, sections[i], startX, baseY, startZ, 15, y, a);
+                    if (a > 0 && a < 15) {
+                        addIfTransparent(cells, sections[i], startX, baseY, startZ, a, y, 0);
+                        addIfTransparent(cells, sections[i], startX, baseY, startZ, a, y, 15);
+                    }
+                }
+            }
+        }
+        return cells;
+    }
+
+    /**
+     * Adds a section-local cell if light can pass through its block.
+     *
+     * @param cells   output list
+     * @param section section holding the cell
+     * @param startX  chunk start X
+     * @param baseY   section bottom Y
+     * @param startZ  chunk start Z
+     * @param x       local X
+     * @param y       local Y
+     * @param z       local Z
+     */
+    private static void addIfTransparent(final LongArrayList cells, final ChunkSection section, final int startX,
+            final int baseY, final int startZ, final int x, final int y, final int z) {
+        if (section.getBlockState(x, y, z).getOpacity() < MAX_OPACITY) {
+            cells.add(BlockPos.asLong(startX + x, baseY + y, startZ + z));
+        }
+    }
+
+    /**
+     * Queues a light check at every position where the restore changed a block in a way that affects
+     * light, exactly as {@code setBlockState} would have. The light engine then lowers and raises light
+     * around those positions, neighbours included.
+     *
+     * @param lightingProvider world lighting provider
+     * @param chunk            restored chunk
+     * @param sections         live chunk sections
+     * @param blocksBefore     section block copies taken before the restore
+     */
+    static void checkLightChanges(final ServerLightingProvider lightingProvider, final WorldChunk chunk,
+            final ChunkSection[] sections, final PalettedContainer<BlockState>[] blocksBefore) {
+        final BlockState air = Blocks.AIR.getDefaultState();
+        final int startX = chunk.getPos().getStartX();
+        final int startZ = chunk.getPos().getStartZ();
+        final LongArrayList changed = new LongArrayList();
+        for (int i = 0; i < sections.length; i++) {
+            final PalettedContainer<BlockState> beforeBlocks = i < blocksBefore.length ? blocksBefore[i] : null;
+            // A side holding only air needs no per-block reads: every state on it is air.
+            final PalettedContainer<BlockState> before = beforeBlocks != null
+                    && beforeBlocks.hasAny(state -> !state.isAir()) ? beforeBlocks : null;
+            final PalettedContainer<BlockState> after = sections[i] != null && !sections[i].isEmpty()
+                    ? sections[i].getBlockStateContainer()
+                    : null;
+            if (before == null && after == null) {
+                continue;
+            }
+            final int baseY = chunk.getBottomY() + (i << 4);
+            for (int y = 0; y < 16; y++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        final BlockState oldState = before == null ? air : before.get(x, y, z);
+                        final BlockState newState = after == null ? air : after.get(x, y, z);
+                        if (oldState != newState && ChunkLightProvider.needsLightUpdate(oldState, newState)) {
+                            changed.add(BlockPos.asLong(startX + x, baseY + y, startZ + z));
+                        }
+                    }
+                }
+            }
+        }
+        ((BatchedLightChecks) lightingProvider).chunkis$checkBlocks(chunk.getPos().x, chunk.getPos().z, changed);
+    }
+
+    /**
+     * Finishes derived state for a chunk whose sections already held the restored blocks when vanilla converted
+     * it: vanilla computed its heightmaps from those sections then, and its light steps, still ahead, refresh
+     * the sky-light surface and use the stored light (see {@link CisNbtUtil#loadsWithStoredLight}). Only an
+     * unlit chunk needs Chunkis: vanilla's from-scratch light pass does not pull light in from lit neighbours.
+     *
+     * @param world world
+     * @param chunk restored chunk
+     */
+    static void refreshPreloadedChunkState(final ServerWorld world, final WorldChunk chunk) {
+        if (!chunk.isLightOn()) {
+            pullNeighbourLightOnceLoaded(world, chunk.getPos());
+        }
+    }
+
+    /**
      * Rebuilds server-side derived chunk data after raw restore writes.
      *
      * <p>Restore bypasses normal block update hooks, so heightmaps and the light engine
@@ -597,6 +842,8 @@ public final class ChunkRestorer {
      * @param chunk             restored chunk
      * @param sourceDelta       restored payload containing explicit block edits
      * @param sections          live chunk sections
+     * @param blocksBefore      copies of the section block containers taken before the restore wrote
+     *                          anything; {@code null} entries were missing sections
      * @param bottomY           chunk bottom Y
      * @param touchedSections   touched-section flags
      * @param refreshWholeChunk whether the restore replaced the chunk baseline
@@ -605,6 +852,7 @@ public final class ChunkRestorer {
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> sourceDelta,
             final ChunkSection[] sections,
+            final PalettedContainer<BlockState>[] blocksBefore,
             final int bottomY,
             final boolean[] touchedSections,
             final int touchedColumnCount,
@@ -629,6 +877,16 @@ public final class ChunkRestorer {
             }
         }
         chunk.refreshSurfaceY();
+        // A chunk loaded unlit (see ChunkLoadNbtBuilder) is restored before vanilla's light steps run, which
+        // light it from its restored blocks; touching the light engine before them corrupts that pass.
+        if (!chunk.isLightOn()) {
+            pullNeighbourLightOnceLoaded(world, chunk.getPos());
+            return;
+        }
+        // Loaded with the light stored alongside these blocks, so it already describes them.
+        if (CisNbtUtil.loadsWithStoredLight(sourceDelta.getChunkMetadata())) {
+            return;
+        }
 
         final ServerLightingProvider lightingProvider = world.getChunkManager()
                 .getLightingProvider();
@@ -648,10 +906,12 @@ public final class ChunkRestorer {
                 .getStartX();
         final int chunkStartZ = chunk.getPos()
                 .getStartZ();
+        // Raw restore writes bypass setBlockState's light checks, so the light still describes the blocks
+        // from before the restore (vanilla lit the terrain it generated). Queue the checks vanilla would.
+        checkLightChanges(lightingProvider, chunk, sections, blocksBefore);
         if (!useBulkRefresh) {
             sourceDelta.forEachBlock((x, y, z, state) -> {
                 mutablePos.set(chunkStartX + x, y, chunkStartZ + z);
-                lightingProvider.checkBlock(mutablePos);
                 world.getChunkManager()
                         .markForUpdate(mutablePos);
             });
@@ -667,6 +927,20 @@ public final class ChunkRestorer {
         if (useBulkRefresh) {
             resendFullChunkToWatchingPlayers(world, chunk, lightingProvider);
         }
+    }
+
+    /**
+     * Reports whether {@code chunk} is the world's accessible chunk at its position, i.e. vanilla may
+     * already have sent it to players. A chunk still being promoted from proto is not.
+     *
+     * <p>Never blocks: a blocking chunk lookup here would wait on the promotion that is running.</p>
+     *
+     * @param world owning world
+     * @param chunk restored chunk
+     * @return true when players may already hold this chunk
+     */
+    private static boolean isPublished(final ServerWorld world, final WorldChunk chunk) {
+        return LoadedChunks.getIfAccessible(world, chunk.getPos().x, chunk.getPos().z) == chunk;
     }
 
     /**
@@ -686,6 +960,10 @@ public final class ChunkRestorer {
                 chunk.getPos(),
                 false);
         if (players.isEmpty()) {
+            return;
+        }
+        if (!isPublished(world, chunk)) {
+            // Still being promoted from proto: vanilla sends it to these players once it becomes accessible.
             return;
         }
 

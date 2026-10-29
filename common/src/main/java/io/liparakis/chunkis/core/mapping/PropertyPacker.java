@@ -126,6 +126,10 @@ public final class PropertyPacker<B, S, P> {
             int valueIndex = propertyValueAdapter != null
                     ? meta.getValueIndex(propertyValueAdapter.getPropertyValue(state, meta.property))
                     : adapter.getValueIndex(state, meta.property);
+            if (valueIndex < 0) {
+                // Writing -1 would mask to all ones and decode as a different value.
+                throw new IllegalStateException("Property " + meta.property + " has no index for state " + state);
+            }
             writer.write(valueIndex, meta.bits);
         }
     }

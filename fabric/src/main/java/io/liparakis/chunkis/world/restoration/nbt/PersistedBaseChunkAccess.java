@@ -41,7 +41,7 @@ final class PersistedBaseChunkAccess {
                 .orElse(EMPTY_BYTES);
         if (rawPayload.length > 0) {
             try {
-                return CisNbtUtil.deserializeRawCompound(rawPayload);
+                return CisMetadataCodec.deserializeRawCompound(rawPayload);
             } catch (final IOException e) {
                 Chunkis.LOGGER.warn("Chunkis: Failed to decode persisted base chunk payload bytes", e);
                 return null;

@@ -154,8 +154,9 @@ class RegionFileFreeListTest {
             largeOffset = region.offsets[indexOf(largeHole)];
             region.write(smallHole, null);
             region.write(largeHole, null);
-            sizeBeforeReuse = Files.size(region.path());
         }
+        // Measured after close: deferred frees enter the footer at flush.
+        sizeBeforeReuse = Files.size(regions.resolve("r.0.0.cis"));
 
         try (RegionFile reopened = new RegionFile(regions, 0, 0)) {
             reopened.write(target, bytes(180, 4));
@@ -215,6 +216,39 @@ class RegionFileFreeListTest {
             reopened.write(target, bytes(120, 8));
             assertNotEquals(holeOffset, reopened.offsets[indexOf(target)]);
             assertArrayEquals(liveBytes, reopened.read(live));
+        }
+    }
+
+    /**
+     * A rewrite must never touch the live slot: until the next flush the previous
+     * payload stays byte-for-byte intact, so a torn write cannot corrupt the only copy,
+     * and its slot is not reused before the new header is durable.
+     */
+    @Test
+    void rewriteNeverOverwritesLiveSlotBeforeFlush() throws Exception {
+        final Path regions = Files.createDirectories(tempDir.resolve("no-in-place"));
+        final CisChunkPos pos = new CisChunkPos(0, 0);
+        final CisChunkPos other = new CisChunkPos(1, 0);
+        final byte[] original = bytes(200, 9);
+
+        try (RegionFile region = new RegionFile(regions, 0, 0)) {
+            region.write(pos, original);
+            final int oldOffset = region.offsets[indexOf(pos)];
+
+            region.write(pos, bytes(50, 1));
+            region.write(other, bytes(40, 2));
+
+            assertNotEquals(oldOffset, region.offsets[indexOf(pos)]);
+            assertNotEquals(oldOffset, region.offsets[indexOf(other)], "freed slot reused before flush");
+            try (FileChannel channel = FileChannel.open(region.path(), StandardOpenOption.READ)) {
+                final ByteBuffer onDisk = ByteBuffer.allocate(original.length);
+                channel.read(onDisk, oldOffset);
+                assertArrayEquals(original, onDisk.array());
+            }
+
+            region.flush();
+            region.write(new CisChunkPos(2, 0), bytes(150, 3));
+            assertEquals(oldOffset, region.offsets[indexOf(new CisChunkPos(2, 0))], "slot reusable after flush");
         }
     }
 }

@@ -140,45 +140,12 @@ final class ChunkRestoreBlockOperations {
      * @return reflection descriptor, enabled only when all required fields were found
      */
     private static ReflectionAccess resolveReflectionAccess() {
-        try {
-            final Field dataField = findField(PalettedContainer.class, "data", "field_34560", "b");
-            final Class<?> dataClass = dataField.getType();
-            return new ReflectionAccess(
-                    true,
-                    dataField,
-                    findField(dataClass, "storage", "comp_118", "b"),
-                    findField(dataClass, "palette", "comp_119", "c")
-            );
-        } catch (final ReflectiveOperationException | RuntimeException e) {
-            LOGGER.warn(
-                    "Chunkis: PalettedContainer fast restore path disabled; falling back to swapUnsafe()",
-                    e
-            );
+        if (!PalettedContainerFields.AVAILABLE) {
+            LOGGER.warn("Chunkis: PalettedContainer fast restore path disabled; falling back to swapUnsafe()");
             return ReflectionAccess.disabled();
         }
-    }
-
-    /**
-     * Finds one declared field using a list of candidate names across mapping namespaces.
-     *
-     * @param owner          class expected to declare the field
-     * @param candidateNames ordered field names to try
-     * @return the first matching field with accessibility forced on
-     * @throws NoSuchFieldException when none of the candidates are present
-     */
-    private static Field findField(final Class<?> owner, final String... candidateNames) throws NoSuchFieldException {
-        for (final String candidateName : candidateNames) {
-            try {
-                final Field field = owner.getDeclaredField(candidateName);
-                field.setAccessible(true);
-                return field;
-            } catch (final NoSuchFieldException ignored) {
-                // Try the next namespace name.
-            }
-        }
-        throw new NoSuchFieldException(
-                owner.getName() + " [" + String.join(", ", candidateNames) + "]"
-        );
+        return new ReflectionAccess(true, PalettedContainerFields.DATA, PalettedContainerFields.STORAGE,
+                PalettedContainerFields.PALETTE);
     }
 
     /**
@@ -703,6 +670,15 @@ final class ChunkRestoreBlockOperations {
         }
 
         /**
+         * Reports whether every visited instruction reached the live chunk.
+         *
+         * @return true when nothing was skipped or failed
+         */
+        boolean appliedEveryInstruction() {
+            return appliedBlocks == visitedInstructions;
+        }
+
+        /**
          * Records visited instruction event.
          */
         void recordVisitedInstruction() {
@@ -714,6 +690,16 @@ final class ChunkRestoreBlockOperations {
          */
         void recordAppliedBlock() {
             appliedBlocks++;
+        }
+
+        /**
+         * Records instructions that reached the live chunk without being visited one by one.
+         *
+         * @param count number of instructions
+         */
+        void recordAppliedInBulk(final int count) {
+            visitedInstructions += count;
+            appliedBlocks += count;
         }
 
         /**

@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.world.restoration.core;
 
+import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.perf.ServerHotpathMetrics;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
@@ -8,6 +9,7 @@ import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -30,6 +32,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.WorldChunk;
 import org.jetbrains.annotations.Nullable;
 
@@ -46,6 +49,11 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Log source tag identifier mapping for block restore operations.
      */
     private static final String BLOCK_TRACE_SOURCE = "ChunkRestorer.RestorationVisitor#visitBlock";
+
+    /**
+     * Mutation source for a restored chunk that keeps its source's unsaved changes.
+     */
+    private static final String RESTORE_DIRTY_SOURCE = "ChunkRestorationVisitor#finishRestoration#unsavedSource";
 
     /**
      * Log source tag identifier mapping for entity restore operations.
@@ -94,6 +102,13 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Snapshot of whether payload-watch tracing is active for this restore pass.
      */
     private final boolean tracePayloadWatches;
+
+    /**
+     * Whether block entities are handed to the chunk as pending NBT, which vanilla builds when it post-processes
+     * the chunk or on first access, instead of being built here: only for a chunk vanilla has yet to
+     * post-process.
+     */
+    private final boolean pendingBlockEntities;
     /**
      * Whether restore cleared the target chunk to air before replay.
      */
@@ -148,6 +163,11 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * Number of touched chunk-local columns.
      */
     private int touchedColumnCount;
+
+    /**
+     * Whether the chunk's sections already held the baseline ({@link #acceptPreloadedBlocks}).
+     */
+    private boolean blocksPreloaded;
     /**
      * Cumulative count of successfully restored block coordinates.
      */
@@ -159,6 +179,11 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     private int restoredBlockEntitiesCount;
 
     /**
+     * Block-entity payloads that could not be applied and were kept as-is.
+     */
+    private int unrestoredBlockEntitiesCount;
+
+    /**
      * Constructor.
      *
      * @param world        target server world
@@ -166,14 +191,18 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
      * @param sourceDelta  loaded source delta containing block restoration data
      * @param runtimeDelta target runtime delta being updated in-place
      * @param operationId  optional trace execution identifier, may be null
+     * @param pendingBlockEntities whether to hand block entities to the chunk as pending NBT for vanilla to
+     *                             build, for a chunk vanilla has yet to post-process
      */
     ChunkRestorationVisitor(
             final ServerWorld world,
             final WorldChunk chunk,
             final ChunkDelta<BlockState, NbtCompound> sourceDelta,
             final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
-            @Nullable final String operationId
+            @Nullable final String operationId,
+            final boolean pendingBlockEntities
     ) {
+        this.pendingBlockEntities = pendingBlockEntities;
         this.world = world;
         this.chunk = chunk;
         this.chunkPosition = chunk.getPos();
@@ -271,18 +300,25 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
 
     /**
      * Performs final runtime-delta cleanup after restoration.
+     *
+     * @param blocksBefore section block copies taken before the restore wrote anything
      */
-    void finishRestoration() {
-        ChunkRestorer.refreshDerivedChunkState(
-                world,
-                chunk,
-                sourceDelta,
-                sections,
-                bottomY,
-                touchedSections,
-                touchedColumnCount,
-                !clearedToAir
-        );
+    void finishRestoration(final PalettedContainer<BlockState>[] blocksBefore) {
+        if (blocksPreloaded) {
+            ChunkRestorer.refreshPreloadedChunkState(world, chunk);
+        } else {
+            ChunkRestorer.refreshDerivedChunkState(
+                    world,
+                    chunk,
+                    sourceDelta,
+                    sections,
+                    blocksBefore,
+                    bottomY,
+                    touchedSections,
+                    touchedColumnCount,
+                    !clearedToAir
+            );
+        }
         if (ServerHotpathMetrics.ENABLED) {
             final SectionWriteCursorStats cursorStats = sectionWriteCursor.snapshot();
             ServerHotpathMetrics.recordRestoreCursor(
@@ -297,8 +333,31 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                     cursorStats.singularPaletteLookups()
             );
         }
+        if (unrestoredBlockEntitiesCount > 0) {
+            Chunkis.LOGGER.warn("Chunkis: {} block entity payload(s) in chunk {} could not be restored (unknown type"
+                    + " or block mismatch); kept unchanged in storage", unrestoredBlockEntitiesCount, chunkPosition);
+        }
         if (runtimeDelta != null) {
-            runtimeDelta.markSaved();
+            if (sourceDelta.isDirty()) {
+                // The source held changes not yet on disk (a reload before its unload save landed): the live chunk
+                // now carries them, so it stays dirty until a normal save writes them.
+                runtimeDelta.markDirty(RESTORE_DIRTY_SOURCE);
+                GlobalChunkTracker.markDirty(chunk, RESTORE_DIRTY_SOURCE);
+            } else {
+                runtimeDelta.markSaved();
+            }
+        }
+    }
+
+    /**
+     * Keeps a block-entity payload that could not be applied in the runtime delta, so
+     * marking the delta saved does not drop it and the next save writes it back as-is.
+     */
+    private void preserveUnrestoredBlockEntity(final int localX, final int localY, final int localZ,
+            final NbtCompound nbt) {
+        unrestoredBlockEntitiesCount++;
+        if (runtimeDelta != null) {
+            runtimeDelta.addBlockEntityData(localX, localY, localZ, nbt, false);
         }
     }
 
@@ -320,6 +379,27 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                 section.calculateCounts();
             }
         }
+    }
+
+    /**
+     * Accounts for a baseline whose blocks the chunk's sections already hold (see
+     * {@code PreloadedBlockSections}) as if this visitor had written each one. Derived state needs no touched
+     * sections here: vanilla derived it from those sections ({@link ChunkRestorer#refreshPreloadedChunkState}).
+     *
+     * @param baseline delta whose blocks the sections hold; every one is inside the world
+     */
+    void acceptPreloadedBlocks(final ChunkDelta<BlockState, NbtCompound> baseline) {
+        blocksPreloaded = true;
+        // The preloaded refresh reads no touched sections, so the blocks are walked only to trace them.
+        if (tracePayloadWatches) {
+            baseline.forEachBlock((x, y, z, state) -> {
+                mutableWorldPos.set(chunkStartX + x, y, chunkStartZ + z);
+                PayloadWatchTracer.traceRestoredBlock(chunk, mutableWorldPos, state, operationId);
+            });
+        }
+        final int blockCount = baseline.getBlockChangesCount();
+        appliedBlocksCount += blockCount;
+        blockApplyFailureCounters.recordAppliedInBulk(blockCount);
     }
 
     /**
@@ -421,7 +501,8 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         }
 
         mutableWorldPos.set(chunkStartX + localX, localY, chunkStartZ + localZ);
-        final BlockState previousState = (!clearedToAir || tracePayloadWatches)
+        // Only traces read the previous state; skip the per-block lookup otherwise.
+        final BlockState previousState = tracePayloadWatches
                 ? chunk.getBlockState(mutableWorldPos)
                 : null;
         if (tracePayloadWatches) {
@@ -508,7 +589,9 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                     ENTITY_TRACE_SOURCE
             );
         }
-        if (replayLegacyEntities && nbt != null) {
+        if (replayLegacyEntities && nbt != null && runtimeDelta == null) {
+            // With a runtime delta the same payloads are its pending entities (see the constructor), which the
+            // restore's pending replay spawns or schedules once; scheduling them here too only copied them again.
             EntityPayloadNbt.findUuid(nbt)
                     .ifPresent(uuid -> ScheduledEntityReplayQueue.schedule(
                             world,
@@ -517,6 +600,9 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                             nbt
                     ));
         } else if (nbt != null) {
+            if (replayLegacyEntities) {
+                return;
+            }
             final String entityUuid = EntityPayloadNbt.findUuidString(nbt)
                     .orElse("<missing-uuid>");
             PayloadWatchTracer.traceRestoreEntitySkipped(
@@ -599,6 +685,26 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
     }
 
     /**
+     * Returns the payload with its position set to {@code pos}, which vanilla reads a pending block entity's
+     * position from; copied only when it differs.
+     *
+     * @param nbt block-entity payload
+     * @param pos block position the payload is restored at
+     * @return payload placed at {@code pos}
+     */
+    private static NbtCompound withPosition(final NbtCompound nbt, final BlockPos pos) {
+        if (nbt.getInt("x", Integer.MIN_VALUE) == pos.getX() && nbt.getInt("y", Integer.MIN_VALUE) == pos.getY()
+                && nbt.getInt("z", Integer.MIN_VALUE) == pos.getZ()) {
+            return nbt;
+        }
+        final NbtCompound placed = nbt.copy();
+        placed.putInt("x", pos.getX());
+        placed.putInt("y", pos.getY());
+        placed.putInt("z", pos.getZ());
+        return placed;
+    }
+
+    /**
      * Restores a block entity from NBT when the current block state supports it.
      *
      * <p>{@link BlockEntity#createFromNbt} already validates that the NBT's
@@ -623,6 +729,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         if (nbt.getString("id")
                 .map(Identifier::tryParse)
                 .isEmpty()) {
+            preserveUnrestoredBlockEntity(localX, localY, localZ, nbt);
             return;
         }
 
@@ -640,6 +747,16 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                                 + " hasBlockEntity=false nbtId=" + blockEntityTypeId(nbt)
                 );
             }
+            preserveUnrestoredBlockEntity(localX, localY, localZ, nbt);
+            return;
+        }
+
+        if (pendingBlockEntities && !chunk.getBlockEntities().containsKey(mutableWorldPos)) {
+            chunk.addPendingBlockEntityNbt(withPosition(nbt, mutableWorldPos));
+            if (runtimeDelta != null) {
+                runtimeDelta.addBlockEntityData(localX, localY, localZ, nbt, false);
+            }
+            restoredBlockEntitiesCount++;
             return;
         }
 
@@ -681,6 +798,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
                                 + " nbtKeys=" + nbt.getKeys()
                 );
             }
+            preserveUnrestoredBlockEntity(localX, localY, localZ, nbt);
             return;
         }
 

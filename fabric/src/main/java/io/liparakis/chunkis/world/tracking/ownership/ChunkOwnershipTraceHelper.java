@@ -47,6 +47,9 @@ public final class ChunkOwnershipTraceHelper {
             final ChunkDelta<?, ?> delta,
             final ChunkMutationTrackingScope.Cause passiveCause
     ) {
+        if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
+            return;
+        }
         traceDecision(
                 worldKey,
                 pos != null ? new DebugChunkKey(pos.x, pos.z) : null,

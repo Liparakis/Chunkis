@@ -58,6 +58,12 @@ public final class ChunkTraceWatchpoints {
     private static final Set<PayloadWatchTarget> PAYLOAD_TARGETS = new LinkedHashSet<>();
 
     /**
+     * Mirrors {@code !PAYLOAD_TARGETS.isEmpty()} for lock-free hot-path checks; written
+     * only under {@link #MONITOR}.
+     */
+    private static volatile boolean payloadWatchesActive;
+
+    /**
      * Prevents instantiation of this utility class.
      *
      * @throws AssertionError always, because instances would have no state or behavior.
@@ -107,6 +113,7 @@ public final class ChunkTraceWatchpoints {
             CHUNK_KEYS.clear();
             REGION_KEYS.clear();
             PAYLOAD_TARGETS.clear();
+            payloadWatchesActive = false;
         }
     }
 
@@ -155,6 +162,7 @@ public final class ChunkTraceWatchpoints {
     public static void watchPayload(final PayloadWatchTarget target) {
         synchronized (MONITOR) {
             PAYLOAD_TARGETS.add(target);
+            payloadWatchesActive = true;
         }
     }
 
@@ -165,9 +173,8 @@ public final class ChunkTraceWatchpoints {
      */
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public static boolean hasPayloadWatches() {
-        synchronized (MONITOR) {
-            return !PAYLOAD_TARGETS.isEmpty();
-        }
+        // Lock-free: called several times per restored block and per setBlockState.
+        return payloadWatchesActive;
     }
 
     /**

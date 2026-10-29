@@ -54,7 +54,7 @@ public final class ChunkEntityNbtCapture {
                 return null;
             }
             final NbtCompound nbt = writeView.getNbt();
-            CisNbtUtil.ensureEntityIdPresent(nbt, entity);
+            EntityPayloadNbt.ensureEntityIdPresent(nbt, entity);
             return nbt;
         } catch (final Exception e) {
             Chunkis.LOGGER.debug("Chunkis: Skipped entity capture for {} in chunk {}", entity.getType(),
@@ -90,10 +90,8 @@ public final class ChunkEntityNbtCapture {
         if (entityNbt == null) {
             return null;
         }
-        // Uuids.toUuid throws IllegalArgumentException for non-4-element arrays;
-        // orElse(null) collapses both the missing-key and the malformed-array cases.
-        return entityNbt.getIntArray("UUID")
-                .map(Uuids::toUuid)
+        // Uuids.toUuid throws for arrays that are not 4 ints; EntityPayloadNbt.findUuid absorbs that.
+        return EntityPayloadNbt.findUuid(entityNbt)
                 .orElse(null);
     }
 }

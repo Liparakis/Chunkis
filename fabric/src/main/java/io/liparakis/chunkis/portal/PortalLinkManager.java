@@ -2,10 +2,7 @@ package io.liparakis.chunkis.portal;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
@@ -16,7 +13,6 @@ import net.minecraft.block.Blocks;
 import net.minecraft.block.NetherPortalBlock;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtList;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
@@ -243,6 +239,15 @@ public final class PortalLinkManager {
         if (table != null) {
             table.close();
         }
+    }
+
+    /**
+     * Writes every link table changed since the last flush. Called once per server
+     * tick so link churn costs one file write per tick, not one per change.
+     */
+    public static void flushDirty() {
+        TABLES.values()
+                .forEach(PortalLinkTable::flushDirty);
     }
 
     /**
@@ -500,12 +505,8 @@ public final class PortalLinkManager {
         private static ConcurrentHashMap<PortalAnchor, PortalAnchor> load(final Path path) {
             final ConcurrentHashMap<PortalAnchor, PortalAnchor> loaded = new ConcurrentHashMap<>();
 
-            if (!Files.isRegularFile(path)) {
-                return loaded;
-            }
-
-            try (final DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
-                final NbtCompound root = NbtIo.readCompound(input);
+            final NbtCompound root = PortalNbtFiles.read(path, "portal links");
+            if (root != null) {
                 final NbtList entries = root.getList(ENTRIES_KEY)
                         .orElseGet(NbtList::new);
 
@@ -524,8 +525,6 @@ public final class PortalLinkManager {
                         loaded.put(source.get(), destination.get());
                     }
                 }
-            } catch (final Exception e) {
-                Chunkis.LOGGER.warn("Chunkis: Failed to load portal links {}", path, e);
             }
 
             return loaded;
@@ -609,7 +608,7 @@ public final class PortalLinkManager {
          * @param source the source portal anchor
          * @return the destination anchor, or {@code null} if no link exists
          */
-        PortalAnchor get(final PortalAnchor source) {
+        synchronized PortalAnchor get(final PortalAnchor source) {
             return links.get(source);
         }
 
@@ -622,13 +621,12 @@ public final class PortalLinkManager {
          * @param a first portal anchor
          * @param b second portal anchor
          */
-        void putPair(final PortalAnchor a, final PortalAnchor b) {
+        synchronized void putPair(final PortalAnchor a, final PortalAnchor b) {
             final boolean changedForward = !b.equals(links.put(a, b));
             final boolean changedReverse = !a.equals(links.put(b, a));
 
             if (changedForward || changedReverse) {
                 dirty = true;
-                save();
             }
         }
 
@@ -638,20 +636,26 @@ public final class PortalLinkManager {
          * @param a first portal anchor
          * @param b second portal anchor
          */
-        void removePair(final PortalAnchor a, final PortalAnchor b) {
+        synchronized void removePair(final PortalAnchor a, final PortalAnchor b) {
             final boolean removedForward = links.remove(a) != null;
             final boolean removedReverse = links.remove(b) != null;
 
             if (removedForward || removedReverse) {
                 dirty = true;
-                save();
             }
         }
 
         /**
          * Flushes the table to disk if it has been modified.
          */
-        void close() {
+        synchronized void close() {
+            flushDirty();
+        }
+
+        /**
+         * Writes the link table if it changed since the last write.
+         */
+        synchronized void flushDirty() {
             if (dirty) {
                 save();
             }
@@ -662,8 +666,6 @@ public final class PortalLinkManager {
          */
         private void save() {
             try {
-                Files.createDirectories(path.getParent());
-
                 final NbtCompound root = new NbtCompound();
                 final NbtList entries = new NbtList();
 
@@ -675,10 +677,7 @@ public final class PortalLinkManager {
                 });
 
                 root.put(ENTRIES_KEY, entries);
-
-                try (final DataOutputStream output = new DataOutputStream(Files.newOutputStream(path))) {
-                    NbtIo.writeCompound(root, output);
-                }
+                PortalNbtFiles.write(path, root);
 
                 dirty = false;
             } catch (final IOException e) {

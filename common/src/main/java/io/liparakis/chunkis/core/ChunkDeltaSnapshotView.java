@@ -64,10 +64,6 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
      */
     private final boolean dirty;
     /**
-     * Unique chunk sections touched by block changes or block entities.
-     */
-    private final int touchedSectionCount;
-    /**
      * Cached encoded metadata payload owned by this snapshot view.
      */
     private byte[] encodedChunkMetadata;
@@ -90,8 +86,8 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
      * @param mutationGeneration          source mutation generation
      * @param suppressInitialRepopulation source repopulation suppression flag
      * @param dirty                       source dirty state
-     * @param touchedSectionCount         source touched section count
-     * @param payloadCopier               payload copy strategy for mutable payload values
+     * @param payloadCopier               copy strategy for block-entity and entity payloads
+     * @param metadataCopier              copy strategy for the chunk metadata payload
      */
     ChunkDeltaSnapshotView(
             final long[] packedInstructions,
@@ -106,10 +102,11 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
             final long mutationGeneration,
             final boolean suppressInitialRepopulation,
             final boolean dirty,
-            final int touchedSectionCount,
-            final UnaryOperator<N> payloadCopier
+            final UnaryOperator<N> payloadCopier,
+            final UnaryOperator<N> metadataCopier
     ) {
         Objects.requireNonNull(payloadCopier, "payloadCopier");
+        Objects.requireNonNull(metadataCopier, "metadataCopier");
 
         this.packedInstructions = Arrays.copyOf(packedInstructions, instructionCount);
         this.instructionCount = instructionCount;
@@ -143,7 +140,7 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
             this.pendingEntities = copied;
         }
 
-        this.chunkMetadata = chunkMetadata != null ? payloadCopier.apply(chunkMetadata) : null;
+        this.chunkMetadata = chunkMetadata != null ? metadataCopier.apply(chunkMetadata) : null;
         this.encodedChunkMetadata = encodedChunkMetadata != null
                 ? Arrays.copyOf(encodedChunkMetadata, encodedChunkMetadata.length)
                 : null;
@@ -151,7 +148,6 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
         this.mutationGeneration = mutationGeneration;
         this.suppressInitialRepopulation = suppressInitialRepopulation;
         this.dirty = dirty;
-        this.touchedSectionCount = touchedSectionCount;
     }
 
     /**
@@ -168,6 +164,15 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
     @Override
     public Long2ObjectMap<N> getBlockEntities() {
         return blockEntities;
+    }
+
+    /**
+     * Returns how many copied entity payloads are still pending (not yet spawned).
+     *
+     * @return pending entity count
+     */
+    public int countPendingEntities() {
+        return pendingEntities.size();
     }
 
     /**
@@ -199,7 +204,7 @@ public final class ChunkDeltaSnapshotView<S, N> implements ChunkDeltaView<S, N> 
      */
     @Override
     public int getTouchedSectionCount() {
-        return touchedSectionCount;
+        return ChunkDeltaViews.touchedSectionCount(packedInstructions, instructionCount, blockEntities);
     }
 
     /**

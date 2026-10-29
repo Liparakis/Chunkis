@@ -32,6 +32,11 @@ public final class BitReader {
     private int endIndex;
 
     /**
+     * Set when a read ran past the end of the data and was zero-padded.
+     */
+    private boolean overrun;
+
+    /**
      * Performs bit reader.
      */
     public BitReader(byte[] data) {
@@ -50,6 +55,7 @@ public final class BitReader {
         this.byteIndex = offset;
         this.bitIndex = 0;
         this.endIndex = offset + length;
+        this.overrun = false;
     }
 
     /**
@@ -71,6 +77,7 @@ public final class BitReader {
 
         while (bits > 0) {
             if (byteIndex >= endIndex) {
+                overrun = true;
                 return result << bits;
             }
 
@@ -133,6 +140,7 @@ public final class BitReader {
                 accBits -= bits;
             } else {
                 // End of stream, pad with zero
+                overrun = true;
                 output[i] = (int) ((acc << (bits - accBits)) & mask);
                 accBits = 0;
             }
@@ -153,6 +161,17 @@ public final class BitReader {
         } else {
             bitIndex = 0;
         }
+    }
+
+    /**
+     * Returns whether any read since the last {@link #setData} ran past the end of the
+     * data. Callers that know the exact payload length use this to detect truncation,
+     * which otherwise decodes silently as zeros.
+     *
+     * @return {@code true} if a read was zero-padded
+     */
+    public boolean hasOverrun() {
+        return overrun;
     }
 
     /**

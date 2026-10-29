@@ -28,6 +28,10 @@ final class RegionFileCache {
      * Bit shift used to convert chunk coordinates into 32x32 region coordinates.
      */
     private static final int REGION_SHIFT = 5;
+    /**
+     * Minimum reclaimable bytes before closing a region triggers compaction.
+     */
+    static final long COMPACT_MIN_SLACK_BYTES = 1L << 20;
 
     /**
      * Stores storage dir.
@@ -54,10 +58,13 @@ final class RegionFileCache {
      * Compacts then closes one region file, logging failures without propagating them.
      */
     static void closeRegionFile(final RegionFile regionFile) {
-        try {
-            regionFile.compact();
-        } catch (final Exception e) {
-            Chunkis.LOGGER.warn("Chunkis: Failed to compact CIS region file", e);
+        // Compaction rewrites and re-verifies the whole file; only pay for it when slack is large.
+        if (shouldCompactOnClose(regionFile.spaceStats())) {
+            try {
+                regionFile.compact();
+            } catch (final Exception e) {
+                Chunkis.LOGGER.warn("Chunkis: Failed to compact CIS region file {}", regionFile.path(), e);
+            }
         }
 
         try {
@@ -65,6 +72,18 @@ final class RegionFileCache {
         } catch (final Exception e) {
             Chunkis.LOGGER.warn("Chunkis: Failed to close CIS region file", e);
         }
+    }
+
+    /**
+     * Returns whether reclaimable space justifies a full compaction: at least
+     * {@value #COMPACT_MIN_SLACK_BYTES} bytes and half of the file.
+     *
+     * @param stats current space accounting for the region
+     * @return {@code true} when compaction is worth its cost
+     */
+    static boolean shouldCompactOnClose(final RegionFile.RegionSpaceStats stats) {
+        final long slack = stats.physicalBytes() - stats.liveBytes();
+        return slack >= COMPACT_MIN_SLACK_BYTES && slack * 2 >= stats.physicalBytes();
     }
 
     /**

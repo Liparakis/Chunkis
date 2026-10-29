@@ -1,11 +1,15 @@
 package io.liparakis.chunkis.world.entity.replay;
 
+import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
+import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
@@ -132,8 +136,15 @@ public final class EntityReplayCoordinator {
             return;
         }
 
+        final Set<String> staleDuplicateUuids = new HashSet<>();
         runtimeDelta.forEachPendingEntity(nbt -> {
             if (nbt == null) {
+                return;
+            }
+            final Entity live = findLiveCopy(world, chunkPosition, nbt);
+            if (live != null) {
+                stats[0]++;
+                ScheduledEntityReplayQueue.acknowledge(live.getUuidAsString());
                 return;
             }
             PayloadWatchTracer.traceRestoreEntityApplyAttempt(world, chunkPosition, nbt, operationId, SOURCE_BULK);
@@ -152,6 +163,11 @@ public final class EntityReplayCoordinator {
                         if (outcome.succeeded() || outcome.status() == ChunkRestorer.ReplayStatus.ALREADY_PRESENT) {
                             stats[0]++;
                             ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
+                        } else if (outcome.status() == ChunkRestorer.ReplayStatus.DUPLICATE_UUID_CONFLICT) {
+                            // The entity lives on elsewhere (e.g. walked into another chunk): this copy is
+                            // stale and would otherwise be retained and retried forever.
+                            staleDuplicateUuids.add(entity.getUuidAsString());
+                            ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
                         } else {
                             stats[1]++;
                             if (outcome.shouldSchedule()) {
@@ -165,6 +181,13 @@ public final class EntityReplayCoordinator {
                     }
             );
         });
+        if (!staleDuplicateUuids.isEmpty()) {
+            runtimeDelta.removePendingEntitiesMatching(nbt -> EntityPayloadNbt.findUuidString(nbt)
+                    .map(staleDuplicateUuids::contains)
+                    .orElse(false));
+            Chunkis.LOGGER.info("Chunkis: Dropped {} stale entity payload(s) from chunk {}: the same UUID is "
+                    + "already live elsewhere", staleDuplicateUuids.size(), chunkPosition);
+        }
 
         if (stats[1] == 0) {
             finishFailureFreeBulkReplay(world, chunk, runtimeDelta, operationId);
@@ -296,8 +319,7 @@ public final class EntityReplayCoordinator {
         }
 
         final ChunkPos chunkPosition = chunk.getPos();
-        if (world.getChunkManager()
-                .getWorldChunk(chunkPosition.x, chunkPosition.z, false) == null) {
+        if (LoadedChunks.getIfAccessible(world, chunkPosition.x, chunkPosition.z) == null) {
             EntityReplayDiagnostics.traceReplayDecision(
                     world,
                     chunk,
@@ -346,25 +368,30 @@ public final class EntityReplayCoordinator {
         final NbtCompound replayNbt = entityNbt;
         final ChunkRestorer.ReplayStatus[] callbackStatus = {ChunkRestorer.ReplayStatus.SPAWN_REJECTED_TRANSIENT};
 
-        EntityType.loadEntityWithPassengers(
-                replayNbt,
-                world,
-                SpawnReason.LOAD,
-                entity -> {
-                    final EntityReplaySpawnResolver.SpawnOutcome outcome =
-                            EntityReplaySpawnResolver.attempt(world,
-                                    chunkPosition,
-                                    searchBox,
-                                    entity,
-                                    replayNbt,
-                                    operationId);
-                    callbackStatus[0] = outcome.status();
-                    if (outcome.shouldSchedule()) {
-                        ScheduledEntityReplayQueue.schedule(world, chunkPosition, entity.getUuidAsString(), replayNbt);
+        if (findLiveCopy(world, chunkPosition, replayNbt) != null) {
+            callbackStatus[0] = ChunkRestorer.ReplayStatus.ALREADY_PRESENT;
+        } else {
+            EntityType.loadEntityWithPassengers(
+                    replayNbt,
+                    world,
+                    SpawnReason.LOAD,
+                    entity -> {
+                        final EntityReplaySpawnResolver.SpawnOutcome outcome =
+                                EntityReplaySpawnResolver.attempt(world,
+                                        chunkPosition,
+                                        searchBox,
+                                        entity,
+                                        replayNbt,
+                                        operationId);
+                        callbackStatus[0] = outcome.status();
+                        if (outcome.shouldSchedule()) {
+                            ScheduledEntityReplayQueue.schedule(world, chunkPosition, entity.getUuidAsString(),
+                                    replayNbt);
+                        }
+                        return entity;
                     }
-                    return entity;
-                }
-        );
+            );
+        }
 
         final Entity afterReplay = world.getEntity(queuedUuid);
         final boolean materialized = afterReplay != null
@@ -454,6 +481,28 @@ public final class EntityReplayCoordinator {
             allVisible[0] = uuid != null && ChunkEntityQueries.isVisibleFromWorldQuery(world, uuid, searchBox);
         });
         return allVisible[0];
+    }
+
+    /**
+     * Returns the live entity the payload describes when it is already in the world: same UUID and type, alive, in
+     * the payload's chunk. Usually vanilla's entity storage loaded it, and checking first spares building an entity
+     * from the payload only to find it already present.
+     *
+     * @param world         world to look in
+     * @param chunkPosition chunk the payload belongs to
+     * @param nbt           entity payload
+     * @return the matching live entity, or {@code null} when it has to be replayed
+     */
+    @Nullable
+    private static Entity findLiveCopy(final ServerWorld world, final ChunkPos chunkPosition, final NbtCompound nbt) {
+        final UUID uuid = EntityPayloadNbt.findUuid(nbt)
+                .orElse(null);
+        if (uuid == null) {
+            return null;
+        }
+        final Entity live = world.getEntity(uuid);
+        return ChunkEntityQueries.isMatchingLiveEntity(live, EntityPayloadNbt.findEntityType(nbt)
+                .orElse(null), chunkPosition) ? live : null;
     }
 
     /**

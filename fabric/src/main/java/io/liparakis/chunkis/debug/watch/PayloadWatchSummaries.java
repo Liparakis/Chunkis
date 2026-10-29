@@ -1,10 +1,10 @@
 package io.liparakis.chunkis.debug.watch;
 
+import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.UUID;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
@@ -250,9 +250,7 @@ public final class PayloadWatchSummaries {
         if (nbt == null) {
             return null;
         }
-        return nbt.getIntArray("UUID")
-                .map(net.minecraft.util.Uuids::toUuid)
-                .map(UUID::toString)
+        return EntityPayloadNbt.findUuidString(nbt)
                 .orElse(null);
     }
 

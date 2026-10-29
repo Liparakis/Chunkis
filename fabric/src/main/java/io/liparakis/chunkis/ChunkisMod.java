@@ -10,12 +10,16 @@ import io.liparakis.chunkis.portal.PortalLinkManager;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
+import io.liparakis.chunkis.world.entity.capture.StoredEntityFingerprints;
 import io.liparakis.chunkis.world.tracking.load.CisLoadPrefetcher;
+import io.liparakis.chunkis.world.tracking.load.ColdLoadDeltaHandoff;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.save.VanillaEntityRegionCleanup;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
+import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -72,14 +76,18 @@ public final class ChunkisMod implements ModInitializer {
             BaseChunkCaptureUtil.clearPendingBaseCapture(chunk);
             GlobalChunkTracker.noteChunkUnloaded(chunk);
         });
-        ServerWorldEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.delete(world));
+        ServerWorldEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.retire(world));
         ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
         ServerTickEvents.START_SERVER_TICK.register(server1 -> BaseChunkCaptureUtil.tick());
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> CisLoadPrefetcher.prefetchAroundPlayer(
                 handler.player));
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            PortalChunkIndexManager.flushDirty();
+            PortalLinkManager.flushDirty();
+        });
         ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> VanillaEntityRegionCleanup.deletePending());
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> VanillaEntityRegionCleanup.retirePending());
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> clearRuntimeState());
     }
 
@@ -88,8 +96,8 @@ public final class ChunkisMod implements ModInitializer {
      *
      * <p>The per-world order is preserved exactly:</p>
      * <ol>
-     *   <li>force-save currently pending tracked deltas</li>
      *   <li>flush and close async CIS saves</li>
+     *   <li>force-save currently pending tracked deltas</li>
      *   <li>close portal chunk index state</li>
      * </ol>
      *
@@ -110,8 +118,10 @@ public final class ChunkisMod implements ModInitializer {
      * @param world world being stopped
      */
     private static void flushWorldBeforeStop(final ServerWorld world) {
-        flushPendingDeltas(world);
+        // Drain async saves first: a synchronous save racing an in-flight async write of an
+        // older snapshot could otherwise be overwritten by it.
         AsyncCisSaveManager.flushAndClose(world);
+        flushPendingDeltas(world);
         PortalChunkIndexManager.close(world);
     }
 
@@ -141,36 +151,37 @@ public final class ChunkisMod implements ModInitializer {
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
                 FabricCisStorageHelper.getStorage(world);
 
+        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> toSave = new LinkedHashMap<>();
         for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
-            savePendingDelta(world, storage, entry.getKey(), entry.getValue());
+            if (shouldSavePendingDelta(world, entry.getKey(), entry.getValue())) {
+                toSave.put(entry.getKey(), entry.getValue());
+            }
         }
+        FabricCisStorageHelper.saveTrackedDeltas(world, storage, toSave);
     }
 
     /**
-     * Saves one pending dirty delta.
+     * Reports whether a pending delta should be saved at stop: dirty, and not a sparse payload without a base
+     * (logged when rejected).
      *
-     * <p>The {@link CisChunkPos} wrapper is allocated only after the dirty check,
-     * avoiding unnecessary objects for stale clean entries in the pending snapshot.</p>
-     *
-     * @param world   owning world
-     * @param storage world CIS storage
-     * @param pos     chunk position
-     * @param delta   delta to save, may be {@code null}
+     * @param world owning world
+     * @param pos   chunk position
+     * @param delta delta to check, may be {@code null}
+     * @return true when the delta should be saved
      */
     @SuppressWarnings("All")
-    private static void savePendingDelta(final ServerWorld world, final CisStorage<Block, BlockState, Property<?>,
-            NbtCompound> storage, final ChunkPos pos, final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static boolean shouldSavePendingDelta(final ServerWorld world, final ChunkPos pos,
+            final ChunkDelta<BlockState, NbtCompound> delta) {
         if (delta == null || !delta.isDirty()) {
-            return;
+            return false;
         }
 
         if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true)) {
             DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(world, pos, delta, "server-stopping", "ChunkisMod"
                     + "#savePendingDelta");
-            return;
+            return false;
         }
-
-        FabricCisStorageHelper.saveTrackedDelta(world, storage, pos, delta);
+        return true;
     }
 
     /**
@@ -188,6 +199,9 @@ public final class ChunkisMod implements ModInitializer {
         ScheduledEntityReplayQueue.clear();
         BaseChunkCaptureUtil.clear();
         MigrationProgressTracker.clear();
+        PendingChunkMutationSuppression.clear();
+        ColdLoadDeltaHandoff.clear();
+        StoredEntityFingerprints.clear();
     }
 
     @Override

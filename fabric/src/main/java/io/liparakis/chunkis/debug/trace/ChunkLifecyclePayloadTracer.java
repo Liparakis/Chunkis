@@ -51,11 +51,11 @@ public final class ChunkLifecyclePayloadTracer {
             return;
         }
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+        WatchPayloadMatcher.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
             final PayloadWatchTarget target = match.target();
             final BlockState expectedState = match.expectedState();
             BlockWatchTraceTracker.markProtoAttached(worldId, chunkPos, target, operationId);
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -64,7 +64,7 @@ public final class ChunkLifecyclePayloadTracer {
                     source,
                     chunk
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_ATTACHED,
                     "proto-attach",
                     source,
@@ -103,10 +103,10 @@ public final class ChunkLifecyclePayloadTracer {
             return;
         }
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+        WatchPayloadMatcher.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
             final PayloadWatchTarget target = match.target();
             final BlockState expectedState = match.expectedState();
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -115,7 +115,7 @@ public final class ChunkLifecyclePayloadTracer {
                     source,
                     chunk
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_PRESENT_BEFORE_CONVERSION,
                     "conversion-before",
                     source,
@@ -154,10 +154,10 @@ public final class ChunkLifecyclePayloadTracer {
             return;
         }
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+        WatchPayloadMatcher.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
             final PayloadWatchTarget target = match.target();
             final BlockState expectedState = match.expectedState();
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -166,7 +166,7 @@ public final class ChunkLifecyclePayloadTracer {
                     source,
                     chunk
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_PROTO_DELTA_PRESENT_AFTER_CONVERSION,
                     "conversion-after",
                     source,
@@ -204,10 +204,10 @@ public final class ChunkLifecyclePayloadTracer {
         }
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
+        WatchPayloadMatcher.forEachWatchedBlockState(worldId, chunkPos, delta, match -> {
             final PayloadWatchTarget target = match.target();
             final BlockState expectedState = match.expectedState();
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -216,7 +216,7 @@ public final class ChunkLifecyclePayloadTracer {
                     source,
                     chunk
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_WORLDCHUNK_DELTA_ATTACHED,
                     "worldchunk-attach",
                     source,
@@ -259,7 +259,7 @@ public final class ChunkLifecyclePayloadTracer {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;
             }
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -268,7 +268,7 @@ public final class ChunkLifecyclePayloadTracer {
                     source,
                     chunk
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_WORLDCHUNK_DELTA_MISSING,
                     "worldchunk-missing",
                     source,
@@ -306,12 +306,12 @@ public final class ChunkLifecyclePayloadTracer {
 
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final ChunkPos chunkPos = chunk.getPos();
-        PayloadWatchTracer.forEachResolvedWatchedBlockState(chunk, expectedDelta, operationId, match -> {
+        WatchPayloadMatcher.forEachResolvedWatchedBlockState(chunk, expectedDelta, operationId, match -> {
             final PayloadWatchTarget target = match.target();
             final BlockState expectedState = match.expectedState();
             final String resolvedOperationId = match.operationId();
             BlockWatchTraceTracker.markWorldConstructorConsumed(worldId, chunkPos, target, resolvedOperationId);
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -320,7 +320,7 @@ public final class ChunkLifecyclePayloadTracer {
                     source,
                     chunk
             );
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     ChunkTraceEventType.WATCH_WORLD_CHUNK_CONSTRUCTOR_CONSUMED,
                     "worldchunk-constructor",
                     source,
@@ -382,24 +382,24 @@ public final class ChunkLifecyclePayloadTracer {
 
             final BlockPos pos = new BlockPos(target.blockX(), target.blockY(), target.blockZ());
             final BlockState liveState = chunk.getBlockState(pos);
-            final BlockState expectedState = PayloadWatchTracer.resolveExpectedState(chunk,
+            final BlockState expectedState = WatchTraceEmitter.resolveExpectedState(chunk,
                     expectedDelta,
                     target,
                     chunkPos,
                     worldId);
-            final String resolvedOperationId = PayloadWatchTracer.resolveOperationId(worldId,
+            final String resolvedOperationId = WatchTraceEmitter.resolveOperationId(worldId,
                     chunkPos,
                     target,
                     operationId);
-            PayloadWatchTracer.markVisibilitySeen(worldId, chunkPos, target, resolvedOperationId);
-            PayloadWatchTracer.assertRestoreDecisionSeen(
+            WatchTraceEmitter.markVisibilitySeen(worldId, chunkPos, target, resolvedOperationId);
+            WatchTraceEmitter.assertRestoreDecisionSeen(
                     worldId,
                     chunkPos,
                     target,
                     resolvedOperationId,
                     source
             );
-            PayloadWatchTracer.traceChunkIdentityAndStatus(
+            WatchTraceEmitter.traceChunkIdentityAndStatus(
                     worldId,
                     chunkPos,
                     target,
@@ -408,7 +408,7 @@ public final class ChunkLifecyclePayloadTracer {
                     source,
                     chunk
             );
-            PayloadWatchTracer.assertSameAppliedChunkInstance(
+            WatchTraceEmitter.assertSameAppliedChunkInstance(
                     worldId,
                     chunkPos,
                     target,
@@ -417,7 +417,7 @@ public final class ChunkLifecyclePayloadTracer {
                     chunk
             );
 
-            PayloadWatchTracer.traceWatch(
+            WatchTraceEmitter.traceWatch(
                     presentEventType,
                     stage,
                     source,
@@ -441,7 +441,7 @@ public final class ChunkLifecyclePayloadTracer {
             );
 
             if (expectedState != null && !Objects.equals(liveState, expectedState)) {
-                PayloadWatchTracer.traceWatch(
+                WatchTraceEmitter.traceWatch(
                         ChunkTraceEventType.WATCH_OVERWRITTEN_AFTER_RESTORE,
                         stage,
                         source,
@@ -466,7 +466,7 @@ public final class ChunkLifecyclePayloadTracer {
             }
 
             if (clientChunk && expectedState != null && Objects.equals(liveState, expectedState)) {
-                PayloadWatchTracer.traceWatch(
+                WatchTraceEmitter.traceWatch(
                         ChunkTraceEventType.WATCH_CLIENT_SEES_EXPECTED_STATE,
                         stage,
                         source,

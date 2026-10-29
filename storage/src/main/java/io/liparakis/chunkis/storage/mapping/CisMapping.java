@@ -9,11 +9,17 @@ import io.liparakis.chunkis.core.mapping.PropertyPacker;
 import io.liparakis.chunkis.core.mapping.PropertyPacker.PropertyMeta;
 import io.liparakis.chunkis.spi.BlockRegistryAdapter;
 import io.liparakis.chunkis.spi.BlockStateAdapter;
-import java.io.FileReader;
-import java.io.FileWriter;
+import com.google.gson.JsonParseException;
 import java.io.IOException;
+import java.io.Reader;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -35,6 +41,16 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
      * Stores gson.
      */
     private static final Gson GSON = new Gson();
+
+    /**
+     * Suffix of the temp file written before the atomic replace.
+     */
+    private static final String TEMP_SUFFIX = ".tmp";
+
+    /**
+     * Suffix of the previous complete mapping kept for recovery.
+     */
+    private static final String BACKUP_SUFFIX = ".bak";
 
     /**
      * Registry view used to resolve stable block identifiers and enumerate known blocks.
@@ -92,52 +108,105 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
         this.packer = packer;
         this.mappingsDirty = false;
 
-        if (mappingFile.toFile()
-                .exists()) {
-            loadMappings();
+        final Map<String, Integer> persisted = readPersistedMappings();
+        blockIds.beginBatch();
+        if (persisted != null) {
+            loadMappings(persisted);
         }
 
         populateRegisteredBlocks();
+        blockIds.endBatch();
         warmPropertyIndexMaps();
         flush();
     }
 
     /**
-     * Loads existing block mappings from the mapping file.
+     * Reads the persisted id table, falling back to the {@code .bak} copy kept by
+     * {@link #flush()}.
+     *
+     * <p>Returns {@code null} only for a brand-new mapping (neither file exists).
+     * An existing but empty or unparseable table is never treated as "no mapping",
+     * since re-numbering would silently change every stored block.</p>
+     *
+     * @throws IOException if a mapping file exists but no readable copy remains
      */
-    private void loadMappings() throws IOException {
-        try (FileReader reader = new FileReader(mappingFilePath.toFile())) {
-            Map<String, Integer> map = GSON.fromJson(reader, new TypeToken<Map<String, Integer>>() {
+    private Map<String, Integer> readPersistedMappings() throws IOException {
+        final Path backup = siblingPath(BACKUP_SUFFIX);
+        if (!Files.exists(mappingFilePath) && !Files.exists(backup)) {
+            return null;
+        }
+        IOException primaryFailure = null;
+        if (Files.exists(mappingFilePath)) {
+            try {
+                return parseMappingFile(mappingFilePath);
+            } catch (final IOException e) {
+                primaryFailure = e;
+            }
+        }
+        try {
+            final Map<String, Integer> recovered = parseMappingFile(backup);
+            if (primaryFailure != null) {
+                System.err.println("Chunkis: Recovered block id mapping from " + backup + " after: "
+                        + primaryFailure.getMessage());
+            }
+            mappingsDirty = true;
+            return recovered;
+        } catch (final IOException backupFailure) {
+            final IOException failure = new IOException("Chunkis: Block id mapping " + mappingFilePath
+                    + " is unreadable and no usable backup exists; refusing to re-number blocks", backupFailure);
+            if (primaryFailure != null) {
+                failure.addSuppressed(primaryFailure);
+            }
+            throw failure;
+        }
+    }
+
+    /**
+     * Parses one mapping file, rejecting missing, empty or malformed content.
+     */
+    private static Map<String, Integer> parseMappingFile(final Path file) throws IOException {
+        if (!Files.exists(file)) {
+            throw new IOException("Mapping file " + file + " does not exist");
+        }
+        final Map<String, Integer> map;
+        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            map = GSON.fromJson(reader, new TypeToken<Map<String, Integer>>() {
             }.getType());
+        } catch (final JsonParseException e) {
+            throw new IOException("Mapping file " + file + " is malformed", e);
+        }
+        if (map == null) {
+            throw new IOException("Mapping file " + file + " is empty");
+        }
+        return map;
+    }
 
-            if (map == null) {
-                return;
+    /**
+     * Loads existing block mappings from a parsed mapping table.
+     */
+    private void loadMappings(final Map<String, Integer> map) {
+        B air = registry.getAir();
+        String airId = registry.getId(air); // "minecraft:air"
+
+        for (Map.Entry<String, Integer> entry : map.entrySet()) {
+            String idStr = entry.getKey();
+            int blockId = entry.getValue();
+            B block = registry.getBlock(idStr);
+
+            // Some adapters return air as the fallback for invalid or removed IDs.
+            // Keep those identifiers as tombstones so their numeric IDs remain occupied.
+            if (block == air && !idStr.equals(airId)) {
+                blockIds.reserveUnresolved(idStr, blockId);
+                continue;
             }
 
-            B air = registry.getAir();
-            String airId = registry.getId(air); // "minecraft:air"
-
-            for (Map.Entry<String, Integer> entry : map.entrySet()) {
-                String idStr = entry.getKey();
-                int blockId = entry.getValue();
-                B block = registry.getBlock(idStr);
-
-                // Some adapters return air as the fallback for invalid or removed IDs.
-                // Keep those identifiers as tombstones so their numeric IDs remain occupied.
-                if (block == air && !idStr.equals(airId)) {
-                    blockIds.reserveUnresolved(idStr, blockId);
-                    continue;
-                }
-
-                // Other adapters may signal a missing block with null instead of air.
-                if (block == null) {
-                    blockIds.reserveUnresolved(idStr, blockId);
-                    continue;
-                }
-
-                blockIds.registerResolved(block, blockId);
+            // Other adapters may signal a missing block with null instead of air.
+            if (block == null) {
+                blockIds.reserveUnresolved(idStr, blockId);
+                continue;
             }
 
+            blockIds.registerResolved(block, blockId);
         }
     }
 
@@ -220,9 +289,19 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
 
     /**
      * Flushes new mappings to disk if there are unsaved changes.
-     * Uses double-checked locking to minimize I/O.
+     *
+     * <p>The file is replaced atomically: the snapshot is written and forced to a
+     * temp file, the previous file is kept as {@code .bak}, and the temp file is
+     * moved over the target. A crash at any point leaves either the old or the new
+     * complete table on disk, never a truncated one.</p>
+     *
+     * <p>The dirty flag is cleared before the snapshot so a block registered
+     * concurrently re-marks it, and it is restored when the write fails.</p>
+     *
+     * @throws IOException if the mapping cannot be persisted; callers must not
+     *                     write chunk payloads that reference unpersisted ids
      */
-    public void flush() {
+    public void flush() throws IOException {
         if (!mappingsDirty) {
             return;
         }
@@ -231,21 +310,47 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
             if (!mappingsDirty) {
                 return;
             }
-
+            mappingsDirty = false;
             try {
-                Map<String, Integer> snapshot = createMappingSnapshot();
-                Path parent = mappingFilePath.getParent();
-                if (parent != null) {
-                    Files.createDirectories(parent);
-                }
-                try (FileWriter writer = new FileWriter(mappingFilePath.toFile())) {
-                    GSON.toJson(snapshot, writer);
-                }
-                mappingsDirty = false;
-            } catch (Exception e) {
-                System.err.println("Chunkis: Failed to save mappings: " + e.getMessage());
+                writeAtomically(GSON.toJson(createMappingSnapshot()));
+            } catch (IOException | RuntimeException e) {
+                mappingsDirty = true;
+                throw new IOException("Chunkis: Failed to persist block id mapping " + mappingFilePath, e);
             }
         }
+    }
+
+    /**
+     * Replaces the mapping file with {@code json} via temp file, fsync and atomic move.
+     */
+    private void writeAtomically(final String json) throws IOException {
+        final Path parent = mappingFilePath.toAbsolutePath()
+                .getParent();
+        Files.createDirectories(parent);
+        final Path temp = siblingPath(TEMP_SUFFIX);
+        try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+            final ByteBuffer bytes = ByteBuffer.wrap(json.getBytes(StandardCharsets.UTF_8));
+            while (bytes.hasRemaining()) {
+                channel.write(bytes);
+            }
+            channel.force(true);
+        }
+        if (Files.exists(mappingFilePath)) {
+            Files.copy(mappingFilePath, siblingPath(BACKUP_SUFFIX), StandardCopyOption.REPLACE_EXISTING);
+        }
+        try {
+            Files.move(temp, mappingFilePath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (final AtomicMoveNotSupportedException e) {
+            Files.move(temp, mappingFilePath, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /**
+     * Returns the mapping file path with {@code suffix} appended to its name.
+     */
+    private Path siblingPath(final String suffix) {
+        return mappingFilePath.resolveSibling(mappingFilePath.getFileName() + suffix);
     }
 
     /**
