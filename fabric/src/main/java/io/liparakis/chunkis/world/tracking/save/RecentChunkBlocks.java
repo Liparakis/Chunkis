@@ -56,10 +56,11 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
 
     /**
      * Blocks a load filled a delta with, as the containers and content fingerprint they came from; attached to the
-     * delta ({@link ChunkDelta#attachLoadedBlocks}) so the load hands vanilla copies of the containers instead of
-     * rebuilding them.
+     * delta ({@link ChunkDelta#attachLoadedBlocks}) so the load hands vanilla the containers instead of rebuilding
+     * them.
      *
-     * @param sections containers by section index, {@code null} for sections of only air; never handed out as is
+     * @param sections containers by section index, {@code null} for sections of only air; owned by the load, which
+     *                 took them out of the cache
      * @param content  their content fingerprint
      */
     public record LoadedSections(PalettedContainer<BlockState>[] sections, long[] content) {
@@ -137,16 +138,13 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
             valid = Arrays.equals(entry.expectedContent(), DeferredBlocksSnapshotView.contentPrintOf(entry.sections()));
         }
         synchronized (this) {
-            if (entries.get(key(pos)) == entry) {
-                if (!valid) {
-                    // The stored entry changed since, or the copies are not what it was written from.
-                    entries.remove(key(pos));
-                    bytes -= entry.bytes();
-                } else if (entry.expectedContent() != null) {
-                    entries.put(key(pos), new Entry(entry.blockPartHash(), null, entry.sections(), entry.bottomY(),
-                            entry.bytes(), entry.content()));
-                }
+            // Taken whatever the outcome: stale entries go, and a valid one is the load's, which gives its containers
+            // to vanilla without copying them, so no second lookup may ever see them. The next unload puts them back.
+            if (entries.get(key(pos)) != entry) {
+                return null;
             }
+            entries.remove(key(pos));
+            bytes -= entry.bytes();
         }
         if (!valid) {
             return null;

@@ -163,7 +163,7 @@ public final class PreloadedBlockSections {
     }
 
     /**
-     * Embeds blocks the delta was filled with straight from their containers: vanilla gets copies of them, and the
+     * Embeds blocks the delta was filled with straight from their containers, which vanilla takes over, and the
      * content fingerprint comes along, so nothing is rebuilt from the instructions.
      *
      * @param world      world the chunk belongs to
@@ -190,7 +190,7 @@ public final class PreloadedBlockSections {
         for (int i = 0; i < containers.length; i++) {
             if (containers[i] != null) {
                 embedding.pending().incrementAndGet();
-                PREBUILT.put(entries[i], new Prebuilt(containers[i].copy(), embedding));
+                PREBUILT.put(entries[i], new Prebuilt(containers[i], embedding));
             }
         }
         EMBEDDED.put(delta, embedding);
