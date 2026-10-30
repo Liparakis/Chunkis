@@ -164,6 +164,35 @@ public final class StoredBlocksUnloadGameTest {
     }
 
     /**
+     * Reloads a stored chunk and unloads it again without touching it, and expects its delta to stay clean (loading
+     * turns the light flag off and on, which must not count as a change) and the dirty tracker to never hold it.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 600)
+    public void untouchedReloadedChunkStaysCleanAndUntracked(final TestContext context) {
+        final Fixture fixture = Fixture.create(context, 3500);
+        fixture.storeAndReloadReleased()
+                .createAndAdd(() -> {
+                    final ChunkDelta<?, ?> delta = fixture.liveDelta();
+                    context.assertTrue(delta != null && !delta.isDirty(),
+                            Text.literal("Loading chunk " + fixture.target + " marked its delta dirty."));
+                    context.assertTrue(GlobalChunkTracker.getActiveDelta(fixture.world, fixture.target) == null,
+                            Text.literal("The dirty tracker holds the clean delta of reloaded chunk "
+                                    + fixture.target + "."));
+                    fixture.unload();
+                })
+                .createAndAdd(fixture::awaitUnloaded)
+                .createAndAdd(() -> {
+                    AsyncCisSaveManager.flushAndClose(fixture.world);
+                    context.assertTrue(GlobalChunkTracker.getActiveDelta(fixture.world, fixture.target) == null,
+                            Text.literal("Unloading untouched chunk " + fixture.target
+                                    + " left its delta in the dirty tracker."));
+                })
+                .completeIfSuccessful();
+    }
+
+    /**
      * One test chunk: a section of varied blocks and a chest, stored and reloaded so its delta releases its
      * block instructions.
      */

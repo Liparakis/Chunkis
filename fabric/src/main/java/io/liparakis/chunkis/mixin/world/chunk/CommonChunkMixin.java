@@ -54,6 +54,12 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     private volatile NbtCompound chunkis$pendingBaseChunkNbt;
 
     /**
+     * The chunk whose {@code setLightOn} is running on this thread, if any.
+     */
+    @Unique
+    private static final ThreadLocal<Chunk> CHUNKIS$SETTING_LIGHT_ON = new ThreadLocal<>();
+
+    /**
      * Default constructor for CommonChunkMixin.
      */
     public CommonChunkMixin() {
@@ -142,6 +148,46 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
     }
 
     /**
+     * Notes that this chunk's light flag is being set, for {@link #chunkis$isLoadingLightToggle()}.
+     *
+     * @param lightOn the new flag
+     * @param ci      the Mixin {@link CallbackInfo}
+     */
+    @Inject(method = "setLightOn", at = @At("HEAD"))
+    private void chunkis$beforeSetLightOn(final boolean lightOn, final CallbackInfo ci) {
+        CHUNKIS$SETTING_LIGHT_ON.set((Chunk) (Object) this);
+    }
+
+    /**
+     * Clears the note left by {@link #chunkis$beforeSetLightOn}.
+     *
+     * @param lightOn the new flag
+     * @param ci      the Mixin {@link CallbackInfo}
+     */
+    @Inject(method = "setLightOn", at = @At("RETURN"))
+    private void chunkis$afterSetLightOn(final boolean lightOn, final CallbackInfo ci) {
+        CHUNKIS$SETTING_LIGHT_ON.remove();
+    }
+
+    /**
+     * Reports whether the current {@code markNeedsSaving()} only follows a light-flag change of a chunk that is still
+     * loading. Loading turns the flag off and on again for every chunk (vanilla's light step, and {@code convert}
+     * setting it from storage), and vanilla marks the chunk unsaved each time, though nothing it stores changed: a
+     * chunk Chunkis stored is stored lit. Mirroring that into the delta made every loaded chunk save again when it
+     * unloaded, writing what was already on disk. Only before the chunk is loaded into the world, when nothing else
+     * can change it: a light-flag change of a chunk in play still marks the delta, and light data changes reach it
+     * through their own updates.
+     *
+     * @return true to leave the delta as it is
+     */
+    @Unique
+    private boolean chunkis$isLoadingLightToggle() {
+        return CHUNKIS$SETTING_LIGHT_ON.get() == (Object) this
+                && (Object) this instanceof io.liparakis.chunkis.mixin.accessor.WorldChunkAccessor loading
+                && !loading.chunkis$isLoadedToWorld();
+    }
+
+    /**
      * Injected at the head of {@code markNeedsSaving()} to keep the Chunkis delta
      * and {@link GlobalChunkTracker} in sync when vanilla marks a chunk dirty.
      *
@@ -150,6 +196,9 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      */
     @Inject(method = "markNeedsSaving", at = @At("HEAD"))
     private void chunkis$onMarkNeedsSaving(final CallbackInfo ci) {
+        if (chunkis$isLoadingLightToggle()) {
+            return;
+        }
         if ((Object) this instanceof ChunkisMutationGuardDuck guardDuck
                 && guardDuck.chunkis$getMutationTrackingScope()
                 .currentCause()
