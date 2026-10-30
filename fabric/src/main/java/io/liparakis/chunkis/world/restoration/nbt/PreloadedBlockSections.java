@@ -6,11 +6,8 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.LongStream;
@@ -44,17 +41,16 @@ import net.minecraft.world.chunk.ReadableContainer;
 public final class PreloadedBlockSections {
 
     /**
-     * Mutation generation of each delta whose blocks were embedded, keyed by instance. Weak, so loads that
-     * never reach the restore leave nothing behind.
+     * Mutation generation of each delta whose blocks were embedded, keyed by instance (weak keys, concurrent, as
+     * every load worker reaches it). Loads that never reach the restore leave nothing behind.
      */
-    private static final Map<ChunkDelta<?, ?>, Embedding> EMBEDDED =
-            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final ConcurrentMap<ChunkDelta<?, ?>, Embedding> EMBEDDED = new MapMaker().weakKeys().makeMap();
 
     /**
      * Content fingerprints of consumed embeddings, for the restore to take right after {@link #consume}.
      */
-    private static final Map<ChunkDelta<?, ?>, long[]> CONSUMED_PRINTS =
-            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final ConcurrentMap<ChunkDelta<?, ?>, long[]> CONSUMED_PRINTS =
+            new MapMaker().weakKeys().makeMap();
 
     /**
      * Built containers waiting for vanilla's chunk reader, by their section's NBT compound (identity, weak keys).
