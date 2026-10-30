@@ -101,8 +101,41 @@ public final class GlobalChunkTracker {
                     null
             );
         }
-        putDeltaIfNeeded(keyOf(chunk.getWorld()
+        trackLiveDelta(keyOf(chunk.getWorld()
                 .getRegistryKey(), chunk.getPos()), delta, source, chunk);
+    }
+
+    /**
+     * Tracks the delta a live chunk reported, which may be clean: chunks report their delta whenever it is set,
+     * after a save as well. Only a dirty delta is tracked. A clean one holds what its stored entry holds, and
+     * nothing would ever remove it (only a save completion removes entries), so it would keep the chunk's data in
+     * memory for the rest of the session. A clean report also drops a clean entry left for the chunk. A different,
+     * dirty entry is handled as before, since it may hold changes not on disk yet.
+     *
+     * @param key    tracker key of the chunk
+     * @param delta  the chunk's delta
+     * @param source caller identifier tag
+     * @param chunk  the live chunk, or {@code null}
+     */
+    static void trackLiveDelta(
+            final DimensionChunkKey key,
+            final ChunkDelta<?, ?> delta,
+            final String source,
+            final WorldChunk chunk
+    ) {
+        if (!delta.isDirty()) {
+            final ChunkDelta<?, ?> existing = dirtyDeltas.get(key);
+            if (existing == null) {
+                return;
+            }
+            if (existing == delta || !existing.isDirty()) {
+                if (dirtyDeltas.remove(key, existing)) {
+                    unloadCache.remove(key);
+                }
+                return;
+            }
+        }
+        putDeltaIfNeeded(key, delta, source, chunk);
     }
 
     /**

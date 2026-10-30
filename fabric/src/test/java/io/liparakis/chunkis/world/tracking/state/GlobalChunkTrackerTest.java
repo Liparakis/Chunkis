@@ -191,6 +191,82 @@ class GlobalChunkTrackerTest {
     }
 
     /**
+     * A chunk reporting a clean delta, as it does whenever its delta is set (after a save as well), must not put it
+     * in the tracker: nothing would ever remove it.
+     */
+    @Test
+    void cleanDeltaReportedByChunkIsNotTracked() {
+        final RegistryKey<World> overworld = overworld();
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+        assertFalse(delta.isDirty());
+
+        GlobalChunkTracker.trackLiveDelta(DimensionChunkKey.of(overworld, 5, 6), delta, "test", null);
+
+        assertNull(GlobalChunkTracker.getDelta(overworld, 5, 6));
+    }
+
+    /**
+     * A clean report of a delta the tracker still holds, now saved, releases it.
+     */
+    @Test
+    void cleanReportReleasesTrackedDeltaThatWasSaved() {
+        final RegistryKey<World> overworld = overworld();
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+        GlobalChunkTracker.addDelta(overworld, 5, 6, delta, "test");
+        delta.markSaved();
+
+        GlobalChunkTracker.trackLiveDelta(DimensionChunkKey.of(overworld, 5, 6), delta, "test", null);
+
+        assertNull(GlobalChunkTracker.getDelta(overworld, 5, 6));
+    }
+
+    /**
+     * A clean report never displaces a different delta that holds unsaved changes.
+     */
+    @Test
+    void cleanReportKeepsDifferentDirtyDelta() {
+        final RegistryKey<World> overworld = overworld();
+        final ChunkDelta<String, NbtCompound> unsaved = new ChunkDelta<>();
+        unsaved.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+        GlobalChunkTracker.addDelta(overworld, 5, 6, unsaved, "test");
+        final ChunkDelta<String, NbtCompound> clean = new ChunkDelta<>();
+        clean.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+
+        GlobalChunkTracker.trackLiveDelta(DimensionChunkKey.of(overworld, 5, 6), clean, "test", null);
+
+        assertEquals(unsaved, GlobalChunkTracker.getDelta(overworld, 5, 6));
+        assertTrue(unsaved.isDirty());
+    }
+
+    /**
+     * A dirty report is tracked until its save completes.
+     */
+    @Test
+    void dirtyDeltaReportedByChunkIsTrackedUntilSaved() {
+        final RegistryKey<World> overworld = overworld();
+        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
+        delta.markDirty("test");
+
+        GlobalChunkTracker.trackLiveDelta(DimensionChunkKey.of(overworld, 5, 6), delta, "test", null);
+        assertEquals(delta, GlobalChunkTracker.getDelta(overworld, 5, 6));
+
+        GlobalChunkTracker.markSavedIfUnchanged(overworld, 5, 6, delta, delta.getMutationGeneration());
+        assertNull(GlobalChunkTracker.getDelta(overworld, 5, 6));
+    }
+
+    /**
+     * Returns the overworld's registry key.
+     *
+     * @return key
+     */
+    private static RegistryKey<World> overworld() {
+        return RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld"));
+    }
+
+    /**
      * Verifies that a dirty delta check requires both the exact same object instance
      * and the exact mutation generation number to be considered current.
      */
