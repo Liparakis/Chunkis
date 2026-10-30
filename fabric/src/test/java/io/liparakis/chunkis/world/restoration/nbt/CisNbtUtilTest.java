@@ -321,4 +321,31 @@ class CisNbtUtilTest {
         assertFalse(rebuilt.contains(CisNbtUtil.BASE_CHUNK_NBT_KEY),
                 "an envelope-owned key absent from the rebuild is an intentional removal");
     }
+
+    /**
+     * A save snapshot shares the entries a capture only ever replaces whole, and copies the rest, which may be
+     * changed in place after the snapshot was taken.
+     */
+    @Test
+    void snapshotCopySharesOnlyEntriesReplacedWhole() {
+        final NbtCompound metadata = new NbtCompound();
+        metadata.put(CisNbtUtil.STORED_SECTIONS_KEY, new NbtList());
+        metadata.put(CisNbtUtil.STORED_HEIGHTMAPS_KEY, new NbtCompound());
+        metadata.put(CisNbtUtil.PENDING_TICKS_KEY, new NbtCompound());
+        final NbtCompound flags = new NbtCompound();
+        flags.putBoolean(CisNbtUtil.FULL_BLOCK_BASELINE_KEY, true);
+        metadata.put(CisNbtUtil.CHUNKIS_METADATA_KEY, flags);
+
+        final NbtCompound copy = CisNbtUtil.copySharingCapturedState(metadata);
+
+        assertTrue(copy != metadata);
+        assertTrue(copy.get(CisNbtUtil.STORED_SECTIONS_KEY) == metadata.get(CisNbtUtil.STORED_SECTIONS_KEY));
+        assertTrue(copy.get(CisNbtUtil.STORED_HEIGHTMAPS_KEY) == metadata.get(CisNbtUtil.STORED_HEIGHTMAPS_KEY));
+        assertTrue(copy.get(CisNbtUtil.PENDING_TICKS_KEY) == metadata.get(CisNbtUtil.PENDING_TICKS_KEY));
+        assertTrue(copy.get(CisNbtUtil.CHUNKIS_METADATA_KEY) != flags, "flags set in place are copied");
+        assertEquals(flags, copy.get(CisNbtUtil.CHUNKIS_METADATA_KEY));
+        flags.putBoolean(CisNbtUtil.PORTAL_CHUNK_KEY, true);
+        assertFalse(copy.getCompound(CisNbtUtil.CHUNKIS_METADATA_KEY).orElseThrow()
+                .contains(CisNbtUtil.PORTAL_CHUNK_KEY), "a later change does not reach the snapshot");
+    }
 }

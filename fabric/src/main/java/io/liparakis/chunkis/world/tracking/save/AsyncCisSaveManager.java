@@ -104,20 +104,20 @@ public final class AsyncCisSaveManager {
         final var cisPos = FabricCisStorageHelper.toStoragePos(pos);
         final long generation = liveDelta.getMutationGeneration();
         // Block-entity and entity payloads are only ever replaced in a delta, never changed in place, so the
-        // snapshot shares them; the metadata is copied, all but its stored sections.
+        // snapshot shares them; the metadata is copied, all but the parts a capture replaces whole.
         final UnaryOperator<NbtCompound> sharePayloads = UnaryOperator.identity();
         final ChunkDeltaView<BlockState, NbtCompound> snapshot;
         if (deferredBlocks != null) {
             snapshot = new DeferredBlocksSnapshotView(
-                    liveDelta.snapshotViewWithoutBlocks(sharePayloads, CisNbtUtil::copySharingStoredSections), deferredBlocks,
+                    liveDelta.snapshotViewWithoutBlocks(sharePayloads, CisNbtUtil::copySharingCapturedState), deferredBlocks,
                     world.getBottomY(), liveDelta.getWrittenBlocksPrint(), unloading);
         } else if (liveDelta.isBlockPayloadReleased()) {
             // No chunk to copy the blocks from (it unloaded): they are the stored entry's plus the recorded edits,
             // read on the worker.
             snapshot = new StoredBlocksSnapshotView(
-                    liveDelta.snapshotView(sharePayloads, CisNbtUtil::copySharingStoredSections), storage, cisPos);
+                    liveDelta.snapshotView(sharePayloads, CisNbtUtil::copySharingCapturedState), storage, cisPos);
         } else {
-            snapshot = liveDelta.snapshotView(sharePayloads, CisNbtUtil::copySharingStoredSections);
+            snapshot = liveDelta.snapshotView(sharePayloads, CisNbtUtil::copySharingCapturedState);
         }
 
         ChunkTraceStore.trace(

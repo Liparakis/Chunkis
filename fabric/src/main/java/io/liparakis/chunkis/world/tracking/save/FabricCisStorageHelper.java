@@ -331,7 +331,7 @@ public final class FabricCisStorageHelper {
             final ChunkDeltaView<BlockState, NbtCompound> payload;
             if (delta.isBlockPayloadReleased()) {
                 final StoredBlocksSnapshotView stored = new StoredBlocksSnapshotView(
-                        delta.snapshotView(UnaryOperator.identity(), CisNbtUtil::copySharingStoredSections), storage,
+                        delta.snapshotView(UnaryOperator.identity(), CisNbtUtil::copySharingCapturedState), storage,
                         cisPos);
                 stored.loadStoredBlocks();
                 payload = stored;

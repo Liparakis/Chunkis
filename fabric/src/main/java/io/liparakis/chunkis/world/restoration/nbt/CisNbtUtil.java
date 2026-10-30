@@ -528,26 +528,34 @@ public final class CisNbtUtil {
     }
 
     /**
-     * Copies a delta payload for an async-save snapshot, sharing its stored sections instead of copying them.
+     * Copies a delta payload for an async-save snapshot, sharing what a capture replaces whole instead of copying it.
      *
-     * <p>A capture always puts a new {@link #STORED_SECTIONS_KEY} list into new metadata and nothing modifies the
-     * list afterwards ({@link #getStoredSections} hands out copies), so the snapshot can share it; it holds a
-     * chunk's light, the largest part of the metadata.</p>
+     * <p>A capture always puts a new {@link #STORED_SECTIONS_KEY} list (the chunk's light and biomes, the largest
+     * part of the metadata), a new {@link #STORED_HEIGHTMAPS_KEY} compound and a new {@link #PENDING_TICKS_KEY}
+     * compound into new metadata, and nothing modifies them afterwards: readers that hand them on copy them
+     * ({@link #getStoredSections}, {@code ChunkLoadNbtBuilder}, {@link PendingTicksNbt#putInto}). The snapshot can
+     * therefore share them. Every other entry, such as the Chunkis flags that are set in place, is copied.</p>
      *
      * @param payload block-entity, entity or metadata payload
-     * @return a copy that may share the stored sections list
+     * @return a copy that may share those three entries
      */
-    public static NbtCompound copySharingStoredSections(final NbtCompound payload) {
-        final NbtElement storedSections = payload.get(STORED_SECTIONS_KEY);
-        if (storedSections == null) {
-            return payload.copy();
-        }
+    public static NbtCompound copySharingCapturedState(final NbtCompound payload) {
         final NbtCompound copy = new NbtCompound();
         for (final String key : payload.getKeys()) {
             final NbtElement element = payload.get(key);
-            copy.put(key, element == storedSections ? element : element.copy());
+            copy.put(key, isReplacedWhole(key) ? element : element.copy());
         }
         return copy;
+    }
+
+    /**
+     * Reports whether a metadata entry is only ever replaced whole, never modified in place.
+     *
+     * @param key metadata key
+     * @return true for the stored sections, stored heightmaps and pending ticks
+     */
+    private static boolean isReplacedWhole(final String key) {
+        return STORED_SECTIONS_KEY.equals(key) || STORED_HEIGHTMAPS_KEY.equals(key) || PENDING_TICKS_KEY.equals(key);
     }
 
     /**
