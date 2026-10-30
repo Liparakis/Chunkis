@@ -51,11 +51,6 @@ public final class StressBenchGameTest {
         final StressScenario scenario = new StressScenario(context);
         active = scenario;
         scenario.begin();
-        context.runAtEveryTick(() -> {
-            if (active == scenario && scenario.tick()) {
-                active = null;
-            }
-        });
     }
 
     /**
@@ -73,11 +68,6 @@ public final class StressBenchGameTest {
         final FlightScenario scenario = new FlightScenario(context);
         active = scenario;
         scenario.begin();
-        context.runAtEveryTick(() -> {
-            if (active == scenario && scenario.tick()) {
-                active = null;
-            }
-        });
     }
 
     /**
@@ -115,9 +105,15 @@ public final class StressBenchGameTest {
             return;
         }
         hooksRegistered = true;
+        // The scenario ticks here, inside the measured tick, rather than through TestContext.runAtEveryTick: that
+        // queues one task per remaining tick of the test's budget, and the test framework scans all of them every
+        // tick, which cost more server-thread time than the scenario itself.
         ServerTickEvents.START_SERVER_TICK.register(server -> {
             if (active != null) {
                 active.metrics().onTickStart();
+                if (active.tick()) {
+                    active = null;
+                }
             }
         });
         ServerTickEvents.END_SERVER_TICK.register(server -> {

@@ -30,3 +30,17 @@ The baseline is `benchmarks/baseline-<profile>.json` and only means something on
 - Don't trust a single run. Even on the fixed area, the 99th-percentile tick time varies by about 10% between runs.
 
 `compare.py` diffs two single reports field by field, for when you want every number side by side.
+
+## Flight scenario
+
+`stress_bench_game_test_flight_out_and_back` moves a window of forced chunks out along a straight line and back, as a player exploring would: leg 0 generates and stores the terrain, legs 1 and 2 load it again while saving what they leave behind. It crosses many region files, which the fixed-area scenario never does, and reports pop-in: chunks that come into view before they are usable.
+
+```bash
+gradlew :fabric:runGameTest -PchunkisStress=true -PgametestFilter=chunkis-gametest:stress_bench_game_test_flight_out_and_back
+```
+
+- `-PchunkisStressFlightSpeed=<blocks per tick>` (default 3) and `-PchunkisStressFlightBlocks=<blocks per leg>` (default 4096).
+- `-PchunkisStressStages=true` adds the load pipeline's stages to the report: wall time and allocations of each stage (region read, decompression, decode, NBT build, vanilla parse and convert, full-chunk steps), a per-chunk timeline from load request to usable, generation work and the recent-chunk cache's traffic per leg. CPU per stage is not in it, since thread CPU time on Windows only advances in 15.6 ms steps; record the run with `-PchunkisStressJfr=<file.jfr>` for that. The stage hooks follow the vanilla chunk system, so with C2ME installed the timeline events are missing.
+- `-PchunkisStressProbeWrites=true` counts region writes that store exactly what is already on disk. It reads every entry before writing it, so its timings mean nothing.
+- `-PchunkisStressFastGeneration=true` runs leg 0 without real tick pacing, several times faster. It changes the cache contents and the pending work leg 1 starts with, so use it only for runs that count things, never to compare timings.
+- `-PchunkisRecentChunkCacheMb=<mb>` sets the recent-chunk cache's budget.

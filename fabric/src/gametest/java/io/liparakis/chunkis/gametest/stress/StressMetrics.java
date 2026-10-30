@@ -452,7 +452,7 @@ final class StressMetrics {
     /**
      * Growable list of long samples with percentile summaries.
      */
-    private static final class LongSamples {
+    static final class LongSamples {
 
         /**
          * Sample storage.
@@ -474,6 +474,13 @@ final class StressMetrics {
                 values = Arrays.copyOf(values, size * 2);
             }
             values[size++] = value;
+        }
+
+        /**
+         * Drops every sample.
+         */
+        void clear() {
+            size = 0;
         }
 
         /**

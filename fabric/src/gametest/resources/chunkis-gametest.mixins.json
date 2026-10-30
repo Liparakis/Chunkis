@@ -6,7 +6,20 @@
         "MinecraftServerAccessor",
         "TestServerMixin",
         "TestServerWorldPresetMixin",
-        "VanillaStorageModeMixin"
+        "VanillaStorageModeMixin",
+        "profile.ChunkDeltaProbeMixin",
+        "profile.ChunkGeneratingProfileMixin",
+        "profile.GlobalChunkTrackerProbeMixin",
+        "profile.CisDecoderProfileMixin",
+        "profile.CisNbtUtilProfileMixin",
+        "profile.CisStorageProfileMixin",
+        "profile.PreloadedBlockSectionsProfileMixin",
+        "profile.RecentChunkBlocksProfileMixin",
+        "profile.RegionFileWriteProbeMixin",
+        "profile.SerializedChunkProfileMixin",
+        "profile.SyntheticLoadNbtProviderProfileMixin",
+        "profile.VanillaLoadProfileMixin",
+        "profile.WorldChunkProfileMixin"
     ],
     "injectors": {
         "defaultRequire": 1
