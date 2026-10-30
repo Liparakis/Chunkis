@@ -26,13 +26,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.LongAdder;
 
 /**
  * Region-based storage system for Chunkis chunk deltas.
@@ -88,14 +82,6 @@ public final class CisStorage<B, S, P, N> {
      */
     private static final int MIN_DECOMPRESSED_SIZE = 8;
     /**
-     * Stores max prefetches.
-     */
-    private static final int MAX_PREFETCHES = 32;
-    /**
-     * Stores prefetch ttl millis.
-     */
-    private static final long PREFETCH_TTL_MILLIS = 2_000L;
-    /**
      * Root directory where {@code .cis} region files are stored.
      */
     private final Path storageDir;
@@ -123,56 +109,19 @@ public final class CisStorage<B, S, P, N> {
      */
     private final ThreadLocal<CisDecoder<S, N>> decoder;
     /**
-     * Bounded decoded-load prefetches keyed by chunk position.
-     */
-    private final ConcurrentHashMap<CisChunkPos, CompletableFuture<LoadResult<S, N>>> prefetchedLoads =
-            new ConcurrentHashMap<>();
-    /**
-     * Single worker keeps speculative disk work from competing with the server.
-     */
-    private final ExecutorService prefetchExecutor = Executors.newSingleThreadExecutor(runnable -> {
-        final Thread thread = new Thread(runnable, "Chunkis-CisPrefetch");
-        thread.setDaemon(true);
-        return thread;
-    });
-    /**
      * Entries that failed to open or decode this session. Writes to them are refused
      * (except an explicit {@link #replace}) so a chunk rebuilt without their data can
      * never overwrite them.
      */
     private final Set<CisChunkPos> unreadableEntries = ConcurrentHashMap.newKeySet();
     /**
-     * Set by {@link #close()}; later prefetches are ignored and writes fail loudly.
+     * Set by {@link #close()}; later writes fail loudly.
      */
     private volatile boolean closed;
     /**
      * Unreadable entries already reported as write-protected, to log once per chunk.
      */
     private final Set<CisChunkPos> reportedProtectedWrites = ConcurrentHashMap.newKeySet();
-    /**
-     * Stores prefetch requests.
-     */
-    private final LongAdder prefetchRequests = new LongAdder();
-    /**
-     * Stores prefetch accepted.
-     */
-    private final LongAdder prefetchAccepted = new LongAdder();
-    /**
-     * Stores prefetch hits.
-     */
-    private final LongAdder prefetchHits = new LongAdder();
-    /**
-     * Stores prefetch drops.
-     */
-    private final LongAdder prefetchDrops = new LongAdder();
-    /**
-     * Stores prefetch stored entries.
-     */
-    private final LongAdder prefetchStoredEntries = new LongAdder();
-    /**
-     * Stores prefetch non empty deltas.
-     */
-    private final LongAdder prefetchNonEmptyDeltas = new LongAdder();
 
     /**
      * Creates a new CIS storage instance.
@@ -459,7 +408,6 @@ public final class CisStorage<B, S, P, N> {
             // A write after close would reopen a region nobody closes again.
             throw new IOException("CIS storage " + storageDir + " is closed; refusing write for " + pos);
         }
-        prefetchedLoads.remove(pos);
 
         if (unreadableEntries.contains(pos)) {
             // The live chunk was rebuilt without this entry's data; writing it back would
@@ -492,7 +440,6 @@ public final class CisStorage<B, S, P, N> {
         if (!written) {
             return false;
         }
-        prefetchedLoads.remove(pos);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.REGION_STORAGE, ChunkTraceEventType.SAVE_FLUSH_COMPLETED,
                 ChunkTraceSeverity.INFO, ChunkTraceReason.STORAGE_WRITE, WRITE_SOURCE, "flush completed", null,
@@ -562,50 +509,6 @@ public final class CisStorage<B, S, P, N> {
     }
 
     /**
-     * Starts a bounded speculative load. The normal load path consumes the
-     * result if it is ready, otherwise it keeps its existing synchronous
-     * behavior.
-     *
-     * @param pos         chunk position
-     * @param operationId trace correlation id for the background load
-     */
-    public void prefetch(final CisChunkPos pos, final String operationId) {
-        Objects.requireNonNull(pos, "pos");
-        if (closed) {
-            return;
-        }
-        prefetchRequests.increment();
-        if (prefetchedLoads.size() >= MAX_PREFETCHES && !prefetchedLoads.containsKey(pos)) {
-            prefetchDrops.increment();
-            return;
-        }
-
-        prefetchedLoads.computeIfAbsent(pos, key -> {
-            prefetchAccepted.increment();
-            final CompletableFuture<LoadResult<S, N>> future = CompletableFuture.supplyAsync(
-                    () -> loadWithPresenceSync(key, operationId, false),
-                    prefetchExecutor
-            );
-            future.whenComplete((result, error) -> {
-                if (error != null) {
-                    prefetchedLoads.remove(key, future);
-                    return;
-                }
-                if (result.storageEntryPresent()) {
-                    prefetchStoredEntries.increment();
-                }
-                if (!result.delta()
-                        .isEmpty()) {
-                    prefetchNonEmptyDeltas.increment();
-                }
-                CompletableFuture.delayedExecutor(PREFETCH_TTL_MILLIS, TimeUnit.MILLISECONDS)
-                        .execute(() -> prefetchedLoads.remove(key, future));
-            });
-            return future;
-        });
-    }
-
-    /**
      * Loads a chunk delta and reports whether a storage entry existed before decoding.
      *
      * <p>The existence check and read share the same cached region file lookup, avoiding
@@ -617,20 +520,7 @@ public final class CisStorage<B, S, P, N> {
      */
     public LoadResult<S, N> loadWithPresence(final CisChunkPos pos, final String operationId) {
         Objects.requireNonNull(pos, "pos");
-        final CompletableFuture<LoadResult<S, N>> prefetched = prefetchedLoads.remove(pos);
-        if (prefetched != null) {
-            prefetchHits.increment();
-            try {
-                final LoadResult<S, N> result = prefetched.join();
-                if (!result.failed()) {
-                    return result;
-                }
-                // Re-run synchronously so the failure is logged and quarantined on this path.
-            } catch (final CompletionException ignored) {
-                // Fall back to the established synchronous recovery path.
-            }
-        }
-        return loadWithPresenceSync(pos, operationId, true);
+        return loadWithPresenceSync(pos, operationId);
     }
 
     /**
@@ -638,13 +528,12 @@ public final class CisStorage<B, S, P, N> {
      *
      * <p>A region that cannot be opened or an entry that cannot be decoded yields an
      * empty delta flagged {@link LoadResult#failed()}. The stored bytes are left in
-     * place; when {@code reportFailure} is set the failure is logged and the raw
-     * entry is copied to {@code quarantine/} so it survives a later overwrite.</p>
+     * place; the failure is logged and the raw entry is copied to {@code quarantine/}
+     * so it survives a later overwrite.</p>
      */
     private LoadResult<S, N> loadWithPresenceSync(
             final CisChunkPos pos,
-            final String operationId,
-            final boolean reportFailure
+            final String operationId
     ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_START,
@@ -663,11 +552,9 @@ public final class CisStorage<B, S, P, N> {
                     "load failed; stored entry left untouched: " + e.getMessage(), null, toChunkKey(pos),
                     toRegionKey(pos), operationId, null, null
             );
-            if (reportFailure) {
-                unreadableEntries.add(pos);
-                Chunkis.LOGGER.error("Chunkis: Failed to open CIS region for chunk {} in {}; stored data left untouched",
-                        pos, storageDir, e);
-            }
+            unreadableEntries.add(pos);
+            Chunkis.LOGGER.error("Chunkis: Failed to open CIS region for chunk {} in {}; stored data left untouched",
+                    pos, storageDir, e);
             return new LoadResult<>(newEmptyDelta(), false, true);
         }
         final boolean storageEntryPresent = regionRead.entryPresent();
@@ -707,13 +594,11 @@ public final class CisStorage<B, S, P, N> {
                     "load failed; stored entry left untouched: " + e.getMessage(), null, toChunkKey(pos),
                     toRegionKey(pos), operationId, null, null
             );
-            if (reportFailure) {
-                unreadableEntries.add(pos);
-                final Path quarantined = quarantine(pos, regionRead.compressedData());
-                Chunkis.LOGGER.error("Chunkis: Failed to decode CIS chunk {} in {} (reason {}); stored entry left "
-                                + "untouched, raw copy at {}", pos, storageDir, reason,
-                        quarantined != null ? quarantined : "<quarantine failed>", e);
-            }
+            unreadableEntries.add(pos);
+            final Path quarantined = quarantine(pos, regionRead.compressedData());
+            Chunkis.LOGGER.error("Chunkis: Failed to decode CIS chunk {} in {} (reason {}); stored entry left "
+                            + "untouched, raw copy at {}", pos, storageDir, reason,
+                    quarantined != null ? quarantined : "<quarantine failed>", e);
             return new LoadResult<>(newEmptyDelta(), storageEntryPresent, true);
         }
     }
@@ -763,29 +648,6 @@ public final class CisStorage<B, S, P, N> {
      */
     public void close() {
         closed = true;
-        prefetchExecutor.shutdown();
-        try {
-            if (!prefetchExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                prefetchExecutor.shutdownNow();
-            }
-        } catch (final InterruptedException e) {
-            Thread.currentThread()
-                    .interrupt();
-            prefetchExecutor.shutdownNow();
-        }
-        if (prefetchRequests.sum() > 0) {
-            Chunkis.LOGGER.info(
-                    "Chunkis prefetch summary: requests={}, accepted={}, storedEntries={}, nonEmpty={}, hits={}, drops={}, unused={}",
-                    prefetchRequests.sum(),
-                    prefetchAccepted.sum(),
-                    prefetchStoredEntries.sum(),
-                    prefetchNonEmptyDeltas.sum(),
-                    prefetchHits.sum(),
-                    prefetchDrops.sum(),
-                    Math.max(0L, prefetchAccepted.sum() - prefetchHits.sum())
-            );
-        }
-        prefetchedLoads.clear();
 
         synchronized (regionFiles) {
             regionFiles.closeAll();
@@ -803,7 +665,6 @@ public final class CisStorage<B, S, P, N> {
      */
     private boolean clearChunk(final CisChunkPos pos) {
         try {
-            prefetchedLoads.remove(pos);
             regionFiles.inRegion(pos, false, null, regionFile -> {
                 regionFile.write(pos, null);
                 regionFile.releaseFreesIfMany();

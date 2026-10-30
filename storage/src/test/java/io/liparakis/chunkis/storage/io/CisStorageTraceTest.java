@@ -176,34 +176,6 @@ class CisStorageTraceTest {
     }
 
     /**
-     * Performs consumes prefetched decoded delta on load.
-     */
-    @Test
-    void consumesPrefetchedDecodedDeltaOnLoad() throws Exception {
-        final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
-        final CisMapping<String, String, String> mapping = new CisMapping<>(
-                tempDir.resolve("global_ids.json"),
-                new TestBlockRegistryAdapter(),
-                stateAdapter,
-                new PropertyPacker<>(stateAdapter)
-        );
-        Files.createDirectories(tempDir.resolve("regions"));
-
-        final CisStorage<String, String, String, String> storage =
-                new CisStorage<>(tempDir.resolve("regions"), mapping, new TestNbtAdapter(), "air");
-        final CisChunkPos pos = new CisChunkPos(2, 3);
-        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
-        delta.addBlockChange(1, 70, 1, "stone");
-        assertThat(storage.save(pos, delta, "save-prefetch")).isTrue();
-
-        storage.prefetch(pos, "prefetch-op");
-        final ChunkDelta<String, String> loaded = storage.load(pos, "load-after-prefetch");
-        storage.close();
-
-        assertThat(loaded.getBlockChangesCount()).isEqualTo(1);
-    }
-
-    /**
      * Reads chunks of more regions than the cache keeps open from several threads while saves keep evicting
      * regions, and expects every read to return its chunk: a read that finds its region closed by eviction is
      * retried, never reported as a failed load.

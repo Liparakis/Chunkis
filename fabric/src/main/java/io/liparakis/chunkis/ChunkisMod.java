@@ -11,7 +11,6 @@ import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
 import io.liparakis.chunkis.world.entity.capture.StoredEntityFingerprints;
-import io.liparakis.chunkis.world.tracking.load.CisLoadPrefetcher;
 import io.liparakis.chunkis.world.tracking.load.ColdLoadDeltaHandoff;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
@@ -27,7 +26,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
@@ -79,8 +77,6 @@ public final class ChunkisMod implements ModInitializer {
         ServerWorldEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.retire(world));
         ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
         ServerTickEvents.START_SERVER_TICK.register(server1 -> BaseChunkCaptureUtil.tick());
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> CisLoadPrefetcher.prefetchAroundPlayer(
-                handler.player));
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             PortalChunkIndexManager.flushDirty();
