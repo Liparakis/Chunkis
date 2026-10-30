@@ -419,7 +419,7 @@ final class StressScenario implements StressRun {
      */
     private void enter(final Step next) {
         // Lines profiles up with phases: JFR samples carry wall-clock times, like the log.
-        Chunkis.LOGGER.info("Chunkis stress: step {} at tick {}", next, tick);
+        Chunkis.LOGGER.info("Chunkis stress: step {} at tick {} ({})", next, tick, java.time.LocalTime.now());
         step = next;
         stepStartTick = tick;
         stepStartNanos = System.nanoTime();
