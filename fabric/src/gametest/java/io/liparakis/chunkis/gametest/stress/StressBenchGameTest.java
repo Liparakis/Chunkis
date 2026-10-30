@@ -19,7 +19,7 @@ public final class StressBenchGameTest {
     /**
      * Scenario currently running, or {@code null}; read by the global event hooks.
      */
-    private static StressScenario active;
+    private static StressRun active;
 
     /**
      * Whether the global event hooks are registered.
@@ -49,6 +49,28 @@ public final class StressBenchGameTest {
         }
         registerHooks();
         final StressScenario scenario = new StressScenario(context);
+        active = scenario;
+        scenario.begin();
+        context.runAtEveryTick(() -> {
+            if (active == scenario && scenario.tick()) {
+                active = null;
+            }
+        });
+    }
+
+    /**
+     * Runs the flight scenario: a player flying out over stored terrain and back.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 72_000)
+    public void flightOutAndBack(final TestContext context) {
+        if (!Boolean.getBoolean("chunkis.stress")) {
+            context.complete();
+            return;
+        }
+        registerHooks();
+        final FlightScenario scenario = new FlightScenario(context);
         active = scenario;
         scenario.begin();
         context.runAtEveryTick(() -> {

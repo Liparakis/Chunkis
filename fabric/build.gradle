@@ -98,11 +98,16 @@ tasks.named("runGameTest") {
     // live-object class histogram next to the report.
     if (providers.gradleProperty("chunkisStress").orNull == "true") {
         systemProperty("chunkis.stress", "true")
-        ["size", "rounds", "editsPerChunk", "chunksPerTick", "tps", "vanilla", "touchedPercent", "natural", "histogram", "anchorX", "anchorZ"].each { key ->
+        ["size", "rounds", "editsPerChunk", "chunksPerTick", "tps", "vanilla", "touchedPercent", "natural", "histogram", "anchorX", "anchorZ", "flightSpeed", "flightBlocks"].each { key ->
             def value = providers.gradleProperty("chunkisStress" + key.capitalize()).orNull
             if (value != null) {
                 systemProperty("chunkis.stress." + key, value)
             }
+        }
+        // -PchunkisRecentChunkCacheMb=<mb> sets the budget of recently unloaded chunks kept for fast reloads.
+        def recentCache = providers.gradleProperty("chunkisRecentChunkCacheMb").orNull
+        if (recentCache != null) {
+            systemProperty("chunkis.recentChunkCacheMb", recentCache)
         }
         // -PchunkisStressJfr=<file.jfr> records a JFR profile of the run.
         def jfr = providers.gradleProperty("chunkisStressJfr").orNull

@@ -37,7 +37,11 @@ final class StressMetrics {
         /** Applying block, block-entity and entity edits. */
         EDIT,
         /** Ticks right after an autosave pass. */
-        SAVE
+        SAVE,
+        /** Flight scenario: flying away from the start, over terrain stored on an earlier leg. */
+        OUTBOUND,
+        /** Flight scenario: flying back toward the start. */
+        RETURN
     }
 
     /**

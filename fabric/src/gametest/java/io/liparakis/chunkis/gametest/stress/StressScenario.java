@@ -39,7 +39,7 @@ import net.minecraft.world.chunk.WorldChunk;
  * <p>All randomness is seeded so runs are comparable. Settings come from {@code chunkis.stress.*}
  * system properties.</p>
  */
-final class StressScenario {
+final class StressScenario implements StressRun {
 
     /**
      * Height of the filled volume above the generated ground.
@@ -249,7 +249,8 @@ final class StressScenario {
      *
      * @return metrics
      */
-    StressMetrics metrics() {
+    @Override
+    public StressMetrics metrics() {
         return metrics;
     }
 
@@ -282,7 +283,8 @@ final class StressScenario {
      *
      * @param loaded loaded chunk
      */
-    void onChunkLoad(final WorldChunk loaded) {
+    @Override
+    public void onChunkLoad(final WorldChunk loaded) {
         if (loaded.getWorld() != world) {
             return;
         }
@@ -296,7 +298,8 @@ final class StressScenario {
      *
      * @param unloaded unloaded chunk
      */
-    void onChunkUnload(final WorldChunk unloaded) {
+    @Override
+    public void onChunkUnload(final WorldChunk unloaded) {
         if (unloaded.getWorld() != world) {
             return;
         }
@@ -310,7 +313,8 @@ final class StressScenario {
      *
      * @return true once the scenario finished
      */
-    boolean tick() {
+    @Override
+    public boolean tick() {
         tick++;
         switch (step) {
             case WAIT_INITIAL_LOAD -> {
@@ -429,7 +433,7 @@ final class StressScenario {
     /**
      * Writes the JVM's class histogram of live objects, taken while the area is still loaded, next to the report.
      */
-    private static void writeHeapHistogram() {
+    static void writeHeapHistogram() {
         try {
             final String histogram = (String) java.lang.management.ManagementFactory.getPlatformMBeanServer()
                     .invoke(new javax.management.ObjectName("com.sun.management:type=DiagnosticCommand"),
