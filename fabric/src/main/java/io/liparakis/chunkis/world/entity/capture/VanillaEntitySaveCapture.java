@@ -142,8 +142,9 @@ public final class VanillaEntitySaveCapture {
     }
 
     /**
-     * Loads the persisted delta for {@code chunkPos}, or returns {@code null} when
-     * storage is closed, has no entry, or the entry cannot be read.
+     * Loads the persisted delta for {@code chunkPos} without its blocks, as a released
+     * delta whose blocks stay the stored entry's, or returns {@code null} when storage is
+     * closed, has no entry, or the entry cannot be read.
      *
      * <p>A clean tracker entry means any async write already finished, so the
      * stored entry is current. The entry is never cleared on read failure.</p>
@@ -155,11 +156,12 @@ public final class VanillaEntitySaveCapture {
         }
         final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
         final CisChunkPos cisPos = FabricCisStorageHelper.toStoragePos(chunkPos);
-        if (!storage.contains(cisPos)) {
-            return null;
-        }
         try {
-            final ChunkDelta<BlockState, NbtCompound> delta = storage.loadWithoutClearing(cisPos);
+            // Entities only: the blocks stay the stored entry's (a released delta), not decoded on this thread.
+            final ChunkDelta<BlockState, NbtCompound> delta = storage.loadReleasedWithoutClearing(cisPos);
+            if (delta == null) {
+                return null;
+            }
             delta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(delta));
             return delta;
         } catch (final IOException e) {

@@ -907,20 +907,7 @@ public final class CisStorage<B, S, P, N> {
             return newEmptyDelta();
         }
 
-        final byte[] decompressed;
-        try {
-            decompressed = compressionContext.decompress(compressedData);
-        } catch (final IOException e) {
-            throw e;
-        } catch (final Exception e) {
-            throw new IOException("Failed to decompress CIS chunk " + pos, e);
-        }
-
-        if (decompressed.length < MIN_DECOMPRESSED_SIZE) {
-            throw new IOException("Decompressed CIS data too small for chunk " + pos + ": " + decompressed.length +
-                    " bytes (compressed size: " + compressedData.length + ")");
-        }
-
+        final byte[] decompressed = decompressEntry(pos, compressedData);
         final int blockPartLength = io.liparakis.chunkis.core.codec.CisBlockPart.length(decompressed);
         final long[] blockPartHash = blockPartLength < 0 ? null
                 : io.liparakis.chunkis.core.codec.CisBlockPart.hash(decompressed, 0, blockPartLength);
@@ -939,6 +926,63 @@ public final class CisStorage<B, S, P, N> {
                     .decode(decompressed);
         }
         delta.setStoredBlockPartHash(blockPartHash);
+        return delta;
+    }
+
+    /**
+     * Decompresses a stored entry.
+     *
+     * @param pos            chunk position, for errors
+     * @param compressedData the stored bytes
+     * @return the payload
+     * @throws IOException when the bytes do not decompress to a plausible payload
+     */
+    private byte[] decompressEntry(final CisChunkPos pos, final byte[] compressedData) throws IOException {
+        final byte[] decompressed;
+        try {
+            decompressed = compressionContext.decompress(compressedData);
+        } catch (final IOException e) {
+            throw e;
+        } catch (final Exception e) {
+            throw new IOException("Failed to decompress CIS chunk " + pos, e);
+        }
+        if (decompressed.length < MIN_DECOMPRESSED_SIZE) {
+            throw new IOException("Decompressed CIS data too small for chunk " + pos + ": " + decompressed.length
+                    + " bytes (compressed size: " + compressedData.length + ")");
+        }
+        return decompressed;
+    }
+
+    /**
+     * Loads a chunk's stored entry without decoding its blocks, as a released delta
+     * ({@link ChunkDelta#isBlockPayloadReleased()}): block entities, entities and metadata are decoded, and the
+     * blocks stay the stored entry's, which every save or reload of a released delta reads back from storage.
+     *
+     * <p>For callers that change only non-block state of a chunk that is not loaded, such as entity saves, and
+     * would otherwise decode every block for nothing. Like {@link #loadWithoutClearing}, a failure never clears
+     * the entry.</p>
+     *
+     * @param pos chunk position
+     * @return the released delta, clean, or {@code null} when no entry exists
+     * @throws IOException if region I/O, decompression, or decode fails
+     */
+    public ChunkDelta<S, N> loadReleasedWithoutClearing(final CisChunkPos pos) throws IOException {
+        Objects.requireNonNull(pos, "pos");
+        final byte[] compressedData = readRegion(pos, null).compressedData();
+        if (compressedData == null) {
+            return null;
+        }
+        final byte[] decompressed = decompressEntry(pos, compressedData);
+        final int blockPartLength = io.liparakis.chunkis.core.codec.CisBlockPart.length(decompressed);
+        if (blockPartLength < 0) {
+            throw new IOException("CIS chunk " + pos + " has a truncated block part (" + decompressed.length
+                    + " bytes decompressed)");
+        }
+        final ChunkDelta<S, N> delta = decoder.get()
+                .decodeWithoutBlocks(decompressed, blockPartLength);
+        delta.setStoredBlockPartHash(io.liparakis.chunkis.core.codec.CisBlockPart.hash(decompressed, 0,
+                blockPartLength));
+        delta.releaseBlockPayload();
         return delta;
     }
 

@@ -252,6 +252,41 @@ class CisStorageTraceTest {
     }
 
     /**
+     * Loading an entry without its blocks yields a clean released delta: no block instructions, its block entities
+     * intact, and the same block-part hash a full load reports. A missing entry yields {@code null}.
+     */
+    @Test
+    void loadReleasedWithoutClearingSkipsOnlyTheBlocks() throws Exception {
+        final TestBlockStateAdapter stateAdapter = new TestBlockStateAdapter();
+        final CisMapping<String, String, String> mapping = new CisMapping<>(
+                tempDir.resolve("global_ids.json"),
+                new TestBlockRegistryAdapter(),
+                stateAdapter,
+                new PropertyPacker<>(stateAdapter)
+        );
+        final Path regionDir = Files.createDirectories(tempDir.resolve("regions"));
+        final CisStorage<String, String, String, String> storage =
+                new CisStorage<>(regionDir, mapping, new TestNbtAdapter(), "air");
+        final CisChunkPos pos = new CisChunkPos(3, 4);
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        for (int i = 0; i < 5; i++) {
+            delta.addBlockChange(i, 64, 2, "stone");
+        }
+        delta.addBlockEntityData(1, 64, 2, "chest-data");
+        assertThat(storage.save(pos, delta, "save")).isTrue();
+
+        final ChunkDelta<String, String> released = storage.loadReleasedWithoutClearing(pos);
+        assertThat(released.isBlockPayloadReleased()).isTrue();
+        assertThat(released.isDirty()).isFalse();
+        assertThat(released.getBlockChangesCount()).isZero();
+        assertThat(released.getBlockEntities().values()).containsExactly("chest-data");
+        assertThat(released.getStoredBlockPartHash())
+                .isEqualTo(storage.loadWithPresence(pos, "full").delta().getStoredBlockPartHash());
+        assertThat(storage.loadReleasedWithoutClearing(new CisChunkPos(40, 40))).isNull();
+        storage.close();
+    }
+
+    /**
      * Saves chunks of more regions than the cache keeps open from several threads at once, so regions keep being
      * evicted under writes in progress, and expects every last save to be what a reopened storage reads back: a
      * write that meets its region closed by eviction is retried, never lost or half-applied.
