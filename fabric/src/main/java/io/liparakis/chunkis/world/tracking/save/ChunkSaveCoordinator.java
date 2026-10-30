@@ -868,12 +868,6 @@ public final class ChunkSaveCoordinator {
         if (pending.isEmpty()) {
             return;
         }
-        Chunkis.LOGGER.warn(
-                "Chunkis [CLOSE]: Force-saving {} remaining dirty delta(s) for {}",
-                pending.size(),
-                world.getRegistryKey()
-                        .getValue()
-        );
         final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> toSave = new LinkedHashMap<>();
         for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
             final ChunkDelta<BlockState, NbtCompound> delta = entry.getValue();
@@ -892,6 +886,12 @@ public final class ChunkSaveCoordinator {
                 toSave.put(entry.getKey(), deltaToSave);
             }
         }
+        if (toSave.isEmpty()) {
+            return;
+        }
+        // Counted after filtering: the tracker also holds clean deltas, which have nothing to save.
+        Chunkis.LOGGER.warn("Chunkis [CLOSE]: Force-saving {} remaining dirty delta(s) for {}", toSave.size(),
+                world.getRegistryKey().getValue());
         FabricCisStorageHelper.saveTrackedDeltas(world, storage, toSave);
     }
 
