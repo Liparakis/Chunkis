@@ -29,9 +29,12 @@ import net.minecraft.world.Heightmap;
 import net.minecraft.world.chunk.WorldChunk;
 
 /**
- * A simulated player flying in a straight line across natural terrain and back, as players explore: chunks stream
- * in ahead and unload behind, across many region files. A window of forced chunks follows the flight position, as
- * the chunks around a player would; a mock player would not load any, since it has no connection.
+ * A simulated player flying in a straight line and back, as players explore: chunks stream in ahead and unload
+ * behind, across many region files. A window of forced chunks follows the flight position, as the chunks around a
+ * player would; a mock player would not load any, since it has no connection.
+ *
+ * <p>The terrain is the game-test world preset's, which is nearly empty, unless {@code chunkis.stress.natural} is
+ * set; disk figures only mean something with natural terrain.</p>
  *
  * <p>Three legs. The first flies out over fresh terrain and generates it; it is not measured. The second flies back
  * and the third out again, both over terrain the first leg stored, so they measure loading stored chunks while

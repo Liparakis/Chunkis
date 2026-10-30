@@ -98,7 +98,7 @@ tasks.named("runGameTest") {
     // live-object class histogram next to the report.
     if (providers.gradleProperty("chunkisStress").orNull == "true") {
         systemProperty("chunkis.stress", "true")
-        ["size", "rounds", "editsPerChunk", "chunksPerTick", "tps", "vanilla", "touchedPercent", "natural", "histogram", "anchorX", "anchorZ", "flightSpeed", "flightBlocks", "stages", "probeWrites", "fastGeneration"].each { key ->
+        ["size", "rounds", "editsPerChunk", "chunksPerTick", "tps", "vanilla", "touchedPercent", "natural", "histogram", "anchorX", "anchorZ", "flightSpeed", "flightBlocks", "stages", "probeWrites", "fastGeneration", "countWrites"].each { key ->
             def value = providers.gradleProperty("chunkisStress" + key.capitalize()).orNull
             if (value != null) {
                 systemProperty("chunkis.stress." + key, value)

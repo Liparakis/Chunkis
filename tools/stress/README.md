@@ -44,3 +44,6 @@ gradlew :fabric:runGameTest -PchunkisStress=true -PgametestFilter=chunkis-gamete
 - `-PchunkisStressProbeWrites=true` counts region writes that store exactly what is already on disk. It reads every entry before writing it, so its timings mean nothing.
 - `-PchunkisStressFastGeneration=true` runs leg 0 without real tick pacing, several times faster. It changes the cache contents and the pending work leg 1 starts with, so use it only for runs that count things, never to compare timings.
 - `-PchunkisRecentChunkCacheMb=<mb>` sets the recent-chunk cache's budget.
+- `-PchunkisStressCountWrites=true` logs, when the server stops, how many region writes each store took and their bytes: the payload, and the bytes it occupies on disk (vanilla rounds every chunk up to 4 KiB sectors). Works for both scenarios and both storage modes.
+
+The flight runs on the game-test world preset, which is nearly empty, unless `-PchunkisStressNatural=true` is given. Its chunks are tiny, so its disk figures say little about real worlds; pass the flag for those.

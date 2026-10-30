@@ -105,6 +105,8 @@ public final class StressBenchGameTest {
             return;
         }
         hooksRegistered = true;
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(
+                server -> WriteVolume.log());
         // The scenario ticks here, inside the measured tick, rather than through TestContext.runAtEveryTick: that
         // queues one task per remaining tick of the test's budget, and the test framework scans all of them every
         // tick, which cost more server-thread time than the scenario itself.

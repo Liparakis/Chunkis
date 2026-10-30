@@ -9,6 +9,7 @@
         "VanillaStorageModeMixin",
         "profile.ChunkDeltaProbeMixin",
         "profile.ChunkGeneratingProfileMixin",
+        "profile.CisRegionWriteVolumeMixin",
         "profile.GlobalChunkTrackerProbeMixin",
         "profile.CisDecoderProfileMixin",
         "profile.CisNbtUtilProfileMixin",
@@ -18,6 +19,7 @@
         "profile.RegionFileWriteProbeMixin",
         "profile.SerializedChunkProfileMixin",
         "profile.SyntheticLoadNbtProviderProfileMixin",
+        "profile.VanillaRegionWriteVolumeMixin",
         "profile.VanillaLoadProfileMixin",
         "profile.WorldChunkProfileMixin"
     ],

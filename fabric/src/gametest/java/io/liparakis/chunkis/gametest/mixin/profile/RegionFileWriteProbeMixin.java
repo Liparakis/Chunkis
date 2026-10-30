@@ -35,7 +35,8 @@ public abstract class RegionFileWriteProbeMixin {
     @Inject(method = "write(Lio/liparakis/chunkis/core/CisChunkPos;[BLjava/lang/String;)V", at = @At("HEAD"))
     private void chunkis$compareWithStored(final CisChunkPos pos, final byte[] data, final String operationId,
             final CallbackInfo ci) throws IOException {
-        if (!CHUNKIS$PROBE) {
+        // A null payload is a delete (CompressedRegionStore#delete), not a write.
+        if (!CHUNKIS$PROBE || data == null) {
             return;
         }
         final RegionFile self = (RegionFile) (Object) this;
