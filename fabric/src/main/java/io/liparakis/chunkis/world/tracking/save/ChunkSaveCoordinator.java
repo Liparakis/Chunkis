@@ -3,6 +3,7 @@ package io.liparakis.chunkis.world.tracking.save;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.PalettedContainer;
 import io.liparakis.chunkis.world.restoration.core.PalettedContainerFields;
+import io.liparakis.chunkis.mixin.accessor.ChunkSaveFlagAccessor;
 import io.liparakis.chunkis.mixin.accessor.WorldChunkAccessor;
 import io.liparakis.chunkis.world.restoration.nbt.CisMetadataCodec;
 import io.liparakis.chunkis.Chunkis;
@@ -157,6 +158,8 @@ public final class ChunkSaveCoordinator {
         final Chunk chunk = chunkToSave instanceof WrapperProtoChunk wrapper
                 ? wrapper.getWrappedChunk()
                 : chunkToSave;
+        // Read first: vanilla's flag is the wrapped chunk's, and says whether anything but entities changed.
+        final boolean vanillaUnsaved = !(chunk instanceof ChunkSaveFlagAccessor flag) || flag.chunkis$vanillaNeedsSaving();
         ChunkDelta<BlockState, NbtCompound> delta = resolveDeltaForSave(chunk, pos);
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             traceBypassedSave(pos, delta, chunk, operationId);
@@ -223,7 +226,9 @@ public final class ChunkSaveCoordinator {
         }
         PalettedContainer<BlockState>[] deferredBlocks = null;
         if (delta != null && delta.isBlockPayloadReleased() && delta.isDirty()) {
-            deferredBlocks = deferBlocks ? captureDeferredBlocks(chunk, delta, operationId) : null;
+            deferredBlocks = deferBlocks
+                    ? captureDeferredBlocks(chunk, delta, !vanillaUnsaved && holdsNonBlockState(delta), operationId)
+                    : null;
             if (deferredBlocks == null) {
                 // Unloading, or only the entity or structure capture changed it after the block capture saw it
                 // clean.
@@ -718,19 +723,34 @@ public final class ChunkSaveCoordinator {
      * Captures a snapshot of a chunk whose delta released its block payload, copying its blocks instead of
      * capturing them, when the chunk can be snapshotted now.
      *
-     * @param chunk       chunk being saved
-     * @param delta       its released delta
-     * @param operationId active save operation ID
+     * @param chunk                chunk being saved
+     * @param delta                its released delta
+     * @param nonBlockStateCurrent whether the delta's non-block state is still the chunk's
+     * @param operationId          active save operation ID
      * @return copied block containers by section index, or {@code null} when no snapshot could be taken
      */
     private static PalettedContainer<BlockState>[] captureDeferredBlocks(final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta, final String operationId) {
+            final ChunkDelta<BlockState, NbtCompound> delta, final boolean nonBlockStateCurrent,
+            final String operationId) {
         if (!(chunk instanceof WorldChunk worldChunk)
                 || !ChunkStatus.FULL.equals(chunk.getStatus())
                 || SnapshotSafetyChecker.isSnapshotUnsafe(worldChunk)) {
             return null;
         }
-        return CisSnapshotCapture.captureDeferringBlocks(worldChunk, delta, operationId);
+        return CisSnapshotCapture.captureDeferringBlocks(worldChunk, delta, nonBlockStateCurrent, operationId);
+    }
+
+    /**
+     * Reports whether a delta holds a complete capture of everything but blocks and entities (block entities, light,
+     * biomes, heightmaps, ticks), which a save can keep when vanilla saw none of it change.
+     *
+     * @param delta the delta
+     * @return true when its metadata has the stored sections and heightmaps a full capture writes
+     */
+    private static boolean holdsNonBlockState(final ChunkDelta<BlockState, NbtCompound> delta) {
+        final NbtCompound metadata = delta.getChunkMetadata();
+        return metadata != null && metadata.contains(CisNbtUtil.STORED_SECTIONS_KEY)
+                && metadata.contains(CisNbtUtil.STORED_HEIGHTMAPS_KEY);
     }
 
     /**

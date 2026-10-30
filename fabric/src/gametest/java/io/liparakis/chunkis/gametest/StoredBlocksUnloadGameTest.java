@@ -6,6 +6,7 @@ import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.entity.capture.VanillaEntitySaveCapture;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
@@ -141,7 +142,7 @@ public final class StoredBlocksUnloadGameTest {
      */
     @GameTest(maxTicks = 600)
     public void failedUnloadSaveKeepsChangeForReload(final TestContext context) {
-        final Fixture fixture = Fixture.create(context, 3300);
+        final Fixture fixture = Fixture.create(context, 4700);
         fixture.storeAndReloadReleased()
                 .createAndAdd(() -> {
                     fixture.fillChest();
@@ -171,7 +172,7 @@ public final class StoredBlocksUnloadGameTest {
      */
     @GameTest(maxTicks = 600)
     public void untouchedReloadedChunkStaysCleanAndUntracked(final TestContext context) {
-        final Fixture fixture = Fixture.create(context, 3500);
+        final Fixture fixture = Fixture.create(context, 4300);
         fixture.storeAndReloadReleased()
                 .createAndAdd(() -> {
                     final ChunkDelta<?, ?> delta = fixture.liveDelta();
@@ -189,6 +190,64 @@ public final class StoredBlocksUnloadGameTest {
                             Text.literal("Unloading untouched chunk " + fixture.target
                                     + " left its delta in the dirty tracker."));
                 })
+                .completeIfSuccessful();
+    }
+
+    /**
+     * Unloads a stored chunk whose only change since its last save is a new entity, and expects the stored entry
+     * to keep every block, the chest, the light and the heightmaps, and to gain the entity: the save keeps the
+     * delta's earlier capture of everything but blocks and entities instead of capturing it again.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 600)
+    public void entityOnlyUnloadSaveKeepsTheRestOfTheChunk(final TestContext context) {
+        final Fixture fixture = Fixture.create(context, 3700);
+        final UUID[] pig = new UUID[1];
+        fixture.storeAndReloadReleased()
+                .createAndAdd(() -> {
+                    // Clears vanilla's own flag, which the reload set: from here vanilla sees no change but the pig.
+                    fixture.world.getChunkManager().save(false);
+                    AsyncCisSaveManager.flushAndClose(fixture.world);
+                    pig[0] = fixture.spawnPig();
+                    fixture.unload();
+                })
+                .createAndAdd(fixture::awaitUnloaded)
+                .createAndAdd(() -> {
+                    AsyncCisSaveManager.flushAndClose(fixture.world);
+                    fixture.assertStoredEntry(pig[0]);
+                    fixture.assertStoredNonBlockState();
+                })
+                .completeIfSuccessful();
+    }
+
+    /**
+     * After the same save, changes a block and the chest and adds an entity, and expects all of them stored: a
+     * change vanilla tracks still makes the save capture everything.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 600)
+    public void trackedChangeWithEntityChangeIsSavedWhole(final TestContext context) {
+        final Fixture fixture = Fixture.create(context, 4500);
+        final UUID[] pig = new UUID[1];
+        fixture.storeAndReloadReleased()
+                .createAndAdd(() -> {
+                    fixture.world.getChunkManager().save(false);
+                    AsyncCisSaveManager.flushAndClose(fixture.world);
+                    fixture.fillChest();
+                    pig[0] = fixture.spawnPig();
+                    fixture.unload();
+                })
+                .createAndAdd(fixture::awaitUnloaded)
+                .createAndAdd(() -> {
+                    AsyncCisSaveManager.flushAndClose(fixture.world);
+                    fixture.assertStoredEntry(pig[0]);
+                    fixture.assertStoredNonBlockState();
+                    fixture.load();
+                })
+                .createAndAdd(fixture::assertReloadedWithChange)
+                .createAndAdd(fixture::unforce)
                 .completeIfSuccessful();
     }
 
@@ -471,6 +530,32 @@ public final class StoredBlocksUnloadGameTest {
          */
         CisChunkPos cisPos() {
             return FabricCisStorageHelper.toStoragePos(target);
+        }
+
+        /**
+         * Spawns a pig in the test chunk.
+         *
+         * @return its UUID
+         */
+        UUID spawnPig() {
+            final PigEntity entity = EntityType.PIG.create(world, SpawnReason.COMMAND);
+            final BlockPos at = target.getBlockPos(8, baseY + 20, 8);
+            entity.refreshPositionAndAngles(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+            world.spawnEntity(entity);
+            return entity.getUuid();
+        }
+
+        /**
+         * Expects the stored entry to hold the chest and the light and heightmaps a full capture writes.
+         */
+        void assertStoredNonBlockState() {
+            final ChunkDelta<BlockState, NbtCompound> stored = storage().load(cisPos());
+            final NbtCompound metadata = stored.getChunkMetadata();
+            context.assertTrue(metadata != null && metadata.contains(CisNbtUtil.STORED_SECTIONS_KEY)
+                            && metadata.contains(CisNbtUtil.STORED_HEIGHTMAPS_KEY),
+                    Text.literal("Stored entry of " + target + " lost its light or heightmaps."));
+            context.assertTrue(!stored.getBlockEntities().isEmpty(),
+                    Text.literal("Stored entry of " + target + " lost the chest."));
         }
     }
 

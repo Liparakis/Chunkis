@@ -5,6 +5,7 @@
     "mixins": [
         "accessor.ChunkBlockEntityNbtAccessor",
         "accessor.ChunkSectionAccessor",
+        "accessor.ChunkSaveFlagAccessor",
         "accessor.WorldChunkAccessor",
         "accessor.PalettedContainerAccessor",
         "accessor.ServerChunkLoadingManagerAccessor",

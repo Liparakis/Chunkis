@@ -128,18 +128,25 @@ public final class CisSnapshotCapture {
      * instead, as vanilla copies its sections to save them, and turned into the saved payload off the server
      * thread. The delta keeps no block instructions.
      *
-     * @param chunk       loaded chunk
-     * @param target      released delta of the chunk
-     * @param operationId save operation id
+     * <p>When vanilla saw nothing but entities change since the last save, the delta's block entities, light,
+     * biomes, heightmaps and ticks are still the chunk's, and capturing them again on the server thread would only
+     * repeat that work: they are kept. Vanilla itself saves a chunk only once something it tracks changed, so
+     * what is kept is never staler than what vanilla would have on disk. The blocks are still copied, since block
+     * changes that bypass Chunkis's tracking are only caught there.</p>
+     *
+     * @param chunk                loaded chunk
+     * @param target               released delta of the chunk
+     * @param nonBlockStateCurrent whether vanilla saw nothing but entities change since the last save, and the
+     *                             delta holds a complete capture of the rest
+     * @param operationId          save operation id
      * @return a copy of every section's block container, {@code null} where a section holds only air
      */
     public static PalettedContainer<BlockState>[] captureDeferringBlocks(final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> target, final String operationId) {
+            final ChunkDelta<BlockState, NbtCompound> target, final boolean nonBlockStateCurrent,
+            final String operationId) {
         final int liveNonAirBlocks = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
         backUpOnBaselineShrink(chunk, SectionCaptureCache.lastNonAirBlocks(target), liveNonAirBlocks, operationId);
         PayloadWatchTracer.traceCapturedBlocks(chunk);
-        final Long2ObjectMap<NbtCompound> previousBlockEntities = new Long2ObjectOpenHashMap<>(target.getBlockEntities());
-        target.clearBlockEntityPayloads(false);
         final ChunkSection[] sections = chunk.getSectionArray();
         @SuppressWarnings("unchecked")
         final PalettedContainer<BlockState>[] blocks = new PalettedContainer[sections.length];
@@ -149,7 +156,12 @@ public final class CisSnapshotCapture {
             }
         }
         SectionCaptureCache.recordNonAirBlocks(target, liveNonAirBlocks);
-        captureNonBlockState(chunk, target, previousBlockEntities);
+        if (!nonBlockStateCurrent) {
+            final Long2ObjectMap<NbtCompound> previousBlockEntities =
+                    new Long2ObjectOpenHashMap<>(target.getBlockEntities());
+            target.clearBlockEntityPayloads(false);
+            captureNonBlockState(chunk, target, previousBlockEntities);
+        }
         return blocks;
     }
 
