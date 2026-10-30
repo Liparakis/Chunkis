@@ -61,14 +61,30 @@ public final class StageProfiler {
         /** {@code WorldChunk.updateAllBlockEntities}. */
         BLOCK_ENTITIES,
         /** {@code WorldChunk.addChunkTickSchedulers}. */
-        TICK_SCHEDULERS
+        TICK_SCHEDULERS,
+        /** Chunkis's save hook, {@code ChunkSaveCoordinator.save}; recorded under the outcome stages below. */
+        SAVE_HOOK,
+        /** Save hook calls that queued a write. */
+        SAVE_HOOK_DIRTY,
+        /** Save hook calls of Chunkis chunks with nothing to write. */
+        SAVE_HOOK_CLEAN,
+        /** Save hook calls left to vanilla. */
+        SAVE_HOOK_VANILLA,
+        /** Saving a chunk into the unfinished-chunk store. */
+        UNFINISHED_SAVE,
+        /** Vanilla's {@code SerializedChunk.fromChunk}: a vanilla save's work on the saving thread. */
+        VANILLA_SERIALIZE,
+        /** Attaching the entities vanilla saves to an unloaded chunk, reading its stored entry if needed. */
+        UNLOADED_ENTITY_CAPTURE
     }
 
     /**
      * Thread context a stage ran in, since storage reads also happen for saves.
      */
     public enum Context {
-        /** Any thread but Chunkis's save workers. */
+        /** The server thread, where time is tick time. */
+        SERVER,
+        /** Any other thread but Chunkis's save workers. */
         LOAD,
         /** A Chunkis async save worker, reading stored blocks back for a save. */
         SAVE
@@ -249,14 +265,26 @@ public final class StageProfiler {
      * @param stage stage
      */
     public static void end(final Stage stage) {
+        endAs(stage, stage);
+    }
+
+    /**
+     * Closes a stage and records it under another, for stages whose kind is only known at the end.
+     *
+     * @param started  the stage that was opened
+     * @param recorded the stage to record it as
+     */
+    public static void endAs(final Stage started, final Stage recorded) {
         if (!ENABLED) {
             return;
         }
+        final Stage stage = recorded;
         final long[] starts = STARTS.get();
-        final long wall = System.nanoTime() - starts[stage.ordinal() * 2];
-        final long allocated = THREADS.getCurrentThreadAllocatedBytes() - starts[stage.ordinal() * 2 + 1];
-        final int context = Thread.currentThread().getName().startsWith("Chunkis-AsyncSave")
-                ? Context.SAVE.ordinal() : Context.LOAD.ordinal();
+        final long wall = System.nanoTime() - starts[started.ordinal() * 2];
+        final long allocated = THREADS.getCurrentThreadAllocatedBytes() - starts[started.ordinal() * 2 + 1];
+        final String thread = Thread.currentThread().getName();
+        final int context = thread.startsWith("Chunkis-AsyncSave") ? Context.SAVE.ordinal()
+                : thread.equals("Server thread") ? Context.SERVER.ordinal() : Context.LOAD.ordinal();
         final LongAdder[] stats = STAGES[context][stage.ordinal()];
         stats[0].increment();
         stats[1].add(wall);
@@ -632,7 +660,11 @@ public final class StageProfiler {
                 entry.addProperty("meanAllocatedKb", stats[2].sum() / 1024.0 / calls);
                 stages.add(stage.name().toLowerCase(), entry);
             }
-            json.add("stages" + (context == Context.LOAD ? "" : "OnSaveThreads"), stages);
+            json.add(switch (context) {
+                case SERVER -> "stagesOnServerThread";
+                case LOAD -> "stages";
+                case SAVE -> "stagesOnSaveThreads";
+            }, stages);
         }
         final JsonObject generation = new JsonObject();
         for (final Generation step : Generation.values()) {

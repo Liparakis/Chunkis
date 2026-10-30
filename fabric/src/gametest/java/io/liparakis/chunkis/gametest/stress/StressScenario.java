@@ -331,6 +331,7 @@ final class StressScenario implements StressRun {
             case START_ROUND -> {
                 if (round == 1) {
                     metrics.start(chunkisDir, vanillaDirs());
+                    StageProfiler.reset();
                 }
                 resetPending();
                 // Ticket-only (no blocking getChunk), so loading is asynchronous like player movement.
@@ -417,6 +418,8 @@ final class StressScenario implements StressRun {
      * @param next next step
      */
     private void enter(final Step next) {
+        // Lines profiles up with phases: JFR samples carry wall-clock times, like the log.
+        Chunkis.LOGGER.info("Chunkis stress: step {} at tick {}", next, tick);
         step = next;
         stepStartTick = tick;
         stepStartNanos = System.nanoTime();
@@ -453,6 +456,8 @@ final class StressScenario implements StressRun {
      */
     private void finish() {
         metrics.stop();
+        // Before the size comparison below reads every stored chunk on this thread.
+        final JsonObject stages = StageProfiler.ENABLED ? StageProfiler.toJson() : null;
         AsyncCisSaveManager.flushAndClose(world);
         System.gc();
         final long retainedHeap = Runtime.getRuntime()
@@ -475,6 +480,9 @@ final class StressScenario implements StressRun {
         config.addProperty("dimension", world.getRegistryKey().getValue().toString());
         config.addProperty("natural", natural);
         metrics.setSizePerChunk(ChunkSizeComparison.measure(world, chunks));
+        if (stages != null) {
+            config.add("stages", stages);
+        }
         final Path report = metrics.writeReport(Path.of("chunkis-stress"), config, chunkisDir, retainedHeap);
         Chunkis.LOGGER.info("Chunkis stress: report written to {}", report.toAbsolutePath());
         StressBenchGameTest.setPacingTicks(false);

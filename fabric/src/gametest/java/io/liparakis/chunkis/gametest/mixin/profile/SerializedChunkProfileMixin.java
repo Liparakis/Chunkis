@@ -19,6 +19,26 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class SerializedChunkProfileMixin {
 
     /**
+     * Opens vanilla's save serialization.
+     *
+     * @param cir callback
+     */
+    @Inject(method = "fromChunk", at = @At("HEAD"))
+    private static void chunkis$beginSerialize(final CallbackInfoReturnable<SerializedChunk> cir) {
+        StageProfiler.begin(Stage.VANILLA_SERIALIZE);
+    }
+
+    /**
+     * Closes vanilla's save serialization.
+     *
+     * @param cir callback
+     */
+    @Inject(method = "fromChunk", at = @At("RETURN"))
+    private static void chunkis$endSerialize(final CallbackInfoReturnable<SerializedChunk> cir) {
+        StageProfiler.end(Stage.VANILLA_SERIALIZE);
+    }
+
+    /**
      * Opens the parse.
      *
      * @param cir callback

@@ -17,8 +17,11 @@
         "profile.PreloadedBlockSectionsProfileMixin",
         "profile.RecentChunkBlocksProfileMixin",
         "profile.RegionFileWriteProbeMixin",
+        "profile.SaveHookProfileMixin",
         "profile.SerializedChunkProfileMixin",
         "profile.SyntheticLoadNbtProviderProfileMixin",
+        "profile.UnfinishedSaveProfileMixin",
+        "profile.UnloadedEntityCaptureProfileMixin",
         "profile.VanillaRegionWriteVolumeMixin",
         "profile.VanillaLoadProfileMixin",
         "profile.WorldChunkProfileMixin"
