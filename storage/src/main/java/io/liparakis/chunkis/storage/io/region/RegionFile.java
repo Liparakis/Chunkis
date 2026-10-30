@@ -41,7 +41,7 @@ public final class RegionFile implements AutoCloseable {
     /**
      * Total header size: 1024 chunk entries - 8 bytes per entry.
      */
-    static final int HEADER_SIZE = 8192;
+    public static final int HEADER_SIZE = 8192;
     /**
      * Footer magic marking the trailing allocation metadata block.
      */

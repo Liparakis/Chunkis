@@ -22,6 +22,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * Cache hits mutate recency order, so both hits and misses take the write lock.
  * Eviction compacts and closes the least-recently-used file before removing it
  * from the cache.</p>
+ *
+ * <p>Rewrites never overwrite a live entry, so every rewrite leaves the old copy behind as
+ * free space, which later writes reuse only when they fit. Compaction gives that space
+ * back. It runs under the cache lock when a file is evicted during play, so there only a
+ * large slack pays for it; when the storage closes nothing waits on it, and a much smaller
+ * slack does.</p>
  */
 final class RegionFileCache {
 
@@ -30,9 +36,17 @@ final class RegionFileCache {
      */
     private static final int REGION_SHIFT = 5;
     /**
-     * Minimum reclaimable bytes before closing a region triggers compaction.
+     * Minimum reclaimable bytes before evicting a region during play triggers compaction.
      */
     static final long COMPACT_MIN_SLACK_BYTES = 1L << 20;
+    /**
+     * Minimum reclaimable bytes before closing the storage compacts a region.
+     */
+    static final long CLOSE_COMPACT_MIN_SLACK_BYTES = 64L << 10;
+    /**
+     * Minimum reclaimable share of a region's file, in percent, before closing the storage compacts it.
+     */
+    static final int CLOSE_COMPACT_MIN_SLACK_PERCENT = 10;
 
     /**
      * Stores storage dir.
@@ -56,11 +70,17 @@ final class RegionFileCache {
     }
 
     /**
-     * Compacts then closes one region file, logging failures without propagating them.
+     * Compacts then closes one region file, logging failures without propagating them. A failed compaction leaves
+     * the file as it was.
+     *
+     * @param regionFile     the file
+     * @param storageClosing whether the whole storage is closing, which compacts at a smaller slack than an
+     *                       eviction during play
      */
-    static void closeRegionFile(final RegionFile regionFile) {
-        // Compaction rewrites and re-verifies the whole file; only pay for it when slack is large.
-        if (shouldCompactOnClose(regionFile.spaceStats())) {
+    static void closeRegionFile(final RegionFile regionFile, final boolean storageClosing) {
+        // Compaction rewrites and re-verifies the whole file.
+        final RegionFile.RegionSpaceStats stats = regionFile.spaceStats();
+        if (storageClosing ? shouldCompactOnStorageClose(stats) : shouldCompactOnClose(stats)) {
             try {
                 regionFile.compact();
             } catch (final Exception e) {
@@ -85,6 +105,21 @@ final class RegionFileCache {
     static boolean shouldCompactOnClose(final RegionFile.RegionSpaceStats stats) {
         final long slack = stats.physicalBytes() - stats.liveBytes();
         return slack >= COMPACT_MIN_SLACK_BYTES && slack * 2 >= stats.physicalBytes();
+    }
+
+    /**
+     * Returns whether a region should be compacted as the storage closes: at least
+     * {@value #CLOSE_COMPACT_MIN_SLACK_BYTES} bytes and {@value #CLOSE_COMPACT_MIN_SLACK_PERCENT} % of the
+     * file reclaimable. Reclaimable is everything but the header and the live entries; a compacted file keeps
+     * only those and an empty allocation footer.
+     *
+     * @param stats current space accounting for the region
+     * @return {@code true} when the region should be compacted
+     */
+    static boolean shouldCompactOnStorageClose(final RegionFile.RegionSpaceStats stats) {
+        final long reclaimable = stats.physicalBytes() - RegionFile.HEADER_SIZE - stats.liveBytes();
+        return reclaimable >= CLOSE_COMPACT_MIN_SLACK_BYTES
+                && reclaimable * 100 >= stats.physicalBytes() * CLOSE_COMPACT_MIN_SLACK_PERCENT;
     }
 
     /**
@@ -204,11 +239,11 @@ final class RegionFileCache {
     }
 
     /**
-     * Compacts then closes every drained file.
+     * Compacts then closes every drained file, as the storage closes.
      */
     void closeAll() {
         for (final RegionFile regionFile : drain()) {
-            closeRegionFile(regionFile);
+            closeRegionFile(regionFile, true);
         }
     }
 
@@ -227,7 +262,7 @@ final class RegionFileCache {
     private void evictLeastRecentlyUsedRegion() {
         final RegionFile regionFile = regionCache.removeLast();
         if (regionFile != null) {
-            closeRegionFile(regionFile);
+            closeRegionFile(regionFile, false);
         }
     }
 }
