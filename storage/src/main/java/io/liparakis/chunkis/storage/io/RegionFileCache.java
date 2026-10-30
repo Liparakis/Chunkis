@@ -7,6 +7,7 @@ import io.liparakis.chunkis.storage.io.region.RegionFile;
 import io.liparakis.chunkis.storage.io.region.RegionKey;
 import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
 import java.io.IOException;
+import java.nio.channels.ClosedChannelException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -127,6 +128,62 @@ final class RegionFileCache {
         } finally {
             cacheLock.writeLock()
                     .unlock();
+        }
+    }
+
+    /**
+     * Times an operation may meet a region file the cache closed meanwhile before it gives up.
+     */
+    private static final int EVICTION_RETRIES = 3;
+
+    /**
+     * One operation on a region file.
+     *
+     * @param <T> result type
+     */
+    @FunctionalInterface
+    interface RegionOperation<T> {
+
+        /**
+         * Runs the operation.
+         *
+         * @param regionFile the open region file
+         * @return the result
+         * @throws IOException on I/O failure
+         */
+        T apply(RegionFile regionFile) throws IOException;
+    }
+
+    /**
+     * Runs an operation on the region file holding {@code pos}, under that file's own lock only, so operations
+     * on other regions, and their disk syncs, never wait for it.
+     *
+     * <p>The cache may close (evict) the file between lookup and use. Closing waits for an operation in progress,
+     * so an operation that meets a closed file fails before changing anything ({@link RegionFile#close()}); it
+     * then runs again on the file reopened.</p>
+     *
+     * @param pos       chunk position
+     * @param create    whether to create a missing region file
+     * @param absent    result when the region file does not exist and is not created
+     * @param operation the operation
+     * @param <T>       result type
+     * @return the operation's result, or {@code absent}
+     * @throws IOException on I/O failure, or when the file keeps being closed under the operation
+     */
+    <T> T inRegion(final CisChunkPos pos, final boolean create, final T absent,
+            final RegionOperation<T> operation) throws IOException {
+        for (int attempt = 0; ; attempt++) {
+            final RegionFile regionFile = get(pos, create);
+            if (regionFile == null) {
+                return absent;
+            }
+            try {
+                return operation.apply(regionFile);
+            } catch (final ClosedChannelException evicted) {
+                if (attempt >= EVICTION_RETRIES) {
+                    throw evicted;
+                }
+            }
         }
     }
 

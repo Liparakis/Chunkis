@@ -2,9 +2,7 @@ package io.liparakis.chunkis.storage.io;
 
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.core.compression.CompressionContext;
-import io.liparakis.chunkis.storage.io.region.RegionFile;
 import java.io.IOException;
-import java.nio.channels.ClosedChannelException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -12,9 +10,9 @@ import java.nio.file.Path;
  * Opaque per-chunk payloads in CIS region files ({@code r.X.Z.cis}), Zstd-compressed like CIS entries.
  *
  * <p>Region files place payloads byte-exact rather than in 4 KiB sectors, which matters for small payloads: a
- * chunk of 1 KiB takes 1 KiB, not a whole sector. Compression runs outside any lock; writes take the store's
- * lock and reads only their region's, as in {@link CisStorage}, so reads of other chunks never queue behind a
- * write or each other's decompression.</p>
+ * chunk of 1 KiB takes 1 KiB, not a whole sector. Compression runs outside any lock, and every read and write
+ * holds only its region file's own lock, as in {@link CisStorage}: reads never queue behind writes to other
+ * regions, nor behind disk syncs.</p>
  */
 public final class CompressedRegionStore implements AutoCloseable {
 
@@ -47,29 +45,25 @@ public final class CompressedRegionStore implements AutoCloseable {
      * @throws IOException when the region cannot be read or the payload does not decompress
      */
     public byte[] read(final CisChunkPos pos) throws IOException {
-        RegionFile region;
-        // Opening a region may evict another; only under the lock, so it never closes a region mid-write.
-        synchronized (this) {
-            region = regionFiles.get(pos, false);
-        }
-        byte[] stored;
-        try {
-            stored = region == null ? null : region.read(pos);
-        } catch (final ClosedChannelException evicted) {
-            // The cache closed the region meanwhile; read it again where no write can evict it.
-            synchronized (this) {
-                region = regionFiles.get(pos, false);
-                stored = region == null ? null : region.read(pos);
-            }
-        }
-        if (stored == null) {
+        final StoredPayload stored = regionFiles.inRegion(pos, false, null,
+                region -> new StoredPayload(region.path(), region.read(pos)));
+        if (stored == null || stored.bytes() == null) {
             return null;
         }
         try {
-            return compression.decompress(stored);
+            return compression.decompress(stored.bytes());
         } catch (final IOException e) {
-            throw new IOException("Failed to decompress payload of chunk " + pos + " in " + region.path(), e);
+            throw new IOException("Failed to decompress payload of chunk " + pos + " in " + stored.file(), e);
         }
+    }
+
+    /**
+     * A stored payload and the file it came from, for errors.
+     *
+     * @param file  region file
+     * @param bytes compressed payload, or {@code null} when the chunk has none
+     */
+    private record StoredPayload(Path file, byte[] bytes) {
     }
 
     /**
@@ -81,12 +75,11 @@ public final class CompressedRegionStore implements AutoCloseable {
      */
     public void write(final CisChunkPos pos, final byte[] payload) throws IOException {
         final byte[] compressed = compression.compress(payload);
-        final RegionFile region;
-        synchronized (this) {
-            region = regionFiles.get(pos, true);
+        regionFiles.inRegion(pos, true, null, region -> {
             region.write(pos, compressed);
-        }
-        region.releaseFreesIfMany();
+            region.releaseFreesIfMany();
+            return null;
+        });
     }
 
     /**
@@ -95,12 +88,14 @@ public final class CompressedRegionStore implements AutoCloseable {
      * @param pos chunk position
      * @throws IOException when the region cannot be written
      */
-    public synchronized void delete(final CisChunkPos pos) throws IOException {
-        final RegionFile region = regionFiles.get(pos, false);
-        if (region != null && region.hasChunk(pos)) {
-            region.write(pos, null);
-            region.releaseFreesIfMany();
-        }
+    public void delete(final CisChunkPos pos) throws IOException {
+        regionFiles.inRegion(pos, false, null, region -> {
+            if (region.hasChunk(pos)) {
+                region.write(pos, null);
+                region.releaseFreesIfMany();
+            }
+            return null;
+        });
     }
 
     /**
