@@ -194,6 +194,46 @@ public final class StoredBlocksUnloadGameTest {
     }
 
     /**
+     * Writes into the block containers of a chunk that unloaded clean, which the recent-chunk cache took over, and
+     * expects the reload to come back with the stored block: the cache checks the containers before a load uses them.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 600)
+    public void staleWriteToAnUnloadedChunkNeverReachesItsReload(final TestContext context) {
+        final Fixture fixture = Fixture.create(context, 4900);
+        final WorldChunk[] unloaded = new WorldChunk[1];
+        final BlockState[] stored = new BlockState[1];
+        fixture.storeAndReloadReleased()
+                .createAndAdd(() -> {
+                    final ChunkDelta<?, ?> delta = fixture.liveDelta();
+                    context.assertTrue(delta != null && !delta.isDirty() && delta.getWrittenBlocksPrint() != null,
+                            Text.literal("Chunk " + fixture.target + " would not reach the recent-chunk cache."));
+                    unloaded[0] = fixture.chunk;
+                    stored[0] = fixture.chunk.getBlockState(fixture.editedPos());
+                    fixture.unload();
+                })
+                .createAndAdd(fixture::awaitUnloaded)
+                .createAndAdd(() -> {
+                    final BlockPos at = fixture.editedPos();
+                    unloaded[0].getSection(unloaded[0].getSectionIndex(at.getY())).getBlockStateContainer()
+                            .swap(at.getX() & 15, at.getY() & 15, at.getZ() & 15,
+                                    Blocks.DIAMOND_BLOCK.getDefaultState());
+                    fixture.load();
+                })
+                .createAndAdd(() -> {
+                    final WorldChunk reloaded = fixture.world.getChunk(fixture.target.x, fixture.target.z);
+                    context.assertTrue(reloaded != unloaded[0],
+                            Text.literal("Chunk " + fixture.target + " was not reloaded."));
+                    context.assertTrue(reloaded.getBlockState(fixture.editedPos()) == stored[0],
+                            Text.literal("A write to the unloaded chunk reached reloaded chunk " + fixture.target
+                                    + ": " + reloaded.getBlockState(fixture.editedPos()) + "."));
+                    fixture.unforce();
+                })
+                .completeIfSuccessful();
+    }
+
+    /**
      * Unloads a stored chunk whose only change since its last save is a new entity, and expects the stored entry
      * to keep every block, the chest, the light and the heightmaps, and to gain the entity: the save keeps the
      * delta's earlier capture of everything but blocks and entities instead of capturing it again.

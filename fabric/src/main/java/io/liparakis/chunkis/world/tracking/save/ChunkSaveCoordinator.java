@@ -238,11 +238,12 @@ public final class ChunkSaveCoordinator {
 
         if (delta != null && !delta.isDirty() && !loadedToWorld && deferBlocks && chunk instanceof WorldChunk unloading
                 && delta.getWrittenBlocksPrint() != null) {
-            // Unloading clean: nothing to save, but keep its blocks for a quick reload. The copies are checked
-            // against the content the stored entry was written from before any load uses them.
+            // Unloading clean: nothing to save, but keep its blocks for a quick reload. Vanilla has already let go
+            // of this chunk, so its containers are taken, not copied. They are checked against the content the
+            // stored entry was written from before any load uses them.
             final long[] print = delta.getWrittenBlocksPrint();
             RecentChunkBlocks.of(world.getRegistryKey()).putToVerify(FabricCisStorageHelper.toStoragePos(pos),
-                    new long[]{print[2], print[3]}, new long[]{print[0], print[1]}, copySections(unloading),
+                    new long[]{print[2], print[3]}, new long[]{print[0], print[1]}, takeSections(unloading),
                     world.getBottomY());
         }
         if (delta != null && !delta.isDirty()) {
@@ -692,21 +693,21 @@ public final class ChunkSaveCoordinator {
     }
 
     /**
-     * Copies a chunk's section block containers, {@code null} for sections of only air.
+     * Takes the section block containers of a chunk vanilla is done with, {@code null} for sections of only air.
      *
-     * @param chunk loaded chunk
-     * @return copies by section index
+     * @param chunk chunk being unloaded
+     * @return its containers by section index
      */
     @SuppressWarnings("unchecked")
-    private static PalettedContainer<BlockState>[] copySections(final WorldChunk chunk) {
+    private static PalettedContainer<BlockState>[] takeSections(final WorldChunk chunk) {
         final ChunkSection[] sections = chunk.getSectionArray();
-        final PalettedContainer<BlockState>[] copies = new PalettedContainer[sections.length];
+        final PalettedContainer<BlockState>[] taken = new PalettedContainer[sections.length];
         for (int i = 0; i < sections.length; i++) {
             if (sections[i] != null && !sections[i].isEmpty()) {
-                copies[i] = sections[i].getBlockStateContainer().copy();
+                taken[i] = sections[i].getBlockStateContainer();
             }
         }
-        return copies;
+        return taken;
     }
 
     /**

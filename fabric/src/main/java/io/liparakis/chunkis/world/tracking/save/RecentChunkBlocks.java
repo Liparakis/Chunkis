@@ -81,13 +81,13 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
     }
 
     /**
-     * Remembers the blocks of a chunk unloading without a save, copied from the live chunk; they are used only
+     * Remembers the blocks of a chunk unloading without a save, taken from the chunk; they are used only
      * once found to hold exactly the content the stored entry was written from.
      *
      * @param pos             chunk position
      * @param blockPartHash   hash of the block part the stored entry was written with
      * @param expectedContent content fingerprint of the blocks that entry was written from
-     * @param sections        copies of the chunk's sections
+     * @param sections        the chunk's section containers
      * @param bottomY         world bottom Y
      */
     public synchronized void putToVerify(final CisChunkPos pos, final long[] blockPartHash,
