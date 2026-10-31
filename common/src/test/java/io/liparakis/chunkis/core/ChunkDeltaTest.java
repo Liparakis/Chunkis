@@ -248,6 +248,36 @@ class ChunkDeltaTest {
     }
 
     /**
+     * Releasing the instructions after a save changes no block, so captured heightmaps stay current.
+     */
+    @Test
+    void releasingSavedBlocksKeepsCapturedHeightmapsCurrent() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.markHeightmapsCaptured();
+
+        delta.releaseBlocksSavedAt(delta.getBlockEditStamp());
+
+        assertThat(delta.isBlockPayloadReleased()).isTrue();
+        assertThat(delta.hasCurrentHeightmaps()).isTrue();
+    }
+
+    /**
+     * A release does not revive heightmaps that a block edit already made stale.
+     */
+    @Test
+    void releasingBlocksDoesNotReviveStaleHeightmaps() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.markHeightmapsCaptured();
+        delta.addBlockChange(2, 64, 1, "dirt");
+
+        delta.releaseBlocksSavedAt(delta.getBlockEditStamp());
+
+        assertThat(delta.hasCurrentHeightmaps()).isFalse();
+    }
+
+    /**
      * A bulk rewrite voids captured heightmaps even if the same blocks come back.
      */
     @Test

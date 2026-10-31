@@ -549,8 +549,20 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         if (isDirty()) {
             throw new IllegalStateException("Refusing to release the block payload of a dirty delta");
         }
+        releaseInstructions();
+    }
+
+    /**
+     * Drops the block instructions, which moves the stamp though no block changed: heightmaps current before are
+     * still current.
+     */
+    private void releaseInstructions() {
+        final boolean heightmapsCurrent = hasCurrentHeightmaps();
         instructions.release();
         blockPayloadReleased = true;
+        if (heightmapsCurrent) {
+            markHeightmapsCaptured();
+        }
     }
 
     /**
@@ -743,8 +755,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         if (getBlockEditStamp() != stamp || (blockPayloadReleased && instructions.instructionCount == 0)) {
             return;
         }
-        instructions.release();
-        blockPayloadReleased = true;
+        releaseInstructions();
     }
 
     /**
