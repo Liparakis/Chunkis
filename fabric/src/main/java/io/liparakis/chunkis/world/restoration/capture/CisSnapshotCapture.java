@@ -203,6 +203,7 @@ public final class CisSnapshotCapture {
         // Taken with the blocks, so a load of exactly these blocks need not rebuild them on the server thread.
         metadata.put(CisNbtUtil.STORED_HEIGHTMAPS_KEY, captureHeightmaps(chunk));
         target.setChunkMetadata(metadata, false);
+        target.markHeightmapsCaptured();
         target.setSuppressInitialRepopulation(true);
     }
 

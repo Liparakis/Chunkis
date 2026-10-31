@@ -647,6 +647,29 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
     }
 
     /**
+     * {@link #getBlockEditStamp()} when the metadata's heightmaps were captured, or -1 when they were not captured
+     * through this delta.
+     */
+    private long heightmapsStamp = -1;
+
+    /**
+     * Records that the metadata now holds heightmaps taken from these exact blocks.
+     */
+    public void markHeightmapsCaptured() {
+        this.heightmapsStamp = getBlockEditStamp();
+    }
+
+    /**
+     * Returns whether the metadata's heightmaps were captured from the blocks this delta holds now. Unlike a clean
+     * flag this survives a save still in flight, and any block change or bulk rewrite since voids it.
+     *
+     * @return {@code true} when they still describe these blocks
+     */
+    public boolean hasCurrentHeightmaps() {
+        return heightmapsStamp == getBlockEditStamp();
+    }
+
+    /**
      * Combines every counter a block change moves.
      *
      * @return the current block state stamp

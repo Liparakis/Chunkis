@@ -226,4 +226,38 @@ class ChunkDeltaTest {
         delta.clearBlockPayloads(false);
         assertThat(delta.getTouchedSectionCount()).isZero();
     }
+
+    /**
+     * Heightmaps stay current through non-block changes and until a block changes.
+     */
+    @Test
+    void capturedHeightmapsStayCurrentUntilABlockChanges() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 64, 1, "stone");
+        assertThat(delta.hasCurrentHeightmaps()).isFalse();
+
+        delta.markHeightmapsCaptured();
+        assertThat(delta.hasCurrentHeightmaps()).isTrue();
+
+        delta.setChunkMetadata("metadata");
+        delta.markDirty();
+        assertThat(delta.hasCurrentHeightmaps()).isTrue();
+
+        delta.addBlockChange(2, 64, 1, "dirt");
+        assertThat(delta.hasCurrentHeightmaps()).isFalse();
+    }
+
+    /**
+     * A bulk rewrite voids captured heightmaps even if the same blocks come back.
+     */
+    @Test
+    void capturedHeightmapsDoNotSurviveABulkRewrite() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.markHeightmapsCaptured();
+
+        delta.clearBlockPayloads(false);
+
+        assertThat(delta.hasCurrentHeightmaps()).isFalse();
+    }
 }

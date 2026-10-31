@@ -73,9 +73,9 @@ final class ChunkLoadNbtBuilder {
             root.putString(CisNbtUtil.STATUS_KEY, STATUS_FULL);
             root.put(CisNbtUtil.SECTIONS_KEY, CisNbtUtil.getStoredSections(metadata));
             PendingTicksNbt.putInto((NbtCompound) metadata, root);
-            // Only blocks exactly as stored: a dirty delta (rebuilt with newer edits, or unsaved) has others, and
-            // vanilla rebuilds heightmaps the root lacks.
-            if (delta != null && !delta.isDirty()) {
+            // Only for the blocks they were captured from: a dirty delta may hold newer edits, unless it is only
+            // waiting for its save. Vanilla rebuilds heightmaps the root lacks.
+            if (delta != null && (!delta.isDirty() || delta.hasCurrentHeightmaps())) {
                 ((NbtCompound) metadata).getCompound(CisNbtUtil.STORED_HEIGHTMAPS_KEY)
                         .ifPresent(heightmaps -> root.put(CisNbtUtil.HEIGHTMAPS_KEY, heightmaps.copy()));
             }

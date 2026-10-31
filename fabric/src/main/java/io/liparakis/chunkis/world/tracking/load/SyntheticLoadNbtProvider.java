@@ -455,6 +455,7 @@ public final class SyntheticLoadNbtProvider {
         // The edits first: the server thread drops them once a save of the entry wrote them, so read after the
         // copy, the entry holds every edit the copy may lack.
         final ChunkDeltaView<BlockState, NbtCompound> edits = trackedDelta.snapshotView(NbtCompound::copy);
+        final boolean heightmapsCurrent = trackedDelta.hasCurrentHeightmaps();
         final CisStorage.LoadResult<BlockState, NbtCompound> stored = storage.loadWithPresence(
                 FabricCisStorageHelper.toStoragePos(chunkPos), ChunkTraceStore.nextOperationId("load"));
         if (!stored.storageEntryPresent() || stored.failed()) {
@@ -466,6 +467,10 @@ public final class SyntheticLoadNbtProvider {
         edits.forEachBlock((x, y, z, state) -> rebuilt.addBlockChange(x, y, z, state, false));
         rebuilt.adoptNonBlockStateFrom(trackedDelta, NbtCompound::copy);
         rebuilt.markRebuiltFromStoredEntry(edits);
+        if (heightmapsCurrent) {
+            // Same blocks the tracked delta's heightmaps were captured from: no edit came after that capture.
+            rebuilt.markHeightmapsCaptured();
+        }
         return rebuilt;
     }
 
