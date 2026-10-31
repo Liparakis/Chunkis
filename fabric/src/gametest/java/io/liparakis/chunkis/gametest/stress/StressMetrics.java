@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -99,6 +100,11 @@ final class StressMetrics {
      * Measured ticks that started more than 10% later than the target rate allows.
      */
     private int lateTicks;
+
+    /**
+     * {@link #lateTicks} by the phase the late tick started in.
+     */
+    private final Map<Phase, Integer> lateTicksByPhase = new EnumMap<>(Phase.class);
 
     /**
      * Ticks needed to finish each measured unload and reload, per phase.
@@ -272,6 +278,7 @@ final class StressMetrics {
             tickIntervals.add(interval);
             if (nanosPerTick > 0 && interval > nanosPerTick + nanosPerTick / 10) {
                 lateTicks++;
+                lateTicksByPhase.merge(phase, 1, Integer::sum);
             }
         }
         lastTickStart = tickStart;
@@ -342,6 +349,9 @@ final class StressMetrics {
 
         final JsonObject intervals = tickIntervals.summaryMillis();
         intervals.addProperty("lateTicks", lateTicks);
+        final JsonObject lateByPhase = new JsonObject();
+        lateTicksByPhase.forEach((late, count) -> lateByPhase.addProperty(late.name().toLowerCase(Locale.ROOT), count));
+        intervals.add("lateTicksByPhase", lateByPhase);
         report.add("tickIntervalMillis", intervals);
 
         final JsonObject cpu = new JsonObject();
