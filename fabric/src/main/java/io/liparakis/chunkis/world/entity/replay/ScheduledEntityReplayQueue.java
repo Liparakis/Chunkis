@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import net.minecraft.block.BlockState;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.world.ServerWorld;
@@ -26,13 +26,13 @@ import net.minecraft.world.chunk.WorldChunk;
  * Holds entity payloads that could not be spawned during an initial chunk
  * restore and schedules them for retry on subsequent server ticks.
  *
- * <p>Entries are keyed by {@code worldId|chunkX,chunkZ|entityUuid}. Each tick,
+ * <p>Entries are keyed by chunk, world and entity UUID, in that order. Each tick,
  * {@link #tick} drains entries whose target chunk is loaded and attempts to
  * replay them via {@link ChunkRestorer}. Successfully replayed or already-present
  * entities are removed; entries that fail transiently are retained for the next
  * tick.</p>
  *
- * <p><b>Threading:</b> the backing map is a {@link ConcurrentHashMap} so
+ * <p><b>Threading:</b> the backing map is a {@link ConcurrentSkipListMap} so
  * {@link #schedule} and {@link #acknowledge} are safe to call from any thread.
  * {@link #tick} is expected to run on the server thread. The {@code queueBefore}
  * snapshot captured at the start of each tick is used across all trace calls in
@@ -48,11 +48,11 @@ public final class ScheduledEntityReplayQueue {
     private static final long UNLOADED_ENTRY_GRACE_MILLIS = 60_000L;
 
     /**
-     * Map from composite key ({@code worldId|chunkX,chunkZ|entityUuid}) to the
-     * scheduled replay entry. {@link ConcurrentHashMap} allows concurrent
-     * {@link #schedule}/{@link #acknowledge} calls while {@link #tick} iterates.
+     * Map from composite key to the scheduled replay entry, sorted by chunk.
+     * {@link ConcurrentSkipListMap} allows concurrent {@link #schedule}/{@link #acknowledge} calls while
+     * {@link #tick} iterates.
      */
-    private static final ConcurrentHashMap<String, ScheduledEntityReplay> QUEUE = new ConcurrentHashMap<>();
+    private static final ConcurrentSkipListMap<ReplayKey, ScheduledEntityReplay> QUEUE = new ConcurrentSkipListMap<>();
 
     /**
      * Server-thread time one tick may spend replaying entities before the rest wait for the next tick.
@@ -60,9 +60,9 @@ public final class ScheduledEntityReplayQueue {
     private static final long DRAIN_BUDGET_NANOS = 2_000_000L;
 
     /**
-     * Position in the queue where the next drain starts, so entries past a budget cut get their turn first.
+     * Packed chunk where the next drain starts, so entries past a budget cut get their turn first.
      */
-    private static int drainCursor;
+    private static long drainCursor = Long.MIN_VALUE;
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -98,20 +98,20 @@ public final class ScheduledEntityReplayQueue {
         final String worldId = world.getRegistryKey()
                 .getValue()
                 .toString();
-        final int before = QUEUE.size();
-        QUEUE.compute(key(worldId, chunkPos, entityUuid), (key, existing) -> existing != null
-                && existing.entityNbt == entityNbt
-                ? existing
-                : new ScheduledEntityReplay(worldId, chunkPos.x, chunkPos.z, entityUuid, entityNbt,
-                        System.currentTimeMillis()));
-        final int after = QUEUE.size();
-
         // Build the diagnostic message only for an enabled trace: every entity of a restored chunk is scheduled,
-        // and a debug log file (enabled in development) would make each schedule pay the message.
+        // and a debug log file (enabled in development) would make each schedule pay the message. The size is a
+        // walk of the whole queue.
         final boolean traceEnabled = io.liparakis.chunkis.debug.config.ChunkisDebugConfig.allows(
                 io.liparakis.chunkis.debug.model.ChunkisDebugDomain.ENTITY_REPLAY,
                 io.liparakis.chunkis.debug.model.ChunkTraceSeverity.INFO
         );
+        final int before = traceEnabled ? QUEUE.size() : 0;
+        QUEUE.compute(new ReplayKey(chunkPos.toLong(), worldId, entityUuid), (key, existing) -> existing != null
+                && existing.entityNbt == entityNbt
+                ? existing
+                : new ScheduledEntityReplay(worldId, chunkPos.x, chunkPos.z, entityUuid, entityNbt,
+                        System.currentTimeMillis()));
+        final int after = traceEnabled ? QUEUE.size() : 0;
         final boolean debugLogEnabled = traceEnabled && Chunkis.LOGGER.isDebugEnabled();
         if (traceEnabled) {
             final String threadName = Thread.currentThread()
@@ -169,17 +169,21 @@ public final class ScheduledEntityReplayQueue {
         final String worldId = world.getRegistryKey()
                 .getValue()
                 .toString();
-        final int queueBefore = QUEUE.size();
+        final boolean tracing = ChunkisDebugConfig.allows(ChunkisDebugDomain.ENTITY_REPLAY, ChunkTraceSeverity.INFO);
+        final int queueBefore = tracing ? QUEUE.size() : 0;
         int visited = 0;
 
         // Replays cost a tick about 0.1 ms each, and every entity of a batch of reloaded chunks becomes ready in
         // the same tick: past a time budget the rest wait for the next tick, starting where this one stopped.
-        final List<Map.Entry<String, ScheduledEntityReplay>> entries = new ArrayList<>(QUEUE.entrySet());
+        // Chunk by chunk, as vanilla adds entities: they tick in the order they were added, and a list in hash
+        // order makes every entity miss the server's small chunk cache and leave its neighbours' memory behind.
+        final List<Map.Entry<ReplayKey, ScheduledEntityReplay>> entries = new ArrayList<>(QUEUE.entrySet());
         final int size = entries.size();
-        final int start = Math.floorMod(drainCursor, size);
+        final int start = drainStart(entries);
         final long deadline = System.nanoTime() + DRAIN_BUDGET_NANOS;
+        boolean finished = true;
         for (int step = 0; step < size; step++) {
-            final Map.Entry<String, ScheduledEntityReplay> entry = entries.get((start + step) % size);
+            final Map.Entry<ReplayKey, ScheduledEntityReplay> entry = entries.get((start + step) % size);
             final ScheduledEntityReplay replay = entry.getValue();
             if (!worldId.equals(replay.worldId)) {
                 continue;
@@ -236,7 +240,8 @@ public final class ScheduledEntityReplayQueue {
             }
 
             if (System.nanoTime() > deadline) {
-                drainCursor = start + step;
+                drainCursor = packedChunk(replay);
+                finished = false;
                 break;
             }
             final ChunkRestorer.ReplayResult result = ChunkRestorer.replayPendingEntityIfNeeded(
@@ -256,7 +261,11 @@ public final class ScheduledEntityReplayQueue {
             }
         }
 
-        if (visited != 0 && ChunkisDebugConfig.allows(ChunkisDebugDomain.ENTITY_REPLAY, ChunkTraceSeverity.INFO)) {
+        if (finished) {
+            drainCursor = Long.MIN_VALUE;
+        }
+
+        if (visited != 0 && tracing) {
             final int queueAfter = QUEUE.size();
             final boolean serverThread = world.getServer() == null || world.getServer()
                     .isOnThread();
@@ -291,6 +300,31 @@ public final class ScheduledEntityReplayQueue {
                     threadName
             );
         }
+    }
+
+    /**
+     * Returns the entry's chunk as a sort key.
+     *
+     * @param replay queue entry
+     * @return packed chunk position
+     */
+    private static long packedChunk(final ScheduledEntityReplay replay) {
+        return ChunkPos.toLong(replay.chunkX, replay.chunkZ);
+    }
+
+    /**
+     * Finds where a drain resumes in the sorted entries.
+     *
+     * @param entries entries sorted by chunk
+     * @return index of the first entry at or past {@link #drainCursor}, or 0 when none is
+     */
+    private static int drainStart(final List<Map.Entry<ReplayKey, ScheduledEntityReplay>> entries) {
+        for (int i = 0; i < entries.size(); i++) {
+            if (packedChunk(entries.get(i).getValue()) >= drainCursor) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     /**
@@ -366,26 +400,6 @@ public final class ScheduledEntityReplayQueue {
     }
 
     /**
-     * Builds the composite map key for a scheduled replay entry.
-     *
-     * <p>Format: {@code worldId|chunkX,chunkZ|entityUuid}. The {@code |}
-     * separator is safe because Minecraft resource locations use
-     * {@code namespace:path} and never contain {@code |}.</p>
-     *
-     * @param worldId    world registry key string
-     * @param chunkPos   chunk coordinates
-     * @param entityUuid entity UUID string
-     * @return composite key
-     */
-    private static String key(
-            final String worldId,
-            final ChunkPos chunkPos,
-            final String entityUuid
-    ) {
-        return worldId + '|' + chunkPos.x + ',' + chunkPos.z + '|' + entityUuid;
-    }
-
-    /**
      * Emits a per-entry diagnostic log line during a {@link #tick} drain pass.
      *
      * <p>{@code queueBefore} is the size captured at the start of the tick;
@@ -451,6 +465,26 @@ public final class ScheduledEntityReplayQueue {
                 serverThread,
                 threadName
         );
+    }
+
+    /**
+     * Queue key: sorts by chunk, so a drain adds entities chunk by chunk.
+     *
+     * @param chunk      packed chunk position
+     * @param worldId    registry key string of the target world
+     * @param entityUuid UUID string of the entity to replay
+     */
+    private record ReplayKey(long chunk, String worldId, String entityUuid) implements Comparable<ReplayKey> {
+
+        @Override
+        public int compareTo(final ReplayKey other) {
+            final int byChunk = Long.compare(chunk, other.chunk);
+            if (byChunk != 0) {
+                return byChunk;
+            }
+            final int byWorld = worldId.compareTo(other.worldId);
+            return byWorld != 0 ? byWorld : entityUuid.compareTo(other.entityUuid);
+        }
     }
 
     /**
