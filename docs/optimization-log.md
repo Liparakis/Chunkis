@@ -20,23 +20,24 @@ The goal is to beat vanilla on every metric, without weakening data safety.
 
 ## Current standing
 
-Chunkis/vanilla ratios from `bench.sh`. Session 5 is the current code, and a later session on it gave tick p90 1.24, unload 1.35, reload p50 0.93, reload p99 1.14, server CPU 1.20; session 4 lacks the heightmap carry across a release. Sessions 1-3 are from before the heightmap fix, with the recent-chunk cache handing containers to the load; 2 and 3 also carried changes that were later dropped. Report the range, not one session: unload was 1.33 and 1.71 on near-identical code. Disk after shutdown was measured on `63349320`.
+From one `bench.sh` session on the current code, the latest of several. Ratios move about 10 % between sessions on identical code, so a paired A/B decides a change, not this table. Vanilla was unusually fast here (tick p50 22.6 ms against 28 ms in earlier sessions). Disk after shutdown was measured on `63349320`.
 
-| Metric | Session 1 | Session 2 | Session 3 | Session 4 | Session 5 | Standing |
-|---|---|---|---|---|---|---|
-| Disk after shutdown, round trip | | | | | 0.51 | Ahead |
-| Disk after shutdown, natural flight | | | | | 0.50 | Ahead |
-| Disk during benchmark | 0.70 | 0.70 | 0.69 | 0.70 | 0.69 | Ahead |
-| Heap | 0.74 | 0.75 | 0.75 | 0.75 | 0.74 | Ahead |
-| Tick p99 | 0.83 | 0.96 | 0.81 | 0.90 | 0.93 | Ahead |
-| Reload p50 | 0.87 | 0.99 | 0.98 | 1.02 | 1.07 | Even |
-| Total CPU | 0.93 | 0.99 | 1.05 | 0.98 | 1.03 | Even |
-| Tick p50 | 1.03 | 1.12 | 1.11 | 1.07 | 1.09 | Behind |
-| Reload p99 | 1.00 | 1.12 | 1.21 | 1.11 | 1.25 | Behind |
-| Server-thread CPU | 1.05 | 1.13 | 1.17 | 1.14 | 1.11 | Behind |
-| Tick p90 | 1.06 | 1.19 | 1.21 | 1.17 | 1.11 | Behind |
-| Unload p50 | 1.33 | 1.34 | 1.71 | 1.27 | 1.52 | Behind |
-| Late ticks | 1.30 | 1.44 | 1.56 | 1.45 | 1.38 | Count only |
+| Metric | Chunkis | Vanilla | Ratio | Standing |
+|---|---|---|---|---|
+| Disk after shutdown, natural flight | 52.5 MB | 104.8 MB | 0.50 | Ahead |
+| Disk after shutdown, round trip | 34.6 MB | 68.1 MB | 0.51 | Ahead |
+| Disk during benchmark | 42.7 MB | 61.5 MB | 0.69 | Ahead |
+| Heap | 876 MB | 1,133 MB | 0.77 | Ahead |
+| Tick p99 | 247 ms | 288 ms | 0.86 | Ahead |
+| Total lateness | 1,698 ms | 1,793 ms | 0.95 | Ahead |
+| Total CPU | 54.5 s | 57.0 s | 0.96 | Ahead |
+| Reload p50 | 867 ms | 867 ms | 1.00 | Even |
+| Late tick count | 15.7 | 13.7 | 1.15 | Behind |
+| Tick p90 | 33.0 ms | 28.8 ms | 1.15 | Behind |
+| Reload p99 | 1,129 ms | 967 ms | 1.17 | Behind |
+| Server-thread CPU | 9.8 s | 8.4 s | 1.17 | Behind |
+| Tick p50 | 27.2 ms | 22.6 ms | 1.20 | Behind |
+| Unload p50 | 224 ms | 166 ms | 1.35 | Behind |
 
 Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Total lateness over two 8-round pairs is 5,985 ms for Chunkis against 6,817 ms for vanilla, a ratio of 0.88. A later 2-round `bench.sh` session gave 2,089 against 2,053 ms, 1.02, so treat it as about even. By phase, over the two pairs: unload 3,400 against 2,880, reload 1,061 against 1,014, edit 278 against 381, save 1,245 against 2,543 ms. Reports now hold `latenessMillisByPhase`; `guard.py` does not check it yet.
 
@@ -53,6 +54,9 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Give cached containers to the load instead of copying them | `78764234` | Chunkis reload p50 1,036-1,106 ms before, 840-1,008 ms in all 9 runs after, against vanilla near 1,000; heap 969 to 875 MB |
 | Keep stored heightmaps for a delta that is dirty only because its save is in flight | `0f9789c3` | Full-chunk rebuilds about 1,600 to 600 per run. Paired A/B, 3 pairs: total CPU -3.2 % and tick p99 -8.2 % in all 3, reload p50 -3.9 % and p99 -5.0 % in 2 of 3. A block-edit stamp decides, so a real edit still rebuilds |
 | Keep captured heightmaps current across a block release | `1e78ce7b` | Rebuilds about 600 to 1 per run. `convert` 1,392 to 771 ms, JFR samples 53 to 15 against vanilla's 10. Paired A/B, 3 pairs: reload p50 -8.7 % and p99 -5.9 % in all 3; reload tick CPU +7.8 %, tick p99 +6.4 % |
+| Take a clean-unloading chunk's containers for the recent-chunk cache instead of copying them | `112eade1` | Paired A/B, 3 pairs, better in all 3: unload p50 -11.3 %, reload p99 -12.1 %, tick p90 -8.6 %, tick p99 -7.2 %, late ticks -12.0 %. An earlier JFR run showed this copy as 1 sample and it was wrongly written off. The cache's content check protects it; `staleWriteToAnUnloadedChunkNeverReachesItsReload` fails without that check |
+| Return early from entity capture for an empty list when the delta holds no entities | `2383a14e` | Paired A/B, 3 pairs: server CPU -2.1 %, tick p90 -1.7 % in all 3. Small, and nothing got worse |
+| Skip vanilla's entity serialization when the region guard would drop its write | `2383a14e` | Paired A/B, 3 pairs: late ticks -9.1 % and tick p50 -1.3 % in all 3, reload p99 -8.3 % in 2 of 3. An earlier sample count (17 to 16) wrongly dropped it. No data lost: vanilla's write never reached disk. Vanilla's write stays when either guard could let it through |
 
 ## Tried and dropped
 
@@ -60,7 +64,6 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 |---|---|---|
 | Defer the region footer to flush (shorter locks) | Failed `bench.sh`: tick p90 +9.1 %, late ticks +30.1 %, unload 1.29 to 1.38. Flush synced twice every time, an untested suspect. | The double sync is removed and it is re-measured |
 | Use stored heightmaps for dirty deltas | No effect: 9,800 rebuilds either way. The reason given then, that vanilla rebuilds them too, is wrong: on reload `populateHeightmaps` is 29 server samples under Chunkis and 0 under vanilla (see Open) | The rebuilds are counted by cause first |
-| Skip copying sections for the recent-chunk cache | 1 sample in the profile | Never |
 | Lower the recent-chunk cache budget | 64 and 256 MB identical: peak 13 MB, no evictions | Heap shows it binding |
 | Skip saves where nothing changed | Natural terrain: only 19 % of writes identical. 89 % of light-only rewrites change light values | Light changes between reloads are explained |
 | Move restore off the server thread | Convert is under 2 % of server samples; load work on the server thread is already below vanilla's | Never for server CPU |
@@ -72,7 +75,6 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Drop the 2 ms replay budget so entities return in a burst, as in vanilla | Paired A/B, 3 pairs: edit tick mean +4.3 %, tick p90 +4.1 %, late ticks +12.5 %, and no tick spike. The extra cost is those entities ticking sooner. Budget kept: it only binds when thousands of entities return together, as this benchmark forces. Tick figures here undercount entity cost for the first 40 ticks. | Real play shows entities late |
 | Keep the block fingerprint across a rebuild during load | Saves with no fingerprint fell from about 500 per round to almost none, mostly into mismatches, since those chunks had real edits. Paired A/B, 3 pairs: server CPU +6.9 % and total CPU +4.1 % in all 3, reload p50 +9.8 %. Likely more clean unloads copying sections on the server thread | Reuse is shown to outweigh that copy |
 | Mark heightmaps current in `ChunkRestorer` after a release | Rebuilds unchanged at about 600. The real cause was the release itself moving the stamp | Never |
-| Skip vanilla's entity serialization when its write would be dropped | Entity unload samples 17 to 16: the rest is Chunkis's own capture. No CPU gain. `generation_flow_does_not_claim_chunks` failed in 1 of 7 suite runs with it, cause unknown, and it stops a vanilla write | A cost is shown and that test failure is explained |
 
 ## Rejected without trying
 
@@ -82,6 +84,7 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Writing region payloads outside the lock | Needs space reservation and protection against compaction swapping the file mid-write; the waits are small |
 | Regenerating unedited chunks from the seed | Worldgen on every load, and it breaks when generation changes between versions |
 | Lean proofs | Prove a model, not the Java; no bearing on performance |
+| Cutting dirty-save cost or allocation | Dirty saves already beat vanilla's serialize on the server thread: 1,284 against 1,359 ms over a run, and Chunkis pauses less for GC |
 | Per-section block reuse | A chunk shares one global palette and one coded stream, so it needs per-section palettes, giving up disk. It targets save threads, which do not touch ticks, for an estimated 5 % of total CPU at most |
 | Storing blocks and light as separate records | Already done: the block part is separate and reused when its fingerprint matches, about 60 % of saves |
 
@@ -89,11 +92,11 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 
 - Late tick count: most of the extra count is in the reload phase, 11-14 against 5 per run, but those are small overruns (see Current standing). Decide whether `guard.py` should judge total lateness instead.
 - `SerializedChunk.convert` on the server thread is now 771 ms against vanilla's 370 ms over a 4-round run; `full_chunk` with `load_entities` gives back about 440 ms, leaving about 180 ms. Use the stage profiler: JFR hid this gap.
-- Unload p50: the phase is one giant tick that drops about 2,975 of 4,096 chunks, then idle ticks while the rest wait on tickets. That tick is about 283 ms against vanilla's 125 ms, about 90 against 42 us per chunk. Cutting save samples did not move it, so what fills that tick still needs stage timing per phase.
-- Save hook on the server thread: 1,767 ms against vanilla's 1,359 ms. 367 ms of it is clean saves, which vanilla does not make; those keep blocks for fast reloads.
+- Unload p50: the phase is one giant tick that drops about 2,975 of 4,096 chunks, then idle ticks while the rest wait on tickets. By stage per round, before the container handoff: dirty saves 41-80 ms against vanilla's serialize 37-67 ms, clean saves 71-78 ms, entity capture 24-74 ms. Entity capture is the largest part left.
 - About 35 % of saves re-encode blocks. They are about 60 % of save-thread samples, and a guard's `scan` is another 19 %.
 - Entities reappear late after a bulk reload: about 2,100 by tick 40 of the edit phase, against vanilla's 2,300 by tick 3-4. Spawn work on a 2 ms budget (see the replay rows above).
-- Vanilla's `tickEntity` runs longer under Chunkis in the save phase (276 against 211 samples) with equal entity counts. One profile pair. `getChunkFuture` under entity ticks (25 against 0) is a lead.
+- Vanilla's `tickEntity` runs longer under Chunkis (about 80 of 2,100 edit samples, 56 of 440 save samples) with equal entity counts. `getChunkFuture` under it is vanilla's chunk-cache miss path from mob fluid checks; no Chunkis frame is involved. Possibly JIT or memory layout, not proven. No fix found.
 - Ruled out for tick p50 and p90: duplicate or extra entities (0 duplicates, counts match), slower block reads (11 % of entity-tick leaves in both modes), lock waits on the server thread, and GC (Chunkis pauses less).
-- `generation_flow_does_not_claim_chunks` failed once under a loaded `gradlew build`, with the entity skip in the tree. Passed in every run since. Any save of a settled chunk claims it, so a save during the test could explain it. Not proven.
+- `generation_flow_does_not_claim_chunks` failed once under a loaded `gradlew build` with the entity skip in the tree: 1 of 13 suite runs with it, 0 without. Any save of a settled chunk claims it, so a save during the test could explain it. Not proven.
+- Measure with stage timers as well as JFR: it hid both `convert` and the clean-save copy.
 - Why a chunk's light keeps changing between reloads, when no block changed.
