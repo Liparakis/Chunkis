@@ -107,6 +107,12 @@ final class StressMetrics {
     private final Map<Phase, Integer> lateTicksByPhase = new EnumMap<>(Phase.class);
 
     /**
+     * Total time ticks started past their due time, by phase, in nanoseconds: a count treats a tick 6 ms late and
+     * one 300 ms late alike.
+     */
+    private final Map<Phase, Long> latenessNanosByPhase = new EnumMap<>(Phase.class);
+
+    /**
      * Ticks needed to finish each measured unload and reload, per phase.
      */
     private final Map<Phase, LongSamples> phaseTickCounts = new EnumMap<>(Phase.class);
@@ -279,6 +285,7 @@ final class StressMetrics {
             if (nanosPerTick > 0 && interval > nanosPerTick + nanosPerTick / 10) {
                 lateTicks++;
                 lateTicksByPhase.merge(phase, 1, Integer::sum);
+                latenessNanosByPhase.merge(phase, interval - nanosPerTick, Long::sum);
             }
         }
         lastTickStart = tickStart;
@@ -352,6 +359,10 @@ final class StressMetrics {
         final JsonObject lateByPhase = new JsonObject();
         lateTicksByPhase.forEach((late, count) -> lateByPhase.addProperty(late.name().toLowerCase(Locale.ROOT), count));
         intervals.add("lateTicksByPhase", lateByPhase);
+        final JsonObject latenessByPhase = new JsonObject();
+        latenessNanosByPhase.forEach((late, nanos) -> latenessByPhase.addProperty(late.name().toLowerCase(Locale.ROOT),
+                nanos / 1_000_000L));
+        intervals.add("latenessMillisByPhase", latenessByPhase);
         report.add("tickIntervalMillis", intervals);
 
         final JsonObject cpu = new JsonObject();
