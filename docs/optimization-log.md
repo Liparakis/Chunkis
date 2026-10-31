@@ -20,24 +20,24 @@ The goal is to beat vanilla on every metric, without weakening data safety.
 
 ## Current standing
 
-From one `bench.sh` session on the current code, the latest of several. Ratios move about 10 % between sessions on identical code, so a paired A/B decides a change, not this table. Vanilla was unusually fast here (tick p50 22.6 ms against 28 ms in earlier sessions). Disk after shutdown was measured on `63349320`.
+From one `bench.sh` session on the current code, the latest of several. Ratios move about 10 % between sessions on identical code, so a paired A/B decides a change, not this table. Disk after shutdown was measured on `63349320`.
 
 | Metric | Chunkis | Vanilla | Ratio | Standing |
 |---|---|---|---|---|
 | Disk after shutdown, natural flight | 52.5 MB | 104.8 MB | 0.50 | Ahead |
 | Disk after shutdown, round trip | 34.6 MB | 68.1 MB | 0.51 | Ahead |
-| Disk during benchmark | 42.7 MB | 61.5 MB | 0.69 | Ahead |
-| Heap | 876 MB | 1,133 MB | 0.77 | Ahead |
-| Tick p99 | 247 ms | 288 ms | 0.86 | Ahead |
-| Total lateness | 1,698 ms | 1,793 ms | 0.95 | Ahead |
-| Total CPU | 54.5 s | 57.0 s | 0.96 | Ahead |
-| Reload p50 | 867 ms | 867 ms | 1.00 | Even |
-| Late tick count | 15.7 | 13.7 | 1.15 | Behind |
-| Tick p90 | 33.0 ms | 28.8 ms | 1.15 | Behind |
-| Reload p99 | 1,129 ms | 967 ms | 1.17 | Behind |
-| Server-thread CPU | 9.8 s | 8.4 s | 1.17 | Behind |
-| Tick p50 | 27.2 ms | 22.6 ms | 1.20 | Behind |
-| Unload p50 | 224 ms | 166 ms | 1.35 | Behind |
+| Disk during benchmark | 42.7 MB | 61.9 MB | 0.69 | Ahead |
+| Heap | 876 MB | 1,192 MB | 0.74 | Ahead |
+| Tick p99 | 269 ms | 291 ms | 0.92 | Ahead |
+| Total CPU | 59.9 s | 63.9 s | 0.94 | Ahead |
+| Total lateness | 1,941 ms | 2,059 ms | 0.94 | Ahead |
+| Reload p50 | 983 ms | 1,019 ms | 0.96 | Ahead |
+| Reload p99 | 1,188 ms | 1,154 ms | 1.03 | Even |
+| Tick p50 | 30.5 ms | 29.2 ms | 1.05 | Behind |
+| Server-thread CPU | 11.4 s | 10.7 s | 1.07 | Behind |
+| Tick p90 | 41.6 ms | 38.1 ms | 1.09 | Behind |
+| Late tick count | 19.3 | 15.0 | 1.29 | Behind |
+| Unload p50 | 243 ms | 176 ms | 1.38 | Behind |
 
 Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Total lateness over two 8-round pairs is 5,985 ms for Chunkis against 6,817 ms for vanilla, a ratio of 0.88. A later 2-round `bench.sh` session gave 2,089 against 2,053 ms, 1.02, so treat it as about even. By phase, over the two pairs: unload 3,400 against 2,880, reload 1,061 against 1,014, edit 278 against 381, save 1,245 against 2,543 ms. Reports now hold `latenessMillisByPhase`; `guard.py` does not check it yet.
 
@@ -57,6 +57,7 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Take a clean-unloading chunk's containers for the recent-chunk cache instead of copying them | `112eade1` | Paired A/B, 3 pairs, better in all 3: unload p50 -11.3 %, reload p99 -12.1 %, tick p90 -8.6 %, tick p99 -7.2 %, late ticks -12.0 %. An earlier JFR run showed this copy as 1 sample and it was wrongly written off. The cache's content check protects it; `staleWriteToAnUnloadedChunkNeverReachesItsReload` fails without that check |
 | Return early from entity capture for an empty list when the delta holds no entities | `2383a14e` | Paired A/B, 3 pairs: server CPU -2.1 %, tick p90 -1.7 % in all 3. Small, and nothing got worse |
 | Skip vanilla's entity serialization when the region guard would drop its write | `2383a14e` | Paired A/B, 3 pairs: late ticks -9.1 % and tick p50 -1.3 % in all 3, reload p99 -8.3 % in 2 of 3. An earlier sample count (17 to 16) wrongly dropped it. No data lost: vanilla's write never reached disk. Vanilla's write stays when either guard could let it through |
+| Replay entities in chunk order: a queue sorted by chunk | `71c20adf` | Paired A/B, 4 pairs, better in 3: tick p50 -7.3 %, tick p90 -9.3 %, tick p99 -8.6 %, late ticks -20.9 %, unload p50 -8.3 %, server CPU -5.5 %. The hash-ordered queue left vanilla's entity list in random order, so entities ticked across the world, missing the small chunk cache and memory locality. Sorting the queue every tick cost reload tick CPU +14.6 %; a sorted map does not |
 
 ## Tried and dropped
 
@@ -95,8 +96,9 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 - Unload p50: the phase is one giant tick that drops about 2,975 of 4,096 chunks, then idle ticks while the rest wait on tickets. By stage per round, before the container handoff: dirty saves 41-80 ms against vanilla's serialize 37-67 ms, clean saves 71-78 ms, entity capture 24-74 ms. Entity capture is the largest part left.
 - About 35 % of saves re-encode blocks. They are about 60 % of save-thread samples, and a guard's `scan` is another 19 %.
 - Entities reappear late after a bulk reload: about 2,100 by tick 40 of the edit phase, against vanilla's 2,300 by tick 3-4. Spawn work on a 2 ms budget (see the replay rows above).
-- Vanilla's `tickEntity` runs longer under Chunkis (about 80 of 2,100 edit samples, 56 of 440 save samples) with equal entity counts. `getChunkFuture` under it is vanilla's chunk-cache miss path from mob fluid checks; no Chunkis frame is involved. Possibly JIT or memory layout, not proven. No fix found.
+- Re-profile `tickEntity` now that replay is chunk-ordered. It ran longer under Chunkis with equal entity counts; order explains at least part of it. Entities also load by chunk completion order, not spatial order, in both modes.
 - Ruled out for tick p50 and p90: duplicate or extra entities (0 duplicates, counts match), slower block reads (11 % of entity-tick leaves in both modes), lock waits on the server thread, and GC (Chunkis pauses less).
 - `generation_flow_does_not_claim_chunks` failed once under a loaded `gradlew build` with the entity skip in the tree: 1 of 13 suite runs with it, 0 without. Any save of a settled chunk claims it, so a save during the test could explain it. Not proven.
+- A paired A/B can be split by the machine: runs fell into a fast band (about 27 ms) and a slow band (about 34 ms). Check bands before reading a pair.
 - Measure with stage timers as well as JFR: it hid both `convert` and the clean-save copy.
 - Why a chunk's light keeps changing between reloads, when no block changed.
