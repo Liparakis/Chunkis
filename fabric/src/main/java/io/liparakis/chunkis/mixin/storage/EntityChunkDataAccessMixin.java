@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.world.entity.capture.VanillaEntitySaveCapture;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.entity.Entity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.storage.ChunkDataList;
@@ -16,8 +17,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Hands vanilla's per-chunk entity save to {@link VanillaEntitySaveCapture}.
  *
  * <p>Runs at {@code HEAD}, before entities are unloaded, so the snapshot sees
- * them live. The vanilla write itself is left alone; the region guard decides
- * whether it reaches disk.</p>
+ * them live. When the region guard would drop vanilla's write anyway, vanilla
+ * does not serialize the entities a second time just to have them dropped; an
+ * empty list goes on to vanilla, which only records that the chunk has none.</p>
  */
 @Mixin(EntityChunkDataAccess.class)
 public abstract class EntityChunkDataAccessMixin {
@@ -30,14 +32,25 @@ public abstract class EntityChunkDataAccessMixin {
     private ServerWorld world;
 
     /**
+     * Chunks vanilla knows to hold no entities.
+     */
+    @Shadow
+    @Final
+    private LongSet emptyChunks;
+
+    /**
      * Captures the saved entities into the Chunkis delta.
      *
      * @param dataList chunk position and the entities vanilla is saving
      * @param ci       mixin callback
      */
-    @Inject(method = "writeChunkData", at = @At("HEAD"))
+    @Inject(method = "writeChunkData", at = @At("HEAD"), cancellable = true)
     private void chunkis$captureSavedEntities(final ChunkDataList<Entity> dataList, final CallbackInfo ci) {
         VanillaEntitySaveCapture.capture(world, dataList.getChunkPos(), dataList.stream()
                 .toList());
+        if (!dataList.isEmpty() && VanillaEntitySaveCapture.isVanillaWriteBlocked(world)) {
+            emptyChunks.remove(dataList.getChunkPos().toLong());
+            ci.cancel();
+        }
     }
 }

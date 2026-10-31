@@ -5,6 +5,7 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
+import io.liparakis.chunkis.integration.c2me.C2meSaveBridge;
 import io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil;
@@ -82,14 +83,29 @@ public final class VanillaEntitySaveCapture {
     }
 
     /**
+     * Returns whether the region guard would drop vanilla's entity write for this world, which is what makes
+     * this capture the only copy.
+     *
+     * @param world world owning the entities
+     * @return {@code true} when vanilla's write would never reach disk
+     */
+    public static boolean isVanillaWriteBlocked(final ServerWorld world) {
+        return MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey()) && !C2meSaveBridge.isUnavailable();
+    }
+
+    /**
      * Captures entities for a chunk that is still loaded.
      */
     private static void captureLoaded(final ServerWorld world, final WorldChunk chunk,
             final ChunkisDeltaDuck deltaDuck, final List<? extends Entity> entities) {
+        final boolean owned = ChunkDeltaOwnership.hasChunkisOwnedState(deltaDuck.chunkis$getDelta());
+        if (owned && entities.isEmpty() && holdsNoEntities(deltaDuck.chunkis$getDelta())) {
+            // Most chunks: nothing to capture, and nothing stored for an empty list to clear.
+            return;
+        }
         if (SnapshotSafetyChecker.isSnapshotUnsafe(chunk)) {
             return;
         }
-        final boolean owned = ChunkDeltaOwnership.hasChunkisOwnedState(deltaDuck.chunkis$getDelta());
         if (!owned && LiveEntitySnapshotCapture.countSavableLiveEntities(world, chunk) == 0) {
             return;
         }
@@ -102,6 +118,13 @@ public final class VanillaEntitySaveCapture {
         if (delta.isDirty()) {
             GlobalChunkTracker.markDirty(chunk, SOURCE);
         }
+    }
+
+    /**
+     * Returns whether a delta holds no entity at all, spawned or still pending.
+     */
+    private static boolean holdsNoEntities(final ChunkDelta<?, ?> delta) {
+        return delta.countNonNullEntities() == 0;
     }
 
     /**
