@@ -26,18 +26,18 @@ From one `bench.sh` session on the current code, the latest of several. Ratios m
 |---|---|---|---|---|
 | Disk after shutdown, natural flight | 52.5 MB | 104.8 MB | 0.50 | Ahead |
 | Disk after shutdown, round trip | 34.6 MB | 68.1 MB | 0.51 | Ahead |
-| Disk during benchmark | 42.7 MB | 61.9 MB | 0.69 | Ahead |
-| Heap | 876 MB | 1,192 MB | 0.74 | Ahead |
-| Tick p99 | 269 ms | 291 ms | 0.92 | Ahead |
-| Total CPU | 59.9 s | 63.9 s | 0.94 | Ahead |
-| Total lateness | 1,941 ms | 2,059 ms | 0.94 | Ahead |
-| Reload p50 | 983 ms | 1,019 ms | 0.96 | Ahead |
-| Reload p99 | 1,188 ms | 1,154 ms | 1.03 | Even |
-| Tick p50 | 30.5 ms | 29.2 ms | 1.05 | Behind |
-| Server-thread CPU | 11.4 s | 10.7 s | 1.07 | Behind |
-| Tick p90 | 41.6 ms | 38.1 ms | 1.09 | Behind |
-| Late tick count | 19.3 | 15.0 | 1.29 | Behind |
-| Unload p50 | 243 ms | 176 ms | 1.38 | Behind |
+| Disk during benchmark | 42.6 MB | 61.8 MB | 0.69 | Ahead |
+| Heap | 872 MB | 1,189 MB | 0.73 | Ahead |
+| Tick p99 | 264 ms | 324 ms | 0.81 | Ahead |
+| Total lateness | 1,979 ms | 2,115 ms | 0.94 | Ahead |
+| Total CPU | 61.3 s | 64.5 s | 0.95 | Ahead |
+| Reload p50 | 984 ms | 998 ms | 0.99 | Even |
+| Tick p50 | 30.4 ms | 29.5 ms | 1.03 | Even |
+| Server-thread CPU | 11.2 s | 10.7 s | 1.05 | Behind |
+| Tick p90 | 40.4 ms | 36.9 ms | 1.09 | Behind |
+| Reload p99 | 1,230 ms | 1,104 ms | 1.11 | Behind |
+| Unload p50 | 236 ms | 197 ms | 1.20 | Behind |
+| Late tick count | 20.0 | 14.7 | 1.36 | Behind |
 
 Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Total lateness over two 8-round pairs is 5,985 ms for Chunkis against 6,817 ms for vanilla, a ratio of 0.88. A later 2-round `bench.sh` session gave 2,089 against 2,053 ms, 1.02, so treat it as about even. By phase, over the two pairs: unload 3,400 against 2,880, reload 1,061 against 1,014, edit 278 against 381, save 1,245 against 2,543 ms. Reports now hold `latenessMillisByPhase`; `guard.py` does not check it yet.
 
@@ -75,6 +75,8 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Replay queue keyed by UUID: no scan per acknowledge, no queue copy per tick, UUID checked once | Paired A/B, 3 pairs: tick p50 -0.7 %, p90 +0.4 %, reload tick CPU +6.3 % and reload p99 +11 % in all 3 pairs. The 48 edit-phase samples are spawn work, not queue overhead | A world shows the queue itself in a profile |
 | Drop the 2 ms replay budget so entities return in a burst, as in vanilla | Paired A/B, 3 pairs: edit tick mean +4.3 %, tick p90 +4.1 %, late ticks +12.5 %, and no tick spike. The extra cost is those entities ticking sooner. Budget kept: it only binds when thousands of entities return together, as this benchmark forces. Tick figures here undercount entity cost for the first 40 ticks. | Real play shows entities late |
 | Keep the block fingerprint across a rebuild during load | Saves with no fingerprint fell from about 500 per round to almost none, mostly into mismatches, since those chunks had real edits. Paired A/B, 3 pairs: server CPU +6.9 % and total CPU +4.1 % in all 3, reload p50 +9.8 %. Likely more clean unloads copying sections on the server thread | Reuse is shown to outweigh that copy |
+| Drop the 2 ms replay budget again, with entities chunk-ordered | Paired A/B, 3 pairs: late ticks +24 % in all 3, nothing else past noise | Real play shows entities late |
+| Blame world-wide saves for the `generation_flow_does_not_claim_chunks` failure | A save forced mid-test did not claim the chunk, and the old assertion still passed, so the theory is wrong | Never |
 | Mark heightmaps current in `ChunkRestorer` after a release | Rebuilds unchanged at about 600. The real cause was the release itself moving the stamp | Never |
 
 ## Rejected without trying
@@ -86,6 +88,8 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Regenerating unedited chunks from the seed | Worldgen on every load, and it breaks when generation changes between versions |
 | Lean proofs | Prove a model, not the Java; no bearing on performance |
 | Cutting dirty-save cost or allocation | Dirty saves already beat vanilla's serialize on the server thread: 1,284 against 1,359 ms over a run, and Chunkis pauses less for GC |
+| Replay entities along a Z-order curve instead of row by row | Over a 64 by 64 area both walks total 8,064 chunks, and Z-order makes 511 jumps over 2 chunks against row order's 63, so row order is already the better walk |
+| Skip `cache_fill` on a clean cached load | The fill is already bulk, so only skipping it helps, and it is at most about 3 % of total CPU (1,722 ms of about 54 s) on workers, not ticks. The restore refuses a released delta on purpose, because an empty delta clears the chunk, and `consume` can fall back to the instructions after the containers went to vanilla. Lazy filling means guarding every reader of the instructions. A missed reader wipes a chunk |
 | Per-section block reuse | A chunk shares one global palette and one coded stream, so it needs per-section palettes, giving up disk. It targets save threads, which do not touch ticks, for an estimated 5 % of total CPU at most |
 | Storing blocks and light as separate records | Already done: the block part is separate and reused when its fingerprint matches, about 60 % of saves |
 
@@ -94,11 +98,14 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 - Late tick count: most of the extra count is in the reload phase, 11-14 against 5 per run, but those are small overruns (see Current standing). Decide whether `guard.py` should judge total lateness instead.
 - `SerializedChunk.convert` on the server thread is now 771 ms against vanilla's 370 ms over a 4-round run; `full_chunk` with `load_entities` gives back about 440 ms, leaving about 180 ms. Use the stage profiler: JFR hid this gap.
 - Unload p50: the phase is one giant tick that drops about 2,975 of 4,096 chunks, then idle ticks while the rest wait on tickets. By stage per round, before the container handoff: dirty saves 41-80 ms against vanilla's serialize 37-67 ms, clean saves 71-78 ms, entity capture 24-74 ms. Entity capture is the largest part left.
+- Unload stages per round on the current code, one clean run, against vanilla's serialize 35-64 ms: dirty saves 49-185 ms, clean saves 62-100 ms, entity capture 27-68 ms. Dirty saves were 41-80 ms in the run before the handoff, and clean saves did not fall with it, though its A/B improved unload. Not explained.
 - About 35 % of saves re-encode blocks. They are about 60 % of save-thread samples, and a guard's `scan` is another 19 %.
 - Entities reappear late after a bulk reload: about 2,100 by tick 40 of the edit phase, against vanilla's 2,300 by tick 3-4. Spawn work on a 2 ms budget (see the replay rows above).
 - Re-profile `tickEntity` now that replay is chunk-ordered. It ran longer under Chunkis with equal entity counts; order explains at least part of it. Entities also load by chunk completion order, not spatial order, in both modes.
 - Ruled out for tick p50 and p90: duplicate or extra entities (0 duplicates, counts match), slower block reads (11 % of entity-tick leaves in both modes), lock waits on the server thread, and GC (Chunkis pauses less).
 - `generation_flow_does_not_claim_chunks` failed once under a loaded `gradlew build` with the entity skip in the tree: 1 of 13 suite runs with it, 0 without. Any save of a settled chunk claims it, so a save during the test could explain it. Not proven.
+- Look at each run before believing a session. One Chunkis run started straight after a build, with a status check during it, and gave 156 late ticks against 23 and 39 for the next two, which flagged four rows on unchanged code. A re-run on a settled machine passed.
 - A paired A/B can be split by the machine: runs fell into a fast band (about 27 ms) and a slow band (about 34 ms). Check bands before reading a pair.
+- Reload workers, one clean stage run over 4,393 provides: `chunkis_provide` 889 us each, of which `cache_fill` 405, `cache_lookup` 167, `decode_without_blocks` 91, `embed` 72, `io` 30, `decompress` 25. `parse` is 543 against vanilla's 475 us. `cache_fill` turns cached containers into delta instructions the load also receives as containers; see Rejected without trying. Vanilla's read time is not in this stage data.
 - Measure with stage timers as well as JFR: it hid both `convert` and the clean-save copy.
 - Why a chunk's light keeps changing between reloads, when no block changed.
