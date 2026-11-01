@@ -26,7 +26,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -39,6 +41,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(ServerChunkLoadingManager.class)
 public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordinatorHolder {
+
+    /**
+     * Queued chunk unloads above which unloads run whatever the tick time.
+     */
+    @Unique
+    private static final int UNLOAD_BACKLOG_LIMIT = 8192;
 
     /**
      * The server world that owns this chunk loading manager.
@@ -89,6 +97,19 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
             chunkis$loadProvider = new SyntheticLoadNbtProvider(world);
         }
         return chunkis$loadProvider;
+    }
+
+    /**
+     * Raises the unload backlog vanilla tolerates before forcing unloads through regardless of tick time, so a mass
+     * unload is spread over ticks by the tick budget instead of landing in one tick. The limit stays finite: an
+     * overloaded server has no budget left, and its backlog must still drain. A shutdown ignores both.
+     *
+     * @param vanillaLimit vanilla's limit
+     * @return the limit to use
+     */
+    @ModifyConstant(method = "unloadChunks", constant = @Constant(intValue = 2000))
+    private int chunkis$unloadBacklogLimit(final int vanillaLimit) {
+        return MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey()) ? UNLOAD_BACKLOG_LIMIT : vanillaLimit;
     }
 
     /**
