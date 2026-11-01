@@ -85,7 +85,7 @@ final class AsyncCisSaveWorker implements Runnable {
                     .getValue() + "-" + i);
             threads[i].setDaemon(true);
             // Saves can wait; a tick cannot. They compete with the server thread for the same cores.
-            threads[i].setPriority(Thread.MIN_PRIORITY);
+            threads[i].setPriority(Thread.NORM_PRIORITY - 1);
             threads[i].start();
         }
     }
