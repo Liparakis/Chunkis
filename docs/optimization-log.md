@@ -58,6 +58,7 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Return early from entity capture for an empty list when the delta holds no entities | `2383a14e` | Paired A/B, 3 pairs: server CPU -2.1 %, tick p90 -1.7 % in all 3. Small, and nothing got worse |
 | Skip vanilla's entity serialization when the region guard would drop its write | `2383a14e` | Paired A/B, 3 pairs: late ticks -9.1 % and tick p50 -1.3 % in all 3, reload p99 -8.3 % in 2 of 3. An earlier sample count (17 to 16) wrongly dropped it. No data lost: vanilla's write never reached disk. Vanilla's write stays when either guard could let it through |
 | Replay entities in chunk order: a queue sorted by chunk | `71c20adf` | Paired A/B, 4 pairs, better in 3: tick p50 -7.3 %, tick p90 -9.3 %, tick p99 -8.6 %, late ticks -20.9 %, unload p50 -8.3 %, server CPU -5.5 %. The hash-ordered queue left vanilla's entity list in random order, so entities ticked across the world, missing the small chunk cache and memory locality. Sorting the queue every tick cost reload tick CPU +14.6 %; a sorted map does not |
+| Encode one-biome sections without repacking them | `ab59e64f` | Paired A/B, 4 pairs: tick p99 -11.3 % in all 4, reload p50 -3.6 %, total CPU -2.0 %, server CPU -1.8 %. An earlier run judged it only on unload latency, where it does nothing |
 
 ## Tried and dropped
 
@@ -71,12 +72,13 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Reuse a pre-generated world in benchmarks | Would skew results: leg 0 fills caches leg 1 depends on | Never |
 | Run leg 0 unpaced in timing runs | Leg 1 cache hits 883 to 17, and a 300-480 ms first tick | Counting runs only (`-PchunkisStressFastGeneration=true`) |
 | Join-time prefetch | Never served a load; removed in `af6db4db` | Never |
-| Fast path for one-biome sections, and no palette copy in block-less snapshots | Paired A/B, 4 pairs of 8 rounds: unload p50 162 to 155 ms with differences both ways, unload tick CPU 30.0 to 30.3 ms | Unload save work is shown to limit latency |
+| No palette copy in block-less snapshots | Paired A/B together with the biome path showed no unload change; not tested alone | Tested alone |
 | Replay queue keyed by UUID: no scan per acknowledge, no queue copy per tick, UUID checked once | Paired A/B, 3 pairs: tick p50 -0.7 %, p90 +0.4 %, reload tick CPU +6.3 % and reload p99 +11 % in all 3 pairs. The 48 edit-phase samples are spawn work, not queue overhead | A world shows the queue itself in a profile |
 | Drop the 2 ms replay budget so entities return in a burst, as in vanilla | Paired A/B, 3 pairs: edit tick mean +4.3 %, tick p90 +4.1 %, late ticks +12.5 %, and no tick spike. The extra cost is those entities ticking sooner. Budget kept: it only binds when thousands of entities return together, as this benchmark forces. Tick figures here undercount entity cost for the first 40 ticks. | Real play shows entities late |
 | Keep the block fingerprint across a rebuild during load | Saves with no fingerprint fell from about 500 per round to almost none, mostly into mismatches, since those chunks had real edits. Paired A/B, 3 pairs: server CPU +6.9 % and total CPU +4.1 % in all 3, reload p50 +9.8 %. Likely more clean unloads copying sections on the server thread | Reuse is shown to outweigh that copy |
 | Drop the 2 ms replay budget again, with entities chunk-ordered | Paired A/B, 3 pairs: late ticks +24 % in all 3, nothing else past noise | Real play shows entities late |
 | Blame world-wide saves for the `generation_flow_does_not_claim_chunks` failure | A save forced mid-test did not claim the chunk, and the old assertion still passed, so the theory is wrong | Never |
+| With the queue sorted: one chunk lookup per chunk, UUIDs checked once, `acknowledge` through an index | Paired A/B, 4 pairs: every row within 2 %, reload p50 and p99 +1.0 % | A world shows the queue itself limiting ticks |
 | Mark heightmaps current in `ChunkRestorer` after a release | Rebuilds unchanged at about 600. The real cause was the release itself moving the stamp | Never |
 
 ## Rejected without trying
