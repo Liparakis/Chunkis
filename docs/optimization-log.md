@@ -23,24 +23,24 @@ The goal is to beat vanilla on every metric, without weakening data safety.
 
 ## Current standing
 
-From one `bench.sh` session on the current code. Ratios move about 10 % between sessions on identical code, and this one caught vanilla in a fast run (tick p50 24.2 ms), so a paired A/B decides a change, not this table. Disk after shutdown was measured just before the save-thread priority changes.
+From one `bench.sh` session with the unload backlog change, pinned to logical CPUs 0-11, so every time is slower than an unpinned run and only the ratios compare. Ratios move about 10 % between sessions on identical code. Disk after shutdown was measured just before the save-thread priority changes.
 
 | Metric | Chunkis | Vanilla | Ratio | Standing |
 |---|---|---|---|---|
 | Disk after shutdown, round trip | 32.8 MB | 70.0 MB | 0.47 | Ahead |
 | Disk after shutdown, natural flight | 50.0 MB | 100.4 MB | 0.50 | Ahead |
-| Disk during benchmark | 43.0 MB | 61.8 MB | 0.70 | Ahead |
-| Heap | 877 MB | 1,140 MB | 0.77 | Ahead |
-| Tick p99 | 234 ms | 286 ms | 0.82 | Ahead |
-| Total lateness | 1,677 ms | 1,766 ms | 0.95 | Ahead |
-| Total CPU | 55.4 s | 56.8 s | 0.98 | Even |
-| Reload p50 | 909 ms | 852 ms | 1.07 | Behind |
-| Tick p90 | 31.6 ms | 29.4 ms | 1.07 | Behind |
-| Tick p50 | 26.1 ms | 24.2 ms | 1.08 | Behind |
-| Server-thread CPU | 9.6 s | 8.7 s | 1.10 | Behind |
-| Reload p99 | 1,187 ms | 951 ms | 1.25 | Behind |
-| Late tick count | 17.7 | 13.7 | 1.29 | Behind |
-| Unload p50 | 249 ms | 167 ms | 1.49 | Behind |
+| Tick p99 | 206 ms | 304 ms | 0.68 | Ahead |
+| Disk during benchmark | 42.8 MB | 61.8 MB | 0.69 | Ahead |
+| Total lateness | 1,661 ms | 2,261 ms | 0.73 | Ahead |
+| Heap | 871 MB | 1,132 MB | 0.77 | Ahead |
+| Total CPU | 55.7 s | 61.8 s | 0.90 | Ahead |
+| Tick p50 | 31.1 ms | 29.7 ms | 1.04 | Behind |
+| Server-thread CPU | 11.5 s | 10.8 s | 1.06 | Behind |
+| Unload p50 | 247 ms | 226 ms | 1.09 | Behind |
+| Tick p90 | 42.9 ms | 38.2 ms | 1.12 | Behind |
+| Reload p50 | 1,074 ms | 961 ms | 1.12 | Behind |
+| Reload p99 | 1,252 ms | 1,077 ms | 1.16 | Behind |
+| Late tick count | 21.0 | 14.7 | 1.43 | Behind |
 
 Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Total lateness over two 8-round pairs is 5,985 ms for Chunkis against 6,817 ms for vanilla, a ratio of 0.88. A later 2-round `bench.sh` session gave 2,089 against 2,053 ms, 1.02, so treat it as about even. By phase, over the two pairs: unload 3,400 against 2,880, reload 1,061 against 1,014, edit 278 against 381, save 1,245 against 2,543 ms. Reports now hold `latenessMillisByPhase`; `guard.py` does not check it yet.
 
@@ -67,6 +67,7 @@ Judge the small results here against the noise floor in How to measure: the wake
 | Run save threads below normal priority | `a78ac7fe`, `adcfd7b4` | Lowest priority, 4 pairs: tick p50 -3.3 %, server CPU -3.5 %, total CPU -1.7 % in all 4, reload p99 -15.2 % in 3, unload +11.3 % in all 4. Below normal against lowest, 4 pairs: unload -6.4 %, ticks unchanged |
 | Wake one save thread per submitted save | `f5e1f2d4` | Paired A/B, 4 pairs: tick p50 -1.3 % and tick p90 -2.1 % in all 4. Reload tick CPU read +14.3 % with reload latency flat |
 | Return early from live entity capture for an empty chunk with an empty delta | `7210f1a3` | Timer around the step, one run each: 32-35 to 25-27 ms per unload round, clean saves about 70-120 to 57 ms. It only skips work that returned the same delta unchanged. The rest is vanilla's section lookup; the paired A/B could not see it (all rows inside the floor apart from one slow run) |
+| Raise the unload backlog vanilla forces through in one tick, 2,000 to 8,192, so the tick budget spreads a mass unload | `bd142b62` | Paired A/B pinned, 4 alternating pairs, every run on better than every run off: unload lateness 3,202-4,201 to 1,937-2,213 ms (-44 %), worst tick 377-537 to 319-347 ms, unload p99 491-687 to 411-477 ms, phase 291-389 to 234-293 ms, tick p99 -17.9 %, late ticks -9.6 %, unload p50 unchanged. Authoritative worlds only, so vanilla-mode runs keep 2,000. An overloaded server has no tick budget, so it drains only past 8,192; not tested |
 
 ## Tried and dropped
 
@@ -92,6 +93,8 @@ Judge the small results here against the noise floor in How to measure: the wake
 | Blame a lock or thread wake-ups for unload getting slower with low-priority saves | Server-thread lock waits of 1 ms or more total 26 ms over all unload rounds; one wake per save did not move unload. Why unload follows save-thread speed is still unknown | The cause is measured |
 | Search a section's first 16 states by reference before hashing, in the encoder | Output byte-identical, and no gain: save-thread CPU in `prepareSave` per 2,000 saves, 4 alternating pairs, 598-688 ms against 613-698 ms. JFR put those hash lookups at 17 % of save-thread samples, which was not real. An earlier A/B looked good only inside the noise floor | A timer shows the lookups cost something |
 | Look up entity sections by key over the world's height instead of vanilla's tree and stream, about 7 us per chunk | Not built: entities can sit above the build limit, in sections such a range misses, and would be dropped from the save | Never |
+| Blame the entity fingerprint for serializing entities twice at unload | Timer, one run: `fingerprintSavable` about 0 ms per 1,000 calls; chunks reaching it hold almost no entities. `capture` itself is 20-49 ms per 1,000 calls over 1,100-2,400 entities, and that serialize is needed. `loadStoredDelta` reads storage on the server thread, usually 2-20 ms per 1,000 calls with one round at 108 ms | Never |
+| Prepare more of the load off the server thread, to beat vanilla's `convert` | Timer, one run: Chunkis's part of `convert` is about 10 us per chunk once warm, 9 of them the restore. Server-thread load work is already level with vanilla (about 208 against 220 ms in a round, entity spawning moved to the replay queue). About 40 ms a round to win at most | A timer shows a larger part |
 | Run both sides of a paired A/B at the same time, in two worktrees | Same code on both sides, 3 pairs: tick p90 +9.2 %, server and total CPU worse in all 3 on one side, late ticks about 60 to 190, tick p90 about 30 to 55. Contention distorts the run and cancels no noise, and a pair is only 38 % faster (214 against 346 s) | Never for latency or ticks |
 | Mark heightmaps current in `ChunkRestorer` after a release | Rebuilds unchanged at about 600. The real cause was the release itself moving the stamp | Never |
 
