@@ -17,6 +17,7 @@
             "io.liparakis.chunkis.gametest.GenerationSettlingGameTest",
             "io.liparakis.chunkis.gametest.SettledChunkBaselineGameTest",
             "io.liparakis.chunkis.gametest.PendingTicksGameTest",
+            "io.liparakis.chunkis.gametest.ScheduledEntityReplayGameTest",
             "io.liparakis.chunkis.gametest.StoredBiomesEncodingGameTest",
             "io.liparakis.chunkis.gametest.PreloadedSectionsReloadGameTest",
             "io.liparakis.chunkis.gametest.UnsavedReloadGameTest",
