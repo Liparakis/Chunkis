@@ -60,7 +60,7 @@ jobs:
           java-version: '21'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6.2.0
+        uses: gradle/actions/setup-gradle@v6.4.1
 
       # Same checks as CI, which skips the Fabric game tests (see ci.yml).
       - name: Build, test, and check
