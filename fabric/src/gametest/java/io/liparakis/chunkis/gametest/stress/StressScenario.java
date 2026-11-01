@@ -479,7 +479,10 @@ final class StressScenario implements StressRun {
         config.addProperty("storage", Boolean.getBoolean("chunkis.stress.vanilla") ? "vanilla" : "chunkis");
         config.addProperty("dimension", world.getRegistryKey().getValue().toString());
         config.addProperty("natural", natural);
-        metrics.setSizePerChunk(ChunkSizeComparison.measure(world, chunks));
+        // Reads every stored chunk, about 10 s; a paired A/B does not use the result.
+        if (!Boolean.getBoolean("chunkis.stress.skipSizes")) {
+            metrics.setSizePerChunk(ChunkSizeComparison.measure(world, chunks));
+        }
         if (stages != null) {
             config.add("stages", stages);
         }
