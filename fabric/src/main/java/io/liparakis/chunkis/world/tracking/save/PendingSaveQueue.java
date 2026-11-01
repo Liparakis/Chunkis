@@ -50,7 +50,8 @@ final class PendingSaveQueue {
             }
             pending.remove(save.posKey());
             pending.put(save.posKey(), save);
-            monitor.notifyAll();
+            // One new save needs one thread; waking all of them is a system call each, on the server thread.
+            monitor.notify();
         }
     }
 
