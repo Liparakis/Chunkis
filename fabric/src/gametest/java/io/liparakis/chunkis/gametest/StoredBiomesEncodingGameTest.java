@@ -24,7 +24,8 @@ import net.minecraft.world.chunk.PalettesFactory;
 public final class StoredBiomesEncodingGameTest {
 
     /**
-     * Encodes a one-biome container and one holding several biomes both ways and expects equal NBT.
+     * Encodes a one-biome container, one holding several biomes and one reduced back to a single biome, whose
+     * palette still has room for more, both ways and expects equal NBT.
      *
      * @param context the game test context
      */
@@ -35,12 +36,17 @@ public final class StoredBiomesEncodingGameTest {
         final var registry = world.getRegistryManager().getOrThrow(RegistryKeys.BIOME);
         final PalettedContainer<RegistryEntry<Biome>> single = palettes.getBiomeContainer();
         final PalettedContainer<RegistryEntry<Biome>> mixed = palettes.getBiomeContainer();
+        final PalettedContainer<RegistryEntry<Biome>> reduced = palettes.getBiomeContainer();
         final List<RegistryKey<Biome>> keys = List.of(BiomeKeys.DESERT, BiomeKeys.FOREST, BiomeKeys.OCEAN,
                 BiomeKeys.SWAMP, BiomeKeys.TAIGA);
         for (int i = 0; i < 64; i++) {
             mixed.swap(i & 3, (i >> 2) & 3, i >> 4, registry.getOrThrow(keys.get(i % keys.size())));
+            reduced.swap(i & 3, (i >> 2) & 3, i >> 4, registry.getOrThrow(keys.get(i % keys.size())));
         }
-        for (final PalettedContainer<RegistryEntry<Biome>> container : List.of(single, mixed)) {
+        for (int i = 0; i < 64; i++) {
+            reduced.swap(i & 3, (i >> 2) & 3, i >> 4, registry.getOrThrow(BiomeKeys.SWAMP));
+        }
+        for (final PalettedContainer<RegistryEntry<Biome>> container : List.of(single, mixed, reduced)) {
             final NbtElement expected = palettes.biomeContainerCodec().encodeStart(NbtOps.INSTANCE, container)
                     .getOrThrow();
             final NbtElement actual = StoredSections.encodeBiomes(container, palettes.biomeStrategy());

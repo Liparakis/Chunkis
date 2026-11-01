@@ -1,6 +1,10 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
 import com.mojang.serialization.Codec;
+import io.liparakis.chunkis.world.restoration.core.PalettedContainerFields;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.LongStream;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
@@ -13,8 +17,11 @@ import net.minecraft.world.LightType;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkNibbleArray;
 import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.Palette;
 import net.minecraft.world.chunk.PaletteProvider;
+import net.minecraft.world.chunk.PalettedContainer;
 import net.minecraft.world.chunk.ReadableContainer;
+import net.minecraft.world.chunk.SingularPalette;
 import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.chunk.light.LightingProvider;
 
@@ -103,15 +110,49 @@ public final class StoredSections {
      * ids and, past one entry, the packed {@code data}), without going through the codec, which cost more than
      * the rest of a save's section capture. Runs on the server thread with every save of a stored chunk.
      *
+     * <p>A section of one biome skips {@link ReadableContainer#serialize}, which would lock the container and
+     * repack its 64 entries only to find that one biome again.</p>
+     *
      * @param biomes   biome container of one section
      * @param provider biome palette provider
      * @return the encoded container, or {@code null} when a biome has no registry key and the codec must encode it
      */
     public static NbtCompound encodeBiomes(final ReadableContainer<RegistryEntry<Biome>> biomes,
             final PaletteProvider<RegistryEntry<Biome>> provider) {
+        final RegistryEntry<Biome> onlyBiome = onlyBiome(biomes);
+        if (onlyBiome != null) {
+            return encodeBiomes(List.of(onlyBiome), Optional.empty());
+        }
         final ReadableContainer.Serialized<RegistryEntry<Biome>> serialized = biomes.serialize(provider);
+        return encodeBiomes(serialized.paletteEntries(), serialized.storage());
+    }
+
+    /**
+     * Returns the biome of a container whose palette can only hold one.
+     *
+     * @param biomes biome container of one section
+     * @return its one biome, or {@code null} when the palette has to be looked through
+     */
+    private static RegistryEntry<Biome> onlyBiome(final ReadableContainer<RegistryEntry<Biome>> biomes) {
+        if (!PalettedContainerFields.AVAILABLE || !(biomes instanceof PalettedContainer<RegistryEntry<Biome>> container)) {
+            return null;
+        }
+        final Palette<RegistryEntry<Biome>> palette = PalettedContainerFields.palette(
+                PalettedContainerFields.data(container));
+        return palette instanceof SingularPalette<RegistryEntry<Biome>> ? palette.get(0) : null;
+    }
+
+    /**
+     * Writes a biome palette and its packed data.
+     *
+     * @param biomes  palette entries
+     * @param storage packed data, empty for one entry
+     * @return the encoded container, or {@code null} when a biome has no registry key
+     */
+    private static NbtCompound encodeBiomes(final List<RegistryEntry<Biome>> biomes,
+            final Optional<LongStream> storage) {
         final NbtList palette = new NbtList();
-        for (final RegistryEntry<Biome> biome : serialized.paletteEntries()) {
+        for (final RegistryEntry<Biome> biome : biomes) {
             final var key = biome.getKey();
             if (key.isEmpty()) {
                 return null;
@@ -120,7 +161,7 @@ public final class StoredSections {
         }
         final NbtCompound encoded = new NbtCompound();
         encoded.put("palette", palette);
-        serialized.storage().ifPresent(data -> encoded.putLongArray("data", data.toArray()));
+        storage.ifPresent(data -> encoded.putLongArray("data", data.toArray()));
         return encoded;
     }
 
