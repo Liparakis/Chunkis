@@ -24,6 +24,8 @@ METRICS = [
     ("tick p90", ("tickMillis", "all", "p90"), "ratio", 0.08),
     ("tick p99", ("tickMillis", "all", "p99"), "ratio", 0.15),
     ("late ticks", ("tickIntervalMillis", "lateTicks"), "ratio", 0.30),
+    # A count weighs a tick 6 ms late like one 300 ms late; this adds up how late they were.
+    ("lateness ms", lambda r: sum(r["tickIntervalMillis"].get("latenessMillisByPhase", {}).values()), "ratio", 0.30),
     ("unload p50", ("chunkLatencyMillis", "unload", "p50"), "ratio", 0.12),
     ("reload p50", ("chunkLatencyMillis", "reload", "p50"), "ratio", 0.10),
     ("reload p99", ("chunkLatencyMillis", "reload", "p99"), "ratio", 0.15),
