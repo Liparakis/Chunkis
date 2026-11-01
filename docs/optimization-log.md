@@ -15,6 +15,9 @@ The goal is to beat vanilla on every metric, without weakening data safety.
 - Vanilla mode runs with Chunkis loaded. Since `63349320` it skips the base capture, save hook and entity capture, but block-edit hooks still run. Baselines from before that commit are not comparable.
 - A probe must not change what it measures. The write counter once made deletes fail, which produced a false "chunks stored twice" finding.
 - For one metric, use a paired A/B: the patch off and on, alternating, with `-PchunkisStressRounds=8`. `bench.sh` runs vary about 10 % within a session, so three runs cannot see a small change. Session ratios can move through vanilla alone: unload went 1.34 to 1.71 while Chunkis stayed flat.
+- Check background CPU, not only games. Legcord on a call took about a core: tick p50 read 28-40 ms on code that gives 26, and two 4-pair A/Bs were unusable. Pinning fixes it: other programs on logical CPUs 14-15, the run on 0-11 (children inherit the launching shell's affinity). Unload then held within 155-167 ms across 8 runs, against 140-221 unpinned. Pinned figures are slower overall (tick p50 about 32 ms), so compare them only with each other.
+- **A paired A/B has a noise floor; better in 4 of 4 is not proof.** The same code against itself, pinned, 4 pairs, off then on: tick p50 -1.7 %, tick p90 -4.0 % in 4/4, tick p99 +7.1 %, reload tick CPU +12.2 %, unload +6.0 % in 0/4, reload p99 +5.7 %, late ticks -4.4 %, server CPU -1.7 %, total CPU -0.6 %. A change inside those figures shows nothing. With a dozen rows, some land 4/4 by chance, and `on` always ran second, so an order bias is not ruled out either. Vary the order within pairs: alternating it turned the unload row from +6.0 % to -5.0 % with nothing else changed that could move it. When a change only removes work, confirm it with a timer around that work.
+- Start an A/B with 2 pairs and extend only if it looks useful. `-PchunkisStressSkipSizes=true` skips the size table, about 10 s, which an A/B does not read.
 - Fewer JFR samples are not a result on their own. Unload save samples fell from 85 to 49 in one pair of runs, and the A/B then showed no change in latency or tick CPU.
 - Cut profiles by phase with the millisecond time in the `step` log line. `unloadChunks` frames also appear during autosaves, and samples after `DONE` are teardown, where vanilla mode's hook skips no longer apply. Both produced false findings.
 
@@ -43,6 +46,8 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 
 ## Kept
 
+Judge the small results here against the noise floor in How to measure: the wake-one row, the below-normal row and the entity early-exit row of `2383a14e` sit inside it. They cost little and are not proven gains.
+
 | Change | Commit | Result |
 |---|---|---|
 | Stop the dirty tracker keeping saved deltas | `1340823a` | Retained heap on a 16,384-block flight 900 to 453 MB (vanilla 366); it no longer grows with distance |
@@ -61,6 +66,7 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Encode one-biome sections without repacking them | `ab59e64f` | Paired A/B, 4 pairs: tick p99 -11.3 % in all 4, reload p50 -3.6 %, total CPU -2.0 %, server CPU -1.8 %. An earlier run judged it only on unload latency, where it does nothing |
 | Run save threads below normal priority | `a78ac7fe`, `adcfd7b4` | Lowest priority, 4 pairs: tick p50 -3.3 %, server CPU -3.5 %, total CPU -1.7 % in all 4, reload p99 -15.2 % in 3, unload +11.3 % in all 4. Below normal against lowest, 4 pairs: unload -6.4 %, ticks unchanged |
 | Wake one save thread per submitted save | `f5e1f2d4` | Paired A/B, 4 pairs: tick p50 -1.3 % and tick p90 -2.1 % in all 4. Reload tick CPU read +14.3 % with reload latency flat |
+| Return early from live entity capture for an empty chunk with an empty delta | `7210f1a3` | Timer around the step, one run each: 32-35 to 25-27 ms per unload round, clean saves about 70-120 to 57 ms. It only skips work that returned the same delta unchanged. The rest is vanilla's section lookup; the paired A/B could not see it (all rows inside the floor apart from one slow run) |
 
 ## Tried and dropped
 
@@ -84,6 +90,9 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Two save threads instead of four | Paired A/B, 4 pairs: reload p99 +12.1 % in all 4; tick p99 -7.3 %, unload -2.8 %. Reload p99 follows how fast saves finish | Reload stops depending on save speed |
 | Six save threads instead of four | Paired A/B, 4 pairs: reload p99 -4.5 %, unload +7.7 %. A trade, not a gain | Unload no longer depends on save threads |
 | Blame a lock or thread wake-ups for unload getting slower with low-priority saves | Server-thread lock waits of 1 ms or more total 26 ms over all unload rounds; one wake per save did not move unload. Why unload follows save-thread speed is still unknown | The cause is measured |
+| Search a section's first 16 states by reference before hashing, in the encoder | Output byte-identical, and no gain: save-thread CPU in `prepareSave` per 2,000 saves, 4 alternating pairs, 598-688 ms against 613-698 ms. JFR put those hash lookups at 17 % of save-thread samples, which was not real. An earlier A/B looked good only inside the noise floor | A timer shows the lookups cost something |
+| Look up entity sections by key over the world's height instead of vanilla's tree and stream, about 7 us per chunk | Not built: entities can sit above the build limit, in sections such a range misses, and would be dropped from the save | Never |
+| Run both sides of a paired A/B at the same time, in two worktrees | Same code on both sides, 3 pairs: tick p90 +9.2 %, server and total CPU worse in all 3 on one side, late ticks about 60 to 190, tick p90 about 30 to 55. Contention distorts the run and cancels no noise, and a pair is only 38 % faster (214 against 346 s) | Never for latency or ticks |
 | Mark heightmaps current in `ChunkRestorer` after a release | Rebuilds unchanged at about 600. The real cause was the release itself moving the stamp | Never |
 
 ## Rejected without trying
@@ -133,6 +142,7 @@ Retained heap is the recent-chunk cache: with it off, 447 MB. It held 5,090 chun
 - Look at each run before believing a session. One Chunkis run started straight after a build, with a status check during it, and gave 156 late ticks against 23 and 39 for the next two, which flagged four rows on unchanged code. A re-run on a settled machine passed.
 - A paired A/B can be split by the machine: runs fell into a fast band (about 27 ms) and a slow band (about 34 ms). Check bands before reading a pair.
 - Reload workers, one clean stage run over 4,393 provides: `chunkis_provide` 889 us each, of which `cache_fill` 405, `cache_lookup` 167, `decode_without_blocks` 91, `embed` 72, `io` 30, `decompress` 25. `parse` is 543 against vanilla's 475 us. `cache_fill` turns cached containers into delta instructions the load also receives as containers; see Rejected without trying. Vanilla's read time is not in this stage data.
+- A JFR sample share is a lead, not a cost. Time the code before acting on one: see the encoder row in Tried and dropped.
 - JFR samples a few threads per cycle, so a server thread among many busy threads is under-sampled compared with vanilla. Sample counts across modes mislead when other threads are busy; stage timers do not.
 - Allocation looks large only with warm-up included: 37.8 against 25.9 GB, but 18.3 against 16.7 GB in the measured rounds.
 - Measure with stage timers as well as JFR: it hid both `convert` and the clean-save copy.
