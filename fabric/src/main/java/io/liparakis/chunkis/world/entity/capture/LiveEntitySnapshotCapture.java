@@ -136,6 +136,10 @@ public final class LiveEntitySnapshotCapture {
                     null);
             return existingDelta;
         }
+        if (existingDelta != null && liveEntities.isEmpty() && existingDelta.countNonNullEntities() == 0) {
+            // Most chunks at unload: nothing live and nothing held, so the capture below would change nothing.
+            return existingDelta;
+        }
 
         final ChunkDelta<BlockState, NbtCompound> delta = existingDelta != null ? existingDelta : new ChunkDelta<>();
 

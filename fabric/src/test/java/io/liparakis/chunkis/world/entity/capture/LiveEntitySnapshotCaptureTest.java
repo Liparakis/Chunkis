@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.world.entity.capture;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
@@ -61,5 +62,15 @@ class LiveEntitySnapshotCaptureTest {
                 List.of(entity("minecraft:cow", 5)), List.of()));
         assertTrue(LiveEntitySnapshotCapture.sameEntities(delta, List.of(pending),
                 List.of(entity("minecraft:cow", 5)), List.of(pending)));
+    }
+
+    /**
+     * An empty list leaves a delta holding no entities exactly as it was, without needing the world or the position.
+     */
+    @Test
+    void emptyEntityListLeavesADeltaWithoutEntitiesAlone() {
+        final ChunkDelta<BlockState, NbtCompound> empty = new ChunkDelta<>();
+        assertSame(empty, LiveEntitySnapshotCapture.capture(null, null, List.of(), empty, null, "test"));
+        assertFalse(empty.isDirty());
     }
 }
