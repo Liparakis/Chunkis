@@ -20,24 +20,24 @@ The goal is to beat vanilla on every metric, without weakening data safety.
 
 ## Current standing
 
-From one `bench.sh` session on the current code, the latest of several. Ratios move about 10 % between sessions on identical code, so a paired A/B decides a change, not this table. Disk after shutdown was measured on `63349320`.
+From one `bench.sh` session on the current code. Ratios move about 10 % between sessions on identical code, and this one caught vanilla in a fast run (tick p50 24.2 ms), so a paired A/B decides a change, not this table. Disk after shutdown was measured just before the save-thread priority changes.
 
 | Metric | Chunkis | Vanilla | Ratio | Standing |
 |---|---|---|---|---|
-| Disk after shutdown, natural flight | 52.5 MB | 104.8 MB | 0.50 | Ahead |
-| Disk after shutdown, round trip | 34.6 MB | 68.1 MB | 0.51 | Ahead |
-| Disk during benchmark | 42.6 MB | 61.8 MB | 0.69 | Ahead |
-| Heap | 872 MB | 1,189 MB | 0.73 | Ahead |
-| Tick p99 | 264 ms | 324 ms | 0.81 | Ahead |
-| Total lateness | 1,979 ms | 2,115 ms | 0.94 | Ahead |
-| Total CPU | 61.3 s | 64.5 s | 0.95 | Ahead |
-| Reload p50 | 984 ms | 998 ms | 0.99 | Even |
-| Tick p50 | 30.4 ms | 29.5 ms | 1.03 | Even |
-| Server-thread CPU | 11.2 s | 10.7 s | 1.05 | Behind |
-| Tick p90 | 40.4 ms | 36.9 ms | 1.09 | Behind |
-| Reload p99 | 1,230 ms | 1,104 ms | 1.11 | Behind |
-| Unload p50 | 236 ms | 197 ms | 1.20 | Behind |
-| Late tick count | 20.0 | 14.7 | 1.36 | Behind |
+| Disk after shutdown, round trip | 32.8 MB | 70.0 MB | 0.47 | Ahead |
+| Disk after shutdown, natural flight | 50.0 MB | 100.4 MB | 0.50 | Ahead |
+| Disk during benchmark | 43.0 MB | 61.8 MB | 0.70 | Ahead |
+| Heap | 877 MB | 1,140 MB | 0.77 | Ahead |
+| Tick p99 | 234 ms | 286 ms | 0.82 | Ahead |
+| Total lateness | 1,677 ms | 1,766 ms | 0.95 | Ahead |
+| Total CPU | 55.4 s | 56.8 s | 0.98 | Even |
+| Reload p50 | 909 ms | 852 ms | 1.07 | Behind |
+| Tick p90 | 31.6 ms | 29.4 ms | 1.07 | Behind |
+| Tick p50 | 26.1 ms | 24.2 ms | 1.08 | Behind |
+| Server-thread CPU | 9.6 s | 8.7 s | 1.10 | Behind |
+| Reload p99 | 1,187 ms | 951 ms | 1.25 | Behind |
+| Late tick count | 17.7 | 13.7 | 1.29 | Behind |
+| Unload p50 | 249 ms | 167 ms | 1.49 | Behind |
 
 Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Total lateness over two 8-round pairs is 5,985 ms for Chunkis against 6,817 ms for vanilla, a ratio of 0.88. A later 2-round `bench.sh` session gave 2,089 against 2,053 ms, 1.02, so treat it as about even. By phase, over the two pairs: unload 3,400 against 2,880, reload 1,061 against 1,014, edit 278 against 381, save 1,245 against 2,543 ms. Reports now hold `latenessMillisByPhase`; `guard.py` does not check it yet.
 
@@ -59,6 +59,8 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Skip vanilla's entity serialization when the region guard would drop its write | `2383a14e` | Paired A/B, 3 pairs: late ticks -9.1 % and tick p50 -1.3 % in all 3, reload p99 -8.3 % in 2 of 3. An earlier sample count (17 to 16) wrongly dropped it. No data lost: vanilla's write never reached disk. Vanilla's write stays when either guard could let it through |
 | Replay entities in chunk order: a queue sorted by chunk | `71c20adf` | Paired A/B, 4 pairs, better in 3: tick p50 -7.3 %, tick p90 -9.3 %, tick p99 -8.6 %, late ticks -20.9 %, unload p50 -8.3 %, server CPU -5.5 %. The hash-ordered queue left vanilla's entity list in random order, so entities ticked across the world, missing the small chunk cache and memory locality. Sorting the queue every tick cost reload tick CPU +14.6 %; a sorted map does not |
 | Encode one-biome sections without repacking them | `ab59e64f` | Paired A/B, 4 pairs: tick p99 -11.3 % in all 4, reload p50 -3.6 %, total CPU -2.0 %, server CPU -1.8 %. An earlier run judged it only on unload latency, where it does nothing |
+| Run save threads below normal priority | `a78ac7fe`, `adcfd7b4` | Lowest priority, 4 pairs: tick p50 -3.3 %, server CPU -3.5 %, total CPU -1.7 % in all 4, reload p99 -15.2 % in 3, unload +11.3 % in all 4. Below normal against lowest, 4 pairs: unload -6.4 %, ticks unchanged |
+| Wake one save thread per submitted save | `f5e1f2d4` | Paired A/B, 4 pairs: tick p50 -1.3 % and tick p90 -2.1 % in all 4. Reload tick CPU read +14.3 % with reload latency flat |
 
 ## Tried and dropped
 
@@ -79,6 +81,9 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Drop the 2 ms replay budget again, with entities chunk-ordered | Paired A/B, 3 pairs: late ticks +24 % in all 3, nothing else past noise | Real play shows entities late |
 | Blame world-wide saves for the `generation_flow_does_not_claim_chunks` failure | A save forced mid-test did not claim the chunk, and the old assertion still passed, so the theory is wrong | Never |
 | With the queue sorted: one chunk lookup per chunk, UUIDs checked once, `acknowledge` through an index | Paired A/B, 4 pairs: every row within 2 %, reload p50 and p99 +1.0 % | A world shows the queue itself limiting ticks |
+| Two save threads instead of four | Paired A/B, 4 pairs: reload p99 +12.1 % in all 4; tick p99 -7.3 %, unload -2.8 %. Reload p99 follows how fast saves finish | Reload stops depending on save speed |
+| Six save threads instead of four | Paired A/B, 4 pairs: reload p99 -4.5 %, unload +7.7 %. A trade, not a gain | Unload no longer depends on save threads |
+| Blame a lock or thread wake-ups for unload getting slower with low-priority saves | Server-thread lock waits of 1 ms or more total 26 ms over all unload rounds; one wake per save did not move unload. Why unload follows save-thread speed is still unknown | The cause is measured |
 | Mark heightmaps current in `ChunkRestorer` after a release | Rebuilds unchanged at about 600. The real cause was the release itself moving the stamp | Never |
 
 ## Rejected without trying
@@ -92,8 +97,27 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 | Cutting dirty-save cost or allocation | Dirty saves already beat vanilla's serialize on the server thread: 1,284 against 1,359 ms over a run, and Chunkis pauses less for GC |
 | Replay entities along a Z-order curve instead of row by row | Over a 64 by 64 area both walks total 8,064 chunks, and Z-order makes 511 jumps over 2 chunks against row order's 63, so row order is already the better walk |
 | Skip `cache_fill` on a clean cached load | The fill is already bulk, so only skipping it helps, and it is at most about 3 % of total CPU (1,722 ms of about 54 s) on workers, not ticks. The restore refuses a released delta on purpose, because an empty delta clears the chunk, and `consume` can fall back to the instructions after the containers went to vanilla. Lazy filling means guarding every reader of the instructions. A missed reader wipes a chunk |
+| Defer the block capture of freshly generated chunks | The largest flight server cost, 74 of 138 save-hook samples, and the likely cause of flight's tick p99. Their blocks exist nowhere else until the first write, so an unload-then-reload before that write would lose them. Needs a design that closes that window |
 | Per-section block reuse | A chunk shares one global palette and one coded stream, so it needs per-section palettes, giving up disk. It targets save threads, which do not touch ticks, for an estimated 5 % of total CPU at most |
 | Storing blocks and light as separate records | Already done: the block part is separate and reused when its fingerprint matches, about 60 % of saves |
+
+## Flight
+
+Natural flight on the code before the save-thread priority changes, two runs each. It behaves differently from the round trip, so measure both.
+
+| Metric | Chunkis | Vanilla | Ratio |
+|---|---|---|---|
+| Disk after shutdown | 50.0 MB | 100.4 MB | 0.50 |
+| Total CPU | 98.4 s | 109.4 s | 0.90 |
+| Tick p50 | 2.5 ms | 2.5 ms | 1.00 |
+| Server-thread CPU | 12.8 s | 11.9 s | 1.07 |
+| Peak heap | 2,761 MB | 2,475 MB | 1.12 |
+| Tick p90 | 8.0 ms | 6.4 ms | 1.24 |
+| Retained heap | 571 MB | 431 MB | 1.32 |
+| Tick p99 | 16.7 ms | 11.4 ms | 1.46 |
+| Late ticks | 4.5 | 2.5 | 1.80 |
+
+Retained heap is the recent-chunk cache: with it off, 447 MB. It held 5,090 chunks and served 5,057 hits with no evictions. Every tick here is far under 50 ms.
 
 ## Open
 
@@ -109,5 +133,7 @@ Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Tot
 - Look at each run before believing a session. One Chunkis run started straight after a build, with a status check during it, and gave 156 late ticks against 23 and 39 for the next two, which flagged four rows on unchanged code. A re-run on a settled machine passed.
 - A paired A/B can be split by the machine: runs fell into a fast band (about 27 ms) and a slow band (about 34 ms). Check bands before reading a pair.
 - Reload workers, one clean stage run over 4,393 provides: `chunkis_provide` 889 us each, of which `cache_fill` 405, `cache_lookup` 167, `decode_without_blocks` 91, `embed` 72, `io` 30, `decompress` 25. `parse` is 543 against vanilla's 475 us. `cache_fill` turns cached containers into delta instructions the load also receives as containers; see Rejected without trying. Vanilla's read time is not in this stage data.
+- JFR samples a few threads per cycle, so a server thread among many busy threads is under-sampled compared with vanilla. Sample counts across modes mislead when other threads are busy; stage timers do not.
+- Allocation looks large only with warm-up included: 37.8 against 25.9 GB, but 18.3 against 16.7 GB in the measured rounds.
 - Measure with stage timers as well as JFR: it hid both `convert` and the clean-save copy.
 - Why a chunk's light keeps changing between reloads, when no block changed.
