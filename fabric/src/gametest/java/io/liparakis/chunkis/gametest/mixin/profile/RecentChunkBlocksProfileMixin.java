@@ -86,7 +86,8 @@ public abstract class RecentChunkBlocksProfileMixin {
      */
     @Inject(method = "put", at = @At("HEAD"))
     private void chunkis$beforePut(final CisChunkPos pos, final long[] blockPartHash, final long[] content,
-            final PalettedContainer<BlockState>[] sections, final int bottomY, final CallbackInfo ci) {
+            final PalettedContainer<BlockState>[] sections, final int bottomY, final int blockCount,
+            final CallbackInfo ci) {
         chunkis$before(pos, CacheCounter.PUTS);
     }
 
@@ -97,7 +98,8 @@ public abstract class RecentChunkBlocksProfileMixin {
      */
     @Inject(method = "put", at = @At("RETURN"))
     private void chunkis$afterPut(final CisChunkPos pos, final long[] blockPartHash, final long[] content,
-            final PalettedContainer<BlockState>[] sections, final int bottomY, final CallbackInfo ci) {
+            final PalettedContainer<BlockState>[] sections, final int bottomY, final int blockCount,
+            final CallbackInfo ci) {
         chunkis$after(sections);
     }
 
@@ -110,7 +112,7 @@ public abstract class RecentChunkBlocksProfileMixin {
     @Inject(method = "putToVerify", at = @At("HEAD"))
     private void chunkis$beforePutToVerify(final CisChunkPos pos, final long[] blockPartHash,
             final long[] expectedContent, final PalettedContainer<BlockState>[] sections, final int bottomY,
-            final CallbackInfo ci) {
+            final int blockCount, final CallbackInfo ci) {
         chunkis$before(pos, CacheCounter.PUTS_TO_VERIFY);
     }
 
@@ -122,7 +124,7 @@ public abstract class RecentChunkBlocksProfileMixin {
     @Inject(method = "putToVerify", at = @At("RETURN"))
     private void chunkis$afterPutToVerify(final CisChunkPos pos, final long[] blockPartHash,
             final long[] expectedContent, final PalettedContainer<BlockState>[] sections, final int bottomY,
-            final CallbackInfo ci) {
+            final int blockCount, final CallbackInfo ci) {
         chunkis$after(sections);
     }
 

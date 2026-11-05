@@ -369,13 +369,15 @@ final class AsyncCisSaveWorker implements Runnable {
         final DeferredBlocksSnapshotView writtenSections = writtenBlocksPrint != null
                 ? (DeferredBlocksSnapshotView) save.snapshot()
                 : null;
+        // Counted here, from the scan the write already did, not on the server thread.
+        final int writtenBlockCount = writtenSections != null ? writtenSections.getBlockChangesCount() : 0;
         final Runnable completion = () -> {
             written.liveDelta().setWrittenBlocksPrint(writtenBlocksPrint);
             if (writtenSections != null && writtenSections.unloading()) {
                 RecentChunkBlocks.of(world.getRegistryKey()).put(written.cisPos(),
                         new long[]{writtenBlocksPrint[2], writtenBlocksPrint[3]},
                         new long[]{writtenBlocksPrint[0], writtenBlocksPrint[1]}, writtenSections.sections(),
-                        writtenSections.bottomY());
+                        writtenSections.bottomY(), writtenBlockCount);
             }
             if (entityFingerprint != null) {
                 StoredEntityFingerprints.record(world, written.pos(), entityFingerprint);

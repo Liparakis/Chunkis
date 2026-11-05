@@ -15,6 +15,7 @@ import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.model.ChunkTraceSeverity;
 import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
+import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder;
@@ -242,9 +243,10 @@ public final class ChunkSaveCoordinator {
             // of this chunk, so its containers are taken, not copied. They are checked against the content the
             // stored entry was written from before any load uses them.
             final long[] print = delta.getWrittenBlocksPrint();
+            final int blockCount = ChunkSectionDebugUtil.countNonAirBlocks(unloading);
             RecentChunkBlocks.of(world.getRegistryKey()).putToVerify(FabricCisStorageHelper.toStoragePos(pos),
                     new long[]{print[2], print[3]}, new long[]{print[0], print[1]}, takeSections(unloading),
-                    world.getBottomY());
+                    world.getBottomY(), blockCount);
         }
         if (delta != null && !delta.isDirty()) {
             PayloadWatchTracer.traceDeltaStage(

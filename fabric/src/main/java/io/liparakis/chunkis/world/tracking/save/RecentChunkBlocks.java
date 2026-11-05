@@ -49,9 +49,10 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
      * @param sections      section containers by section index, {@code null} for sections of only air
      * @param bottomY       world bottom Y
      * @param bytes         estimated memory
+     * @param blockCount    non-air blocks, to size the delta's instructions once
      */
     private record Entry(long[] blockPartHash, long[] expectedContent, PalettedContainer<BlockState>[] sections,
-            int bottomY, long bytes, long[] content) {
+            int bottomY, long bytes, long[] content, int blockCount) {
     }
 
     /**
@@ -74,10 +75,11 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
      * @param content       content fingerprint of those blocks
      * @param sections      the save's section copies
      * @param bottomY       world bottom Y
+     * @param blockCount    non-air blocks in the sections
      */
     public synchronized void put(final CisChunkPos pos, final long[] blockPartHash, final long[] content,
-            final PalettedContainer<BlockState>[] sections, final int bottomY) {
-        store(pos, new Entry(blockPartHash, null, sections, bottomY, estimate(sections), content));
+            final PalettedContainer<BlockState>[] sections, final int bottomY, final int blockCount) {
+        store(pos, new Entry(blockPartHash, null, sections, bottomY, estimate(sections), content, blockCount));
     }
 
     /**
@@ -89,10 +91,13 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
      * @param expectedContent content fingerprint of the blocks that entry was written from
      * @param sections        the chunk's section containers
      * @param bottomY         world bottom Y
+     * @param blockCount      non-air blocks in the sections
      */
     public synchronized void putToVerify(final CisChunkPos pos, final long[] blockPartHash,
-            final long[] expectedContent, final PalettedContainer<BlockState>[] sections, final int bottomY) {
-        store(pos, new Entry(blockPartHash, expectedContent, sections, bottomY, estimate(sections), expectedContent));
+            final long[] expectedContent, final PalettedContainer<BlockState>[] sections, final int bottomY,
+            final int blockCount) {
+        store(pos, new Entry(blockPartHash, expectedContent, sections, bottomY, estimate(sections), expectedContent,
+                blockCount));
     }
 
     /**
@@ -153,6 +158,8 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
         return delta -> {
             final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
             final PalettedContainer<BlockState>[] sections = verified.sections();
+            // Reserved once: grown section by section, a full chunk's instructions were half of a reload's garbage.
+            delta.ensureBlockCapacity(verified.blockCount());
             for (int section = 0; section < sections.length; section++) {
                 if (sections[section] != null) {
                     CisSnapshotCapture.appendSectionBlocks(sections[section], delta, verified.bottomY(), section,
