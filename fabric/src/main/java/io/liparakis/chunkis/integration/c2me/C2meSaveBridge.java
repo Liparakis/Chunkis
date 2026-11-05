@@ -72,6 +72,50 @@ public final class C2meSaveBridge {
     }
 
     /**
+     * Checks, when C2ME is installed, that the method the save mixin hooks still exists; the mixin is optional, so
+     * a C2ME update that renamed it would leave the bridge unhooked without a word, while the region-file guard
+     * kept dropping C2ME's own writes. Without the method the bridge is marked unavailable, so those writes go
+     * through, and the problem is logged.
+     */
+    public static void checkSaveHook() {
+        if (!net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("c2me")) {
+            return;
+        }
+        if (!hasSaveHook(C2meSaveBridge.class.getClassLoader(), SAVE_HOOK_OWNER)) {
+            unavailable = true;
+            Chunkis.LOGGER.error("Chunkis: C2ME is installed but its chunk save method ({}.asyncSave) was not found "
+                    + "(unsupported C2ME version?); C2ME will keep saving chunks to vanilla region files, which "
+                    + "Chunkis does not load", SAVE_HOOK_OWNER);
+        }
+    }
+
+    /**
+     * Reports whether a class declares the save method the mixin hooks: {@code asyncSave(context, Chunk)}.
+     *
+     * @param loader    class loader to look in
+     * @param className class to look in
+     * @return true when the method is there
+     */
+    static boolean hasSaveHook(final ClassLoader loader, final String className) {
+        try {
+            for (final Method method : Class.forName(className, false, loader).getDeclaredMethods()) {
+                if (method.getName().equals("asyncSave") && method.getParameterCount() == 2
+                        && method.getParameterTypes()[1].isAssignableFrom(Chunk.class)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (final ClassNotFoundException | LinkageError e) {
+            return false;
+        }
+    }
+
+    /**
+     * The C2ME class whose save method {@code C2meReadFromDiskMixin} hooks.
+     */
+    static final String SAVE_HOOK_OWNER = "com.ishland.c2me.rewrites.chunksystem.common.statuses.ReadFromDisk";
+
+    /**
      * Returns whether C2ME saves can't be routed through Chunkis, in which case they must not be blocked either.
      *
      * @return {@code true} once routing failed

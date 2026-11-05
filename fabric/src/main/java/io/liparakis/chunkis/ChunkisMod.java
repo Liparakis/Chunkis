@@ -205,6 +205,7 @@ public final class ChunkisMod implements ModInitializer {
         io.liparakis.chunkis.api.ChunkisApi.setInstance(io.liparakis.chunkis.api.impl.ChunkisApiImpl.getInstance());
         registerCommands();
         registerEvents();
+        io.liparakis.chunkis.integration.c2me.C2meSaveBridge.checkSaveHook();
         if (ServerHotpathMetrics.ENABLED) {
             Chunkis.LOGGER.info("Chunkis server hot-path metrics enabled.");
         }
