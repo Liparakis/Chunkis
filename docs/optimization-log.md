@@ -140,6 +140,19 @@ Natural flight on the code before the save-thread priority changes, two runs eac
 
 Retained heap is the recent-chunk cache: with it off, 447 MB. It held 5,090 chunks and served 5,057 hits with no evictions. Every tick here is far under 50 ms.
 
+## Release review for 4.1.0
+
+An independent review of every change since the unofficial v4.2.0 build (`fcda8773`) found no critical or high defect; the container-only cached load was traced end to end. Fixed from it, each with a test that fails without the fix:
+
+- `c6cd3b24`: a compaction during the unlocked part of releasing freed region slots could hand the old layout's slots back out and overwrite a live chunk (`RegionFileReleaseRaceTest` reproduced it). A layout counter now discards them.
+- `a3524eaa`: if C2ME renamed its save method, the optional mixin would silently not apply while Chunkis kept blocking C2ME's region writes, so its unloaded chunks were saved nowhere. A startup check now finds the method or lets C2ME's writes through and logs an error.
+- `3c738dc3`: a save skipped because the chunk could not be snapshotted still cleared vanilla's save flag, so the change was never captured; the flag is now kept. Also fixed: payload-watch tracing read a stored-blocks save view on the server thread before the worker had read its blocks, and crashed.
+- `9edd44fe`: with no tick time left, unloads under the 8,192 backlog never ran; vanilla has the same stall under its 2,000. A minimum of 64 forced unloads a tick drains it (`OverloadedUnloadGameTest`). Its cost on tick p99 and lateness is not yet measured; two A/B attempts were interrupted.
+
+Not changed: containers taken by the clean-unload branch from a chunk vanilla has not yet marked loaded (vanilla marks it in the same server-thread step that builds it, and the cache checks content before any use), and a chunk stored without light being relit on every reload (performance only).
+
+C2ME `0.4.0-alpha.0.28` for 1.21.11: all 42 game tests pass with it loaded (Java 25, loader 0.18.3), and the startup check finds its save method.
+
 ## Open
 
 - Tick p50 and p90 are partly the price of spreading. In the save phase the mean tick is lower than vanilla's (42-45.5 against 45-48.7 ms) and the p50 higher (34-36 against 27-32 ms): vanilla does its saves in a few large ticks, Chunkis spreads them. The dirty capture costs about 36 us a chunk (copy 4-5 us of it) against vanilla's serialize at about 78 us, so the zero-copy idea would win about 5 us a chunk. Save completions cost 0.8 ms a save tick, about 8 us each. Chunkis also spends less on GC: 538-656 against 834-904 ms a run.
