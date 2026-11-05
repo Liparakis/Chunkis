@@ -136,7 +136,7 @@ public abstract class RecentChunkBlocksProfileMixin {
      */
     @Inject(method = "blocksFor", at = @At("HEAD"))
     private void chunkis$beginLookup(final CisChunkPos pos, final long[] blockPartHash,
-            final CallbackInfoReturnable<?> cir) {
+            final boolean forChunkLoad, final CallbackInfoReturnable<?> cir) {
         if (!StageProfiler.ENABLED) {
             return;
         }
@@ -153,7 +153,7 @@ public abstract class RecentChunkBlocksProfileMixin {
      */
     @Inject(method = "blocksFor", at = @At("RETURN"))
     private void chunkis$endLookup(final CisChunkPos pos, final long[] blockPartHash,
-            final CallbackInfoReturnable<?> cir) {
+            final boolean forChunkLoad, final CallbackInfoReturnable<?> cir) {
         if (!StageProfiler.ENABLED) {
             return;
         }

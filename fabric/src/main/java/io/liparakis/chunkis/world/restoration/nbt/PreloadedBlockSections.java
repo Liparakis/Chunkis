@@ -99,11 +99,15 @@ public final class PreloadedBlockSections {
         if (!CisNbtUtil.loadsAsFinishedChunk(delta.getChunkMetadata())) {
             return;
         }
-        final long generation = delta.getMutationGeneration();
-        if (delta.takeLoadedBlocks() instanceof RecentChunkBlocks.LoadedSections loaded
-                && embedLoadedSections(world, root, delta, generation, loaded)) {
+        final Object taken = delta.takeLoadedBlocks();
+        if (taken instanceof RecentChunkBlocks.LoadedSections loaded
+                && embedLoadedSections(world, root, delta, delta.getMutationGeneration(), loaded)) {
             return;
         }
+        if (delta.hasBlocksOnlyAttached()) {
+            buildAttachedInstructions(world, delta);
+        }
+        final long generation = delta.getMutationGeneration();
         final SectionIndices[] built = buildSectionIndices(world, delta);
         if (built == null) {
             return;
@@ -234,6 +238,23 @@ public final class PreloadedBlockSections {
             }
         }
         return print.finish();
+    }
+
+    /**
+     * Builds the instructions of a delta whose blocks were only attached, from the attached containers: those are
+     * the blocks this load decoded and gave vanilla, so the instructions match the chunk even if the stored entry
+     * was written again since. A chunk load is converted before its chunk ticks, so nothing changed them yet.
+     *
+     * @param world world the chunk belongs to
+     * @param delta delta whose blocks were only attached
+     */
+    public static void buildAttachedInstructions(final ServerWorld world,
+            final ChunkDelta<BlockState, NbtCompound> delta) {
+        if (!(delta.blocksOnlySource() instanceof RecentChunkBlocks.LoadedSections loaded)) {
+            throw new IllegalStateException("Chunkis: delta has no attached blocks to build instructions from");
+        }
+        RecentChunkBlocks.appendBlocks(delta, loaded.sections(), world.getBottomY(), 0);
+        delta.endBlocksOnlyAttached();
     }
 
     /**

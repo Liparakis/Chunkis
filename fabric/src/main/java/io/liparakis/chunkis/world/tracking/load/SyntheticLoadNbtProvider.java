@@ -203,7 +203,7 @@ public final class SyntheticLoadNbtProvider {
         }
         // Read here, on this worker: a prefetch of the same chunk would only queue the read behind the
         // single prefetch thread and wait for it.
-        final ChunkDelta<BlockState, NbtCompound> storedDelta = storage.load(cisPos);
+        final ChunkDelta<BlockState, NbtCompound> storedDelta = storage.loadForChunkLoad(cisPos);
         storedDelta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(storedDelta));
         ColdLoadDeltaHandoff.offer(world, chunkPos, storedDelta);
         return storedDelta;

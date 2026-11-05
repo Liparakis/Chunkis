@@ -214,6 +214,10 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     public ChunkDeltaSnapshotView<S, N> snapshotView(final UnaryOperator<N> payloadCopier,
             final UnaryOperator<N> metadataCopier) {
+        if (blocksOnlySource != null) {
+            // Its instructions were never built: a snapshot of it would save the chunk without blocks.
+            throw new IllegalStateException("Chunkis: snapshot of a delta whose blocks exist only as loaded sections");
+        }
         return new ChunkDeltaSnapshotView<>(
                 this.instructions.packedInstructions,
                 this.instructions.instructionCount,
@@ -489,6 +493,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      */
     public void clearBlockPayloads(final boolean markDirty) {
         blockPayloadReleased = false;
+        blocksOnlySource = null;
         if (instructions.instructionCount == 0 && (blockEntities == null || blockEntities.isEmpty())) {
             return;
         }
@@ -560,6 +565,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         final boolean heightmapsCurrent = hasCurrentHeightmaps();
         instructions.release();
         blockPayloadReleased = true;
+        blocksOnlySource = null;
         if (heightmapsCurrent) {
             markHeightmapsCaptured();
         }
@@ -593,6 +599,7 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         Objects.requireNonNull(edits, "edits");
         instructions.release();
         blockPayloadReleased = true;
+        blocksOnlySource = null;
         edits.forEachBlock((x, y, z, state) -> addBlockChange(x, y, z, state, false));
     }
 
@@ -634,6 +641,54 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
      * Block state stamp when {@link #loadedBlocks} was attached.
      */
     private long loadedBlocksStamp;
+
+    /**
+     * The blocks attached without instructions ({@link #attachLoadedBlocksOnly}), kept until instructions are built
+     * from them or the delta is released: the delta then has no block instructions although its chunk is not air.
+     */
+    private Object blocksOnlySource;
+
+    /**
+     * Gives a delta decoded without blocks its blocks in the load's form only, without building instructions for
+     * them: a chunk load hands that form to vanilla and releases the delta's blocks right after the restore.
+     * Anything that needs the instructions builds them from {@link #blocksOnlySource()} first, then calls
+     * {@link #endBlocksOnlyAttached}. The form is the load's own, so the instructions match the blocks the chunk
+     * received whatever happened to the stored entry since.
+     *
+     * @param blocks the blocks in that form
+     */
+    public void attachLoadedBlocksOnly(final Object blocks) {
+        if (instructions.instructionCount != 0) {
+            throw new IllegalStateException("Chunkis: attaching blocks only to a delta that already holds blocks");
+        }
+        attachLoadedBlocks(blocks);
+        blocksOnlySource = blocks;
+    }
+
+    /**
+     * Reports whether the delta's blocks exist only in the form attached by {@link #attachLoadedBlocksOnly}.
+     *
+     * @return true while no instructions were built for those blocks
+     */
+    public boolean hasBlocksOnlyAttached() {
+        return blocksOnlySource != null;
+    }
+
+    /**
+     * Returns the blocks attached without instructions, to build them from.
+     *
+     * @return the attached form, or {@code null} when the delta holds its blocks as instructions
+     */
+    public Object blocksOnlySource() {
+        return blocksOnlySource;
+    }
+
+    /**
+     * Records that the delta's instructions now hold its blocks, after a caller built them from the attached form.
+     */
+    public void endBlocksOnlyAttached() {
+        blocksOnlySource = null;
+    }
 
     /**
      * Attaches the form the blocks this delta was just filled with came in, for the chunk load to use instead of

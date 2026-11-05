@@ -332,9 +332,12 @@ public final class CisStorage<B, S, P, N> {
          *
          * @param pos           chunk position
          * @param blockPartHash hash of the stored block part ({@code CisBlockPart#hash})
-         * @return a filler appending those blocks to a delta decoded without blocks, or {@code null}
+         * @param forChunkLoad  whether the load is a chunk load, which may take the blocks without instructions
+         *                      ({@link ChunkDelta#attachLoadedBlocksOnly})
+         * @return a filler giving those blocks to a delta decoded without blocks, or {@code null}
          */
-        java.util.function.Consumer<ChunkDelta<S, N>> blocksFor(CisChunkPos pos, long[] blockPartHash);
+        java.util.function.Consumer<ChunkDelta<S, N>> blocksFor(CisChunkPos pos, long[] blockPartHash,
+                boolean forChunkLoad);
     }
 
     /**
@@ -520,7 +523,20 @@ public final class CisStorage<B, S, P, N> {
      */
     public LoadResult<S, N> loadWithPresence(final CisChunkPos pos, final String operationId) {
         Objects.requireNonNull(pos, "pos");
-        return loadWithPresenceSync(pos, operationId);
+        return loadWithPresenceSync(pos, operationId, false);
+    }
+
+    /**
+     * Loads a chunk delta for a chunk load, which may receive its blocks without block instructions when the
+     * {@link BlockPartSource} has them in a form the load uses as is; every other caller needs the instructions
+     * and uses {@link #load}.
+     *
+     * @param pos chunk position
+     * @return loaded chunk delta, or an empty delta if missing or corrupt
+     */
+    public ChunkDelta<S, N> loadForChunkLoad(final CisChunkPos pos) {
+        Objects.requireNonNull(pos, "pos");
+        return loadWithPresenceSync(pos, ChunkTraceStore.nextOperationId("load"), true).delta();
     }
 
     /**
@@ -533,7 +549,8 @@ public final class CisStorage<B, S, P, N> {
      */
     private LoadResult<S, N> loadWithPresenceSync(
             final CisChunkPos pos,
-            final String operationId
+            final String operationId,
+            final boolean forChunkLoad
     ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_TX_START,
@@ -560,7 +577,7 @@ public final class CisStorage<B, S, P, N> {
         final boolean storageEntryPresent = regionRead.entryPresent();
 
         try {
-            final ChunkDelta<S, N> delta = decodeCompressed(pos, regionRead.compressedData());
+            final ChunkDelta<S, N> delta = decodeCompressed(pos, regionRead.compressedData(), forChunkLoad);
             if (!delta.isEmpty()) {
                 ChunkTraceStore.trace(
                         ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceEventType.LOAD_SOURCE_RESOLVED,
@@ -748,7 +765,7 @@ public final class CisStorage<B, S, P, N> {
      * @throws IOException if region I/O, decompression, or decode fails
      */
     private ChunkDelta<S, N> loadUnchecked(final CisChunkPos pos) throws IOException {
-        return decodeCompressed(pos, readRegion(pos, null).compressedData());
+        return decodeCompressed(pos, readRegion(pos, null).compressedData(), false);
     }
 
     /**
@@ -762,7 +779,8 @@ public final class CisStorage<B, S, P, N> {
     /**
      * Performs decode compressed.
      */
-    private ChunkDelta<S, N> decodeCompressed(final CisChunkPos pos, final byte[] compressedData) throws IOException {
+    private ChunkDelta<S, N> decodeCompressed(final CisChunkPos pos, final byte[] compressedData,
+            final boolean forChunkLoad) throws IOException {
         if (compressedData == null) {
             return newEmptyDelta();
         }
@@ -773,7 +791,7 @@ public final class CisStorage<B, S, P, N> {
                 : io.liparakis.chunkis.core.codec.CisBlockPart.hash(decompressed, 0, blockPartLength);
         final BlockPartSource<S, N> source = blockPartSource;
         final java.util.function.Consumer<ChunkDelta<S, N>> knownBlocks =
-                source != null && blockPartHash != null ? source.blocksFor(pos, blockPartHash) : null;
+                source != null && blockPartHash != null ? source.blocksFor(pos, blockPartHash, forChunkLoad) : null;
         final ChunkDelta<S, N> delta;
         if (knownBlocks != null) {
             // The exact blocks this block part encodes are at hand: decode the rest, take the blocks as they are.

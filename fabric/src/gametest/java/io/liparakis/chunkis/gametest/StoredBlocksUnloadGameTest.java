@@ -7,6 +7,7 @@ import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.entity.capture.VanillaEntitySaveCapture;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import io.liparakis.chunkis.world.restoration.nbt.PreloadedBlockSections;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
@@ -231,6 +232,63 @@ public final class StoredBlocksUnloadGameTest {
                     fixture.unforce();
                 })
                 .completeIfSuccessful();
+    }
+
+    /**
+     * Takes a chunk that unloaded clean back out of the recent-chunk cache as a chunk load does, with its blocks only
+     * attached, and expects the fallback that needs its instructions to build exactly the stored blocks from the
+     * attached containers, then the chunk to reload whole.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 600)
+    public void chunkLoadWithoutInstructionsBuildsThemFromItsContainers(final TestContext context) {
+        final Fixture fixture = Fixture.create(context, 5300);
+        fixture.storeAndReloadReleased()
+                .createAndAdd(() -> {
+                    final ChunkDelta<?, ?> delta = fixture.liveDelta();
+                    context.assertTrue(delta != null && !delta.isDirty() && delta.getWrittenBlocksPrint() != null,
+                            Text.literal("Chunk " + fixture.target + " would not reach the recent-chunk cache."));
+                    fixture.unload();
+                })
+                .createAndAdd(fixture::awaitUnloaded)
+                .createAndAdd(() -> {
+                    final var storage = FabricCisStorageHelper.getStorage(fixture.world);
+                    final CisChunkPos pos = FabricCisStorageHelper.toStoragePos(fixture.target);
+                    final ChunkDelta<BlockState, NbtCompound> attached = storage.loadForChunkLoad(pos);
+                    context.assertTrue(attached.hasBlocksOnlyAttached() && attached.getBlockChangesCount() == 0,
+                            Text.literal("Chunk " + fixture.target + " did not load its blocks without instructions:"
+                                    + " attached=" + attached.hasBlocksOnlyAttached() + " blocks="
+                                    + attached.getBlockChangesCount() + "."));
+                    PreloadedBlockSections.buildAttachedInstructions(fixture.world, attached);
+                    final java.util.Map<Long, BlockState> rebuilt = blockMap(attached);
+                    final java.util.Map<Long, BlockState> stored = blockMap(storage.load(pos));
+                    context.assertTrue(!attached.hasBlocksOnlyAttached() && !stored.isEmpty()
+                                    && rebuilt.equals(stored),
+                            Text.literal("Rebuilt blocks of " + fixture.target + " differ from the stored entry: "
+                                    + rebuilt.size() + " against " + stored.size() + "."));
+                    fixture.load();
+                })
+                .createAndAdd(() -> {
+                    fixture.chunk = fixture.world.getChunk(fixture.target.x, fixture.target.z);
+                    context.assertTrue(fixture.chunk.getBlockState(fixture.chest).isOf(Blocks.CHEST),
+                            Text.literal("Reloaded chunk " + fixture.target + " lost its chest."));
+                    fixture.unforce();
+                })
+                .completeIfSuccessful();
+    }
+
+    /**
+     * Returns a delta's blocks by packed position.
+     *
+     * @param delta delta to read
+     * @return blocks by position
+     */
+    private static java.util.Map<Long, BlockState> blockMap(final ChunkDelta<BlockState, NbtCompound> delta) {
+        final java.util.Map<Long, BlockState> blocks = new java.util.HashMap<>();
+        delta.forEachBlock((x, y, z, state) -> blocks.put(io.liparakis.chunkis.core.BlockInstruction.packPos(x, y, z),
+                state));
+        return blocks;
     }
 
     /**

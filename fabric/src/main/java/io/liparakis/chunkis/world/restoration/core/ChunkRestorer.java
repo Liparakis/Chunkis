@@ -251,6 +251,11 @@ public final class ChunkRestorer {
         final boolean releaseAfterFinish = blocksPreloaded && runtimeDelta != null
                 && (!protoDelta.isDirty() || storedEntryEdits != null)
                 && !usePersistedBaseChunkForBlocks && CisNbtUtil.hasFullBlockBaseline(protoDelta.getChunkMetadata());
+        // Blocks loaded without instructions skip them only when the restore releases them unread; anything
+        // else replays or copies the instructions, so they are built first.
+        if (protoDelta.hasBlocksOnlyAttached() && !releaseAfterFinish) {
+            PreloadedBlockSections.buildAttachedInstructions(world, protoDelta);
+        }
 
         // Reset the runtime delta only once the payload is known to be restorable; resetting it
         // before the early return above would leave an empty delta that could overwrite storage.

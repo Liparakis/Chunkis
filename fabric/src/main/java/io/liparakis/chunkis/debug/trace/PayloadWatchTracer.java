@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.debug.trace;
 
+import io.liparakis.chunkis.world.tracking.save.RecentChunkBlocks;
+
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
@@ -279,6 +281,29 @@ public final class PayloadWatchTracer {
     }
 
     /**
+     * Returns a delta whose blocks were loaded without instructions as one holding them, built from the attached
+     * containers, so watched blocks are found in it; any other delta as it is. Only reached with payload watches on.
+     *
+     * @param world world the chunk belongs to
+     * @param delta decoded delta
+     * @return a delta to match watched blocks against
+     */
+    public static ChunkDeltaView<BlockState, NbtCompound> withAttachedBlocks(final ServerWorld world,
+            final ChunkDeltaView<BlockState, NbtCompound> delta) {
+        if (!(delta instanceof ChunkDelta<BlockState, NbtCompound> attached)
+                || !(attached.blocksOnlySource() instanceof RecentChunkBlocks.LoadedSections loaded)) {
+            return delta;
+        }
+        final ChunkDelta<BlockState, NbtCompound> blocks = new ChunkDelta<>(BlockState::isAir);
+        RecentChunkBlocks.appendBlocks(blocks, loaded.sections(), world.getBottomY(), 0);
+        attached.getBlockEntities().forEach((packedPos, nbt) -> blocks.addBlockEntityData(
+                io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos),
+                io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos),
+                io.liparakis.chunkis.core.BlockInstruction.unpackZ(packedPos), nbt, false));
+        return blocks;
+    }
+
+    /**
      * Submits trace outputs detailing outcomes from deserializing chunk data.
      *
      * @param world               target world instance
@@ -288,11 +313,12 @@ public final class PayloadWatchTracer {
      * @param storageEntryPresent true if storage bytes were successfully loaded
      */
     public static void traceDecodeOutcome(final ServerWorld world, final ChunkPos chunkPos,
-            final ChunkDeltaView<BlockState, NbtCompound> delta, final String operationId,
+            final ChunkDeltaView<BlockState, NbtCompound> decoded, final String operationId,
             final boolean storageEntryPresent) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
+        final ChunkDeltaView<BlockState, NbtCompound> delta = withAttachedBlocks(world, decoded);
         final String worldId = PayloadWatchSummaries.worldId(world);
 
         if (storageEntryPresent) {

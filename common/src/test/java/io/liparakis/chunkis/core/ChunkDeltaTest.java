@@ -78,6 +78,42 @@ class ChunkDeltaTest {
     }
 
     /**
+     * A delta whose blocks are only attached keeps them for building its instructions and refuses a snapshot,
+     * which would save the chunk without blocks, until the instructions are built; releasing it also ends the
+     * state.
+     */
+    @Test
+    void blocksOnlyAttachedRefusesSnapshotsUntilItHoldsInstructions() {
+        final ChunkDelta<String, String> delta = new ChunkDelta<>("air"::equals);
+        delta.attachLoadedBlocksOnly("sections");
+
+        assertThat(delta.hasBlocksOnlyAttached()).isTrue();
+        assertThat(delta.blocksOnlySource()).isEqualTo("sections");
+        assertThat(delta.getBlockChangesCount()).isZero();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> delta.snapshotView(UnaryOperator.identity()))
+                .isInstanceOf(IllegalStateException.class);
+
+        delta.addBlockChange(1, 64, 1, "stone");
+        delta.addBlockChange(2, 65, 3, "dirt");
+        delta.endBlocksOnlyAttached();
+        assertThat(delta.hasBlocksOnlyAttached()).isFalse();
+        assertThat(delta.blocksOnlySource()).isNull();
+        assertThat(delta.snapshotView(UnaryOperator.identity()).getBlockChangesCount()).isEqualTo(2);
+
+        final ChunkDelta<String, String> decoded = new ChunkDelta<>("air"::equals);
+        decoded.addBlockChange(1, 64, 1, "stone");
+
+        final ChunkDelta<String, String> released = new ChunkDelta<>("air"::equals);
+        released.attachLoadedBlocksOnly("sections");
+        released.releaseBlockPayload();
+        assertThat(released.hasBlocksOnlyAttached()).isFalse();
+        assertThat(released.isBlockPayloadReleased()).isTrue();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> decoded.attachLoadedBlocksOnly("sections"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    /**
      * Only a clean delta may release its instructions: a dirty one may hold changes found nowhere else.
      */
     @Test

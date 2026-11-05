@@ -72,7 +72,7 @@ public final class ChunkTraceInvariants {
             final ChunkDelta<?, ?> delta,
             final boolean hasPersistedBaseChunk
     ) {
-        if (delta == null || hasPersistedBaseChunk) {
+        if (delta == null || hasPersistedBaseChunk || delta.hasBlocksOnlyAttached()) {
             return false;
         }
         return delta.getBlockChangesCount() == 0 && !delta.getBlockEntities()

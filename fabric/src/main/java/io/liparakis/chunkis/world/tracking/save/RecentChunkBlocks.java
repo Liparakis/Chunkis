@@ -4,6 +4,7 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
+import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.world.restoration.core.PalettedContainerFields;
 import java.util.Arrays;
 import java.util.IdentityHashMap;
@@ -129,7 +130,7 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
 
     @Override
     public Consumer<ChunkDelta<BlockState, NbtCompound>> blocksFor(final CisChunkPos pos,
-            final long[] blockPartHash) {
+            final long[] blockPartHash, final boolean forChunkLoad) {
         Entry entry;
         synchronized (this) {
             entry = entries.get(key(pos));
@@ -156,18 +157,36 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
         }
         final Entry verified = entry;
         return delta -> {
-            final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
-            final PalettedContainer<BlockState>[] sections = verified.sections();
-            // Reserved once: grown section by section, a full chunk's instructions were half of a reload's garbage.
-            delta.ensureBlockCapacity(verified.blockCount());
-            for (int section = 0; section < sections.length; section++) {
-                if (sections[section] != null) {
-                    CisSnapshotCapture.appendSectionBlocks(sections[section], delta, verified.bottomY(), section,
-                            paletteIds);
-                }
+            final LoadedSections loaded = new LoadedSections(verified.sections(), verified.content());
+            if (forChunkLoad && CisNbtUtil.loadsAsFinishedChunk(delta.getChunkMetadata())) {
+                // The load hands these containers to vanilla and the restore releases the delta's blocks: the
+                // instructions, about 590 KB a chunk, were garbage the moment they were built.
+                delta.attachLoadedBlocksOnly(loaded);
+                return;
             }
-            delta.attachLoadedBlocks(new LoadedSections(sections, verified.content()));
+            appendBlocks(delta, verified.sections(), verified.bottomY(), verified.blockCount());
+            delta.attachLoadedBlocks(loaded);
         };
+    }
+
+    /**
+     * Appends every non-air block of the containers to a delta as instructions.
+     *
+     * @param delta      delta to fill
+     * @param sections   containers by section index, {@code null} for sections of only air
+     * @param bottomY    world bottom Y
+     * @param blockCount non-air blocks in them, to size the instructions once, or 0 when unknown
+     */
+    public static void appendBlocks(final ChunkDelta<BlockState, NbtCompound> delta,
+            final PalettedContainer<BlockState>[] sections, final int bottomY, final int blockCount) {
+        final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
+        // Reserved once: grown section by section, a full chunk's instructions were half of a reload's garbage.
+        delta.ensureBlockCapacity(blockCount);
+        for (int section = 0; section < sections.length; section++) {
+            if (sections[section] != null) {
+                CisSnapshotCapture.appendSectionBlocks(sections[section], delta, bottomY, section, paletteIds);
+            }
+        }
     }
 
     /**

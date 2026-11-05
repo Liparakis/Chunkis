@@ -392,7 +392,7 @@ final class ChunkRestorationVisitor implements ChunkDelta.DeltaVisitor<BlockStat
         blocksPreloaded = true;
         // The preloaded refresh reads no touched sections, so the blocks are walked only to trace them.
         if (tracePayloadWatches) {
-            baseline.forEachBlock((x, y, z, state) -> {
+            PayloadWatchTracer.withAttachedBlocks(world, baseline).forEachBlock((x, y, z, state) -> {
                 mutableWorldPos.set(chunkStartX + x, y, chunkStartZ + z);
                 PayloadWatchTracer.traceRestoredBlock(chunk, mutableWorldPos, state, operationId);
             });
