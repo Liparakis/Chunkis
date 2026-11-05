@@ -320,6 +320,61 @@ public final class StoredBlocksUnloadGameTest {
     }
 
     /**
+     * Stores a pig, moves it so the stored entity no longer matches, lets the chunk and then its entities unload
+     * the way vanilla schedules them, and expects exactly one pig back after the reload, where it was moved to.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 800)
+    public void movedEntitySurvivesUnloadAndReloadOnce(final TestContext context) {
+        final Fixture fixture = Fixture.create(context, 5700);
+        final UUID[] pig = new UUID[1];
+        final net.minecraft.util.math.Vec3d[] moved = new net.minecraft.util.math.Vec3d[1];
+        fixture.storeAndReloadReleased()
+                .createAndAdd(() -> {
+                    pig[0] = fixture.spawnPig();
+                    fixture.chunk.markNeedsSaving();
+                    fixture.world.getChunkManager().save(false);
+                    AsyncCisSaveManager.flushAndClose(fixture.world);
+                })
+                .createAndAdd(() -> {
+                    final net.minecraft.entity.Entity entity = fixture.world.getEntity(pig[0]);
+                    context.assertTrue(entity != null, Text.literal("Pig " + pig[0] + " is not in the world."));
+                    final BlockPos to = fixture.target.getBlockPos(3, fixture.baseY + 20, 12);
+                    entity.refreshPositionAndAngles(to.getX() + 0.5, to.getY(), to.getZ() + 0.5, 90, 0);
+                    if (entity instanceof net.minecraft.entity.mob.MobEntity mob) {
+                        mob.setAiDisabled(true);
+                    }
+                    moved[0] = entity.getEntityPos();
+                    fixture.unload();
+                })
+                .createAndAdd(fixture::awaitUnloaded)
+                .createAndAdd(() -> context.assertTrue(fixture.world.getEntity(pig[0]) == null,
+                        Text.literal("Waiting for vanilla to unload the entities of " + fixture.target + ".")))
+                .createAndAdd(() -> {
+                    AsyncCisSaveManager.flushAndClose(fixture.world);
+                    fixture.load();
+                })
+                .createAndAdd(() -> {
+                    final net.minecraft.entity.Entity entity = fixture.world.getEntity(pig[0]);
+                    context.assertTrue(entity != null,
+                            Text.literal("Waiting for pig " + pig[0] + " to come back with " + fixture.target + "."));
+                    context.assertTrue(entity.getEntityPos().squaredDistanceTo(moved[0]) < 0.01,
+                            Text.literal("Pig " + pig[0] + " came back at " + entity.getEntityPos() + ", moved to "
+                                    + moved[0] + "."));
+                    final int pigs = fixture.world.getEntitiesByType(EntityType.PIG,
+                            new net.minecraft.util.math.Box(fixture.target.getStartX(), fixture.world.getBottomY(),
+                                    fixture.target.getStartZ(), fixture.target.getEndX() + 1,
+                                    fixture.world.getTopYInclusive() + 1, fixture.target.getEndZ() + 1),
+                            candidate -> candidate.getUuid().equals(pig[0])).size();
+                    context.assertTrue(pigs == 1, Text.literal("Pig " + pig[0] + " exists " + pigs
+                            + " times after the reload."));
+                    fixture.unforce();
+                })
+                .completeIfSuccessful();
+    }
+
+    /**
      * After the same save, changes a block and the chest and adds an entity, and expects all of them stored: a
      * change vanilla tracks still makes the save capture everything.
      *
