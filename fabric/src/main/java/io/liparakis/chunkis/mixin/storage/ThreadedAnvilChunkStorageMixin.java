@@ -29,6 +29,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -47,6 +48,12 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      */
     @Unique
     private static final int UNLOAD_BACKLOG_LIMIT = 8192;
+
+    /**
+     * Queued chunk unloads forced every tick, so a backlog drains even with no tick time left.
+     */
+    @Unique
+    private static final int MIN_FORCED_UNLOADS = 64;
 
     /**
      * The server world that owns this chunk loading manager.
@@ -110,6 +117,21 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
     @ModifyConstant(method = "unloadChunks", constant = @Constant(intValue = 2000))
     private int chunkis$unloadBacklogLimit(final int vanillaLimit) {
         return MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey()) ? UNLOAD_BACKLOG_LIMIT : vanillaLimit;
+    }
+
+    /**
+     * Forces a few unloads every tick whatever the tick time: an overloaded server has none left, and without
+     * this a backlog under {@link #UNLOAD_BACKLOG_LIMIT} would stay loaded until the server caught up. A few
+     * unloads cost a few milliseconds, too little to bring back the spike the limit spreads.
+     *
+     * @param forced unloads vanilla forces this tick
+     * @return unloads to force
+     */
+    @ModifyVariable(method = "unloadChunks", at = @At("STORE"), ordinal = 0)
+    private int chunkis$minimumForcedUnloads(final int forced) {
+        return MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey())
+                ? Math.max(forced, MIN_FORCED_UNLOADS)
+                : forced;
     }
 
     /**

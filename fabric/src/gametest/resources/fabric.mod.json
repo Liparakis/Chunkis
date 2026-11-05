@@ -14,6 +14,7 @@
             "io.liparakis.chunkis.gametest.LegacyEntityStorageHandoffGameTest",
             "io.liparakis.chunkis.gametest.PersistedBaseChunkReloadGameTest",
             "io.liparakis.chunkis.gametest.StoredBlocksUnloadGameTest",
+            "io.liparakis.chunkis.gametest.OverloadedUnloadGameTest",
             "io.liparakis.chunkis.gametest.GenerationSettlingGameTest",
             "io.liparakis.chunkis.gametest.SettledChunkBaselineGameTest",
             "io.liparakis.chunkis.gametest.PendingTicksGameTest",
