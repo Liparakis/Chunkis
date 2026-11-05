@@ -106,6 +106,11 @@ public final class RegionFile implements AutoCloseable {
      */
     private final List<RegionFreeBlock> pendingFrees = new ArrayList<>();
     /**
+     * Counts replacements of the file's layout (a compaction swap or a recovery reopen): slots freed in an older
+     * layout point at space that layout's successor rebuilt from its live entries.
+     */
+    private long layoutEpoch;
+    /**
      * Open channel for all reads, writes, compaction swaps, and header updates.
      */
     private FileChannel channel;
@@ -408,19 +413,39 @@ public final class RegionFile implements AutoCloseable {
      * stay unused until the next compaction. Neither ever reuses a slot early.</p>
      */
     public void releaseFreesIfMany() {
+        releaseFreesIfMany(() -> {
+        });
+    }
+
+    /**
+     * {@link #releaseFreesIfMany()}, running {@code betweenLocks} while the lock is released, so a test can put a
+     * compaction exactly there.
+     *
+     * @param betweenLocks runs after the frees are taken and before the sync
+     */
+    void releaseFreesIfMany(final Runnable betweenLocks) {
         final List<RegionFreeBlock> releasing;
+        final FileChannel forced;
+        final long epoch;
         synchronized (this) {
             if (pendingFrees.size() < PENDING_FREE_FLUSH_THRESHOLD || !channel.isOpen()) {
                 return;
             }
             releasing = new ArrayList<>(pendingFrees);
             pendingFrees.clear();
+            forced = channel;
+            epoch = layoutEpoch;
         }
+        betweenLocks.run();
         try {
-            channel.force(true);
+            forced.force(true);
         } catch (final IOException e) {
             synchronized (this) {
-                pendingFrees.addAll(0, releasing);
+                // A compaction in between rebuilt the free space from the live entries: these slots belong to
+                // the old layout, and handing them out again would overwrite live chunks.
+                if (layoutEpoch == epoch) {
+                    pendingFrees.addAll(0, releasing);
+                }
             }
             if (channel.isOpen()) {
                 Chunkis.LOGGER.warn("Failed to sync region file {}; freed slots wait for the next flush", path, e);
@@ -428,7 +453,7 @@ public final class RegionFile implements AutoCloseable {
             return;
         }
         synchronized (this) {
-            if (!channel.isOpen()) {
+            if (!channel.isOpen() || layoutEpoch != epoch) {
                 return;
             }
             for (final RegionFreeBlock block : releasing) {
@@ -518,6 +543,7 @@ public final class RegionFile implements AutoCloseable {
      */
     private void swapCompactedFile(final Path tempPath) throws IOException {
         channel = RegionCompactionRecovery.swapCompactedFile(channel, tempPath, path);
+        layoutEpoch++;
         loadHeader();
     }
 
@@ -530,6 +556,7 @@ public final class RegionFile implements AutoCloseable {
      */
     private void recoverChannel() {
         channel = RegionCompactionRecovery.recoverChannel(channel, path);
+        layoutEpoch++;
         try {
             if (channel.isOpen() && channel.size() >= HEADER_SIZE) {
                 loadHeader();
