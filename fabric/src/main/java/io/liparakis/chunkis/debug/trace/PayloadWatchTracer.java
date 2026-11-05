@@ -209,15 +209,20 @@ public final class PayloadWatchTracer {
         }
         Objects.requireNonNull(delta, "delta");
 
-        delta.forEachBlock((x, y, z, state) -> {
-            final int worldX = chunkStartX + x;
-            final int worldZ = chunkStartZ + z;
-            final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedBlock(worldId, worldX, y, worldZ);
-            if (target != null) {
-                WatchTraceEmitter.traceWatch(eventType, stage, source, message, worldId, chunkKey, operationId, target,
-                        PayloadWatchSummaries.summarizeBlock(target, state), byteSize);
-            }
-        });
+        // A save of stored blocks reads them on the save worker; walking them here would read them early.
+        final boolean blocksReadable = !(delta instanceof io.liparakis.chunkis.world.tracking.save.StoredBlocksSnapshotView
+                stored) || stored.hasStoredBlocks();
+        if (blocksReadable) {
+            delta.forEachBlock((x, y, z, state) -> {
+                final int worldX = chunkStartX + x;
+                final int worldZ = chunkStartZ + z;
+                final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedBlock(worldId, worldX, y, worldZ);
+                if (target != null) {
+                    WatchTraceEmitter.traceWatch(eventType, stage, source, message, worldId, chunkKey, operationId,
+                            target, PayloadWatchSummaries.summarizeBlock(target, state), byteSize);
+                }
+            });
+        }
 
         delta.getBlockEntities()
                 .long2ObjectEntrySet()

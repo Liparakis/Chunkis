@@ -320,6 +320,39 @@ public final class StoredBlocksUnloadGameTest {
     }
 
     /**
+     * Saves a changed chunk while it cannot be snapshotted, as during a restore, and expects vanilla's save flag to
+     * stay set so the next save captures the change; that save then clears it.
+     *
+     * @param context the game test context
+     */
+    @GameTest(maxTicks = 600)
+    public void saveSkippedAsUnsafeKeepsVanillasSaveFlag(final TestContext context) {
+        final Fixture fixture = Fixture.create(context, 5900);
+        context.createTimedTaskRunner()
+                .createAndAdd(() -> {
+                    final var coordinator = ((io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinatorHolder)
+                            fixture.world.getChunkManager().chunkLoadingManager).chunkis$saveCoordinator();
+                    final ChunkisDeltaDuck duck = (ChunkisDeltaDuck) fixture.chunk;
+                    fixture.chunk.markNeedsSaving();
+                    duck.chunkis$setRestoreOperationId("gametest-unsafe");
+                    try {
+                        coordinator.save(fixture.chunk);
+                    } finally {
+                        duck.chunkis$setRestoreOperationId(null);
+                    }
+                    // Vanilla's own flag: Chunkis's needsSaving() also reports a dirty delta, such as one being written.
+                    final var flag = (io.liparakis.chunkis.mixin.accessor.ChunkSaveFlagAccessor) fixture.chunk;
+                    context.assertTrue(flag.chunkis$vanillaNeedsSaving(), Text.literal("A save skipped as unsafe cleared "
+                            + "the save flag of " + fixture.target + ", so its change would never be captured."));
+                    final var outcome = coordinator.save(fixture.chunk);
+                    context.assertFalse(flag.chunkis$vanillaNeedsSaving(), Text.literal("The next save of "
+                            + fixture.target + " did not clear the save flag: outcome " + outcome + "."));
+                    fixture.unforce();
+                })
+                .completeIfSuccessful();
+    }
+
+    /**
      * Stores a pig, moves it so the stored entity no longer matches, lets the chunk and then its entities unload
      * the way vanilla schedules them, and expects exactly one pig back after the reload, where it was moved to.
      *

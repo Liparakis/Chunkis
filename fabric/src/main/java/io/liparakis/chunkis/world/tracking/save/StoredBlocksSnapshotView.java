@@ -20,7 +20,7 @@ import net.minecraft.state.property.Property;
  * <p>{@link #loadStoredBlocks()} must succeed before the view is encoded. It fails instead of yielding no blocks
  * when the entry is missing or unreadable, since an encoded empty view would clear the stored chunk.</p>
  */
-final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState, NbtCompound> {
+public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState, NbtCompound> {
 
     /**
      * Snapshot of the delta: its block instructions are the edits applied over the entry, the rest is taken as
@@ -99,6 +99,16 @@ final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState, NbtCo
                     + (result.failed() ? "unreadable" : "missing"));
         }
         return result.delta();
+    }
+
+    /**
+     * Reports whether the stored blocks were read, which happens on the save worker; before that the view has no
+     * blocks to list.
+     *
+     * @return true once {@link #loadStoredBlocks()} succeeded
+     */
+    public boolean hasStoredBlocks() {
+        return stored != null;
     }
 
     /**

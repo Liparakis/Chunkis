@@ -271,6 +271,12 @@ public final class ChunkSaveCoordinator {
             queueDirtyDelta(getStorage(), pos, delta, operationId, chunk, deferredBlocks);
         }
 
+        if (vanillaUnsaved && chunk instanceof WorldChunk live && SnapshotSafetyChecker.isSnapshotUnsafe(live)) {
+            // The capture above was skipped, so what vanilla saw change is not in the delta: keep vanilla's flag for
+            // the next save to capture it, which a cleared flag would leave to the entity-only path, keeping the old
+            // block entities, light and ticks.
+            return SaveOutcome.HANDLED_CLEAN;
+        }
         // Vanilla's return contract: true once per vanilla-dirty chunk. It drives the 10s
         // autosave throttle and terminates the flush loop (`while any save returned true`);
         // returning "delta still dirty" would spin there, since async completion runs later.
