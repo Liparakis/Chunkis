@@ -16,9 +16,9 @@ A Fabric mod that saves worlds in **CIS**, a versioned alternative to vanilla re
 
 <sub>Ryzen 7 5700X at 4.6 GHz · 32 GB DDR4-3600 · Unpinned · 6 November 2026</sub>
 
-Three alternating runs per side, each unloading, reloading, editing, and saving **4,096 natural-terrain chunks** over two measured rounds. Related measurements sit together in the chart; percentiles and maxima are averaged across runs. Results vary with the world, hardware, and background activity.
+Three alternating runs per side, each unloading, reloading, editing, and saving **4,096 natural-terrain chunks** over two measured rounds. Related measurements sit together in the chart; percentiles are averaged across runs. Results vary with the world, hardware, and background activity.
 
-<img src=".github/assets/performance-2026.svg" width="960" alt="Complete Chunkis-versus-vanilla benchmark in one chart, with related measurements and each operation’s percentiles adjacent.">
+<img src=".github/assets/performance-2026.svg" width="960" alt="Chunkis versus vanilla across the twelve benchmark summary metrics: tick p50, p90 and p99; late ticks and total lateness; unload p50; reload p50 and p99; CPU, server CPU, heap and disk.">
 
 [Every metric and scenario setting in text](docs/benchmark-2026-11-06.md) · [Methodology and reproduction](tools/stress/README.md)
 
