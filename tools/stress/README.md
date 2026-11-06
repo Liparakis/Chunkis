@@ -1,6 +1,8 @@
 # Stress benchmark
 
-The stress game test (`fabric/src/gametest/.../stress`) loads a fixed area of natural terrain, then repeatedly unloads it, reloads it, edits 10% of its chunks and saves. It reports tick times, chunk load and unload latency, CPU, heap and disk use. With `-PchunkisStressVanilla=true` it runs the same scenario with vanilla storage, which gives the baseline Chunkis is measured against.
+The stress game test (`fabric/src/gametest/.../stress`) loads a fixed area of natural terrain, then repeatedly unloads it, reloads it, edits 10% of its chunks and saves. It reports tick times, chunk load and unload latency, CPU, heap and disk use. With `-PchunkisStressVanilla=true` it runs the same scenario with vanilla storage. Chunkis is still loaded in that mode, and some block-edit hooks still run; it is not a test of a game with the mod absent.
+
+For the latest published comparison and test hardware, see [Performance](../../README.md#performance).
 
 ## Checking a change for regressions
 

@@ -21,7 +21,30 @@ The goal is to beat vanilla on every metric, without weakening data safety.
 - Fewer JFR samples are not a result on their own. Unload save samples fell from 85 to 49 in one pair of runs, and the A/B then showed no change in latency or tick CPU.
 - Cut profiles by phase with the millisecond time in the `step` log line. `unloadChunks` frames also appear during autosaves, and samples after `DONE` are teardown, where vanilla mode's hook skips no longer apply. Both produced false findings.
 
-## Current standing
+## Latest unpinned comparison
+
+The table below is the regression summary. See the [complete grouped report](benchmark-2026-11-06.md) for all 144 raw numeric fields, derived totals, and scenario settings.
+
+On 6 November 2026, `bench.sh` ran three alternating pairs at `d43d6a82` on a Ryzen 7 5700X at 4.6 GHz with 32 GB DDR4-3600 RAM. The 64 × 64 natural-terrain scenario had two measured rounds per run. Vanilla mode still had Chunkis loaded. The run was unpinned, and background load was not recorded.
+
+| Metric | Chunkis | Vanilla | C/V |
+|:---|---:|---:|---:|
+| Tick p50 | 31.0 ms | 27.3 ms | 1.14 |
+| Tick p90 | 44.4 ms | 35.4 ms | 1.25 |
+| Tick p99 | 195.4 ms | 314.3 ms | 0.62 |
+| Late ticks | 17.3 | 15.7 | 1.11 |
+| Total lateness | 1,399.3 ms | 2,031.7 ms | 0.69 |
+| Unload p50 | 222.9 ms | 162.8 ms | 1.37 |
+| Reload p50 | 891.5 ms | 976.5 ms | 0.91 |
+| Reload p99 | 1,058.8 ms | 1,162.4 ms | 0.91 |
+| Process CPU time | 52.6 s | 62.3 s | 0.84 |
+| Server-thread CPU time | 11.3 s | 10.0 s | 1.14 |
+| Retained heap | 874.0 MB | 1,173.4 MB | 0.74 |
+| Disk during benchmark | 42.9 MB | 61.7 MB | 0.69 |
+
+The local regression check failed on tick p90: its ratio was 12.2% worse than the saved baseline, beyond the 8% margin. All other checked rows passed; total lateness had no saved baseline entry. Treat one session as a measurement, not proof of a code regression. The disk measurement is before shutdown compaction.
+
+## Earlier pinned comparison
 
 From one `bench.sh` session at `c137bdbd`, pinned to logical CPUs 0-11, so every time is slower than an unpinned run and only the ratios compare. Ratios move about 10 % between sessions on identical code; vanilla's unload p50 alone read 226 ms in the previous pinned session and 144 ms in this one. Disk after shutdown was measured before the save-thread priority changes.
 
@@ -42,7 +65,7 @@ From one `bench.sh` session at `c137bdbd`, pinned to logical CPUs 0-11, so every
 | Late tick count | 17.7 | 13.3 | 1.32 | Behind |
 | Unload p50 | 206 ms | 144 ms | 1.43 | Behind |
 
-Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Total lateness over two 8-round pairs is 5,985 ms for Chunkis against 6,817 ms for vanilla, a ratio of 0.88. A later 2-round `bench.sh` session gave 2,089 against 2,053 ms, 1.02, so treat it as about even. By phase, over the two pairs: unload 3,400 against 2,880, reload 1,061 against 1,014, edit 278 against 381, save 1,245 against 2,543 ms. Reports now hold `latenessMillisByPhase`; `guard.py` does not check it yet.
+Late ticks are a count: a tick 6 ms late and one 300 ms late weigh the same. Total lateness over two 8-round pairs is 5,985 ms for Chunkis against 6,817 ms for vanilla, a ratio of 0.88. A later 2-round `bench.sh` session gave 2,089 against 2,053 ms, 1.02, so treat it as about even. By phase, over the two pairs: unload 3,400 against 2,880, reload 1,061 against 1,014, edit 278 against 381, save 1,245 against 2,543 ms. Reports hold `latenessMillisByPhase`; the current `guard.py` checks total lateness when the saved baseline includes it.
 
 ## Kept
 
