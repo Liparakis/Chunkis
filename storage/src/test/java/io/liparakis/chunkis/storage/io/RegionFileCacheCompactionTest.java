@@ -8,6 +8,7 @@ import io.liparakis.chunkis.core.CisChunkPos;
 import io.liparakis.chunkis.storage.io.region.RegionFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -55,7 +56,7 @@ class RegionFileCacheCompactionTest {
         final RegionFileCache cache = new RegionFileCache(dir);
         final Random random = new Random(7);
         final byte[][] entries = new byte[200][];
-        final RegionFile region = cache.get(new CisChunkPos(0, 0), true);
+        final RegionFile region = Objects.requireNonNull(cache.get(new CisChunkPos(0, 0), true));
         for (int i = 0; i < entries.length; i++) {
             entries[i] = bytes(random, 2000 + random.nextInt(4000));
             region.write(new CisChunkPos(i & 31, i >> 5), entries[i]);

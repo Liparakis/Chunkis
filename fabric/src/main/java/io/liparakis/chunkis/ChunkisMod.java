@@ -58,8 +58,7 @@ public final class ChunkisMod implements ModInitializer {
      * Registers Chunkis server commands.
      */
     private static void registerCommands() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> ChunkisCommand.register(
-                dispatcher));
+        CommandRegistrationCallback.EVENT.register((dispatcher, _, _) -> ChunkisCommand.register(dispatcher));
     }
 
     /**
@@ -69,22 +68,22 @@ public final class ChunkisMod implements ModInitializer {
      * are still available. Server stopped clears static managers.</p>
      */
     private static void registerEvents() {
-        ServerChunkEvents.CHUNK_LOAD.register((world, chunk, generated) -> BaseChunkCaptureUtil.scheduleBaseCapture(chunk));
-        ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> {
+        ServerChunkEvents.CHUNK_LOAD.register((_, chunk, _) -> BaseChunkCaptureUtil.scheduleBaseCapture(chunk));
+        ServerChunkEvents.CHUNK_UNLOAD.register((_, chunk) -> {
             BaseChunkCaptureUtil.clearPendingBaseCapture(chunk);
             GlobalChunkTracker.noteChunkUnloaded(chunk);
         });
-        ServerLevelEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.retire(world));
+        ServerLevelEvents.UNLOAD.register((_, world) -> VanillaEntityRegionCleanup.retire(world));
         ServerTickEvents.END_LEVEL_TICK.register(ScheduledEntityReplayQueue::tick);
-        ServerTickEvents.START_SERVER_TICK.register(server1 -> BaseChunkCaptureUtil.tick());
-        ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
+        ServerTickEvents.START_SERVER_TICK.register(_ -> BaseChunkCaptureUtil.tick());
+        ServerTickEvents.END_SERVER_TICK.register(_ -> PayloadWatchTracer.tickEntityReloadAssertions());
+        ServerTickEvents.END_SERVER_TICK.register(_ -> {
             PortalChunkIndexManager.flushDirty();
             PortalLinkManager.flushDirty();
         });
         ServerLifecycleEvents.SERVER_STOPPING.register(ChunkisMod::flushBeforeServerStop);
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> VanillaEntityRegionCleanup.retirePending());
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> clearRuntimeState());
+        ServerLifecycleEvents.SERVER_STOPPED.register(_ -> VanillaEntityRegionCleanup.retirePending());
+        ServerLifecycleEvents.SERVER_STOPPED.register(_ -> clearRuntimeState());
     }
 
     /**
@@ -140,12 +139,12 @@ public final class ChunkisMod implements ModInitializer {
             return;
         }
 
-        Chunkis.LOGGER.warn("Chunkis [STOPPING]: Force-saving {} dirty delta(s) for {}", pending.size(),
+        Chunkis.LOGGER.warn("Chunkis [STOPPING]: Force-saving {} dirty delta(s) for {}",
+                pending.size(),
                 world.dimension()
                         .identifier());
 
-        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage =
-                FabricCisStorageHelper.getStorage(world);
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = FabricCisStorageHelper.getStorage(world);
 
         final Map<ChunkPos, ChunkDelta<BlockState, CompoundTag>> toSave = new LinkedHashMap<>();
         for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, CompoundTag>> entry : pending.entrySet()) {
@@ -166,15 +165,19 @@ public final class ChunkisMod implements ModInitializer {
      * @return true when the delta should be saved
      */
     @SuppressWarnings("All")
-    private static boolean shouldSavePendingDelta(final ServerLevel world, final ChunkPos pos,
+    private static boolean shouldSavePendingDelta(final ServerLevel world,
+            final ChunkPos pos,
             final ChunkDelta<BlockState, CompoundTag> delta) {
         if (delta == null || !delta.isDirty()) {
             return false;
         }
 
         if (DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true)) {
-            DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(world, pos, delta, "server-stopping", "ChunkisMod"
-                    + "#savePendingDelta");
+            DeltaPersistenceGuard.logRejectedSparseDeltaWithoutBase(world,
+                    pos,
+                    delta,
+                    "server-stopping",
+                    "ChunkisMod" + "#savePendingDelta");
             return false;
         }
         return true;

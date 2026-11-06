@@ -78,9 +78,6 @@ public abstract class SplashOverlayMixin {
         }
 
         final Font textRenderer = minecraft.font;
-        if (textRenderer == null) {
-            return;
-        }
 
         final int width = context.guiWidth();
         final int height = context.guiHeight();

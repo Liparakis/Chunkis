@@ -145,12 +145,12 @@ public final class ChunkRestorer {
      * {@code WorldChunk#runPostProcessing} or on first access, as it does for its own loads; handing them over
      * keeps their decoding off the load path. Any other chunk gets them built here.</p>
      *
-     * @param world                  server world context
-     * @param chunk                  chunk to restore into
-     * @param protoDelta             source delta loaded from disk/proto state
-     * @param runtimeDelta           runtime delta to populate with validated changes
-     * @param operationId            optional execution/operation trace ID label, may be null
-     * @param freshlyConvertedChunk  whether vanilla has yet to post-process {@code chunk}
+     * @param world                 server world context
+     * @param chunk                 chunk to restore into
+     * @param protoDelta            source delta loaded from disk/proto state
+     * @param runtimeDelta          runtime delta to populate with validated changes
+     * @param operationId           optional execution/operation trace ID label, may be null
+     * @param freshlyConvertedChunk whether vanilla has yet to post-process {@code chunk}
      */
     public static void restore(final ServerLevel world,
             final LevelChunk chunk,
@@ -281,8 +281,7 @@ public final class ChunkRestorer {
                 freshlyConvertedChunk);
 
         // Only the light diff of a written restore reads this copy.
-        @SuppressWarnings("unchecked")
-        final PalettedContainer<BlockState>[] blocksBefore = blocksPreloaded
+        @SuppressWarnings("unchecked") final PalettedContainer<BlockState>[] blocksBefore = blocksPreloaded
                 ? new PalettedContainer[0]
                 : copySectionBlocks(chunk);
         try {
@@ -331,7 +330,8 @@ public final class ChunkRestorer {
             }
             final boolean holdsExactBaseline = runtimeDelta != null && !usePersistedBaseChunkForBlocks
                     && CisNbtUtil.hasFullBlockBaseline(protoDelta.getChunkMetadata())
-                    && visitor.blockApplyFailureCounters().appliedEveryInstruction();
+                    && visitor.blockApplyFailureCounters()
+                    .appliedEveryInstruction();
             replayPendingEntitiesIfNeeded(world, chunk, runtimeDelta, operationId);
             if (runtimeDelta != null && runtimeDelta.shouldSuppressInitialRepopulation()
                     && EntityReplayCoordinator.allPendingEntitiesVisible(world, chunk.getPos(), runtimeDelta)) {
@@ -408,8 +408,8 @@ public final class ChunkRestorer {
                 "restore completed: blocks=" + visitor.appliedBlocksCount() + ", blockEntities="
                         + visitor.restoredBlockEntitiesCount() + ", blockReplay=" + visitor.blockApplyFailureCounters()
                         .describe() + (ServerHotpathMetrics.ENABLED ? ", sectionCursor="
-                                                                      + visitor.sectionWriteCursorStats()
-                                                                        .describe() : ""),
+                        + visitor.sectionWriteCursorStats()
+                        .describe() : ""),
                 world.dimension()
                         .identifier()
                         .toString(),
@@ -581,7 +581,7 @@ public final class ChunkRestorer {
                     final int z = io.liparakis.chunkis.core.BlockInstruction.unpackZ(packedPos);
                     sections.add(y >> 4);
                     final String id = nbt == null ? "null" : nbt.getString(ID_KEY)
-                                                             .orElse("<missing-id>");
+                            .orElse("<missing-id>");
                     blockEntities.add("(" + x + "," + y + "," + z + ")=" + id);
                 });
 
@@ -704,7 +704,8 @@ public final class ChunkRestorer {
         final LevelChunkSection[] sections = chunk.getSections();
         final PalettedContainer<BlockState>[] copies = new PalettedContainer[sections.length];
         for (int i = 0; i < sections.length; i++) {
-            copies[i] = sections[i] == null ? null : sections[i].getStates().copy();
+            copies[i] = sections[i] == null ? null : sections[i].getStates()
+                    .copy();
         }
         return copies;
     }
@@ -720,18 +721,21 @@ public final class ChunkRestorer {
      * @param chunkPos chunk being loaded
      */
     private static void pullNeighbourLightOnceLoaded(final ServerLevel world, final ChunkPos chunkPos) {
-        world.getServer().execute(() -> {
-            final ChunkHolder holder = world.getChunkSource().chunkMap
-                    .getUpdatingChunkIfPresent(chunkPos.pack());
-            if (holder == null) {
-                return;
-            }
-            holder.getFullChunkFuture().thenAcceptAsync(loaded -> loaded.ifSuccess(chunk -> {
-                final ThreadedLevelLightEngine lightingProvider = world.getChunkSource().getLightEngine();
-                ((BatchedLightChecks) lightingProvider).chunkis$checkBlocks(chunkPos.x(), chunkPos.z(),
-                        transparentBorderCells(chunk));
-            }), world.getServer());
-        });
+        world.getServer()
+                .execute(() -> {
+                    final ChunkHolder holder = world.getChunkSource().chunkMap
+                            .getUpdatingChunkIfPresent(chunkPos.pack());
+                    if (holder == null) {
+                        return;
+                    }
+                    holder.getFullChunkFuture()
+                            .thenAcceptAsync(loaded -> loaded.ifSuccess(chunk -> {
+                                final ThreadedLevelLightEngine lightingProvider = world.getChunkSource()
+                                        .getLightEngine();
+                                ((BatchedLightChecks) lightingProvider).chunkis$checkBlocks(chunkPos.x(), chunkPos.z(),
+                                        transparentBorderCells(chunk));
+                            }), world.getServer());
+                });
     }
 
     /**
@@ -743,8 +747,10 @@ public final class ChunkRestorer {
     private static LongArrayList transparentBorderCells(final LevelChunk chunk) {
         final LongArrayList cells = new LongArrayList();
         final LevelChunkSection[] sections = chunk.getSections();
-        final int startX = chunk.getPos().getMinBlockX();
-        final int startZ = chunk.getPos().getMinBlockZ();
+        final int startX = chunk.getPos()
+                .getMinBlockX();
+        final int startZ = chunk.getPos()
+                .getMinBlockZ();
         for (int i = 0; i < sections.length; i++) {
             final int baseY = chunk.getMinY() + (i << 4);
             for (int y = 0; y < 16; y++) {
@@ -775,7 +781,8 @@ public final class ChunkRestorer {
      */
     private static void addIfTransparent(final LongArrayList cells, final LevelChunkSection section, final int startX,
             final int baseY, final int startZ, final int x, final int y, final int z) {
-        if (section.getBlockState(x, y, z).getLightDampening() < MAX_OPACITY) {
+        if (section.getBlockState(x, y, z)
+                .getLightDampening() < MAX_OPACITY) {
             cells.add(BlockPos.asLong(startX + x, baseY + y, startZ + z));
         }
     }
@@ -793,8 +800,10 @@ public final class ChunkRestorer {
     static void checkLightChanges(final ThreadedLevelLightEngine lightingProvider, final LevelChunk chunk,
             final LevelChunkSection[] sections, final PalettedContainer<BlockState>[] blocksBefore) {
         final BlockState air = Blocks.AIR.defaultBlockState();
-        final int startX = chunk.getPos().getMinBlockX();
-        final int startZ = chunk.getPos().getMinBlockZ();
+        final int startX = chunk.getPos()
+                .getMinBlockX();
+        final int startZ = chunk.getPos()
+                .getMinBlockZ();
         final LongArrayList changed = new LongArrayList();
         for (int i = 0; i < sections.length; i++) {
             final PalettedContainer<BlockState> beforeBlocks = i < blocksBefore.length ? blocksBefore[i] : null;
@@ -820,7 +829,11 @@ public final class ChunkRestorer {
                 }
             }
         }
-        ((BatchedLightChecks) lightingProvider).chunkis$checkBlocks(chunk.getPos().x(), chunk.getPos().z(), changed);
+        ((BatchedLightChecks) lightingProvider).chunkis$checkBlocks(chunk.getPos()
+                        .x(),
+                chunk.getPos()
+                        .z(),
+                changed);
     }
 
     /**
@@ -916,7 +929,7 @@ public final class ChunkRestorer {
         // from before the restore (vanilla lit the terrain it generated). Queue the checks vanilla would.
         checkLightChanges(lightingProvider, chunk, sections, blocksBefore);
         if (!useBulkRefresh) {
-            sourceDelta.forEachBlock((x, y, z, state) -> {
+            sourceDelta.forEachBlock((x, y, z, ignoredState) -> {
                 mutablePos.set(chunkStartX + x, y, chunkStartZ + z);
                 world.getChunkSource()
                         .blockChanged(mutablePos);
@@ -946,7 +959,11 @@ public final class ChunkRestorer {
      * @return true when players may already hold this chunk
      */
     private static boolean isPublished(final ServerLevel world, final LevelChunk chunk) {
-        return LoadedChunks.getIfAccessible(world, chunk.getPos().x(), chunk.getPos().z()) == chunk;
+        return LoadedChunks.getIfAccessible(world,
+                chunk.getPos()
+                        .x(),
+                chunk.getPos()
+                        .z()) == chunk;
     }
 
     /**
@@ -979,7 +996,10 @@ public final class ChunkRestorer {
             return;
         }
 
-        final ClientboundLevelChunkWithLightPacket chunkPacket = new ClientboundLevelChunkWithLightPacket(chunk, lightingProvider, null, null);
+        final ClientboundLevelChunkWithLightPacket chunkPacket = new ClientboundLevelChunkWithLightPacket(chunk,
+                lightingProvider,
+                null,
+                null);
         for (final ServerPlayer player : players) {
             if (player.isRemoved() || player.hasDisconnected()) {
                 continue;

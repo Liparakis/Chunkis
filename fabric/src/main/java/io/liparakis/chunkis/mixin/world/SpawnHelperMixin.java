@@ -64,9 +64,6 @@ public class SpawnHelperMixin {
             final CallbackInfo ci) {
 
         final ChunkAccess chunk = getChunkAt(world, chunkPos);
-        if (chunk == null) {
-            return;
-        }
         if (shouldCancelSpawning(chunk, ci)) {
             logSpawnCancellation(chunkPos);
         }

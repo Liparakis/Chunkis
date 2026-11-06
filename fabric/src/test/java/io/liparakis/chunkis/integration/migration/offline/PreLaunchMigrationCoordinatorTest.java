@@ -68,7 +68,7 @@ class PreLaunchMigrationCoordinatorTest {
     @Test
     void interruptedMigrationResumesInsteadOfDeletingSources() {
         assertEquals(PreLaunchMigrationCoordinator.DimensionAction.MIGRATE,
-                PreLaunchMigrationCoordinator.decide(false, true, true));
+                PreLaunchMigrationCoordinator.decide(false, true));
     }
 
     /**
@@ -77,7 +77,7 @@ class PreLaunchMigrationCoordinatorTest {
     @Test
     void completedMigrationSetsAsideReappearedSources() {
         assertEquals(PreLaunchMigrationCoordinator.DimensionAction.SET_ASIDE_STALE_SOURCES,
-                PreLaunchMigrationCoordinator.decide(true, true, true));
+                PreLaunchMigrationCoordinator.decide(true, true));
     }
 
     /**
@@ -86,8 +86,8 @@ class PreLaunchMigrationCoordinatorTest {
     @Test
     void noVanillaFilesIsAuthoritative() {
         assertEquals(PreLaunchMigrationCoordinator.DimensionAction.AUTHORITATIVE,
-                PreLaunchMigrationCoordinator.decide(false, true, false));
+                PreLaunchMigrationCoordinator.decide(false, false));
         assertEquals(PreLaunchMigrationCoordinator.DimensionAction.AUTHORITATIVE,
-                PreLaunchMigrationCoordinator.decide(false, false, false));
+                PreLaunchMigrationCoordinator.decide(false, false));
     }
 }

@@ -17,7 +17,7 @@ import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.chunk.PalettedContainerFactory;
 
 /**
- * Covers {@link StoredSections#encodeBiomes}: it must write exactly what vanilla's biome container codec writes,
+ * Covers {@code StoredSections.encodeBiomes}: it must write exactly what vanilla's biome container codec writes,
  * since stored sections are handed to vanilla's chunk reader as they are.
  */
 @SuppressWarnings("unused")

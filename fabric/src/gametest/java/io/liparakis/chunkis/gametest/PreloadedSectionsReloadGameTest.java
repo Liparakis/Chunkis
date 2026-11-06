@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.gametest;
 
+import static io.liparakis.chunkis.gametest.SectionTestSupport.copySections;
+
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -17,7 +19,6 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.levelgen.Heightmap;
 
@@ -25,7 +26,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
  * Verifies that a full-baseline chunk, whose sections Chunkis builds in vanilla's serialized form when it
  * loads, comes back with exactly the blocks and heightmaps it was stored with.
  */
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused"})
 public final class PreloadedSectionsReloadGameTest {
 
     /**
@@ -44,14 +45,7 @@ public final class PreloadedSectionsReloadGameTest {
         final ServerLevel world = context.getLevel();
         final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
         final ChunkPos target = new ChunkPos(anchor.x() - 1300, anchor.z() + 1300);
-        world.setChunkForced(target.x(), target.z(), true);
-        final LevelChunk chunk = world.getChunk(target.x(), target.z());
-        final int baseY = (chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 20) & ~15;
-        final List<BlockState> states = simpleStates();
-        for (int i = 0; i < 16 * 16 * 16; i++) {
-            final BlockPos pos = target.getBlockAt(i & 15, baseY + (i >> 8), (i >> 4) & 15);
-            world.setBlock(pos, states.get(i % states.size()), Block.UPDATE_CLIENTS);
-        }
+        final LevelChunk chunk = createPatternChunk(world, target).chunk();
         final List<PalettedContainer<BlockState>> stored = copySections(chunk);
         final Map<Heightmap.Types, long[]> storedHeightmaps = heightmaps(chunk);
         final AtomicBoolean unloaded = new AtomicBoolean();
@@ -77,17 +71,7 @@ public final class PreloadedSectionsReloadGameTest {
                 .thenWaitUntil(() -> {
                     final LevelChunk reloaded = world.getChunk(target.x(), target.z());
                     context.assertTrue(reloaded != chunk, Component.literal("Chunk " + target + " was not reloaded."));
-                    final List<PalettedContainer<BlockState>> restored = copySections(reloaded);
-                    for (int section = 0; section < stored.size(); section++) {
-                        for (int i = 0; i < 16 * 16 * 16; i++) {
-                            final BlockState expected = stored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
-                            final BlockState actual = restored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
-                            if (expected != actual) {
-                                throw context.assertionException(Component.literal("Section " + section + " position " + i
-                                        + " reloaded as " + actual + ", stored as " + expected + "."));
-                            }
-                        }
-                    }
+                    SectionTestSupport.assertSectionsMatch(context, stored, reloaded);
                     final Map<Heightmap.Types, long[]> restoredHeightmaps = heightmaps(reloaded);
                     storedHeightmaps.forEach((type, values) -> context.assertTrue(
                             java.util.Arrays.equals(values, restoredHeightmaps.get(type)),
@@ -96,6 +80,7 @@ public final class PreloadedSectionsReloadGameTest {
                 .thenWaitUntil(() -> world.setChunkForced(target.x(), target.z(), false))
                 .thenSucceed();
     }
+
 
     /**
      * Reloads a stored chunk, whose delta then releases its block instructions, edits it, saves, reloads it
@@ -108,14 +93,9 @@ public final class PreloadedSectionsReloadGameTest {
         final ServerLevel world = context.getLevel();
         final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
         final ChunkPos target = new ChunkPos(anchor.x() - 1500, anchor.z() + 1500);
-        world.setChunkForced(target.x(), target.z(), true);
-        final LevelChunk chunk = world.getChunk(target.x(), target.z());
-        final int baseY = (chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 20) & ~15;
-        final List<BlockState> states = simpleStates();
-        for (int i = 0; i < 16 * 16 * 16; i++) {
-            final BlockPos pos = target.getBlockAt(i & 15, baseY + (i >> 8), (i >> 4) & 15);
-            world.setBlock(pos, states.get(i % states.size()), Block.UPDATE_CLIENTS);
-        }
+        final PatternChunk pattern = createPatternChunk(world, target);
+        final LevelChunk chunk = pattern.chunk();
+        final int baseY = pattern.baseY();
         final BlockPos edited = target.getBlockAt(3, baseY + 5, 7);
         final List<List<PalettedContainer<BlockState>>> expected = new ArrayList<>();
         final int[] unloads = {0};
@@ -155,21 +135,8 @@ public final class PreloadedSectionsReloadGameTest {
                     world.setChunkForced(target.x(), target.z(), true);
                     world.getChunk(target.x(), target.z());
                 })
-                .thenWaitUntil(() -> {
-                    final List<PalettedContainer<BlockState>> restored = copySections(world.getChunk(target.x(),
-                            target.z()));
-                    final List<PalettedContainer<BlockState>> stored = expected.get(0);
-                    for (int section = 0; section < stored.size(); section++) {
-                        for (int i = 0; i < 16 * 16 * 16; i++) {
-                            final BlockState want = stored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
-                            final BlockState got = restored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
-                            if (want != got) {
-                                throw context.assertionException(Component.literal("Section " + section + " position " + i
-                                        + " reloaded as " + got + ", saved as " + want + "."));
-                            }
-                        }
-                    }
-                })
+                .thenWaitUntil(() -> SectionTestSupport.assertSectionsMatch(context, expected.getFirst(),
+                        world.getChunk(target.x(), target.z())))
                 .thenWaitUntil(() -> world.setChunkForced(target.x(), target.z(), false))
                 .thenSucceed();
     }
@@ -194,19 +161,7 @@ public final class PreloadedSectionsReloadGameTest {
         return states;
     }
 
-    /**
-     * Copies every section's blocks.
-     *
-     * @param chunk chunk
-     * @return per-section copies
-     */
-    private static List<PalettedContainer<BlockState>> copySections(final LevelChunk chunk) {
-        final List<PalettedContainer<BlockState>> copies = new ArrayList<>();
-        for (final LevelChunkSection section : chunk.getSections()) {
-            copies.add(section.getStates().copy());
-        }
-        return copies;
-    }
+
 
     /**
      * Copies the chunk's heightmaps.
@@ -220,5 +175,29 @@ public final class PreloadedSectionsReloadGameTest {
             heightmaps.put(entry.getKey(), entry.getValue().getRawData().clone());
         }
         return heightmaps;
+    }
+
+    /**
+     * Forces a chunk and fills one section with enough states to exercise the widest palette.
+     *
+     * @param world fixture world
+     * @param target chunk to prepare
+     * @return live chunk and the pattern's original bottom Y
+     */
+    private static PatternChunk createPatternChunk(final ServerLevel world, final ChunkPos target) {
+        world.setChunkForced(target.x(), target.z(), true);
+        final LevelChunk chunk = world.getChunk(target.x(), target.z());
+        final int baseY = (chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 20) & ~15;
+        SectionTestSupport.placePattern(world, target, baseY, simpleStates());
+        return new PatternChunk(chunk, baseY);
+    }
+
+    /**
+     * Carries the original pattern height across edits that change the chunk's heightmap.
+     *
+     * @param chunk live fixture chunk
+     * @param baseY original section bottom Y
+     */
+    private record PatternChunk(LevelChunk chunk, int baseY) {
     }
 }

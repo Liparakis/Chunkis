@@ -31,7 +31,7 @@ import net.minecraft.world.level.chunk.PalettedContainer;
  * left {@code null}), which the encoder also takes a whole section at a time ({@link SectionStatesSource}).</p>
  */
 public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockState, CompoundTag>,
-        SectionStatesSource<BlockState> {
+        SectionStatesSource {
 
     /**
      * Blocks per section edge.
@@ -116,10 +116,6 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
         this.bottomY = bottomY;
     }
 
-    /**
-     * Unpacks every section's non-air blocks once: one bulk index unpack per section and one palette lookup per
-     * palette entry.
-     */
     /**
      * Prepares the save by copying the stored entry's block part when these sections are exactly the ones it was
      * last written from: their content hash matches, and the stored block part still hashes as written.
@@ -330,7 +326,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
             final BlockState[] byIndex = new BlockState[palette.getSize()];
             for (int i = 0; i < byIndex.length; i++) {
                 final BlockState state = palette.valueFor(i);
-                byIndex[i] = state == null || state.isAir() ? null : state;
+                byIndex[i] = state.isAir() ? null : state;
             }
             storage.unpack(indices);
             final Object[] sectionStates = new Object[SECTION_VOLUME];

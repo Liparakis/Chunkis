@@ -64,7 +64,6 @@ final class ChunkSizeComparison {
      * @param chunks chunk positions
      * @return mean bytes per chunk for Chunkis, vanilla and vanilla on disk, plus ratios
      */
-    @SuppressWarnings("unchecked")
     static JsonObject measure(final ServerLevel world, final List<ChunkPos> chunks) {
         long chunkisBytes = 0;
         long chunkisRawBytes = 0;

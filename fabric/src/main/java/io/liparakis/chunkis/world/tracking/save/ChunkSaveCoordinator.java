@@ -32,7 +32,6 @@ import io.liparakis.chunkis.mixin.accessor.ChunkBlockEntityNbtAccessor;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import net.minecraft.SharedConstants;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
@@ -61,10 +60,6 @@ public final class ChunkSaveCoordinator {
      */
     private static final String SAVE_SOURCE = "ChunkSaveCoordinator#save";
 
-    /**
-     * Trace source identification tag label for rejection path.
-     */
-    private static final String REJECT_SOURCE = "ChunkSaveCoordinator#rejectSparse";
 
     /**
      * World whose chunks this coordinator saves.
@@ -150,7 +145,7 @@ public final class ChunkSaveCoordinator {
                 world.dimension()
                         .identifier()
                         .toString(),
-                new DebugChunkKey(pos.x(), pos.z()),
+                debugChunkKey(pos),
                 null,
                 operationId,
                 null,
@@ -331,17 +326,6 @@ public final class ChunkSaveCoordinator {
 
 
     /**
-     * Resolves the current Minecraft data version id.
-     *
-     * @return the data version identifier int
-     */
-    private static int getGameDataVersion() {
-        return SharedConstants.getCurrentVersion()
-                .dataVersion()
-                .version();
-    }
-
-    /**
      * Writes {@code metadata} into {@code delta}, preferring the pre-encoded path
      * for performance. Falls back to a direct set if encoding fails so structure
      * metadata is never silently lost.
@@ -367,21 +351,6 @@ public final class ChunkSaveCoordinator {
         }
     }
 
-    /**
-     * Returns {@code true} when a tracked in-memory delta is too weak to be
-     * authoritative for load reconstruction and storage should be consulted instead.
-     *
-     * <p>An empty clean delta with no persisted base chunk or full-block baseline
-     * is not useful reconstruction state preferring it over storage would cause
-     * Chunkis to emit synthetic {@code STATUS_EMPTY} NBT and reroll terrain.</p>
-     *
-     * @param delta the tracked delta candidate; may be {@code null}
-     * @return {@code true} when storage should be consulted instead
-     */
-    private static boolean shouldBypassTrackedDelta(
-            final ChunkDelta<BlockState, CompoundTag> delta) {
-        return delta == null || (!delta.isDirty() && delta.isEmpty());
-    }
 
     /**
      * Claims ownership for a delta created by save-time live entity capture.
@@ -406,34 +375,6 @@ public final class ChunkSaveCoordinator {
         }
         delta.claimOwnership(reason, source);
         return delta;
-    }
-
-    /**
-     * Returns the live {@link LevelChunk} instance to use for base recovery.
-     *
-     * <p>If the supplied {@link ChunkAccess} is already a {@link LevelChunk}, it is preferred.
-     * Otherwise, the previously looked-up chunk is used as the fallback.</p>
-     *
-     * @param chunk         the chunk instance being recovered
-     * @param lookedUpChunk the fallback live world chunk
-     * @return the live world chunk to use for recovery
-     */
-    private static LevelChunk chooseLiveChunkForBaseRecovery(
-            final ChunkAccess chunk,
-            final LevelChunk lookedUpChunk
-    ) {
-        return chunk instanceof LevelChunk ? (LevelChunk) chunk : lookedUpChunk;
-    }
-
-    /**
-     * Returns the string representation of the world registry path.
-     *
-     * @return registry path string
-     */
-    private String worldId() {
-        return world.dimension()
-                .identifier()
-                .toString();
     }
 
 
@@ -530,7 +471,7 @@ public final class ChunkSaveCoordinator {
         try {
             final ChunkDelta<BlockState, CompoundTag> persisted =
                     getStorage().loadWithoutClearing(FabricCisStorageHelper.toStoragePos(pos));
-            return persisted != null && !persisted.getBlockEntities()
+            return !persisted.getBlockEntities()
                     .isEmpty() ? persisted : null;
         } catch (final Exception e) {
             Chunkis.LOGGER.warn(
@@ -575,7 +516,7 @@ public final class ChunkSaveCoordinator {
                     world.dimension()
                             .identifier()
                             .toString(),
-                    new DebugChunkKey(pos.x(), pos.z()),
+                    debugChunkKey(pos),
                     null,
                     operationId,
                     true,
@@ -594,7 +535,7 @@ public final class ChunkSaveCoordinator {
                     world.dimension()
                             .identifier()
                             .toString(),
-                    new DebugChunkKey(pos.x(), pos.z()),
+                    debugChunkKey(pos),
                     null,
                     operationId,
                     delta != null && delta.isDirty(),
@@ -612,18 +553,6 @@ public final class ChunkSaveCoordinator {
         );
     }
 
-    /**
-     * Returns the delta currently tracked for {@code pos} (memory + unload cache),
-     * or {@code null}. Used by the load path to preserve pending in-memory state
-     * before building synthetic load NBT.
-     *
-     * @param pos the chunk position
-     * @return the tracked delta, or {@code null}
-     */
-    @SuppressWarnings("unchecked")
-    private ChunkDelta<BlockState, CompoundTag> getTrackedDelta(final ChunkPos pos) {
-        return (ChunkDelta<BlockState, CompoundTag>) GlobalChunkTracker.getDelta(world, pos);
-    }
 
     /**
      * Returns the active (dirty-map only) delta for {@code pos}, or {@code null}.

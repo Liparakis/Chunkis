@@ -16,7 +16,6 @@ import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
-import java.util.List;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
@@ -276,28 +275,16 @@ final class SaveDeltaGuard {
             final String caller,
             final String operationId
     ) {
-        final CompoundTag metadata = delta.getChunkMetadata();
-        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
-        final boolean shouldUseBase = CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
-        final boolean fullBaseline = CisNbtUtil.hasFullBlockBaseline(metadata);
-        final byte[] baseChunkPayload = metadata != null
-                ? metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
-                  .orElse(new byte[0])
-                : new byte[0];
+        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        final String message = "save guard precheck: " + DeltaPersistenceGuard.describeBaseMetadata(delta);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                hasBase
-                        ? ChunkTraceEventType.BASE_METADATA_PRESENT_BEFORE_SAVE_GUARD
+                hasBase ? ChunkTraceEventType.BASE_METADATA_PRESENT_BEFORE_SAVE_GUARD
                         : ChunkTraceEventType.BASE_METADATA_MISSING_BEFORE_SAVE_GUARD,
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 caller,
-                "save guard precheck: " + DeltaPersistenceGuard.describeLifecycleState(delta)
-                        + ", hasPersistedBaseChunk=" + hasBase
-                        + ", shouldUsePersistedBaseChunk=" + shouldUseBase
-                        + ", fullBlockBaseline=" + fullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : List.of())
-                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length,
+                message,
                 worldId(),
                 debugChunkKey(pos),
                 null,
@@ -311,12 +298,7 @@ final class SaveDeltaGuard {
                 operationId,
                 "save-guard-precheck",
                 caller,
-                "save guard precheck: " + DeltaPersistenceGuard.describeLifecycleState(delta)
-                        + ", hasPersistedBaseChunk=" + hasBase
-                        + ", shouldUsePersistedBaseChunk=" + shouldUseBase
-                        + ", fullBlockBaseline=" + fullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : List.of())
-                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length
+                message
         );
     }
 

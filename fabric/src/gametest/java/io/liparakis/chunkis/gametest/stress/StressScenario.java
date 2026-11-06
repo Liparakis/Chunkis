@@ -232,12 +232,11 @@ final class StressScenario implements StressRun {
                 chunks.add(new ChunkPos(anchor.x() + dx, anchor.z() + dz));
             }
         }
-        final int touched = Math.max(1, Math.min(chunks.size(),
-                (int) Math.round(chunks.size() * Math.max(0, touchedPercent) / 100.0)));
+        final int touched = Math.clamp((int) Math.round(chunks.size() * Math.max(0, touchedPercent) / 100.0),
+                1, chunks.size());
         for (int i = 0; i < touched; i++) {
             touchedChunks.add(chunks.get((int) ((long) i * chunks.size() / touched)));
         }
-        assert world.getServer() != null;
         this.chunkisDir = ChunkisStoragePaths.computeRegionsDirectory(
                         world.getServer()
                                 .getWorldPath(LevelResource.ROOT), world.dimension())

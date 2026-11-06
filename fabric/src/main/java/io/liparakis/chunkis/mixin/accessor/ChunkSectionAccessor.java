@@ -23,18 +23,6 @@ public interface ChunkSectionAccessor {
      * Performs accessor.
      */
     @Accessor("tickingBlockCount")
-    short chunkis$getRandomTickableBlockCount();
-
-    /**
-     * Performs accessor.
-     */
-    @Accessor("tickingFluidCount")
-    short chunkis$getNonEmptyFluidCount();
-
-    /**
-     * Performs accessor.
-     */
-    @Accessor("tickingBlockCount")
     void chunkis$setRandomTickableBlockCount(short count);
 
     /**

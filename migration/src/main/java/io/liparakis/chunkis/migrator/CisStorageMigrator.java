@@ -224,7 +224,7 @@ public final class CisStorageMigrator<S, N> {
         try {
             final ChunkDelta<S, N> delta = storage.loadWithoutClearing(pos);
 
-            if (delta == null || delta.isEmpty()) {
+            if (delta.isEmpty()) {
                 return report.addSkipped();
             }
 

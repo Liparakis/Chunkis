@@ -3,10 +3,8 @@ package io.liparakis.chunkis.core;
 /**
  * A {@link ChunkDeltaView} that can hand its blocks to the encoder a whole section at a time, instead of one
  * {@link ChunkDelta.BlockVisitor} call per block. The encoder writes exactly the same bytes either way.
- *
- * @param <S> block state type
  */
-public interface SectionStatesSource<S> {
+public interface SectionStatesSource {
 
     /**
      * Visits every section holding at least one block, in ascending section order.

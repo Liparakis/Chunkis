@@ -49,16 +49,9 @@ public final class VanillaEntitySaveCaptureGameTest {
      * @param pos   any position in the chunk to save
      * @throws ReflectiveOperationException if the entity manager internals are missing
      */
-    @SuppressWarnings("unchecked")
     private static void saveEntities(final ServerLevel world, final BlockPos pos)
             throws ReflectiveOperationException {
-        final Field managerField = ServerLevel.class.getDeclaredField("entityManager");
-        managerField.setAccessible(true);
-        final PersistentEntitySectionManager<?> manager = (PersistentEntitySectionManager<?>) managerField.get(world);
-        final Field accessField = PersistentEntitySectionManager.class.getDeclaredField("permanentStorage");
-        accessField.setAccessible(true);
-        final net.minecraft.world.level.entity.EntityPersistentStorage<Entity> dataAccess =
-                (net.minecraft.world.level.entity.EntityPersistentStorage<Entity>) accessField.get(manager);
+        final var dataAccess = entityStorage(world);
         final net.minecraft.world.level.ChunkPos chunkPos = net.minecraft.world.level.ChunkPos.containing(pos);
         final java.util.List<Entity> entities = world.getEntities(null, new net.minecraft.world.phys.AABB(
                 chunkPos.getMinBlockX(), world.getMinY(), chunkPos.getMinBlockZ(),
@@ -138,6 +131,7 @@ public final class VanillaEntitySaveCaptureGameTest {
         final CompoundTag standPayload = storedPayload(world, armorStand);
         context.assertTrue(standPayload != null,
                 Component.literal("Expected armor stand payload in delta after entity save."));
+        assert standPayload != null;
         context.assertTrue(standPayload.toString()
                         .contains("minecraft:diamond_helmet"),
                 Component.literal("Expected armor stand payload to keep its helmet but was " + standPayload));
@@ -234,5 +228,23 @@ public final class VanillaEntitySaveCaptureGameTest {
         cow.discard();
         world.setChunkForced(target.x(), target.z(), false);
         context.succeed();
+    }
+
+    /**
+     * Resolves the entity store owned by the game-test world without saving other test chunks.
+     *
+     * @param world fixture world
+     * @return the world's entity storage
+     * @throws ReflectiveOperationException if the expected vanilla fields changed
+     */
+    @SuppressWarnings("unchecked")
+    private static net.minecraft.world.level.entity.EntityPersistentStorage<Entity> entityStorage(
+            final ServerLevel world) throws ReflectiveOperationException {
+        final Field managerField = ServerLevel.class.getDeclaredField("entityManager");
+        managerField.setAccessible(true);
+        final PersistentEntitySectionManager<?> manager = (PersistentEntitySectionManager<?>) managerField.get(world);
+        final Field accessField = PersistentEntitySectionManager.class.getDeclaredField("permanentStorage");
+        accessField.setAccessible(true);
+        return (net.minecraft.world.level.entity.EntityPersistentStorage<Entity>) accessField.get(manager);
     }
 }

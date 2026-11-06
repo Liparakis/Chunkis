@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.NonNull;
 
 /**
  * Full-screen MCA-to-CIS conversion status display shown while startup waits for
@@ -447,7 +448,7 @@ public final class MigrationScreen extends Screen {
      * Starts scrollbar dragging or jumps to the clicked track position.
      */
     @Override
-    public boolean mouseClicked(final MouseButtonEvent click, final boolean doubleClick) {
+    public boolean mouseClicked(final @NonNull MouseButtonEvent click, final boolean doubleClick) {
         if (click.button() == 0 && maxScroll > 0 && isInsideScrollbar(click.x(), click.y())) {
             final int trackY = scrollTrackY();
             final int trackHeight = scrollTrackHeight();
@@ -467,7 +468,7 @@ public final class MigrationScreen extends Screen {
      * Updates the scroll index while dragging the scrollbar thumb.
      */
     @Override
-    public boolean mouseDragged(final MouseButtonEvent click, final double deltaX, final double deltaY) {
+    public boolean mouseDragged(final @NonNull MouseButtonEvent click, final double deltaX, final double deltaY) {
         if (!draggingScrollbar) {
             return super.mouseDragged(click, deltaX, deltaY);
         }
@@ -485,7 +486,7 @@ public final class MigrationScreen extends Screen {
      * Stops scrollbar dragging when the mouse button is released.
      */
     @Override
-    public boolean mouseReleased(final MouseButtonEvent click) {
+    public boolean mouseReleased(final @NonNull MouseButtonEvent click) {
         draggingScrollbar = false;
         return super.mouseReleased(click);
     }

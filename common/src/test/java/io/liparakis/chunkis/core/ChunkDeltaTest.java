@@ -135,7 +135,7 @@ class ChunkDeltaTest {
         final ChunkDelta<String, String> bulk = new ChunkDelta<>("air"::equals);
         single.addBlockChange(0, 0, 0, "stone");
         final int[] stoneId = {-1};
-        single.forEachBlockInstruction((x, y, z, paletteId, state) -> stoneId[0] = paletteId);
+        single.forEachBlockInstruction((ignoredX, ignoredY, ignoredZ, paletteId, ignoredState) -> stoneId[0] = paletteId);
         bulk.copyBlockPaletteFrom(single);
         single.clearBlockPayloads(false);
         single.appendDecodedBlockFast(1, -64, 2, stoneId[0]);

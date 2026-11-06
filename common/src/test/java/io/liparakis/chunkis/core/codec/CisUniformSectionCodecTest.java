@@ -106,7 +106,7 @@ class CisUniformSectionCodecTest {
 
         final ChunkDelta<String, String> decoded = harness.decoder.decode(encoded);
         final int[] blockCount = {0};
-        decoded.forEachBlock((x, y, z, state) -> {
+        decoded.forEachBlock((ignoredX, ignoredY, ignoredZ, state) -> {
             blockCount[0]++;
             assertThat(state).isEqualTo("stone");
         });
@@ -185,7 +185,7 @@ class CisUniformSectionCodecTest {
         final ChunkDelta<String, String> decoded = harness.decoder.decode(encoded);
         final int[] stoneCount = {0};
         final int[] airCount = {0};
-        decoded.forEachBlock((x, y, z, state) -> {
+        decoded.forEachBlock((ignoredX, ignoredY, ignoredZ, state) -> {
             if ("stone".equals(state)) {
                 stoneCount[0]++;
             } else if ("air".equals(state)) {
@@ -416,11 +416,11 @@ class CisUniformSectionCodecTest {
                 CisUniformSectionCodecTest.class.getClassLoader(),
                 new Class<?>[]{io.liparakis.chunkis.core.ChunkDeltaView.class,
                         io.liparakis.chunkis.core.SectionStatesSource.class},
-                (proxy, method, args) -> {
+                (ignoredProxy, method, args) -> {
                     if (method.getName().equals("forEachSectionStates")) {
                         final java.util.TreeMap<Integer, Object[]> sections = new java.util.TreeMap<>();
                         delta.forEachBlock((x, y, z, state) -> sections.computeIfAbsent(y >> 4,
-                                key -> new Object[4096])[((y & 15) << 8) | (z << 4) | x] = state);
+                                ignoredKey -> new Object[4096])[((y & 15) << 8) | (z << 4) | x] = state);
                         final var visitor = (io.liparakis.chunkis.core.SectionStatesSource.SectionStatesVisitor) args[0];
                         sections.forEach(visitor::visit);
                         return null;
@@ -755,7 +755,7 @@ class CisUniformSectionCodecTest {
 
         final ChunkDelta<String, String> decoded = harness.decoder.decode(harness.encoder.encode(delta));
         final int[] counts = {0, 0};
-        decoded.forEachBlock((x, y, z, state) -> counts["air".equals(state) ? 1 : 0]++);
+        decoded.forEachBlock((ignoredX, ignoredY, ignoredZ, state) -> counts["air".equals(state) ? 1 : 0]++);
         assertThat(counts[0]).isEqualTo(4096 - 241);
         assertThat(counts[1]).isZero();
     }

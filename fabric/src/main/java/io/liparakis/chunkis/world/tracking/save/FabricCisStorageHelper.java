@@ -222,34 +222,7 @@ public final class FabricCisStorageHelper {
         return false;
     }
 
-    /**
-     * Saves a tracked delta synchronously with an explicit operation id and clears
-     * the tracker entry only when the write succeeds.
-     *
-     * @param world       owning world
-     * @param storage     target storage
-     * @param pos         chunk position
-     * @param delta       delta to save
-     * @param operationId trace/storage operation id
-     * @return {@code true} when the payload was written and the tracker entry was cleared
-     */
-    @SuppressWarnings("UnusedReturnValue")
-    public static boolean saveTrackedDelta(
-            final ServerLevel world,
-            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
-            final ChunkPos pos,
-            final ChunkDelta<BlockState, CompoundTag> delta,
-            final String operationId) {
-        if (delta != null && delta.isBlockPayloadReleased()) {
-            return saveWithStoredBlocks(world, storage, pos, delta, operationId);
-        }
-        StoredEntityFingerprints.forget(world, pos);
-        if (storage.save(toStoragePos(pos), delta, operationId)) {
-            GlobalChunkTracker.markSaved(world, pos);
-            return true;
-        }
-        return false;
-    }
+
 
     /**
      * Saves a released delta ({@link ChunkDelta#isBlockPayloadReleased()}) with its blocks read back from the

@@ -313,7 +313,7 @@ public final class PayloadWatchTracer {
      *
      * @param world               target world instance
      * @param chunkPos            coordinates of the chunk
-     * @param delta               the decoded chunk delta state
+     * @param decoded             the decoded chunk delta state
      * @param operationId         active trace session operation ID
      * @param storageEntryPresent true if storage bytes were successfully loaded
      */

@@ -232,7 +232,7 @@ public final class ChunkTraceStore {
      * @return list of events, newest first; never {@code null}
      */
     public static List<ChunkTraceEvent> latest(final int count) {
-        return latestMatching(count, event -> true);
+        return latestMatching(count, ignoredEvent -> true);
     }
 
     /**
@@ -241,7 +241,7 @@ public final class ChunkTraceStore {
      * @return full snapshot of the ring buffer; never {@code null}
      */
     public static List<ChunkTraceEvent> snapshot() {
-        return snapshotMatching(event -> true);
+        return snapshotMatching(ignoredEvent -> true);
     }
 
     /**

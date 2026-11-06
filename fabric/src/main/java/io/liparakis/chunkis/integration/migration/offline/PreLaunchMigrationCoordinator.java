@@ -59,24 +59,20 @@ public final class PreLaunchMigrationCoordinator {
      * @param saveLoader save loader containing dimension registries
      * @param newWorld   whether Minecraft is booting a freshly created world
      */
-    public static void runBeforeIntegratedServerStart(
-            final LevelStorageSource.LevelStorageAccess session,
+    public static void runBeforeIntegratedServerStart(final LevelStorageSource.LevelStorageAccess session,
             final WorldStem saveLoader,
-            final boolean newWorld
-    ) {
+            final boolean newWorld) {
         final Path saveRoot = session.getLevelPath(LevelResource.ROOT);
 
         try {
             MigrationStateServiceHolder.clear();
-            final RegistryAccess registryManager =
-                    saveLoader.registries()
-                            .compositeAccess();
-            final Registry<LevelStem> dimensionRegistry =
-                    registryManager.lookupOrThrow(Registries.LEVEL_STEM);
+            final RegistryAccess registryManager = saveLoader.registries()
+                    .compositeAccess();
+            final Registry<LevelStem> dimensionRegistry = registryManager.lookupOrThrow(Registries.LEVEL_STEM);
 
             for (final var entry : dimensionRegistry.entrySet()) {
                 final ResourceKey<Level> worldKey = Registries.levelStemToLevel(entry.getKey());
-                if (shouldTreatDimensionAsAuthoritative(newWorld, false)) {
+                if (newWorld) {
                     MigrationStateServiceHolder.markAuthoritative(worldKey);
                     LOGGER.info("Chunkis storage is authoritative from first boot for {}", worldKey.identifier());
                     continue;
@@ -91,8 +87,7 @@ public final class PreLaunchMigrationCoordinator {
                 final Path completionMarker = cisDir.resolve(MIGRATION_COMPLETE_MARKER);
                 final boolean hasCisData = Files.isDirectory(cisDir) && !collectFiles(cisDir, "*.cis").isEmpty();
 
-                switch (decide(Files.exists(completionMarker), hasCisData,
-                        !liveMca.isEmpty() || !liveEntityMca.isEmpty())) {
+                switch (decide(Files.exists(completionMarker), !liveMca.isEmpty() || !liveEntityMca.isEmpty())) {
                     case AUTHORITATIVE -> {
                         writeCompletionMarker(completionMarker);
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
@@ -104,19 +99,21 @@ public final class PreLaunchMigrationCoordinator {
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
                         LOGGER.warn("Chunkis: {} vanilla region file(s) and {} entity region file(s) appeared in {} "
                                         + "after migration completed; renamed to *{} (not deleted, not imported)",
-                                liveMca.size(), liveEntityMca.size(), worldKey.identifier(), STALE_SUFFIX);
+                                liveMca.size(),
+                                liveEntityMca.size(),
+                                worldKey.identifier(),
+                                STALE_SUFFIX);
                     }
                     case MIGRATE -> {
                         if (hasCisData) {
                             LOGGER.warn("Chunkis: Resuming interrupted migration for {} ({} region file(s) left)",
-                                    worldKey.identifier(), liveMca.size());
+                                    worldKey.identifier(),
+                                    liveMca.size());
                         }
-                        final OfflineWorldMigrationReport report = OfflineMcaCisTranslator.translateWorld(
-                                saveRoot,
+                        final OfflineWorldMigrationReport report = OfflineMcaCisTranslator.translateWorld(saveRoot,
                                 worldKey,
                                 registryManager,
-                                dimensionType
-                        );
+                                dimensionType);
                         verifyMigrationSucceeded(report, saveRoot.resolve("chunkis"));
                         writeCompletionMarker(completionMarker);
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
@@ -136,29 +133,14 @@ public final class PreLaunchMigrationCoordinator {
      * @param report   migration result to inspect
      * @param saveRoot save root used for the failure message context
      */
-    static void verifyMigrationSucceeded(
-            final OfflineWorldMigrationReport report,
-            final Path saveRoot
-    ) {
+    static void verifyMigrationSucceeded(final OfflineWorldMigrationReport report, final Path saveRoot) {
         if (report.failedChunks() > 0) {
-            throw new IllegalStateException(
-                    "Chunkis pre-launch migration failed for "
-                            + report.worldKey()
-                            .identifier()
-                            + " under "
-                            + saveRoot
-                            + ": " + report.failedChunks() + " chunk(s) failed, " + report.handledChunks()
-                            + " converted, " + report.retiredRegions() + " region(s) retired. Failed regions were"
-                            + " kept in place and will be retried on the next launch; see the log for chunk coordinates."
-            );
+            throw new IllegalStateException("Chunkis pre-launch migration failed for " + report.worldKey()
+                    .identifier() + " under " + saveRoot + ": " + report.failedChunks() + " chunk(s) failed, "
+                    + report.handledChunks() + " converted, " + report.retiredRegions()
+                    + " region(s) retired. Failed regions were"
+                    + " kept in place and will be retried on the next launch; see the log for chunk coordinates.");
         }
-    }
-
-    /**
-     * Returns whether a fresh world should start under Chunkis authority immediately.
-     */
-    static boolean shouldTreatDimensionAsAuthoritative(final boolean newWorld, final boolean hasCisData) {
-        return newWorld || hasCisData;
     }
 
     /**
@@ -169,12 +151,10 @@ public final class PreLaunchMigrationCoordinator {
      * un-migrated vanilla regions, which must be resumed, never deleted.</p>
      *
      * @param migrationComplete   whether the completion marker exists
-     * @param hasCisData          whether any {@code .cis} region exists
      * @param hasLiveVanillaFiles whether any vanilla region or entity file remains
      * @return the action to take
      */
-    static DimensionAction decide(final boolean migrationComplete, final boolean hasCisData,
-            final boolean hasLiveVanillaFiles) {
+    static DimensionAction decide(final boolean migrationComplete, final boolean hasLiveVanillaFiles) {
         if (!hasLiveVanillaFiles) {
             return DimensionAction.AUTHORITATIVE;
         }
@@ -199,7 +179,8 @@ public final class PreLaunchMigrationCoordinator {
      */
     private static void setAside(final List<Path> files) throws IOException {
         for (final Path file : files) {
-            Files.move(file, file.resolveSibling(file.getFileName() + STALE_SUFFIX),
+            Files.move(file,
+                    file.resolveSibling(file.getFileName() + STALE_SUFFIX),
                     StandardCopyOption.REPLACE_EXISTING);
         }
     }
@@ -208,11 +189,17 @@ public final class PreLaunchMigrationCoordinator {
      * Per-dimension migration action.
      */
     enum DimensionAction {
-        /** Nothing vanilla remains; CIS is the store. */
+        /**
+         * Nothing vanilla remains; CIS is the store.
+         */
         AUTHORITATIVE,
-        /** Migration finished earlier but vanilla files reappeared; keep them aside. */
+        /**
+         * Migration finished earlier but vanilla files reappeared; keep them aside.
+         */
         SET_ASIDE_STALE_SOURCES,
-        /** First migration or resume of an interrupted one. */
+        /**
+         * First migration or resume of an interrupted one.
+         */
         MIGRATE
     }
 

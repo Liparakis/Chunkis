@@ -84,7 +84,7 @@ public final class PendingChunkMutationSuppression {
         final ChunkMutationTrackingScope.Cause cause = currentCause(chunk.getLevel()
                 .dimension(), chunk.getPos());
         if (cause == ChunkMutationTrackingScope.Cause.BASE_APPLY && chunk.getLevel() instanceof ServerLevel serverWorld
-                && ChunkStatus.FULL.equals(chunk.getPersistedStatus()) && serverWorld.getServer() != null
+                && ChunkStatus.FULL.equals(chunk.getPersistedStatus())
                 && serverWorld.getServer()
                 .getRunningThread() == Thread.currentThread()) {
             end(chunk.getLevel()

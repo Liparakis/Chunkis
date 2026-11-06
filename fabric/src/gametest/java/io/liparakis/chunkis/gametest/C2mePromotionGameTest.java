@@ -14,6 +14,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
+import org.jspecify.annotations.NonNull;
 
 /**
  * Checks the actual optional C2ME hook, including worker-thread scope cleanup.
@@ -30,25 +31,24 @@ public final class C2mePromotionGameTest {
     @GameTest(maxTicks = 200)
     public void c2meConstructionMarksOnlyItsUnpublishedChunk(final GameTestHelper context)
             throws ReflectiveOperationException {
-        if (!FabricLoader.getInstance().isModLoaded("c2me")) {
+        if (!FabricLoader.getInstance()
+                .isModLoaded("c2me")) {
             context.succeed();
             return;
         }
         final ServerLevel world = context.getLevel();
         final ChunkPos pos = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
         final AtomicBoolean observed = new AtomicBoolean();
-        final ProtoChunk proto = new ProtoChunk(pos, UpgradeData.EMPTY, world,
-                world.palettedContainerFactory(), null) {
+        final ProtoChunk proto = new ProtoChunk(pos, UpgradeData.EMPTY, world, world.palettedContainerFactory(), null) {
             @Override
-            public ChunkPos getPos() {
+            public @NonNull ChunkPos getPos() {
                 if (C2meChunkPromotion.isConstructing(world, chunkPos.x(), chunkPos.z())) {
                     observed.set(true);
                 }
                 return super.getPos();
             }
         };
-        final Class<?> owner = Class.forName(
-                "com.ishland.c2me.rewrites.chunksystem.common.statuses.ServerAccessible");
+        final Class<?> owner = Class.forName("com.ishland.c2me.rewrites.chunksystem.common.statuses.ServerAccessible");
         final Method conversion = owner.getDeclaredMethod("toFullChunk", ProtoChunk.class, ServerLevel.class);
         conversion.setAccessible(true);
         final CompletableFuture<LevelChunk> worker = CompletableFuture.supplyAsync(() -> {
@@ -65,9 +65,11 @@ public final class C2mePromotionGameTest {
         context.startSequence()
                 .thenWaitUntil(() -> {
                     context.assertTrue(worker.isDone(), Component.literal("C2ME constructor worker has not returned"));
-                    context.assertTrue(worker.join().getPos().equals(pos),
-                            Component.literal("C2ME conversion changed the chunk position"));
-                    context.assertTrue(observed.get(), Component.literal("C2ME promotion hook did not wrap construction"));
+                    context.assertTrue(worker.join()
+                            .getPos()
+                            .equals(pos), Component.literal("C2ME conversion changed the chunk position"));
+                    context.assertTrue(observed.get(),
+                            Component.literal("C2ME promotion hook did not wrap construction"));
                     context.assertTrue(!C2meChunkPromotion.isConstructing(world, pos.x(), pos.z()),
                             Component.literal("Worker construction scope leaked onto the server"));
                 })

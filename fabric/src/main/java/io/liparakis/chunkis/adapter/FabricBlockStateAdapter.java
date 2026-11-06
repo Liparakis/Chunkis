@@ -63,7 +63,7 @@ public final class FabricBlockStateAdapter
     private final Map<Property<?>, Map<Object, Integer>> valueIndexCache = new ConcurrentHashMap<>(512);
 
     /**
-     * Attempts to resolve {@code Property.getValues()} by name first,
+     * Attempts to resolve {@code Property.getPossibleValues()} by name first,
      * then falls back to scanning public methods by signature.
      *
      * @return the resolved Method, or null if resolution fails entirely
@@ -71,7 +71,7 @@ public final class FabricBlockStateAdapter
     private static java.lang.reflect.Method resolveGetValuesMethod() {
         try {
             // Primary: resolve by name (works in dev/named mappings)
-            return Property.class.getMethod("getValues");
+            return Property.class.getMethod("getPossibleValues");
         } catch (final NoSuchMethodException e) {
             // Fallback: scan by signature (handles intermediary/production mappings)
             return scanForValuesMethod();
@@ -141,7 +141,7 @@ public final class FabricBlockStateAdapter
     }
 
     /**
-     * Reflectively invokes {@code Property.getValues()} using the pre-resolved method.
+     * Reflectively invokes {@code Property.getPossibleValues()} using the pre-resolved method.
      * Falls back to a direct call if the method could not be resolved at class load.
      *
      * @param property the property to query

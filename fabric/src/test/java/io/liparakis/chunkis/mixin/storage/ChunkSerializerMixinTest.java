@@ -57,6 +57,8 @@ class ChunkSerializerMixinTest {
      * @throws ReflectiveOperationException if reflection fails
      */
     @Test
+    // Distinct equal objects are the fixture under test.
+    @SuppressWarnings({"RedundantStringConstructorCall"})
     void identityMarkerSetUsesReferenceEquality() throws ReflectiveOperationException {
         final Set<Object> markers = newIdentityMarkerSet();
         final Object first = new String("same");

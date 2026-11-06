@@ -1,7 +1,6 @@
 package io.liparakis.chunkis.world.entity.capture;
 
 import io.liparakis.chunkis.Chunkis;
-import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.UUID;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
@@ -36,7 +35,7 @@ public final class ChunkEntityNbtCapture {
      *
      * <p>Uses Minecraft's {@link TagValueOutput} / {@link ProblemReporter.ScopedCollector}
      * pipeline so that per-field serialization errors are captured and logged rather than propagated
-     * as exceptions. After serialization, {@link CisNbtUtil#ensureEntityIdPresent} injects the entity
+     * as exceptions. After serialization, {@link EntityPayloadNbt#ensureEntityIdPresent} injects the entity
      * type ID if the vanilla serializer omitted it.</p>
      *
      * <p>Returns {@code null} if serialization throws - for example, if the

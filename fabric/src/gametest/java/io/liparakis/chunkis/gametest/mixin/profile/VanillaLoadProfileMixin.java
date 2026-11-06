@@ -42,7 +42,7 @@ public abstract class VanillaLoadProfileMixin {
     @Inject(method = "scheduleChunkLoad", at = @At("RETURN"))
     private void chunkis$loadDone(final ChunkPos pos, final CallbackInfoReturnable<CompletableFuture<?>> cir) {
         if (StageProfiler.ENABLED) {
-            cir.getReturnValue().whenComplete((chunk, error) -> StageProfiler.event(Event.LOAD_DONE, pos.x(), pos.z()));
+            cir.getReturnValue().whenComplete((ignoredChunk, ignoredError) -> StageProfiler.event(Event.LOAD_DONE, pos.x(), pos.z()));
         }
     }
 
@@ -71,7 +71,7 @@ public abstract class VanillaLoadProfileMixin {
             final ChunkPos pos, final Operation<CompletableFuture<Optional<CompoundTag>>> original) {
         final CompletableFuture<Optional<CompoundTag>> future = original.call(manager, pos);
         if (StageProfiler.ENABLED) {
-            future.whenComplete((nbt, error) -> StageProfiler.event(Event.NBT_READY, pos.x(), pos.z()));
+            future.whenComplete((ignoredNbt, ignoredError) -> StageProfiler.event(Event.NBT_READY, pos.x(), pos.z()));
         }
         return future;
     }

@@ -18,11 +18,12 @@ class C2meSaveBridgeTest {
         /**
          * The hooked method's shape.
          *
-         * @param context loading context
-         * @param chunk   chunk to save
+         * @param ignoredContext loading context
+         * @param ignoredChunk   chunk to save
          * @return nothing
          */
-        Object asyncSave(final Object context, final ChunkAccess chunk) {
+        @SuppressWarnings("unused") // Queried reflectively by the compatibility probe.
+        Object asyncSave(final Object ignoredContext, final ChunkAccess ignoredChunk) {
             return null;
         }
     }
@@ -34,11 +35,12 @@ class C2meSaveBridgeTest {
         /**
          * A renamed method of the same shape.
          *
-         * @param context loading context
-         * @param chunk   chunk to save
+         * @param ignoredContext loading context
+         * @param ignoredChunk   chunk to save
          * @return nothing
          */
-        Object save(final Object context, final ChunkAccess chunk) {
+        @SuppressWarnings("unused") // Queried reflectively by the compatibility probe.
+        Object save(final Object ignoredContext, final ChunkAccess ignoredChunk) {
             return null;
         }
     }

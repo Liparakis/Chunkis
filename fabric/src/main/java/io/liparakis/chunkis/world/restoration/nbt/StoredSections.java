@@ -149,6 +149,7 @@ public final class StoredSections {
      * @param storage packed data, empty for one entry
      * @return the encoded container, or {@code null} when a biome has no registry key
      */
+    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     private static CompoundTag encodeBiomes(final List<Holder<Biome>> biomes,
             final Optional<LongStream> storage) {
         final ListTag palette = new ListTag();

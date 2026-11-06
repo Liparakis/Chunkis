@@ -193,7 +193,7 @@ public final class ChunkBlockEntityCapture {
     ) {
         try {
             final CompoundTag nbt = blockEntity.saveWithFullMetadata(registryManager);
-            if (nbt == null || nbt.isEmpty()) {
+            if (nbt.isEmpty()) {
                 return null;
             }
             return nbt.contains(BLOCK_ENTITY_ID_KEY) ? nbt : injectBlockEntityId(blockEntity, nbt);

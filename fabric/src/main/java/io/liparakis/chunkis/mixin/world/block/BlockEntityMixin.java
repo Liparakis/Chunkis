@@ -78,13 +78,8 @@ public abstract class BlockEntityMixin {
             return;
         }
         final LevelChunk chunk = serverWorld.getChunkAt(getBlockPos());
-        if (chunk == null) {
-            return;
-        }
-        if (chunk instanceof ChunkisMutationGuardDuck guardDuck
-                && guardDuck.chunkis$getMutationTrackingScope()
-                .currentCause()
-                != ChunkMutationTrackingScope.Cause.NONE) {
+        if (chunk instanceof ChunkisMutationGuardDuck guardDuck && guardDuck.chunkis$getMutationTrackingScope()
+                .currentCause() != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
         if (PendingChunkMutationSuppression.currentCause(chunk) != ChunkMutationTrackingScope.Cause.NONE) {
@@ -110,13 +105,13 @@ public abstract class BlockEntityMixin {
      *                    manager access and base capture
      */
     @Unique
-    @SuppressWarnings("unchecked")
     private void handleChunkDelta(final LevelChunk chunk, final ServerLevel serverWorld) {
         if (!(chunk instanceof ChunkisDeltaDuck)) {
             return;
         }
         final ChunkDelta<BlockState, CompoundTag> delta = OwnedDeltaAccess.getOrClaim(chunk,
-                ChunkTraceReason.PLAYER_OR_COMMAND_EDIT, "BlockEntityMixin#handleChunkDelta");
+                ChunkTraceReason.PLAYER_OR_COMMAND_EDIT,
+                "BlockEntityMixin#handleChunkDelta");
 
         BaseChunkCaptureUtil.captureBaseChunkIfMissing(serverWorld, chunk, delta);
         delta.markDirty("BlockEntityMixin#handleChunkDelta");
@@ -143,17 +138,12 @@ public abstract class BlockEntityMixin {
      */
     @Unique
     @SuppressWarnings("ConstantConditions")
-    private void captureBlockEntityNbt(
-            final ServerLevel serverWorld,
-            final ChunkDelta<BlockState, CompoundTag> delta) {
+    private void captureBlockEntityNbt(final ServerLevel serverWorld, final ChunkDelta<BlockState, CompoundTag> delta) {
         try {
-            ChunkBlockEntityCapture.captureBlockEntity(
-                    (BlockEntity) (Object) this,
+            ChunkBlockEntityCapture.captureBlockEntity((BlockEntity) (Object) this,
                     serverWorld.registryAccess(),
-                    delta
-            );
-            PayloadWatchTracer.traceDeltaStage(
-                    serverWorld.dimension()
+                    delta);
+            PayloadWatchTracer.traceDeltaStage(serverWorld.dimension()
                             .identifier()
                             .toString(),
                     net.minecraft.world.level.ChunkPos.containing(getBlockPos()),
@@ -163,13 +153,9 @@ public abstract class BlockEntityMixin {
                     "mark-dirty-post-capture",
                     "BlockEntityMixin#captureBlockEntityNbt",
                     "delta state after block entity markDirty capture",
-                    null
-            );
+                    null);
         } catch (final Exception e) {
-            Chunkis.LOGGER.error(
-                    "Chunkis: Failed to proactively capture block entity NBT at {}",
-                    getBlockPos(), e
-            );
+            Chunkis.LOGGER.error("Chunkis: Failed to proactively capture block entity NBT at {}", getBlockPos(), e);
         }
     }
 }

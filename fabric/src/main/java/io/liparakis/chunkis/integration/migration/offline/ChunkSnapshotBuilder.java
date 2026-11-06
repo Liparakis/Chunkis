@@ -86,7 +86,7 @@ public final class ChunkSnapshotBuilder {
                 for (int localX = 0; localX < 16; localX++) {
                     for (int localZ = 0; localZ < 16; localZ++) {
                         final BlockState state = section.getBlockState(localX, localY, localZ);
-                        if (state == null || state.isAir()) {
+                        if (state.isAir()) {
                             continue;
                         }
 

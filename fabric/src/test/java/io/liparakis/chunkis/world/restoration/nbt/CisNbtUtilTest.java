@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import net.minecraft.nbt.CompoundTag;
@@ -338,11 +340,11 @@ class CisNbtUtilTest {
 
         final CompoundTag copy = CisNbtUtil.copySharingCapturedState(metadata);
 
-        assertTrue(copy != metadata);
-        assertTrue(copy.get(CisNbtUtil.STORED_SECTIONS_KEY) == metadata.get(CisNbtUtil.STORED_SECTIONS_KEY));
-        assertTrue(copy.get(CisNbtUtil.STORED_HEIGHTMAPS_KEY) == metadata.get(CisNbtUtil.STORED_HEIGHTMAPS_KEY));
-        assertTrue(copy.get(CisNbtUtil.PENDING_TICKS_KEY) == metadata.get(CisNbtUtil.PENDING_TICKS_KEY));
-        assertTrue(copy.get(CisNbtUtil.CHUNKIS_METADATA_KEY) != flags, "flags set in place are copied");
+        assertNotSame(metadata, copy);
+        assertSame(metadata.get(CisNbtUtil.STORED_SECTIONS_KEY), copy.get(CisNbtUtil.STORED_SECTIONS_KEY));
+        assertSame(metadata.get(CisNbtUtil.STORED_HEIGHTMAPS_KEY), copy.get(CisNbtUtil.STORED_HEIGHTMAPS_KEY));
+        assertSame(metadata.get(CisNbtUtil.PENDING_TICKS_KEY), copy.get(CisNbtUtil.PENDING_TICKS_KEY));
+        assertNotSame(flags, copy.get(CisNbtUtil.CHUNKIS_METADATA_KEY), "flags set in place are copied");
         assertEquals(flags, copy.get(CisNbtUtil.CHUNKIS_METADATA_KEY));
         flags.putBoolean(CisNbtUtil.PORTAL_CHUNK_KEY, true);
         assertFalse(copy.getCompound(CisNbtUtil.CHUNKIS_METADATA_KEY).orElseThrow()

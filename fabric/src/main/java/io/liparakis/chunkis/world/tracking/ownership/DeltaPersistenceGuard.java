@@ -3,6 +3,8 @@ package io.liparakis.chunkis.world.tracking.ownership;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
+import java.util.Set;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 
@@ -22,6 +24,24 @@ public final class DeltaPersistenceGuard {
      */
     private DeltaPersistenceGuard() {
         throw new AssertionError("Utility class");
+    }
+
+    /**
+     * Describes the reconstruction anchors consistently in load and save diagnostics.
+     *
+     * @param delta live or decoded delta whose metadata is being inspected
+     * @return lifecycle, baseline flags, metadata keys and persisted base-payload size
+     */
+    public static String describeBaseMetadata(final ChunkDeltaView<?, CompoundTag> delta) {
+        final CompoundTag metadata = delta.getChunkMetadata();
+        final int basePayloadBytes = metadata == null ? 0 : metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
+                .map(bytes -> bytes.length).orElse(0);
+        return describeLifecycleState(delta)
+                + ", hasPersistedBaseChunk=" + CisNbtUtil.hasPersistedBaseChunkNbt(metadata)
+                + ", shouldUsePersistedBaseChunk=" + CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata)
+                + ", fullBlockBaseline=" + CisNbtUtil.hasFullBlockBaseline(metadata)
+                + ", metadataKeys=" + (metadata == null ? Set.of() : metadata.keySet())
+                + ", baseChunkPayloadBytes=" + basePayloadBytes;
     }
 
     /**

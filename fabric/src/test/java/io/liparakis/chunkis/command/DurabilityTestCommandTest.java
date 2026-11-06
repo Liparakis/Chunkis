@@ -47,6 +47,8 @@ class DurabilityTestCommandTest {
      *
      * @throws Exception if reflection access fails
      */
+    // shutdownNow cancels the test executor; close would wait for its scheduled jobs.
+    @SuppressWarnings({"resource"})
     private static void clearRunState() throws Exception {
         final ScheduledExecutorService executor = currentExecutor();
         if (executor != null) {

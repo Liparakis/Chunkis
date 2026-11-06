@@ -118,7 +118,7 @@ public final class ChunkTraceInvariants {
      * given type are reported as violation messages. The first detected violation
      * is returned; events are not expected to have multiple simultaneously.</p>
      *
-     * <p><b>Note for save-lifecycle events:</b> {@link ChunkTraceStore#OPERATION_IDS} is checked
+     * <p><b>Note for save-lifecycle events:</b> {@code ChunkTraceStore} operation IDs is checked
      * first because it is considered more critical than chunk coordinates; a
      * missing chunk key on an event that is also missing its operation ID will
      * not be separately reported.</p>

@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.world.tracking.save;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -23,19 +23,19 @@ class PendingSaveQueueTest {
     @Test
     void chunkInFlightIsNotHandedOutAgainUntilDone() throws Exception {
         final PendingSaveQueue queue = new PendingSaveQueue();
-        final AsyncCisSaveWorker.PendingSave first = save(1, 0, 1);
+        final AsyncCisSaveWorker.PendingSave first = save(1, 1);
         queue.submit(first);
         assertSame(first, queue.poll());
 
-        final AsyncCisSaveWorker.PendingSave newer = save(1, 0, 2);
-        final AsyncCisSaveWorker.PendingSave other = save(2, 0, 1);
+        final AsyncCisSaveWorker.PendingSave newer = save(1, 2);
+        final AsyncCisSaveWorker.PendingSave other = save(2, 1);
         queue.submit(newer);
         queue.submit(other);
         assertSame(other, queue.poll());
 
         final CompletableFuture<AsyncCisSaveWorker.PendingSave> waiting = CompletableFuture.supplyAsync(queue::poll);
         Thread.sleep(100);
-        assertEquals(false, waiting.isDone());
+        assertFalse(waiting.isDone());
         queue.done(first.posKey());
         assertSame(newer, waiting.get(5, TimeUnit.SECONDS));
 
@@ -49,13 +49,12 @@ class PendingSaveQueueTest {
      * Builds a save carrying only what the queue reads.
      *
      * @param x          chunk x
-     * @param z          chunk z
      * @param generation save generation, to tell saves apart
      * @return the save
      */
-    private static AsyncCisSaveWorker.PendingSave save(final int x, final int z, final long generation) {
+    private static AsyncCisSaveWorker.PendingSave save(final int x, final long generation) {
         // The queue reads only the position key; no Minecraft class is needed (or bootstrapped) here.
         return new AsyncCisSaveWorker.PendingSave(null, null, null, null, null, generation, 0L, "test",
-                ((long) z << 32) | (x & 0xFFFFFFFFL));
+                x & 0xFFFFFFFFL);
     }
 }

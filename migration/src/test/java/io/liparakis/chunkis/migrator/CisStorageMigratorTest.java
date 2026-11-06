@@ -391,7 +391,7 @@ class CisStorageMigratorTest {
          * Performs inflate.
          */
         private static byte[] inflate(final byte[] compressed) throws Exception {
-            final long decompressedSize = com.github.luben.zstd.Zstd.decompressedSize(compressed);
+            final long decompressedSize = com.github.luben.zstd.Zstd.getFrameContentSize(compressed);
             if (com.github.luben.zstd.Zstd.isError(decompressedSize)) {
                 throw new IOException(
                         "Failed to read Zstd size: " + com.github.luben.zstd.Zstd.getErrorName(decompressedSize));

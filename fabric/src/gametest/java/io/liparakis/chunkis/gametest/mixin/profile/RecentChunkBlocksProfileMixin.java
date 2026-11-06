@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.PalettedContainer;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -27,6 +28,7 @@ public abstract class RecentChunkBlocksProfileMixin {
      * Cached entries.
      */
     @Shadow
+    @Final
     @SuppressWarnings("rawtypes")
     private LinkedHashMap entries;
 

@@ -626,7 +626,7 @@ public final class ChunkDebugActions {
      * @return number of exported events
      */
     public static int exportLatest(final CommandSourceStack source, final int count) {
-        return exportEvents(source, ChunkTraceStore.snapshotMatching(event -> true), "latest-" + count, count, false);
+        return exportEvents(source, ChunkTraceStore.snapshotMatching(ignoredEvent -> true), "latest-" + count, count, false);
     }
 
     /**

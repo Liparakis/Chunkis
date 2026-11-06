@@ -278,18 +278,17 @@ public final class StageProfiler {
         if (!ENABLED) {
             return;
         }
-        final Stage stage = recorded;
         final long[] starts = STARTS.get();
         final long wall = System.nanoTime() - starts[started.ordinal() * 2];
         final long allocated = THREADS.getCurrentThreadAllocatedBytes() - starts[started.ordinal() * 2 + 1];
         final String thread = Thread.currentThread().getName();
         final int context = thread.startsWith("Chunkis-AsyncSave") ? Context.SAVE.ordinal()
                 : thread.equals("Server thread") ? Context.SERVER.ordinal() : Context.LOAD.ordinal();
-        final LongAdder[] stats = STAGES[context][stage.ordinal()];
+        final LongAdder[] stats = STAGES[context][recorded.ordinal()];
         stats[0].increment();
         stats[1].add(wall);
         stats[2].add(allocated);
-        MAX.accumulateAndGet(context * Stage.values().length + stage.ordinal(), wall, Math::max);
+        MAX.accumulateAndGet(context * Stage.values().length + recorded.ordinal(), wall, Math::max);
     }
 
     /**
@@ -514,21 +513,6 @@ public final class StageProfiler {
     }
 
     /**
-     * Where each delta was last marked saved.
-     */
-    private static final Map<Object, String> CLEAN_SITES =
-            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
-
-    /**
-     * Records where a dirty delta is being marked saved.
-     *
-     * @param delta the delta
-     */
-    public static void recordCleanSite(final Object delta) {
-        CLEAN_SITES.put(delta, callSite());
-    }
-
-    /**
      * Where each delta was last put into the dirty tracker while clean.
      */
     private static final Map<Object, String> CLEAN_PUTS =
@@ -552,16 +536,6 @@ public final class StageProfiler {
      */
     static String cleanPut(final Object delta) {
         return CLEAN_PUTS.getOrDefault(delta, "never put clean");
-    }
-
-    /**
-     * Returns where a delta was last marked saved.
-     *
-     * @param delta the delta
-     * @return call site, or {@code "never marked saved"}
-     */
-    static String cleanSite(final Object delta) {
-        return CLEAN_SITES.getOrDefault(delta, "never marked saved");
     }
 
     /**

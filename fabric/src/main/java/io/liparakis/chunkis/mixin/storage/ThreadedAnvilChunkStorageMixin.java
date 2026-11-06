@@ -60,7 +60,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      */
     @Shadow
     @Final
-    ServerLevel level;
+    private ServerLevel level;
 
     /**
      * Save path for {@link #level}, created on first use.

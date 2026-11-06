@@ -806,9 +806,6 @@ public class WorldChunkMixin implements ChunkisMutationGuardDuck, FreshChunkDuck
 
         if (chunkis$serverThread == null) {
             final var server = serverWorld.getServer();
-            if (server == null) {
-                return false;
-            }
             chunkis$serverThread = server.getRunningThread();
         }
 

@@ -369,7 +369,7 @@ public final class WorldChunkPromotion {
             final Holder<PoiType> portalType) {
         final int[] count = {0};
         chunk.findBlocks(
-                NETHER_PORTAL_BLOCK_PREDICATE, (pos, state) -> {
+                NETHER_PORTAL_BLOCK_PREDICATE, (pos, ignoredState) -> {
                     count[0]++;
                     poiStorage.add(pos, portalType);
                 }

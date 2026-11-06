@@ -166,7 +166,7 @@ public final class PortalChunkIndexManager {
         final boolean[] found = {false};
         final java.util.function.Predicate<BlockState> portalPredicate = state -> state.is(Blocks.NETHER_PORTAL);
 
-        chunk.findBlocks(portalPredicate, (pos, state) -> found[0] = true);
+        chunk.findBlocks(portalPredicate, (ignoredPos, ignoredState) -> found[0] = true);
         return found[0];
     }
 

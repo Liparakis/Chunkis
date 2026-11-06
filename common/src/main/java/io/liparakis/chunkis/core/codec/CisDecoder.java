@@ -399,7 +399,7 @@ public final class CisDecoder<S, N> {
         denseRawCursor = end;
         denseRawEnd = end;
         if (decodedVersion >= CisConstants.CODED_DENSE_MIN_VERSION) {
-            final int rawLength = readStreamLength(data, end, "raw dense block");
+            final int rawLength = readStreamLength(data, end);
             end += 4;
             denseRawCursor = end;
             denseRawEnd = end + rawLength;
@@ -409,9 +409,6 @@ public final class CisDecoder<S, N> {
             // Negative: one stream per coded section ([int length][bytes]); otherwise a single shared stream.
             codedPerSection = codedMarker < 0;
             final int codedLength = codedPerSection ? -(codedMarker + 1) : codedMarker;
-            if (codedLength < 0) {
-                throw new IOException("Invalid coded dense block stream length: " + codedMarker);
-            }
             end += 4;
             ensureAvailable(data, end, codedLength, "coded dense block stream");
             denseDecoder.setData(data, end, codedLength);
@@ -449,12 +446,12 @@ public final class CisDecoder<S, N> {
      *
      * @param data   payload
      * @param offset offset of the length prefix
-     * @param name   stream name, for errors
      * @return stream length
      * @throws IOException if the length is negative or the stream overruns the payload
      */
-    private static int readStreamLength(final byte[] data, final int offset, final String name)
+    private static int readStreamLength(final byte[] data, final int offset)
             throws IOException {
+        final String name = "raw dense block";
         ensureAvailable(data, offset, 4, name + " stream length");
         final int length = readIntBE(data, offset);
         if (length < 0) {

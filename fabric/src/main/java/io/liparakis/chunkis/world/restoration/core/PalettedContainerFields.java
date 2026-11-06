@@ -36,9 +36,9 @@ public final class PalettedContainerFields {
     public static final boolean AVAILABLE;
 
     static {
-        Field data = null;
-        Field storage = null;
-        Field palette = null;
+        Field data;
+        Field storage;
+        Field palette;
         try {
             data = findField(PalettedContainer.class, "data", "field_34560", "b");
             storage = findField(data.getType(), "storage", "comp_118", "b");

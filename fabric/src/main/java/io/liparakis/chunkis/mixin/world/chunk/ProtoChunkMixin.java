@@ -19,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * {@link io.liparakis.chunkis.world.tracking.settle.GenerationSettling}.
  */
 @Mixin(ProtoChunk.class)
+@SuppressWarnings({"ConstantValue"})
 public class ProtoChunkMixin implements FreshChunkDuck {
 
     /**

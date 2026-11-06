@@ -33,20 +33,15 @@ final class ChunkLoadNbtBuilder {
      * @param delta       source block delta
      * @return LoadChunkNbtResult wrapper
      */
-    static CisNbtUtil.LoadChunkNbtResult buildLoadChunkNbt(
-            final int chunkX,
+    static CisNbtUtil.LoadChunkNbtResult buildLoadChunkNbt(final int chunkX,
             final int chunkZ,
             final int dataVersion,
-            final ChunkDelta<?, CompoundTag> delta
-    ) {
+            final ChunkDelta<?, CompoundTag> delta) {
         final Object metadata = delta != null ? delta.getChunkMetadata() : null;
         final CompoundTag baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
-        final CompoundTag preservedAuxiliaryChunkNbt =
-                CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
-        final boolean usePersistedBaseChunkForBlocks =
-                CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
-        final boolean migratedAuthoritativeChunk =
-                CisNbtUtil.isMigratedAuthoritativeChunk(metadata);
+        final CompoundTag preservedAuxiliaryChunkNbt = CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
+        final boolean usePersistedBaseChunkForBlocks = CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
+        final boolean migratedAuthoritativeChunk = CisNbtUtil.isMigratedAuthoritativeChunk(metadata);
         final CisNbtUtil.PersistedBaseChunkUsage baseChunkUsage;
         final CompoundTag root;
 
@@ -61,8 +56,7 @@ final class ChunkLoadNbtBuilder {
                 root.putInt(CisNbtUtil.X_POS_KEY, chunkX);
                 root.putInt(CisNbtUtil.Z_POS_KEY, chunkZ);
             }
-            baseChunkUsage = CisNbtUtil.hasPersistedBaseChunkNbt(metadata)
-                    ? CisNbtUtil.PersistedBaseChunkUsage.SKIPPED
+            baseChunkUsage = CisNbtUtil.hasPersistedBaseChunkNbt(metadata) ? CisNbtUtil.PersistedBaseChunkUsage.SKIPPED
                     : CisNbtUtil.PersistedBaseChunkUsage.MISSING;
         }
 
@@ -71,11 +65,13 @@ final class ChunkLoadNbtBuilder {
             // of regenerating terrain only to replace it. With its light stored too it loads lit, like a vanilla
             // chunk; otherwise vanilla lights the restored blocks itself.
             root.putString(CisNbtUtil.STATUS_KEY, STATUS_FULL);
-            root.put(CisNbtUtil.SECTIONS_KEY, CisNbtUtil.getStoredSections(metadata));
+            root.put(CisNbtUtil.SECTIONS_KEY,
+                    Objects.requireNonNull(CisNbtUtil.getStoredSections(metadata),
+                            "Finished CIS chunk " + chunkX + "," + chunkZ + " is missing stored sections"));
             PendingTicksNbt.putInto((CompoundTag) metadata, root);
             // Only for the blocks they were captured from: a dirty delta may hold newer edits, unless it is only
             // waiting for its save. Vanilla rebuilds heightmaps the root lacks.
-            if (delta != null && (!delta.isDirty() || delta.hasCurrentHeightmaps())) {
+            if (!delta.isDirty() || delta.hasCurrentHeightmaps()) {
                 ((CompoundTag) metadata).getCompound(CisNbtUtil.STORED_HEIGHTMAPS_KEY)
                         .ifPresent(heightmaps -> root.put(CisNbtUtil.HEIGHTMAPS_KEY, heightmaps.copy()));
             }
@@ -104,17 +100,13 @@ final class ChunkLoadNbtBuilder {
      * @param root  target NBT compound
      * @param delta source block delta
      */
-    static void putChunkMetadata(
-            final CompoundTag root,
-            final ChunkDelta<BlockState, CompoundTag> delta
-    ) {
+    static void putChunkMetadata(final CompoundTag root, final ChunkDelta<BlockState, CompoundTag> delta) {
         Objects.requireNonNull(root, "root");
         if (delta == null) {
             return;
         }
 
-        final CompoundTag structures =
-                CisNbtUtil.extractPersistedStructureMetadata(delta.getChunkMetadata());
+        final CompoundTag structures = CisNbtUtil.extractPersistedStructureMetadata(delta.getChunkMetadata());
         if (structures != null && !structures.isEmpty()) {
             root.put(CisNbtUtil.STRUCTURES_KEY, structures);
         }
@@ -129,10 +121,8 @@ final class ChunkLoadNbtBuilder {
      * @param root                  target synthetic root
      * @param preservedAuxiliaryNbt preserved opaque vanilla metadata
      */
-    private static void mergePreservedAuxiliaryMetadata(
-            final CompoundTag root,
-            final CompoundTag preservedAuxiliaryNbt
-    ) {
+    private static void mergePreservedAuxiliaryMetadata(final CompoundTag root,
+            final CompoundTag preservedAuxiliaryNbt) {
         root.merge(preservedAuxiliaryNbt);
     }
 
@@ -143,9 +133,7 @@ final class ChunkLoadNbtBuilder {
      * @return casted delta mapping
      */
     @SuppressWarnings("unchecked")
-    private static ChunkDelta<BlockState, CompoundTag> castDelta(
-            final ChunkDelta<?, CompoundTag> delta
-    ) {
+    private static ChunkDelta<BlockState, CompoundTag> castDelta(final ChunkDelta<?, CompoundTag> delta) {
         return (ChunkDelta<BlockState, CompoundTag>) delta;
     }
 }

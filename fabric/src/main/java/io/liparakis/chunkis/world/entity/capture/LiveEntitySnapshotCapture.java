@@ -262,6 +262,7 @@ public final class LiveEntitySnapshotCapture {
      * save, usually) must still see them, or the chunk stays unowned and its entities are lost in an
      * authoritative world, where vanilla entity files are not written.</p>
      */
+    @SuppressWarnings({"resource"})
     private static List<Entity> chunkSectionEntities(final ServerLevel world, final ChunkPos chunkPos) {
         final EntitySectionStorage<?> cache = ((ServerEntityManagerAccessor) ((ServerWorldAccessor) world)
                 .chunkis$getEntityManager()).chunkis$getCache();

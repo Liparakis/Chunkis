@@ -170,7 +170,7 @@ Before submitting, check that:
 Before opening an issue:
 
 - reproduce it on a **copy** of the world;
-- check the compatibility notes in the [README](README.md#compatibility);
+- check the compatibility notes in the [README](README.md#install);
 - confirm it happens on the latest version.
 
 Then include:

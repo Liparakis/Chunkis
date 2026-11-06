@@ -463,10 +463,10 @@ final class FlightScenario implements StressRun {
             final RecentChunkBlocks recent = RecentChunkBlocks.of(world.dimension());
             owners.addProperty("recentCacheEntries", ((Map<?, ?>) field(recent, "entries")).size());
             owners.addProperty("recentCacheEstimateMb", (long) field(recent, "bytes") / 1048576.0);
-            final Object unloadCache = staticField(GlobalChunkTracker.class, "unloadCache");
+            final Object unloadCache = staticField("unloadCache");
             owners.addProperty("unloadCacheEntries", ((Map<?, ?>) field(unloadCache, "entries")).size());
             owners.addProperty("dirtyDeltas",
-                    ((Map<?, ?>) staticField(GlobalChunkTracker.class, "dirtyDeltas")).size());
+                    ((Map<?, ?>) staticField("dirtyDeltas")).size());
             owners.addProperty("loadedChunks", world.getChunkSource().getLoadedChunksCount());
             owners.add("dirtyDeltaProbe", probeDirtyDeltas());
             final long before = usedHeapAfterGc();
@@ -495,7 +495,7 @@ final class FlightScenario implements StressRun {
      * @throws ReflectiveOperationException when the tracker or delta layout changed
      */
     private JsonObject probeDirtyDeltas() throws ReflectiveOperationException {
-        final Map<?, ?> dirty = (Map<?, ?>) staticField(GlobalChunkTracker.class, "dirtyDeltas");
+        final Map<?, ?> dirty = (Map<?, ?>) staticField("dirtyDeltas");
         final var storage = io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper.getStorage(world);
         long reallyDirty = 0;
         long neverSaved = 0;
@@ -579,13 +579,12 @@ final class FlightScenario implements StressRun {
     /**
      * Reads a private static field.
      *
-     * @param owner class
      * @param name  field name
      * @return value
      * @throws ReflectiveOperationException when the field is missing
      */
-    private static Object staticField(final Class<?> owner, final String name) throws ReflectiveOperationException {
-        final Field field = owner.getDeclaredField(name);
+    private static Object staticField(final String name) throws ReflectiveOperationException {
+        final Field field = GlobalChunkTracker.class.getDeclaredField(name);
         field.setAccessible(true);
         return field.get(null);
     }
@@ -637,9 +636,36 @@ final class FlightScenario implements StressRun {
         if (Boolean.getBoolean("chunkis.stress.histogram")) {
             StressScenario.writeHeapHistogram();
         }
+        final JsonObject config = reportConfiguration();
+        final Path report = metrics.writeReport(Path.of("chunkis-stress"), config, chunkisDir, retainedHeap);
+        Chunkis.LOGGER.info("Chunkis stress: report written to {}", report.toAbsolutePath());
+        StressBenchGameTest.setPacingTicks(false);
+        context.succeed();
+    }
+
+    /**
+     * Collects scenario settings and completed flight diagnostics for the report.
+     *
+     * @return configuration and per-leg measurements
+     */
+    private JsonObject reportConfiguration() {
+        final JsonObject config = scenarioConfiguration();
+        config.add("popIn", popInMetrics());
+        config.add("loader", loaderMetrics());
+        config.add("legs", legs);
+        config.add("storedLegsProfile", StageProfiler.toJson());
+        config.add("heapOwnership", heapOwnership());
+        return config;
+    }
+
+    /**
+     * Describes the fixed workload independently of the observed results.
+     *
+     * @return scenario settings
+     */
+    private static JsonObject scenarioConfiguration() {
         final JsonObject config = new JsonObject();
         config.addProperty("scenario", "flight-out-and-back");
-        config.addProperty("legs", LEGS);
         config.addProperty("measuredLegs", LEGS - 1);
         config.addProperty("blocksPerLeg", DISTANCE);
         config.addProperty("blocksPerTick", SPEED);
@@ -648,22 +674,32 @@ final class FlightScenario implements StressRun {
         config.addProperty("ticksPerSecond", TICKS_PER_SECOND);
         config.addProperty("fastGeneration", FAST_GENERATION);
         config.addProperty("storage", Boolean.getBoolean("chunkis.stress.vanilla") ? "vanilla" : "chunkis");
+        return config;
+    }
+
+    /**
+     * Summarizes whether flight entered chunks before they became usable.
+     *
+     * @return chunk arrival counters
+     */
+    private JsonObject popInMetrics() {
         final JsonObject popIn = new JsonObject();
         popIn.addProperty("chunksEntered", chunksEntered);
         popIn.addProperty("chunksLate", chunksLate);
         popIn.addProperty("chunksMissed", chunksMissed);
-        config.add("popIn", popIn);
+        return popIn;
+    }
+
+    /**
+     * Summarizes loader pressure and abandoned tickets.
+     *
+     * @return loader measurements
+     */
+    private JsonObject loaderMetrics() {
         final JsonObject loader = new JsonObject();
         loader.add("loadsInFlight", backlog.summaryRaw());
         loader.add("forcedChunksUnusable", unusable.summaryRaw());
         loader.addProperty("ticketsAbandoned", ticketsAbandoned);
-        config.add("loader", loader);
-        config.add("legs", legs);
-        config.add("storedLegsProfile", StageProfiler.toJson());
-        config.add("heapOwnership", heapOwnership());
-        final Path report = metrics.writeReport(Path.of("chunkis-stress"), config, chunkisDir, retainedHeap);
-        Chunkis.LOGGER.info("Chunkis stress: report written to {}", report.toAbsolutePath());
-        StressBenchGameTest.setPacingTicks(false);
-        context.succeed();
+        return loader;
     }
 }

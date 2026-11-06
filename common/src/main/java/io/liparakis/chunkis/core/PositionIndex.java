@@ -1,6 +1,7 @@
 package io.liparakis.chunkis.core;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import org.jetbrains.annotations.Contract;
 
 /**
  * Maps a packed local block position to its instruction index, one {@code int[4096]} per 16-block
@@ -76,6 +77,7 @@ final class PositionIndex {
      * @param create whether to allocate a missing section
      * @return section slots, or {@code null} when absent and {@code create} is false
      */
+    @Contract("_, true -> !null")
     private int[] section(final int key, final boolean create) {
         if (lastSection != null && lastSectionKey == key) {
             return lastSection;

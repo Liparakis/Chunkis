@@ -43,7 +43,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import java.util.List;
 import java.util.UUID;
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "resource"})
 public final class PersistedBaseChunkReloadGameTest {
 
     /**
@@ -1096,9 +1096,10 @@ public final class PersistedBaseChunkReloadGameTest {
 
         final ChunkDelta<BlockState, CompoundTag> rightDelta = new ChunkDelta<>(BlockState::isAir);
         BaseChunkCaptureUtil.captureBaseChunk(world, rightChunk, rightDelta);
-        storage.save(new CisChunkPos(rightChunkPos.x(), rightChunkPos.z()), rightDelta);
+        final CisChunkPos rightStoragePos = new CisChunkPos(rightChunkPos.x(), rightChunkPos.z());
+        storage.save(rightStoragePos, rightDelta);
         final ChunkDelta<BlockState, CompoundTag> storedRightDelta =
-                storage.load(new CisChunkPos(rightChunkPos.x(), rightChunkPos.z()), "gametest-mixed-border-right-readback");
+                storage.load(rightStoragePos, "gametest-mixed-border-right-readback");
 
         context.assertTrue(
                 !CisNbtUtil.hasPersistedBaseChunkNbt(leftDelta.getChunkMetadata())

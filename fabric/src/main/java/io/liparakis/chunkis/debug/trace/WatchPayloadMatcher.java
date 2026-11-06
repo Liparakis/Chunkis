@@ -49,7 +49,7 @@ final class WatchPayloadMatcher {
         final boolean[] found = {false};
 
         if (target.type() == PayloadWatchType.BLOCK) {
-            delta.forEachBlock((x, y, z, state) -> {
+            delta.forEachBlock((x, y, z, ignoredState) -> {
                 if (found[0]) {
                     return;
                 }

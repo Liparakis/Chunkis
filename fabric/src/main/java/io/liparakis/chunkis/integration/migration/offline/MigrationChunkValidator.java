@@ -189,7 +189,7 @@ public final class MigrationChunkValidator {
      */
     private static Map<Long, String> canonicalNonAirBlockMap(final ChunkDelta<BlockState, CompoundTag> delta) {
         final Map<Long, String> result = new HashMap<>();
-        delta.forEachBlockInstruction((x, y, z, paletteId, state) -> {
+        delta.forEachBlockInstruction((x, y, z, ignoredPaletteId, state) -> {
             if (state != null && !state.isAir()) {
                 result.put(BlockPos.asLong(x, y, z), canonicalBlockStateKey(state));
             }

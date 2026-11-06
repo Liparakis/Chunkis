@@ -89,6 +89,8 @@ public final class CisPayloadDiagnosticsReader {
 
         final ChunkSectionPayloadAccumulator sections = inspectSectionPayloads(sectionData, sectionCount, version,
                 calculateBitsNeeded(globalPaletteSize));
+        // Keep this capability threshold when a later supported format version is added.
+        //noinspection NonStrictComparisonCanBeEquality
         if (version >= CisConstants.CODED_DENSE_MIN_VERSION) {
             cursor.skip(cursor.readNonNegativeInt("raw dense block length"), "raw dense block bytes");
             final int codedPrefix = cursor.readInt("coded dense block length");

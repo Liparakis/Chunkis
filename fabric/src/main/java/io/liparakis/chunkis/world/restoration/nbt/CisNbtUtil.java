@@ -542,7 +542,7 @@ public final class CisNbtUtil {
     public static CompoundTag copySharingCapturedState(final CompoundTag payload) {
         final CompoundTag copy = new CompoundTag();
         for (final String key : payload.keySet()) {
-            final Tag element = payload.get(key);
+            final Tag element = Objects.requireNonNull(payload.get(key), "Missing payload key: " + key);
             copy.put(key, isReplacedWhole(key) ? element : element.copy());
         }
         return copy;
@@ -700,8 +700,7 @@ public final class CisNbtUtil {
                     || targetMetadata.contains(key)) {
                 continue;
             }
-            targetMetadata.put(key, sourceMetadata.get(key)
-                    .copy());
+            targetMetadata.put(key, Objects.requireNonNull(sourceMetadata.get(key), "Missing metadata key: " + key).copy());
         }
 
         final CompoundTag sourceChunkis = sourceMetadata.getCompound(CHUNKIS_METADATA_KEY)
@@ -712,8 +711,7 @@ public final class CisNbtUtil {
         final CompoundTag targetChunkis = getOrCreateChunkisMetadata(targetMetadata);
         for (final String key : sourceChunkis.keySet()) {
             if (!targetChunkis.contains(key)) {
-                targetChunkis.put(key, sourceChunkis.get(key)
-                        .copy());
+                targetChunkis.put(key, Objects.requireNonNull(sourceChunkis.get(key), "Missing Chunkis metadata key: " + key).copy());
             }
         }
     }
@@ -798,7 +796,7 @@ public final class CisNbtUtil {
         }
 
         final Boolean explicit = readSuppressInitialRepopulationFlag(delta);
-        return explicit != null ? explicit : true;
+        return explicit == null || explicit;
     }
 
     /**

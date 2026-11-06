@@ -5,6 +5,7 @@ import it.unimi.dsi.fastutil.longs.LongList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ThreadedLevelLightEngine;
+import net.minecraft.server.level.ThreadedLevelLightEngine.TaskType;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.LightChunkGetter;
 import net.minecraft.world.level.lighting.LayerLightEventListener;
@@ -40,7 +41,7 @@ public abstract class ServerLightingProviderMixin extends LevelLightEngine imple
      * @param task  work to run on the light thread
      */
     @Shadow
-    private void addTask(final int x, final int z, final ThreadedLevelLightEngine.TaskType stage, final Runnable task) {
+    private void addTask(final int x, final int z, final TaskType stage, final Runnable task) {
     }
 
     @Override
@@ -50,7 +51,7 @@ public abstract class ServerLightingProviderMixin extends LevelLightEngine imple
         }
         final long[] packed = positions.toLongArray();
         // Same stage as vanilla's checkBlock, but one task for the whole batch.
-        addTask(chunkX, chunkZ, ThreadedLevelLightEngine.TaskType.PRE_UPDATE, () -> {
+        addTask(chunkX, chunkZ, TaskType.PRE_UPDATE, () -> {
             final LayerLightEventListener blockLight = getLayerListener(LightLayer.BLOCK);
             final LayerLightEventListener skyLight = getLayerListener(LightLayer.SKY);
             for (final long position : packed) {

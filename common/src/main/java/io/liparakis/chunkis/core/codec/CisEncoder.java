@@ -357,7 +357,7 @@ public final class CisEncoder<S, N> {
         seenStates.put(airState, 0);
         usedStates.add(airState);
 
-        if (delta instanceof SectionStatesSource<?> source) {
+        if (delta instanceof SectionStatesSource source) {
             // Whole sections: same sections, same states and same first-seen palette order as the per-block walk.
             source.forEachSectionStates((sectionY, states) -> {
                 chunk.putDenseSection(sectionY, states);
@@ -418,7 +418,6 @@ public final class CisEncoder<S, N> {
         final Object[] sectionStates = denseStatesForSection(ctx, section);
         // One pass gives every candidate its numbers and leaves the dense local palette and indices ready.
         final SectionAnalysis<S> analysis = analyseSection(ctx, sectionStates);
-        final boolean hasExplicitAir = analysis.hasExplicitAir();
 
         final S uniformState = analysis.uniformState();
         final DefaultSparseCandidate<S> defaultSparse = analysis.defaultSparse();
@@ -451,7 +450,7 @@ public final class CisEncoder<S, N> {
             case UNIFORM -> encodeUniformSection(ctx, uniformState, globalBits);
             case DEFAULT_SPARSE -> encodeDefaultSparseSection(ctx, sectionStates, defaultSparse, globalBits);
             case SPARSE -> encodeSparseSectionAdaptive(ctx, section, globalBits);
-            case DENSE -> encodeAnalysedDenseSection(ctx, sectionStates);
+            case DENSE -> encodeAnalysedDenseSection(ctx);
         }
     }
 
@@ -537,7 +536,7 @@ public final class CisEncoder<S, N> {
         final int distinct = ctx.localStates.size();
         S uniform = null;
         if (nullCount == 0 && distinct == 1) {
-            final S only = ctx.localStates.get(0);
+            final S only = ctx.localStates.getFirst();
             if (!(hasExplicitAir && Objects.equals(only, airState))) {
                 uniform = only;
             }
@@ -556,9 +555,8 @@ public final class CisEncoder<S, N> {
      * Writes a dense section from the palette and indices {@link #analyseSection} left in the context.
      *
      * @param ctx    encoder context
-     * @param states the section's states, for the wide (bit-packed) form
      */
-    private void encodeAnalysedDenseSection(final EncoderContext<S> ctx, final Object[] states) {
+    private void encodeAnalysedDenseSection(final EncoderContext<S> ctx) {
         ctx.bitWriter.write(CisConstants.SECTION_ENCODING_DENSE, 1);
         final int localSize = ctx.localPaletteIds.size();
         ctx.bitWriter.write(localSize, CisConstants.PALETTE_SIZE_BITS);

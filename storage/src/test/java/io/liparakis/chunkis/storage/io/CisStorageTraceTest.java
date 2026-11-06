@@ -248,6 +248,7 @@ class CisStorageTraceTest {
         assertThat(storage.save(pos, delta, "save")).isTrue();
 
         final ChunkDelta<String, String> released = storage.loadReleasedWithoutClearing(pos);
+        assertThat(released).isNotNull();
         assertThat(released.isBlockPayloadReleased()).isTrue();
         assertThat(released.isDirty()).isFalse();
         assertThat(released.getBlockChangesCount()).isZero();
@@ -337,7 +338,7 @@ class CisStorageTraceTest {
 
         final int[] supplied = {0};
         final java.util.List<Boolean> forChunkLoad = new java.util.ArrayList<>();
-        storage.setBlockPartSource((at, hash, chunkLoad) -> {
+        storage.setBlockPartSource((ignoredAt, hash, chunkLoad) -> {
             forChunkLoad.add(chunkLoad);
             return java.util.Arrays.equals(hash, storedHash)
                     ? loaded -> {
@@ -355,7 +356,7 @@ class CisStorageTraceTest {
         storage.loadForChunkLoad(pos);
         assertThat(forChunkLoad).containsExactly(false, true);
 
-        storage.setBlockPartSource((at, hash, chunkLoad) -> null);
+        storage.setBlockPartSource((ignoredAt, ignoredHash, ignoredChunkLoad) -> null);
         assertThat(storage.load(pos).getBlockChangesCount()).isEqualTo(2);
         storage.close();
     }

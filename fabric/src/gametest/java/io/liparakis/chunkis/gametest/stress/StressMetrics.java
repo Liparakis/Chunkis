@@ -22,7 +22,7 @@ import java.util.stream.Stream;
  * Collects server-thread tick times per scenario phase plus CPU, allocation, GC, heap and disk figures,
  * and writes them as a JSON report.
  *
- * <p>Only ticks recorded while {@link #isMeasuring()} is true count; the warm-up round is excluded.
+ * <p>Only ticks recorded while a measurement phase is active count; the warm-up round is excluded.
  * Everything here runs on the server thread.</p>
  */
 final class StressMetrics {
@@ -219,14 +219,7 @@ final class StressMetrics {
                 threads.getThreadAllocatedBytes(serverThreadId), gcCount(), gcMillis(), System.nanoTime());
     }
 
-    /**
-     * Reports whether ticks are being recorded.
-     *
-     * @return true while measuring
-     */
-    boolean isMeasuring() {
-        return measuring;
-    }
+
 
     /**
      * Sets the phase that following ticks are attributed to.

@@ -4,7 +4,7 @@ import io.liparakis.chunkis.Chunkis;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
- * Minimal opt-in server-side counters for restore and sync hot paths.
+ * Minimal opt-in server-side counters for chunk restore hot paths.
  *
  * <p>Enable via {@code -Dchunkis.server.hotpath.metrics=true}. When disabled,
  * callers should skip all timing/counter work.</p>
@@ -16,30 +16,6 @@ public final class ServerHotpathMetrics {
      */
     public static final boolean ENABLED = Boolean.getBoolean("chunkis.server.hotpath.metrics");
 
-    /**
-     * Stores payload count.
-     */
-    private static final LongAdder payloadCount = new LongAdder();
-    /**
-     * Stores total encode nanos.
-     */
-    private static final LongAdder totalEncodeNanos = new LongAdder();
-    /**
-     * Stores total wrap nanos.
-     */
-    private static final LongAdder totalWrapNanos = new LongAdder();
-    /**
-     * Stores total raw bytes.
-     */
-    private static final LongAdder totalRawBytes = new LongAdder();
-    /**
-     * Stores total wire bytes.
-     */
-    private static final LongAdder totalWireBytes = new LongAdder();
-    /**
-     * Stores total fanout players.
-     */
-    private static final LongAdder totalFanoutPlayers = new LongAdder();
     /**
      * Stores restore count.
      */
@@ -89,38 +65,6 @@ public final class ServerHotpathMetrics {
     }
 
     /**
-     * Returns a start timestamp when metrics are enabled.
-     */
-    public static long startTimer() {
-        return ENABLED ? System.nanoTime() : 0L;
-    }
-
-    /**
-     * Records one prepared outgoing delta payload.
-     */
-    public static void recordPreparedPayload(
-            final long encodeNanos,
-            final long wrapNanos,
-            final int rawBytes,
-            final int wireBytes,
-            final int playerCount
-    ) {
-        payloadCount.increment();
-        totalEncodeNanos.add(encodeNanos);
-        totalWrapNanos.add(wrapNanos);
-        totalRawBytes.add(rawBytes);
-        totalWireBytes.add(wireBytes);
-        totalFanoutPlayers.add(playerCount);
-    }
-
-    /**
-     * Returns the number of prepared payloads recorded so far.
-     */
-    public static long payloadCount() {
-        return payloadCount.sum();
-    }
-
-    /**
      * Records one restore cursor summary.
      */
     public static void recordRestoreCursor(
@@ -154,26 +98,6 @@ public final class ServerHotpathMetrics {
     }
 
     /**
-     * Logs an aggregate summary for sync payload metrics.
-     */
-    public static void logPayloadSummary() {
-        final long payloads = payloadCount.sum();
-        if (payloads == 0) {
-            return;
-        }
-
-        Chunkis.LOGGER.info(
-                "Chunkis server sync metrics: payloads={}, avgEncodeMicros={}, avgWrapMicros={}, avgRawBytes={}, avgWireBytes={}, avgPlayers={}",
-                payloads,
-                nanosToMicros(totalEncodeNanos.sum() / payloads),
-                nanosToMicros(totalWrapNanos.sum() / payloads),
-                totalRawBytes.sum() / payloads,
-                totalWireBytes.sum() / payloads,
-                totalFanoutPlayers.sum() / payloads
-        );
-    }
-
-    /**
      * Logs an aggregate summary for restore cursor metrics.
      */
     public static void logRestoreSummary() {
@@ -197,10 +121,4 @@ public final class ServerHotpathMetrics {
         );
     }
 
-    /**
-     * Formats nanoseconds as microseconds for trace messages.
-     */
-    public static long nanosToMicros(final long nanos) {
-        return nanos / 1_000L;
-    }
 }

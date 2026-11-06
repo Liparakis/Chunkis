@@ -309,7 +309,7 @@ public final class CisSnapshotCapture {
         // Count final non-air states, not instructions: a full baseline stores explicit air too,
         // and comparing that against the live non-air count fired on every mostly-air chunk.
         final int[] nonAir = {0};
-        target.forEachBlock((x, y, z, state) -> {
+        target.forEachBlock((ignoredX, ignoredY, ignoredZ, state) -> {
             if (state != null && !state.isAir()) {
                 nonAir[0]++;
             }
@@ -409,6 +409,8 @@ public final class CisSnapshotCapture {
      * @param paletteIds   cache from block state to delta palette id
      * @return false when the caller must fall back to {@link #captureSectionByState}
      */
+    // True consistently means capture succeeded; callers only need the fallback on failure.
+    @SuppressWarnings({"BooleanMethodIsAlwaysInverted"})
     private static boolean captureSectionByPaletteIndex(final PalettedContainer<BlockState> container,
             final ChunkDelta<BlockState, CompoundTag> target, final int chunkBottomY, final int sectionIndex,
             final IdentityHashMap<BlockState, Integer> paletteIds) {
@@ -424,9 +426,6 @@ public final class CisSnapshotCapture {
         final int[] deltaIds = new int[paletteSize];
         for (int i = 0; i < paletteSize; i++) {
             final BlockState state = palette.valueFor(i);
-            if (state == null) {
-                return false;
-            }
             deltaIds[i] = state.isAir() ? -1 : deltaPaletteId(target, state, paletteIds);
         }
         final BitStorage storage = PalettedContainerFields.storage(data);

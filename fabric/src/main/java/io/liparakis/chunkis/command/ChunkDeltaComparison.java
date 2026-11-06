@@ -80,7 +80,7 @@ final class ChunkDeltaComparison {
      */
     private static Map<Long, BlockState> materializeBlocks(final ChunkDelta<BlockState, CompoundTag> delta) {
         final Map<Long, BlockState> blocks = new java.util.HashMap<>();
-        delta.forEachBlockInstruction((x, y, z, paletteId, state) -> blocks.put(BlockPos.asLong(x, y, z), state));
+        delta.forEachBlockInstruction((x, y, z, ignoredPaletteId, state) -> blocks.put(BlockPos.asLong(x, y, z), state));
         return blocks;
     }
 

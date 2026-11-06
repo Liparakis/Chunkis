@@ -6,6 +6,7 @@ import io.liparakis.chunkis.storage.io.region.RegionFile;
 import java.io.IOException;
 import java.util.Arrays;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -21,6 +22,7 @@ public abstract class RegionFileWriteProbeMixin {
     /**
      * Whether the probe runs.
      */
+    @Unique
     private static final boolean CHUNKIS$PROBE = Boolean.getBoolean("chunkis.stress.probeWrites");
 
     /**

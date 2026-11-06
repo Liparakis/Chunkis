@@ -112,15 +112,7 @@ public final class PreloadedBlockSections {
         if (built == null) {
             return;
         }
-        final ListTag sections = root.getListOrEmpty(CisNbtUtil.SECTIONS_KEY);
-        final CompoundTag[] entries = new CompoundTag[built.length];
-        for (int i = 0; i < sections.size(); i++) {
-            final CompoundTag entry = sections.getCompoundOrEmpty(i);
-            final int index = entry.getByteOr(StoredSections.Y_KEY, (byte) 0) - world.getMinSectionY();
-            if (index >= 0 && index < entries.length) {
-                entries[index] = entry;
-            }
-        }
+        final CompoundTag[] entries = sectionEntries(world, root, built.length);
         for (int i = 0; i < built.length; i++) {
             if (built[i] != null && entries[i] == null) {
                 return;

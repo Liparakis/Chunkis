@@ -74,19 +74,20 @@ class CisFixtureCopyTest {
      * Inflates a zlib-compressed byte array.
      */
     private static byte[] inflate(final byte[] compressed) throws Exception {
-        final Inflater inflater = new Inflater();
-        inflater.setInput(compressed);
+        try (final Inflater inflater = new Inflater()) {
+            inflater.setInput(compressed);
 
-        final byte[] buffer = new byte[IO_BUFFER_SIZE];
-        final ByteArrayOutputStream output = new ByteArrayOutputStream();
-        while (!inflater.finished()) {
-            final int read = inflater.inflate(buffer);
-            if (read == 0 && inflater.needsInput()) {
-                break;
+            final byte[] buffer = new byte[IO_BUFFER_SIZE];
+            final ByteArrayOutputStream output = new ByteArrayOutputStream();
+            while (!inflater.finished()) {
+                final int read = inflater.inflate(buffer);
+                if (read == 0 && inflater.needsInput()) {
+                    break;
+                }
+                output.write(buffer, 0, read);
             }
-            output.write(buffer, 0, read);
+            return output.toByteArray();
         }
-        return output.toByteArray();
     }
 
     /**

@@ -71,6 +71,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * authoritative saved snapshot into the promoted world chunk.</p>
  */
 @Mixin(SerializableChunkData.class)
+@SuppressWarnings({"DataFlowIssue"})
 public class ChunkSerializerMixin {
 
     /**
@@ -464,30 +465,17 @@ public class ChunkSerializerMixin {
         if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
             return;
         }
-        final CompoundTag metadata = delta.getChunkMetadata();
-        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
-        final boolean shouldUseBase = CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
-        final boolean fullBaseline = CisNbtUtil.hasFullBlockBaseline(metadata);
-        final byte[] baseChunkPayload = metadata != null
-                ? metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
-                  .orElse(new byte[0])
-                : new byte[0];
+        final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata());
+        final String message = "decoded delta metadata: "
+                + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeBaseMetadata(delta);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
-                hasBase
-                        ? ChunkTraceEventType.BASE_METADATA_PRESENT_AFTER_DECODE
+                hasBase ? ChunkTraceEventType.BASE_METADATA_PRESENT_AFTER_DECODE
                         : ChunkTraceEventType.BASE_METADATA_MISSING_AFTER_DECODE,
                 ChunkTraceSeverity.INFO,
                 ChunkTraceReason.NONE,
                 SOURCE + "#chunkis$traceBaseMetadataAfterDecode",
-                "decoded delta metadata: "
-                        + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(
-                        delta)
-                        + ", hasPersistedBaseChunk=" + hasBase
-                        + ", shouldUsePersistedBaseChunk=" + shouldUseBase
-                        + ", fullBlockBaseline=" + fullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : java.util.List.of())
-                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length,
+                message,
                 world.dimension()
                         .identifier()
                         .toString(),
@@ -505,14 +493,7 @@ public class ChunkSerializerMixin {
                 operationId,
                 "decoded-delta-metadata",
                 SOURCE + "#chunkis$traceBaseMetadataAfterDecode",
-                "decoded delta metadata: "
-                        + io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard.describeLifecycleState(
-                        delta)
-                        + ", hasPersistedBaseChunk=" + hasBase
-                        + ", shouldUsePersistedBaseChunk=" + shouldUseBase
-                        + ", fullBlockBaseline=" + fullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : java.util.List.of())
-                        + ", baseChunkPayloadBytes=" + baseChunkPayload.length
+                message
         );
     }
 
@@ -702,15 +683,15 @@ public class ChunkSerializerMixin {
                 operationId,
                 protoDelta
         );
-        if (world.getServer() != null) {
-            world.getServer()
-                    .execute(() -> ChunkRestorer.replayPendingEntitiesIfNeeded(
-                            world,
-                            wrappedChunk,
-                            runtimeDelta,
-                            operationId
-                    ));
-        }
+        world.getServer()
+                .execute(() -> ChunkRestorer.replayPendingEntitiesIfNeeded(
+                        world,
+                        wrappedChunk,
+                        runtimeDelta,
+                        operationId
+                ));
+
+
         if (restoreLoadedFromStorage || !protoDelta.isDirty()) {
             protoDelta.markSaved();
         }

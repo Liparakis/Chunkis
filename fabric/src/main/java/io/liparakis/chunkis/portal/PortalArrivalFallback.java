@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.portal;
 
+import java.util.Objects;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -126,16 +127,9 @@ public final class PortalArrivalFallback {
 
         final Vec3 safeArrival = findSafeArrival(destinationWorld, scaledDestinationPos);
 
-        if (safeArrival != null) {
-            return createTeleportTarget(destinationWorld, entity, safeArrival, false);
-        }
-
-        return createTeleportTarget(
-                destinationWorld,
-                entity,
-                emergencyArrival(destinationWorld, entity, scaledDestinationPos),
-                false
-        );
+        final Vec3 arrival = Objects.requireNonNullElseGet(safeArrival,
+                () -> emergencyArrival(destinationWorld, entity, scaledDestinationPos));
+        return createTeleportTarget(destinationWorld, entity, arrival, false);
     }
 
     /**

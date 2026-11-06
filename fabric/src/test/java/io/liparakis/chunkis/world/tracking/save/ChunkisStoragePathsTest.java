@@ -68,10 +68,11 @@ class ChunkisStoragePathsTest {
         }
 
         try (CopyOnWriteFileSystem fileSystem = CopyOnWriteFileSystem.create("migration-test",
-                world, temporary.resolve("cow"), path -> false)) {
+                world, temporary.resolve("cow"), ignoredPath -> false)) {
             final Path migrated = fileSystem.rootPath();
-            // The schema is only needed for version lookup, outside these filesystem operations.
-            new DimensionStorageFileFix(null).runFixOperations(migrated, new UpgradeProgress.Noop());
+            final var schema = new com.mojang.datafixers.DataFixerBuilder(99)
+                    .addSchema(99, net.minecraft.util.datafix.schemas.V99::new);
+            new DimensionStorageFileFix(schema).runFixOperations(migrated, new UpgradeProgress.Noop());
             final Path vanillaRoot = ChunkisStoragePaths.computeVanillaRegionDirectory(migrated, key).getParent();
             for (final String directory : List.of("region", "entities", "poi")) {
                 assertEquals("vanilla:" + directory,

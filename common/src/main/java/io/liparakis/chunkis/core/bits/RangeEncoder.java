@@ -28,7 +28,7 @@ public final class RangeEncoder {
     /**
      * Mask of the bits that must stay set in the range; below it the range is renormalized.
      */
-    static final int TOP_MASK = ~((1 << 24) - 1);
+    static final int TOP_MASK = -(1 << 24);
 
     /**
      * Lower bound of the current interval, with room for a carry into bit 32.

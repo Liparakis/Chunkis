@@ -23,7 +23,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -204,14 +203,13 @@ public final class OfflineMcaCisTranslator {
             }
         } finally {
             executor.shutdownNow();
+            // close joins cancelled workers and restores interruption before shared storage is closed.
+            executor.close();
             try {
-                executor.awaitTermination(30, TimeUnit.SECONDS);
-            } catch (final InterruptedException e) {
-                Thread.currentThread()
-                        .interrupt();
+                storage.close();
+            } finally {
+                MigrationProgressTracker.finish();
             }
-            storage.close();
-            MigrationProgressTracker.finish();
         }
 
         // Sources are retired only now, after storage.close() forced every CIS region to disk.
@@ -264,17 +262,7 @@ public final class OfflineMcaCisTranslator {
         final List<RegionTask> tasks = new ArrayList<>();
         for (final RegionCoordinates region : collectRegions(regionDir)) {
             final Path mcaPath = regionDir.resolve(region.fileName());
-            int presentChunks = 0;
-            try (RegionFile regionFile = new RegionFile(storageKey, mcaPath, mcaPath.getParent(), true)) {
-                for (int localX = 0; localX < REGION_SIZE; localX++) {
-                    for (int localZ = 0; localZ < REGION_SIZE; localZ++) {
-                        if (regionFile.hasChunk(new ChunkPos((region.regionX() << 5) + localX,
-                                (region.regionZ() << 5) + localZ))) {
-                            presentChunks++;
-                        }
-                    }
-                }
-            }
+            final int presentChunks = countPresentChunks(storageKey, mcaPath, region);
             long fileSizeBytes = Files.size(mcaPath);
             final Path entityPath = entityDir.resolve(region.fileName());
             if (Files.isRegularFile(entityPath)) {
@@ -392,10 +380,6 @@ public final class OfflineMcaCisTranslator {
                         presentChunks++;
                         final CompoundTag sourceNbt = NbtIo.read(input,
                                 NbtAccounter.create(FabricNbtAdapter.MAX_NBT_SIZE));
-                        if (sourceNbt == null) {
-                            failedChunks++;
-                            continue;
-                        }
 
                         final ChunkDelta<BlockState, CompoundTag> delta = ChunkSnapshotBuilder.buildChunkDelta(heightLimitView,
                                 palettesFactory,
@@ -557,5 +541,30 @@ public final class OfflineMcaCisTranslator {
      */
     private record RegionTask(RegionCoordinates coordinates, int presentChunks, long fileSizeBytes) {
 
+    }
+
+    /**
+     * Counts populated entries for migration progress before a worker opens the region.
+     *
+     * @param storageKey vanilla storage context
+     * @param mcaPath source region file
+     * @param region region coordinates
+     * @return populated chunk count
+     * @throws IOException if the region cannot be read
+     */
+    private static int countPresentChunks(final RegionStorageInfo storageKey, final Path mcaPath,
+            final RegionCoordinates region) throws IOException {
+        int presentChunks = 0;
+        try (RegionFile regionFile = new RegionFile(storageKey, mcaPath, mcaPath.getParent(), true)) {
+            for (int localX = 0; localX < REGION_SIZE; localX++) {
+                for (int localZ = 0; localZ < REGION_SIZE; localZ++) {
+                    if (regionFile.hasChunk(new ChunkPos((region.regionX() << 5) + localX,
+                            (region.regionZ() << 5) + localZ))) {
+                        presentChunks++;
+                    }
+                }
+            }
+        }
+        return presentChunks;
     }
 }

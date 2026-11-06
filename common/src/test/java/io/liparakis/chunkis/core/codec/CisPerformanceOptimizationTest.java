@@ -192,7 +192,7 @@ class CisPerformanceOptimizationTest {
 
         // 3. Verify no duplicate positions
         final Set<Long> seenPositions = new HashSet<>();
-        decoded.forEachBlock((x, y, z, state) -> {
+        decoded.forEachBlock((x, y, z, ignoredState) -> {
             final long pos = (x & 0xF) | ((z & 0xF) << 4) | (((long) y) << 8);
             final boolean added = seenPositions.add(pos);
             assertThat(added).withFailMessage("Duplicate position detected: " + x + ", " + y + ", " + z)

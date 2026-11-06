@@ -53,7 +53,7 @@ public final class StructureMetadataExtractorGameTest {
 
     /**
      * Game test that verifies the output of {@link StructureMetadataExtractor#extract} matches
-     * vanilla's {@link SerializableChunkData#structureData} for the same live chunk.
+     * vanilla's {@code SerializableChunkData.structureData} for the same live chunk.
      *
      * @param context the game test context
      */
@@ -68,6 +68,7 @@ public final class StructureMetadataExtractorGameTest {
                 .lookupOrThrow(Registries.STRUCTURE);
         final Structure structure = getTestStructure(structureRegistry);
         context.assertTrue(structure != null, Component.literal("Expected a structure to exist in the registry."));
+        assert structure != null;
 
         final StructureStart start = new StructureStart(
                 structure,

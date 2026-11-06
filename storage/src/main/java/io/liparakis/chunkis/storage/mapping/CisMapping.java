@@ -323,6 +323,8 @@ public final class CisMapping<B, S, P> implements CisAdapter<S> {
     /**
      * Replaces the mapping file with {@code json} via temp file, fsync and atomic move.
      */
+    // The ByteBuffer position drives this loop, including retries after partial writes.
+    @SuppressWarnings({"ResultOfMethodCallIgnored"})
     private void writeAtomically(final String json) throws IOException {
         final Path parent = mappingFilePath.toAbsolutePath()
                 .getParent();

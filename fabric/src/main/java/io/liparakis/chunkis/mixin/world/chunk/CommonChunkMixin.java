@@ -3,6 +3,7 @@ package io.liparakis.chunkis.mixin.world.chunk;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
+import io.liparakis.chunkis.mixin.accessor.WorldChunkAccessor;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
@@ -181,9 +182,10 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * @return true to leave the delta as it is
      */
     @Unique
+    @SuppressWarnings({"ConstantValue"})
     private boolean chunkis$isLoadingLightToggle() {
         return CHUNKIS$SETTING_LIGHT_ON.get() == (Object) this
-                && (Object) this instanceof io.liparakis.chunkis.mixin.accessor.WorldChunkAccessor loading
+                && (Object) this instanceof WorldChunkAccessor loading
                 && !loading.chunkis$isLoadedToWorld();
     }
 

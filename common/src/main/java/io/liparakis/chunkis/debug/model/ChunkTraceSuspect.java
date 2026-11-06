@@ -18,36 +18,33 @@ import java.util.List;
  * <p>Deduplication is keyed on {@code (chunkKey, reason)}: multiple events
  * with the same cause at the same chunk increment {@link #occurrenceCount}
  * rather than creating additional suspects.</p>
+ * @param suspectId Unique monotonic ID assigned when this suspect was first created.
+ * @param originalFailureEvent The first event that created this suspect.
+ * @param latestEvent The most recent event that updated this suspect.
+ * @param chunkKey Chunk coordinates where the anomaly was detected.
+ * @param regionKey Region coordinates, if known; may be refined on subsequent updates.
+ * @param operationId Operation ID of the most recent associated save operation, or {@code null}.
+ * @param reason Machine-readable cause category.
+ * @param severity Highest severity seen across all occurrences.
+ * @param firstSeenTimestampMillis Wall-clock time of the first occurrence.
+ * @param lastSeenTimestampMillis Wall-clock time of the most recent occurrence.
+ * @param occurrenceCount Number of times this suspect has been triggered.
+ * @param copiedTimeline Trimmed, deduplicated timeline of events related to this suspect. Capped at {@code ChunkTraceStore.DEFAULT_SUSPECT_TIMELINE_CAPACITY}.
+ * @param latestMessage Human-readable description from the most recent occurrence.
  */
 public record ChunkTraceSuspect(
-        /** Unique monotonic ID assigned when this suspect was first created. */
         long suspectId,
-        /** The first event that created this suspect. */
         ChunkTraceEvent originalFailureEvent,
-        /** The most recent event that updated this suspect. */
         ChunkTraceEvent latestEvent,
-        /** Chunk coordinates where the anomaly was detected. */
         DebugChunkKey chunkKey,
-        /** Region coordinates, if known; may be refined on subsequent updates. */
         DebugRegionKey regionKey,
-        /** Operation ID of the most recent associated save operation, or {@code null}. */
         String operationId,
-        /** Machine-readable cause category. */
         ChunkTraceReason reason,
-        /** Highest severity seen across all occurrences. */
         ChunkTraceSeverity severity,
-        /** Wall-clock time of the first occurrence. */
         long firstSeenTimestampMillis,
-        /** Wall-clock time of the most recent occurrence. */
         long lastSeenTimestampMillis,
-        /** Number of times this suspect has been triggered. */
         int occurrenceCount,
-        /**
-         * Trimmed, deduplicated timeline of events related to this suspect.
-         * Capped at {@code ChunkTraceStore.DEFAULT_SUSPECT_TIMELINE_CAPACITY}.
-         */
         List<ChunkTraceEvent> copiedTimeline,
-        /** Human-readable description from the most recent occurrence. */
         String latestMessage
 ) {
 

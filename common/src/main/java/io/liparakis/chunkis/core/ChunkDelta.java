@@ -236,20 +236,11 @@ public final class ChunkDelta<S, N> implements ChunkDeltaView<S, N> {
         );
     }
 
-    /**
-     * Same as {@link #snapshotView}, without block instructions, for a save whose blocks come from elsewhere;
-     * skips copying an instruction array the save would not read.
-     *
-     * @param payloadCopier copies block-entity, entity and metadata payloads
-     * @return snapshot holding no block instructions
-     */
-    public ChunkDeltaSnapshotView<S, N> snapshotViewWithoutBlocks(final UnaryOperator<N> payloadCopier) {
-        return snapshotViewWithoutBlocks(payloadCopier, payloadCopier);
-    }
+
 
     /**
-     * Same as {@link #snapshotViewWithoutBlocks(UnaryOperator)}, with separate copy strategies for payloads and
-     * metadata ({@link #snapshotView(UnaryOperator, UnaryOperator)}).
+     * Creates a save snapshot without block instructions, using separate copy strategies for payloads and
+     * metadata. The save supplies block data independently of this snapshot.
      *
      * @param payloadCopier  copies each block-entity and entity payload
      * @param metadataCopier copies the chunk metadata

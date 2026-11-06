@@ -68,7 +68,7 @@ public final class UnfinishedChunkStore {
     private final IOWorker legacy;
 
     /**
-     * Region coordinates ({@link ChunkPos#toLong} of the region) that have a legacy {@code .mca} file.
+     * Region coordinates ({@link ChunkPos#pack()} of the region) that have a legacy {@code .mca} file.
      */
     private final Set<Long> legacyRegions;
 
@@ -226,6 +226,8 @@ public final class UnfinishedChunkStore {
      * @param pos chunk position
      * @param nbt the entry's NBT once serialized
      */
+    // IOWorker uses null payloads as deletion tombstones despite its non-null annotation.
+    @SuppressWarnings({"DataFlowIssue"})
     private void submit(final ChunkPos pos, final CompletableFuture<CompoundTag> nbt) {
         pending.put(pos.pack(), nbt);
         io.execute(() -> {
@@ -258,6 +260,8 @@ public final class UnfinishedChunkStore {
      * @param pos chunk position
      * @param nbt the entry
      */
+    // Deleting the migrated legacy entry requires the vanilla null tombstone.
+    @SuppressWarnings({"DataFlowIssue"})
     private void moveFromLegacy(final ChunkPos pos, final CompoundTag nbt) {
         io.execute(() -> {
             if (pending.containsKey(pos.pack())) {
@@ -325,7 +329,7 @@ public final class UnfinishedChunkStore {
      * Lists the non-empty legacy {@code .mca} region files of a directory.
      *
      * @param directory the store's directory
-     * @return their region coordinates, packed like {@link ChunkPos#toLong}
+     * @return their region coordinates, packed like {@link ChunkPos#pack()}
      */
     private static Set<Long> legacyRegions(final Path directory) {
         final Set<Long> regions = ConcurrentHashMap.newKeySet();

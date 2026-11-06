@@ -116,13 +116,11 @@ public abstract class NetherPortalBlockMixin {
             final WorldBorder worldBorder,
             final CallbackInfoReturnable<TeleportTransition> cir
     ) {
-        if (!(entity instanceof ServerPlayer)) {
+        if (!(entity instanceof ServerPlayer player)) {
             return;
         }
 
-        if (!(entity.level() instanceof ServerLevel sourceWorld)) {
-            return;
-        }
+        final ServerLevel sourceWorld = player.level();
 
         if (!chunkis$isNetherOverworldPair(sourceWorld, destinationWorld)) {
             return;

@@ -1,5 +1,7 @@
 package io.liparakis.chunkis.gametest;
 
+import static io.liparakis.chunkis.gametest.SectionTestSupport.copySections;
+
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.CisChunkPos;
@@ -13,6 +15,7 @@ import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
@@ -34,7 +37,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
 
 /**
@@ -99,7 +101,7 @@ public final class StoredBlocksUnloadGameTest {
                     fixture.recordEdit(tracked);
                     GlobalChunkTracker.addDelta(fixture.world, fixture.target, tracked, "gametest");
 
-                    final Pig entity = EntityType.PIG.create(fixture.world, EntitySpawnReason.LOAD);
+                    final Pig entity = java.util.Objects.requireNonNull(EntityType.PIG.create(fixture.world, EntitySpawnReason.LOAD), "Pig fixture could not be created");
                     final BlockPos at = fixture.target.getBlockAt(8, fixture.baseY + 20, 8);
                     entity.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
                     pig[0] = entity.getUUID();
@@ -373,6 +375,7 @@ public final class StoredBlocksUnloadGameTest {
                 .thenWaitUntil(() -> {
                     final net.minecraft.world.entity.Entity entity = fixture.world.getEntity(pig[0]);
                     context.assertTrue(entity != null, Component.literal("Pig " + pig[0] + " is not in the world."));
+                    assert entity != null;
                     final BlockPos to = fixture.target.getBlockAt(3, fixture.baseY + 20, 12);
                     entity.snapTo(to.getX() + 0.5, to.getY(), to.getZ() + 0.5, 90, 0);
                     if (entity instanceof net.minecraft.world.entity.Mob mob) {
@@ -392,6 +395,7 @@ public final class StoredBlocksUnloadGameTest {
                     final net.minecraft.world.entity.Entity entity = fixture.world.getEntity(pig[0]);
                     context.assertTrue(entity != null,
                             Component.literal("Waiting for pig " + pig[0] + " to come back with " + fixture.target + "."));
+                    assert entity != null;
                     context.assertTrue(entity.position().distanceToSqr(moved[0]) < 0.01,
                             Component.literal("Pig " + pig[0] + " came back at " + entity.position() + ", moved to "
                                     + moved[0] + "."));
@@ -528,11 +532,7 @@ public final class StoredBlocksUnloadGameTest {
             // Deep underground, under the chunk's highest block: no snow settles on it and nothing near it ticks,
             // so the chunk sees no block edit of its own.
             baseY = (world.getMinY() + 32) & ~15;
-            final List<BlockState> states = simpleStates();
-            for (int i = 0; i < 16 * 16 * 16; i++) {
-                final BlockPos pos = target.getBlockAt(i & 15, baseY + (i >> 8), (i >> 4) & 15);
-                world.setBlock(pos, states.get(i % states.size()), Block.UPDATE_CLIENTS);
-            }
+            SectionTestSupport.placePattern(world, target, baseY, simpleStates());
             chest = target.getBlockAt(4, baseY + 16, 4);
             world.setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_CLIENTS);
             blocks = copySections(chunk);
@@ -552,8 +552,11 @@ public final class StoredBlocksUnloadGameTest {
                     })
                     // The save's completion marks the delta clean on a later tick; unloading before it would
                     // capture the chunk again and hand the dirty delta to the reload.
-                    .thenWaitUntil(() -> context.assertTrue(liveDelta() != null && !liveDelta().isDirty(),
-                            Component.literal("Waiting for the first save of chunk " + target + " to complete.")))
+                    .thenWaitUntil(() -> {
+                        final ChunkDelta<?, ?> delta = liveDelta();
+                        context.assertTrue(delta != null && !delta.isDirty(),
+                                Component.literal("Waiting for the first save of chunk " + target + " to complete."));
+                    })
                     .thenWaitUntil(this::unload)
                     .thenWaitUntil(this::awaitUnloaded)
                     .thenWaitUntil(this::load)
@@ -724,7 +727,7 @@ public final class StoredBlocksUnloadGameTest {
          * @return its UUID
          */
         UUID spawnPig() {
-            final Pig entity = EntityType.PIG.create(world, EntitySpawnReason.COMMAND);
+            final Pig entity = Objects.requireNonNull(EntityType.PIG.create(world, EntitySpawnReason.COMMAND), "Pig fixture could not be created");
             final BlockPos at = target.getBlockAt(8, baseY + 20, 8);
             entity.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
             world.addFreshEntity(entity);
@@ -762,17 +765,5 @@ public final class StoredBlocksUnloadGameTest {
         return states;
     }
 
-    /**
-     * Copies every section's blocks.
-     *
-     * @param chunk chunk
-     * @return per-section copies
-     */
-    private static List<PalettedContainer<BlockState>> copySections(final LevelChunk chunk) {
-        final List<PalettedContainer<BlockState>> copies = new ArrayList<>();
-        for (final LevelChunkSection section : chunk.getSections()) {
-            copies.add(section.getStates().copy());
-        }
-        return copies;
-    }
+
 }

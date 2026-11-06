@@ -20,46 +20,43 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
  *
  * <p>The 15-argument constructor omits payload watch fields for the common case
  * where no payload watch is active.</p>
+ * @param eventId Monotonic event ID assigned by {@link ChunkTraceStore}; 0 before storage.
+ * @param timestampMillis Wall-clock time when the event was recorded, in milliseconds since epoch.
+ * @param threadName Name of the thread that produced this event.
+ * @param domain Debug domain that categorises this event.
+ * @param eventType Specific event type within the domain.
+ * @param severity Severity of this event.
+ * @param reason Machine-readable cause or context for this event.
+ * @param source Short identifying string for the code location that emitted the event.
+ * @param message Human-readable description of what occurred.
+ * @param worldId Registry key string of the world, or {@code null} if not applicable.
+ * @param chunkKey Chunk coordinates, or {@code null} if not applicable.
+ * @param regionKey Region coordinates, or {@code null} if not applicable.
+ * @param operationId Save-operation identifier, or {@code null} if not applicable.
+ * @param dirtyState Dirty/clean state associated with this event, or {@code null} if not applicable. {@code Boolean.TRUE} = dirty, {@code Boolean.FALSE} = clean.
+ * @param byteSize Payload byte size associated with this event, or {@code null} if not applicable.
+ * @param payloadWatchTarget Payload watch target that triggered this event, or {@code null}.
+ * @param payloadWatchStage Human-readable stage label for payload watch events, or {@code null}.
+ * @param payloadWatchSummary Human-readable payload summary for watch events, or {@code null}.
  */
 public record ChunkTraceEvent(
-        /** Monotonic event ID assigned by {@link ChunkTraceStore}; 0 before storage. */
         long eventId,
-        /** Wall-clock time when the event was recorded, in milliseconds since epoch. */
         long timestampMillis,
-        /** Name of the thread that produced this event. */
         String threadName,
-        /** Debug domain that categorises this event. */
         ChunkisDebugDomain domain,
-        /** Specific event type within the domain. */
         ChunkTraceEventType eventType,
-        /** Severity of this event. */
         ChunkTraceSeverity severity,
-        /** Machine-readable cause or context for this event. */
         ChunkTraceReason reason,
-        /** Short identifying string for the code location that emitted the event. */
         String source,
-        /** Human-readable description of what occurred. */
         String message,
-        /** Registry key string of the world, or {@code null} if not applicable. */
         String worldId,
-        /** Chunk coordinates, or {@code null} if not applicable. */
         DebugChunkKey chunkKey,
-        /** Region coordinates, or {@code null} if not applicable. */
         DebugRegionKey regionKey,
-        /** Save-operation identifier, or {@code null} if not applicable. */
         String operationId,
-        /**
-         * Dirty/clean state associated with this event, or {@code null} if not
-         * applicable. {@code Boolean.TRUE} = dirty, {@code Boolean.FALSE} = clean.
-         */
         Boolean dirtyState,
-        /** Payload byte size associated with this event, or {@code null} if not applicable. */
         Integer byteSize,
-        /** Payload watch target that triggered this event, or {@code null}. */
         PayloadWatchTarget payloadWatchTarget,
-        /** Human-readable stage label for payload watch events, or {@code null}. */
         String payloadWatchStage,
-        /** Human-readable payload summary for watch events, or {@code null}. */
         String payloadWatchSummary
 ) {
 
