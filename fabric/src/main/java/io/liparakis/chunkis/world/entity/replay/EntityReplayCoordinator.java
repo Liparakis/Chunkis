@@ -11,20 +11,20 @@ import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * Coordinates replay of pending Chunkis entity payloads into a loaded
- * {@link ServerWorld}.
+ * {@link ServerLevel}.
  *
  * <p>Entity payloads are stored in a {@link ChunkDelta} and replayed when the
  * target chunk becomes available. Replay may succeed immediately, be deferred
@@ -70,9 +70,9 @@ public final class EntityReplayCoordinator {
      * @param operationId  save-operation correlation ID for tracing; may be {@code null}
      */
     public static void replayPendingEntitiesIfNeeded(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
+            final ServerLevel world,
+            final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> runtimeDelta,
             @Nullable final String operationId
     ) {
         if (world == null || chunk == null) {
@@ -106,7 +106,7 @@ public final class EntityReplayCoordinator {
         }
 
         final ChunkPos chunkPosition = chunk.getPos();
-        final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
+        final AABB searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
         final int[] stats = {0, 0};
 
         PayloadWatchTracer.traceEntityReplayState(
@@ -120,7 +120,7 @@ public final class EntityReplayCoordinator {
                 "entity replay started from runtime delta"
         );
 
-        if (!world.canSpawnEntitiesAt(chunkPosition)) {
+        if (!world.canSpawnEntitiesInChunk(chunkPosition)) {
             runtimeDelta.forEachPendingEntity(nbt -> EntityPayloadNbt.findUuidString(nbt)
                     .ifPresent(uuid -> ScheduledEntityReplayQueue.schedule(world, chunkPosition, uuid, nbt)));
             PayloadWatchTracer.traceEntityReplayState(
@@ -144,14 +144,14 @@ public final class EntityReplayCoordinator {
             final Entity live = findLiveCopy(world, chunkPosition, nbt);
             if (live != null) {
                 stats[0]++;
-                ScheduledEntityReplayQueue.acknowledge(live.getUuidAsString());
+                ScheduledEntityReplayQueue.acknowledge(live.getStringUUID());
                 return;
             }
             PayloadWatchTracer.traceRestoreEntityApplyAttempt(world, chunkPosition, nbt, operationId, SOURCE_BULK);
-            EntityType.loadEntityWithPassengers(
+            EntityType.loadEntityRecursive(
                     nbt,
                     world,
-                    SpawnReason.LOAD,
+                    EntitySpawnReason.LOAD,
                     entity -> {
                         final EntityReplaySpawnResolver.SpawnOutcome outcome =
                                 EntityReplaySpawnResolver.attempt(world,
@@ -162,18 +162,18 @@ public final class EntityReplayCoordinator {
                                         operationId);
                         if (outcome.succeeded() || outcome.status() == ChunkRestorer.ReplayStatus.ALREADY_PRESENT) {
                             stats[0]++;
-                            ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
+                            ScheduledEntityReplayQueue.acknowledge(entity.getStringUUID());
                         } else if (outcome.status() == ChunkRestorer.ReplayStatus.DUPLICATE_UUID_CONFLICT) {
                             // The entity lives on elsewhere (e.g. walked into another chunk): this copy is
                             // stale and would otherwise be retained and retried forever.
-                            staleDuplicateUuids.add(entity.getUuidAsString());
-                            ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
+                            staleDuplicateUuids.add(entity.getStringUUID());
+                            ScheduledEntityReplayQueue.acknowledge(entity.getStringUUID());
                         } else {
                             stats[1]++;
                             if (outcome.shouldSchedule()) {
                                 ScheduledEntityReplayQueue.schedule(world,
                                         chunkPosition,
-                                        entity.getUuidAsString(),
+                                        entity.getStringUUID(),
                                         nbt);
                             }
                         }
@@ -224,12 +224,12 @@ public final class EntityReplayCoordinator {
      * @return replay result describing outcome and whether to retry
      */
     public static ChunkRestorer.ReplayResult replayPendingEntityIfNeeded(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
+            final ServerLevel world,
+            final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> runtimeDelta,
             @Nullable final String operationId,
             final String entityUuid,
-            @Nullable final NbtCompound fallbackEntityNbt
+            @Nullable final CompoundTag fallbackEntityNbt
     ) {
         if (world == null || chunk == null || entityUuid == null || entityUuid.isBlank()) {
             return new ChunkRestorer.ReplayResult(
@@ -261,7 +261,7 @@ public final class EntityReplayCoordinator {
             );
         }
 
-        NbtCompound entityNbt = runtimeDelta == null
+        CompoundTag entityNbt = runtimeDelta == null
                 ? null
                 : ChunkEntityQueries.findPendingEntityNbt(runtimeDelta, entityUuid);
         if (entityNbt == null) {
@@ -319,7 +319,7 @@ public final class EntityReplayCoordinator {
         }
 
         final ChunkPos chunkPosition = chunk.getPos();
-        if (LoadedChunks.getIfAccessible(world, chunkPosition.x, chunkPosition.z) == null) {
+        if (LoadedChunks.getIfAccessible(world, chunkPosition.x(), chunkPosition.z()) == null) {
             EntityReplayDiagnostics.traceReplayDecision(
                     world,
                     chunk,
@@ -335,7 +335,7 @@ public final class EntityReplayCoordinator {
                     "target chunk is not loaded"
             );
         }
-        if (!world.canSpawnEntitiesAt(chunkPosition)) {
+        if (!world.canSpawnEntitiesInChunk(chunkPosition)) {
             EntityReplayDiagnostics.traceReplayDecision(
                     world,
                     chunk,
@@ -364,17 +364,17 @@ public final class EntityReplayCoordinator {
         );
         PayloadWatchTracer.traceRestoreEntityApplyAttempt(world, chunkPosition, entityNbt, operationId, SOURCE_SINGLE);
 
-        final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
-        final NbtCompound replayNbt = entityNbt;
+        final AABB searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
+        final CompoundTag replayNbt = entityNbt;
         final ChunkRestorer.ReplayStatus[] callbackStatus = {ChunkRestorer.ReplayStatus.SPAWN_REJECTED_TRANSIENT};
 
         if (findLiveCopy(world, chunkPosition, replayNbt) != null) {
             callbackStatus[0] = ChunkRestorer.ReplayStatus.ALREADY_PRESENT;
         } else {
-            EntityType.loadEntityWithPassengers(
+            EntityType.loadEntityRecursive(
                     replayNbt,
                     world,
-                    SpawnReason.LOAD,
+                    EntitySpawnReason.LOAD,
                     entity -> {
                         final EntityReplaySpawnResolver.SpawnOutcome outcome =
                                 EntityReplaySpawnResolver.attempt(world,
@@ -385,7 +385,7 @@ public final class EntityReplayCoordinator {
                                         operationId);
                         callbackStatus[0] = outcome.status();
                         if (outcome.shouldSchedule()) {
-                            ScheduledEntityReplayQueue.schedule(world, chunkPosition, entity.getUuidAsString(),
+                            ScheduledEntityReplayQueue.schedule(world, chunkPosition, entity.getStringUUID(),
                                     replayNbt);
                         }
                         return entity;
@@ -463,14 +463,14 @@ public final class EntityReplayCoordinator {
      * @return {@code true} if all pending entities are visible, or if there are none
      */
     public static boolean allPendingEntitiesVisible(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPosition,
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta
+            final ChunkDelta<BlockState, CompoundTag> runtimeDelta
     ) {
         if (runtimeDelta.countPendingEntities() == 0) {
             return true;
         }
-        final Box searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
+        final AABB searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
         final boolean[] allVisible = {true};
         runtimeDelta.forEachPendingEntity(nbt -> {
             if (!allVisible[0] || nbt == null) {
@@ -494,7 +494,7 @@ public final class EntityReplayCoordinator {
      * @return the matching live entity, or {@code null} when it has to be replayed
      */
     @Nullable
-    private static Entity findLiveCopy(final ServerWorld world, final ChunkPos chunkPosition, final NbtCompound nbt) {
+    private static Entity findLiveCopy(final ServerLevel world, final ChunkPos chunkPosition, final CompoundTag nbt) {
         final UUID uuid = EntityPayloadNbt.findUuid(nbt)
                 .orElse(null);
         if (uuid == null) {
@@ -515,9 +515,9 @@ public final class EntityReplayCoordinator {
      * @param operationId  save-operation correlation ID; may be {@code null}
      */
     private static void finishFailureFreeBulkReplay(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
+            final ServerLevel world,
+            final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> runtimeDelta,
             @Nullable final String operationId
     ) {
         final boolean suppressRepopulation = runtimeDelta.shouldSuppressInitialRepopulation();

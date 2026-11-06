@@ -8,9 +8,9 @@ import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import java.util.Objects;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,14 +19,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Mixin for the base {@link Chunk} class to provide {@link ChunkDelta}
+ * Mixin for the base {@link ChunkAccess} class to provide {@link ChunkDelta}
  * capability to all chunk types.
  *
  * <p>Implements {@link ChunkisDeltaDuck} to attach a per-chunk delta, and
  * overrides {@code needsSaving()} so that a chunk is always considered dirty
  * when its delta has unsaved changes - even if vanilla would report it clean.</p>
  */
-@Mixin(Chunk.class)
+@Mixin(ChunkAccess.class)
 public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
 
     /**
@@ -51,13 +51,13 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * Serialized vanilla base snapshot captured before the chunk's first edit.
      */
     @Unique
-    private volatile NbtCompound chunkis$pendingBaseChunkNbt;
+    private volatile CompoundTag chunkis$pendingBaseChunkNbt;
 
     /**
      * The chunk whose {@code setLightOn} is running on this thread, if any.
      */
     @Unique
-    private static final ThreadLocal<Chunk> CHUNKIS$SETTING_LIGHT_ON = new ThreadLocal<>();
+    private static final ThreadLocal<ChunkAccess> CHUNKIS$SETTING_LIGHT_ON = new ThreadLocal<>();
 
     /**
      * Default constructor for CommonChunkMixin.
@@ -121,7 +121,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * {@inheritDoc}
      */
     @Override
-    public NbtCompound chunkis$getPendingBaseChunkNbt() {
+    public CompoundTag chunkis$getPendingBaseChunkNbt() {
         return chunkis$pendingBaseChunkNbt;
     }
 
@@ -129,7 +129,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * {@inheritDoc}
      */
     @Override
-    public void chunkis$setPendingBaseChunkNbt(final NbtCompound nbt) {
+    public void chunkis$setPendingBaseChunkNbt(final CompoundTag nbt) {
         this.chunkis$pendingBaseChunkNbt = nbt;
     }
 
@@ -140,7 +140,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * @param cir the returnable callback; return value is overridden to
      *            {@code true} when the delta reports dirty
      */
-    @Inject(method = "needsSaving", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "isUnsaved", at = @At("RETURN"), cancellable = true)
     private void chunkis$onNeedsSaving(final CallbackInfoReturnable<Boolean> cir) {
         if (shouldOverrideSavingFlag(cir.getReturnValueZ())) {
             cir.setReturnValue(true);
@@ -153,9 +153,9 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * @param lightOn the new flag
      * @param ci      the Mixin {@link CallbackInfo}
      */
-    @Inject(method = "setLightOn", at = @At("HEAD"))
+    @Inject(method = "setLightCorrect", at = @At("HEAD"))
     private void chunkis$beforeSetLightOn(final boolean lightOn, final CallbackInfo ci) {
-        CHUNKIS$SETTING_LIGHT_ON.set((Chunk) (Object) this);
+        CHUNKIS$SETTING_LIGHT_ON.set((ChunkAccess) (Object) this);
     }
 
     /**
@@ -164,7 +164,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * @param lightOn the new flag
      * @param ci      the Mixin {@link CallbackInfo}
      */
-    @Inject(method = "setLightOn", at = @At("RETURN"))
+    @Inject(method = "setLightCorrect", at = @At("RETURN"))
     private void chunkis$afterSetLightOn(final boolean lightOn, final CallbackInfo ci) {
         CHUNKIS$SETTING_LIGHT_ON.remove();
     }
@@ -194,7 +194,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
      * @param ci the Mixin {@link CallbackInfo}; unused but required by the
      *           injection contract
      */
-    @Inject(method = "markNeedsSaving", at = @At("HEAD"))
+    @Inject(method = "markUnsaved", at = @At("HEAD"))
     private void chunkis$onMarkNeedsSaving(final CallbackInfo ci) {
         if (chunkis$isLoadingLightToggle()) {
             return;
@@ -205,7 +205,7 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
                 != ChunkMutationTrackingScope.Cause.NONE) {
             return;
         }
-        if ((Object) this instanceof WorldChunk worldChunk) {
+        if ((Object) this instanceof LevelChunk worldChunk) {
             PendingChunkMutationSuppression.currentCause(worldChunk);
         }
         if (this.chunkis$delta == null) {
@@ -238,15 +238,15 @@ public abstract class CommonChunkMixin implements ChunkisDeltaDuck {
 
     /**
      * Notifies {@link GlobalChunkTracker} if this chunk instance is a
-     * {@link WorldChunk}.
+     * {@link LevelChunk}.
      *
      * <p>The {@code instanceof} pattern match is used rather than a cast
-     * on {@code this} directly, because at the {@link Chunk} mixin level
-     * {@code this} may be any {@link Chunk} subtype.</p>
+     * on {@code this} directly, because at the {@link ChunkAccess} mixin level
+     * {@code this} may be any {@link ChunkAccess} subtype.</p>
      */
     @Unique
     private void notifyTrackerIfWorldChunk() {
-        if ((Object) this instanceof WorldChunk worldChunk) {
+        if ((Object) this instanceof LevelChunk worldChunk) {
             GlobalChunkTracker.markDirty(worldChunk);
         }
     }

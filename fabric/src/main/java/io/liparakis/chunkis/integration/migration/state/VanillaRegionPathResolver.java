@@ -2,10 +2,10 @@ package io.liparakis.chunkis.integration.migration.state;
 
 import java.nio.file.Path;
 import java.util.Optional;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 /**
  * Resolves vanilla chunk and external-entity region directories to dimension keys.
@@ -70,7 +70,7 @@ public final class VanillaRegionPathResolver {
      * @param regionDirectory vanilla region or entity directory path
      * @return resolved dimension key, or empty when the path is not a supported storage directory
      */
-    public static Optional<RegistryKey<World>> resolveDimension(final Path regionDirectory) {
+    public static Optional<ResourceKey<Level>> resolveDimension(final Path regionDirectory) {
         if (regionDirectory == null) {
             return Optional.empty();
         }
@@ -92,10 +92,10 @@ public final class VanillaRegionPathResolver {
         }
         final String dimensionSegment = dimensionName.toString();
         if ("DIM-1".equals(dimensionSegment)) {
-            return Optional.of(RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla("the_nether")));
+            return Optional.of(ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_nether")));
         }
         if ("DIM1".equals(dimensionSegment)) {
-            return Optional.of(RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla("the_end")));
+            return Optional.of(ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_end")));
         }
 
         final Path namespacePath = dimensionPath.getParent();
@@ -104,14 +104,14 @@ public final class VanillaRegionPathResolver {
                 && dimensionsRoot != null
                 && DIMENSIONS_DIR.equals(dimensionsRoot.getFileName()
                 .toString())) {
-            return Optional.of(RegistryKey.of(
-                    RegistryKeys.WORLD,
-                    Identifier.of(namespacePath.getFileName()
+            return Optional.of(ResourceKey.create(
+                    Registries.DIMENSION,
+                    Identifier.fromNamespaceAndPath(namespacePath.getFileName()
                             .toString(), dimensionSegment)
             ));
         }
 
-        return Optional.of(RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla("overworld")));
+        return Optional.of(ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("overworld")));
     }
 
     /**

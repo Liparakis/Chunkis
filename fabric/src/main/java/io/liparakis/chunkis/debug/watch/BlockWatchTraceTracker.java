@@ -10,7 +10,7 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.level.ChunkPos;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -312,7 +312,7 @@ public final class BlockWatchTraceTracker {
                 source,
                 "watched payload was applied on one chunk instance but later observed on another",
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                new DebugChunkKey(chunkPos.x(), chunkPos.z()),
                 null,
                 operationId,
                 null,
@@ -371,8 +371,8 @@ public final class BlockWatchTraceTracker {
     ) {
         return new WatchTraceKey(
                 worldId,
-                chunkPos.x,
-                chunkPos.z,
+                chunkPos.x(),
+                chunkPos.z(),
                 target.blockX(),
                 target.blockY(),
                 target.blockZ()

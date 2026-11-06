@@ -9,12 +9,12 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 /**
  * Tracks chunk-scoped passive load suppression before a WorldChunk instance is fully live.
@@ -44,9 +44,9 @@ public final class PendingChunkMutationSuppression {
      * @param source   caller identifier tag
      */
     public static void begin(
-            final RegistryKey<World> worldKey, final ChunkPos chunkPos,
+            final ResourceKey<Level> worldKey, final ChunkPos chunkPos,
             final ChunkMutationTrackingScope.Cause cause, final String source) {
-        begin(worldKey, chunkPos.x, chunkPos.z, cause, source);
+        begin(worldKey, chunkPos.x(), chunkPos.z(), cause, source);
     }
 
     /**
@@ -59,7 +59,7 @@ public final class PendingChunkMutationSuppression {
      * @param source   caller identifier tag
      */
     static void begin(
-            final RegistryKey<World> worldKey, final int chunkX, final int chunkZ,
+            final ResourceKey<Level> worldKey, final int chunkX, final int chunkZ,
             final ChunkMutationTrackingScope.Cause cause, final String source) {
         if (cause == ChunkMutationTrackingScope.Cause.NONE) {
             return;
@@ -80,27 +80,27 @@ public final class PendingChunkMutationSuppression {
      * @param chunk target world chunk
      * @return suppression cause active
      */
-    public static ChunkMutationTrackingScope.Cause currentCause(final WorldChunk chunk) {
-        final ChunkMutationTrackingScope.Cause cause = currentCause(chunk.getWorld()
-                .getRegistryKey(), chunk.getPos());
-        if (cause == ChunkMutationTrackingScope.Cause.BASE_APPLY && chunk.getWorld() instanceof ServerWorld serverWorld
-                && ChunkStatus.FULL.equals(chunk.getStatus()) && serverWorld.getServer() != null
+    public static ChunkMutationTrackingScope.Cause currentCause(final LevelChunk chunk) {
+        final ChunkMutationTrackingScope.Cause cause = currentCause(chunk.getLevel()
+                .dimension(), chunk.getPos());
+        if (cause == ChunkMutationTrackingScope.Cause.BASE_APPLY && chunk.getLevel() instanceof ServerLevel serverWorld
+                && ChunkStatus.FULL.equals(chunk.getPersistedStatus()) && serverWorld.getServer() != null
                 && serverWorld.getServer()
-                .getThread() == Thread.currentThread()) {
-            end(chunk.getWorld()
-                    .getRegistryKey(), chunk.getPos());
+                .getRunningThread() == Thread.currentThread()) {
+            end(chunk.getLevel()
+                    .dimension(), chunk.getPos());
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.ASSERTIONS, ChunkTraceEventType.ASSERTION_FAILED,
                     ChunkTraceSeverity.ERROR, ChunkTraceReason.SUPPRESSION_CONTEXT_LEAK,
                     "PendingChunkMutationSuppression#currentCause", "cleared leaked base-apply suppression on live " +
-                            "chunk" + " status=" + chunk.getStatus() + " thread=" + Thread.currentThread()
+                            "chunk" + " status=" + chunk.getPersistedStatus() + " thread=" + Thread.currentThread()
                             .getName(),
-                    chunk.getWorld()
-                            .getRegistryKey()
-                            .getValue()
+                    chunk.getLevel()
+                            .dimension()
+                            .identifier()
                             .toString(), new DebugChunkKey(
-                            chunk.getPos().x,
-                            chunk.getPos().z
+                            chunk.getPos().x(),
+                            chunk.getPos().z()
                     ), null, null, null, null
             );
             return ChunkMutationTrackingScope.Cause.NONE;
@@ -116,9 +116,9 @@ public final class PendingChunkMutationSuppression {
      * @return suppression cause active
      */
     public static ChunkMutationTrackingScope.Cause currentCause(
-            final RegistryKey<World> worldKey,
+            final ResourceKey<Level> worldKey,
             final ChunkPos chunkPos) {
-        return currentCause(worldKey, chunkPos.x, chunkPos.z);
+        return currentCause(worldKey, chunkPos.x(), chunkPos.z());
     }
 
     /**
@@ -130,7 +130,7 @@ public final class PendingChunkMutationSuppression {
      * @return suppression cause active
      */
     static ChunkMutationTrackingScope.Cause currentCause(
-            final RegistryKey<World> worldKey, final int chunkX,
+            final ResourceKey<Level> worldKey, final int chunkX,
             final int chunkZ) {
         final Entry entry = PENDING.get(new Key(worldKey, chunkX, chunkZ));
         return entry != null ? entry.cause : ChunkMutationTrackingScope.Cause.NONE;
@@ -145,9 +145,9 @@ public final class PendingChunkMutationSuppression {
      * @return true if trace should be emitted
      */
     public static boolean shouldTrace(
-            final RegistryKey<World> worldKey, final ChunkPos chunkPos,
+            final ResourceKey<Level> worldKey, final ChunkPos chunkPos,
             final ChunkMutationTrackingScope.Cause cause) {
-        return shouldTrace(worldKey, chunkPos.x, chunkPos.z, cause);
+        return shouldTrace(worldKey, chunkPos.x(), chunkPos.z(), cause);
     }
 
     /**
@@ -160,7 +160,7 @@ public final class PendingChunkMutationSuppression {
      * @return true if trace should be emitted
      */
     static boolean shouldTrace(
-            final RegistryKey<World> worldKey, final int chunkX, final int chunkZ,
+            final ResourceKey<Level> worldKey, final int chunkX, final int chunkZ,
             final ChunkMutationTrackingScope.Cause cause) {
         final Entry entry = PENDING.get(new Key(worldKey, chunkX, chunkZ));
         if (entry == null || entry.cause != cause || entry.traced) {
@@ -185,7 +185,7 @@ public final class PendingChunkMutationSuppression {
      * @param worldKey registry key mapping levels
      * @param chunkPos coordinates pos mapping
      */
-    public static void end(final RegistryKey<World> worldKey, final ChunkPos chunkPos) {
+    public static void end(final ResourceKey<Level> worldKey, final ChunkPos chunkPos) {
         end(worldKey, chunkPos, "PendingChunkMutationSuppression#end");
     }
 
@@ -196,8 +196,8 @@ public final class PendingChunkMutationSuppression {
      * @param chunkPos coordinates pos mapping
      * @param source   caller identifier tag
      */
-    public static void end(final RegistryKey<World> worldKey, final ChunkPos chunkPos, final String source) {
-        end(worldKey, chunkPos.x, chunkPos.z, source);
+    public static void end(final ResourceKey<Level> worldKey, final ChunkPos chunkPos, final String source) {
+        end(worldKey, chunkPos.x(), chunkPos.z(), source);
     }
 
     /**
@@ -208,7 +208,7 @@ public final class PendingChunkMutationSuppression {
      * @param chunkZ   chunk Z coordinate
      * @param source   caller identifier tag
      */
-    static void end(final RegistryKey<World> worldKey, final int chunkX, final int chunkZ, final String source) {
+    static void end(final ResourceKey<Level> worldKey, final int chunkX, final int chunkZ, final String source) {
         final Entry removed = PENDING.remove(new Key(worldKey, chunkX, chunkZ));
         if (removed == null) {
             return;
@@ -250,7 +250,7 @@ public final class PendingChunkMutationSuppression {
      */
     private static void traceLifecycle(
             final ChunkTraceEventType eventType, final ChunkTraceReason reason,
-            final String source, final String message, final RegistryKey<World> worldKey,
+            final String source, final String message, final ResourceKey<Level> worldKey,
             final int chunkX, final int chunkZ) {
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -259,7 +259,7 @@ public final class PendingChunkMutationSuppression {
                 reason,
                 source,
                 message,
-                worldKey.getValue()
+                worldKey.identifier()
                         .toString(),
                 new DebugChunkKey(chunkX, chunkZ),
                 null,
@@ -276,7 +276,7 @@ public final class PendingChunkMutationSuppression {
      * @param chunkX   chunk X coordinate
      * @param chunkZ   chunk Z coordinate
      */
-    private record Key(RegistryKey<World> worldKey, int chunkX, int chunkZ) {
+    private record Key(ResourceKey<Level> worldKey, int chunkX, int chunkZ) {
 
         /**
          * Constructor.

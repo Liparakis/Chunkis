@@ -5,11 +5,11 @@ import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import java.util.stream.Stream;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -40,36 +40,36 @@ final class EntityReplaySpawnResolver {
      * @param operationId   trace correlation ID; may be {@code null}
      * @return spawn outcome including retry intent
      */
-    static SpawnOutcome attempt(final ServerWorld world, final ChunkPos chunkPosition, final Box searchBox,
-            final Entity entity, final NbtCompound nbt, @Nullable final String operationId) {
-        final Entity existing = world.getEntity(entity.getUuid());
+    static SpawnOutcome attempt(final ServerLevel world, final ChunkPos chunkPosition, final AABB searchBox,
+            final Entity entity, final CompoundTag nbt, @Nullable final String operationId) {
+        final Entity existing = world.getEntity(entity.getUUID());
 
         if (ChunkEntityQueries.isMatchingLiveEntity(existing, entity.getType(), chunkPosition)) {
-            PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getUuidAsString(), operationId,
+            PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getStringUUID(), operationId,
                     "restore skipped: entity already present in world");
             return SpawnOutcome.ALREADY_PRESENT;
         }
 
         if (existing != null) {
-            PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getUuidAsString(), operationId,
+            PayloadWatchTracer.traceRestoreEntitySkipped(world, chunkPosition, entity.getStringUUID(), operationId,
                     "restore skipped: duplicate UUID conflict type/chunk mismatch");
             return SpawnOutcome.DUPLICATE_UUID_CONFLICT;
         }
 
-        world.loadEntities(Stream.of(entity));
-        if (ChunkEntityQueries.isVisibleFromWorldQuery(world, entity.getUuid(), searchBox)
-                || ChunkEntityQueries.isMatchingLiveEntity(world.getEntity(entity.getUuid()), entity.getType(),
+        world.addLegacyChunkEntities(Stream.of(entity));
+        if (ChunkEntityQueries.isVisibleFromWorldQuery(world, entity.getUUID(), searchBox)
+                || ChunkEntityQueries.isMatchingLiveEntity(world.getEntity(entity.getUUID()), entity.getType(),
                 chunkPosition)) {
             PayloadWatchTracer.traceRestoredEntity(world, chunkPosition, entity, nbt, operationId);
             return SpawnOutcome.SPAWNED;
         }
         PayloadWatchTracer.traceRestoreEntitySkipped(world,
                 chunkPosition,
-                entity.getUuidAsString(),
+                entity.getStringUUID(),
                 operationId,
                 "restore skipped: loaded entity was not visible in world"
-                        + " entityChunk=" + entity.getChunkPos()
-                        + " entityPos=" + entity.getBlockPos()
+                        + " entityChunk=" + entity.chunkPosition()
+                        + " entityPos=" + entity.blockPosition()
                         + " removed=" + entity.isRemoved()
                         + " alive=" + entity.isAlive()
                         + " nbtPos=" + EntityPayloadNbt.describeRawPos(nbt));

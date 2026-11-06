@@ -1,8 +1,8 @@
 package io.liparakis.chunkis.gametest.mixin;
 
 import io.liparakis.chunkis.gametest.stress.StressBenchGameTest;
+import net.minecraft.gametest.framework.GameTestServer;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.test.TestServer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * benchmark asks for a real tick rate, restore vanilla's wait so the server keeps its own tick budget, which
  * chunk unloading and other between-tick work depend on.
  */
-@Mixin(TestServer.class)
+@Mixin(GameTestServer.class)
 public abstract class TestServerMixin {
 
     /**
@@ -21,7 +21,7 @@ public abstract class TestServerMixin {
      *
      * @param ci callback info, cancelled when pacing
      */
-    @Inject(method = "runTasksTillTickEnd", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "waitUntilNextTick", at = @At("HEAD"), cancellable = true)
     private void chunkis$waitForNextTick(final CallbackInfo ci) {
         if (!StressBenchGameTest.isPacingTicks()) {
             return;
@@ -30,7 +30,7 @@ public abstract class TestServerMixin {
         final MinecraftServerAccessor accessor = (MinecraftServerAccessor) server;
         accessor.chunkis$setWaitingForNextTick(true);
         try {
-            server.runTasks(() -> !accessor.chunkis$shouldKeepTicking());
+            server.managedBlock(() -> !accessor.chunkis$shouldKeepTicking());
         } finally {
             accessor.chunkis$setWaitingForNextTick(false);
         }

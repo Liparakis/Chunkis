@@ -10,9 +10,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtSizeTracker;
 
 /**
  * NBT adapter for Chunkis' length-prefixed NBT payload format.
@@ -35,13 +35,13 @@ import net.minecraft.nbt.NbtSizeTracker;
  * <p><b>Thread safety:</b> buffers are stored in {@link ThreadLocal}. No world,
  * chunk, registry, or mutable NBT references are retained by this adapter.</p>
  */
-public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
+public final class FabricNbtAdapter implements NbtAdapter<CompoundTag> {
 
     /**
      * Maximum accepted payload size in bytes.
      *
      * <p>For compressed NBT, this is the compressed byte count. Parsed NBT size is
-     * still guarded separately by {@link NbtSizeTracker}.</p>
+     * still guarded separately by {@link NbtAccounter}.</p>
      */
     public static final int MAX_NBT_SIZE = 16 * 1024 * 1024;
 
@@ -108,7 +108,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      * @return parsed NBT compound
      * @throws IOException if reading or parsing fails
      */
-    private static NbtCompound readCompressedBuffered(
+    private static CompoundTag readCompressedBuffered(
             final DataInput input,
             final int length
     ) throws IOException {
@@ -119,7 +119,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
             input.readFully(buffer, 0, length);
 
             try (ByteArrayInputStream stream = new ByteArrayInputStream(buffer, 0, length)) {
-                return NbtIo.readCompressed(stream, NbtSizeTracker.of(MAX_NBT_SIZE));
+                return NbtIo.readCompressed(stream, NbtAccounter.create(MAX_NBT_SIZE));
             }
         } finally {
             holder.releaseReadBufferIfOversized();
@@ -134,7 +134,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      * @return parsed NBT compound
      * @throws IOException if reading or parsing fails
      */
-    private static NbtCompound readRawBuffered(
+    private static CompoundTag readRawBuffered(
             final DataInput input,
             final int length
     ) throws IOException {
@@ -146,7 +146,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
 
             try (ByteArrayInputStream byteInput = new ByteArrayInputStream(buffer, 0, length);
                     DataInputStream nbtInput = new DataInputStream(byteInput)) {
-                return NbtIo.readCompound(nbtInput, NbtSizeTracker.of(MAX_NBT_SIZE));
+                return NbtIo.read(nbtInput, NbtAccounter.create(MAX_NBT_SIZE));
             }
         } finally {
             holder.releaseReadBufferIfOversized();
@@ -197,7 +197,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      * @throws IOException if serialization or output fails
      */
     @Override
-    public void write(final NbtCompound nbt, final DataOutput output) throws IOException {
+    public void write(final CompoundTag nbt, final DataOutput output) throws IOException {
         writeCompressed(nbt, output);
     }
 
@@ -210,7 +210,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      */
     @Override
     public void writeCompressed(
-            final NbtCompound nbt,
+            final CompoundTag nbt,
             final DataOutput output
     ) throws IOException {
         Objects.requireNonNull(nbt, "nbt");
@@ -235,7 +235,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      * @throws IOException if reading or parsing fails
      */
     @Override
-    public NbtCompound read(final DataInput input) throws IOException {
+    public CompoundTag read(final DataInput input) throws IOException {
         return readCompressed(input);
     }
 
@@ -247,7 +247,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      * @throws IOException if the declared length is invalid or parsing fails
      */
     @Override
-    public NbtCompound readCompressed(final DataInput input) throws IOException {
+    public CompoundTag readCompressed(final DataInput input) throws IOException {
         Objects.requireNonNull(input, "input");
 
         final int length = readAndValidateLength(input);
@@ -264,7 +264,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      */
     @Override
     public void writeRaw(
-            final NbtCompound nbt,
+            final CompoundTag nbt,
             final DataOutput output
     ) throws IOException {
         Objects.requireNonNull(nbt, "nbt");
@@ -275,7 +275,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
 
         try {
             final DataOutputStream nbtOutput = new DataOutputStream(buffer);
-            NbtIo.writeCompound(nbt, nbtOutput);
+            NbtIo.write(nbt, nbtOutput);
             nbtOutput.flush();
 
             writeLengthPrefixedPayload(output, buffer);
@@ -292,7 +292,7 @@ public final class FabricNbtAdapter implements NbtAdapter<NbtCompound> {
      * @throws IOException if the declared length is invalid or parsing fails
      */
     @Override
-    public NbtCompound readRaw(final DataInput input) throws IOException {
+    public CompoundTag readRaw(final DataInput input) throws IOException {
         Objects.requireNonNull(input, "input");
 
         final int length = readAndValidateLength(input);

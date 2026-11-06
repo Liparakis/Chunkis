@@ -9,13 +9,13 @@ import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.EntityWatchTracker;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import java.util.function.Consumer;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -44,7 +44,7 @@ final class WatchPayloadMatcher {
      * @return true if matching updates exist
      */
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    static boolean contains(final ChunkDeltaView<BlockState, NbtCompound> delta, final PayloadWatchTarget target,
+    static boolean contains(final ChunkDeltaView<BlockState, CompoundTag> delta, final PayloadWatchTarget target,
             final int chunkStartX, final int chunkStartZ, final String worldId) {
         final boolean[] found = {false};
 
@@ -99,9 +99,9 @@ final class WatchPayloadMatcher {
      * @return matching entity NBT compound if found, or null
      */
     @Nullable
-    static NbtCompound findWatchedEntityNbt(final ChunkDeltaView<BlockState, NbtCompound> delta,
+    static CompoundTag findWatchedEntityNbt(final ChunkDeltaView<BlockState, CompoundTag> delta,
             final String entityUuid) {
-        final NbtCompound[] found = {null};
+        final CompoundTag[] found = {null};
         delta.forEachEntity(entityNbt -> {
             if (found[0] != null || entityNbt == null) {
                 return;
@@ -124,7 +124,7 @@ final class WatchPayloadMatcher {
      * @return expected BlockState if found, or null
      */
     @Nullable
-    static BlockState findWatchedBlockState(final ChunkDeltaView<BlockState, NbtCompound> delta,
+    static BlockState findWatchedBlockState(final ChunkDeltaView<BlockState, CompoundTag> delta,
             final PayloadWatchTarget target, final ChunkPos chunkPos,
             final String worldId) {
         final BlockState[] found = {null};
@@ -132,8 +132,8 @@ final class WatchPayloadMatcher {
             if (found[0] != null) {
                 return;
             }
-            final int worldX = chunkPos.getStartX() + x;
-            final int worldZ = chunkPos.getStartZ() + z;
+            final int worldX = chunkPos.getMinBlockX() + x;
+            final int worldZ = chunkPos.getMinBlockZ() + z;
             if (target.matchesBlock(worldId, PayloadWatchType.BLOCK, worldX, y, worldZ)) {
                 found[0] = state;
             }
@@ -152,7 +152,7 @@ final class WatchPayloadMatcher {
     static void forEachWatchedBlockState(
             final String worldId,
             final ChunkPos chunkPos,
-            final ChunkDeltaView<BlockState, NbtCompound> delta,
+            final ChunkDeltaView<BlockState, CompoundTag> delta,
             final Consumer<WatchedBlockState> consumer
     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
@@ -183,8 +183,8 @@ final class WatchPayloadMatcher {
      * @param consumer      receiver callback for matches found
      */
     static void forEachResolvedWatchedBlockState(
-            final WorldChunk chunk,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+            final LevelChunk chunk,
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             @Nullable final String operationId,
             final Consumer<WatchedBlockState> consumer
     ) {
@@ -229,9 +229,9 @@ final class WatchPayloadMatcher {
      * @param consumer      receiver callback for matches found
      */
     static void forEachWatchedEntityState(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+            final ServerLevel world,
+            final LevelChunk chunk,
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             @Nullable final String operationId,
             final Consumer<WatchedEntityState> consumer
     ) {
@@ -250,7 +250,7 @@ final class WatchPayloadMatcher {
             }
 
             final Entity liveEntity = WatchTraceEmitter.resolveWatchedEntity(world, target.entityUuid());
-            if (liveEntity != null && !liveEntity.getChunkPos()
+            if (liveEntity != null && !liveEntity.chunkPosition()
                     .equals(chunkPos)) {
                 continue;
             }
@@ -319,7 +319,7 @@ final class WatchPayloadMatcher {
             PayloadWatchTarget target,
             @Nullable String operationId,
             @Nullable Entity liveEntity,
-            @Nullable NbtCompound expectedNbt
+            @Nullable CompoundTag expectedNbt
     ) {
 
     }

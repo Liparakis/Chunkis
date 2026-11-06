@@ -3,9 +3,9 @@ package io.liparakis.chunkis.integration.migration.state;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.file.Path;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -20,11 +20,11 @@ class VanillaRegionPathResolverTest {
 
     /**
      * Tests that the overworld region directory path is successfully resolved
-     * to the corresponding {@link RegistryKey} for the overworld.
+     * to the corresponding {@link ResourceKey} for the overworld.
      */
     @Test
     void resolvesOverworldRegionDirectory() {
-        assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld")),
+        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "overworld")),
                 VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("region"))
                         .orElseThrow());
     }
@@ -34,18 +34,18 @@ class VanillaRegionPathResolverTest {
      */
     @Test
     void resolvesOverworldEntityDirectory() {
-        assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld")),
+        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "overworld")),
                 VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("entities"))
                         .orElseThrow());
     }
 
     /**
      * Tests that a dimension-scoped region directory (specifically within the minecraft namespace,
-     * e.g., the nether) is successfully resolved to its corresponding {@link RegistryKey}.
+     * e.g., the nether) is successfully resolved to its corresponding {@link ResourceKey}.
      */
     @Test
     void resolvesDimensionScopedRegionDirectory() {
-        assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "the_nether")),
+        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "the_nether")),
                 VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("dimensions")
                                 .resolve("minecraft")
                                 .resolve("the_nether")
@@ -55,11 +55,11 @@ class VanillaRegionPathResolverTest {
 
     /**
      * Tests that a custom dimension-scoped region directory under a non-minecraft namespace
-     * (e.g., example namespace) is successfully resolved to its corresponding {@link RegistryKey}.
+     * (e.g., example namespace) is successfully resolved to its corresponding {@link ResourceKey}.
      */
     @Test
     void resolvesCustomDimensionScopedRegionDirectory() {
-        assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("example", "overworld")),
+        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("example", "overworld")),
                 VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("dimensions")
                                 .resolve("example")
                                 .resolve("overworld")
@@ -72,7 +72,7 @@ class VanillaRegionPathResolverTest {
      */
     @Test
     void resolvesDimensionScopedEntityDirectory() {
-        assertEquals(RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "the_nether")),
+        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "the_nether")),
                 VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("DIM-1")
                                 .resolve("entities"))
                         .orElseThrow());

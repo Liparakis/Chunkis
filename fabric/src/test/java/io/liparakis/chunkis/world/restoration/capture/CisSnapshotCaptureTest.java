@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -43,17 +43,17 @@ class CisSnapshotCaptureTest {
      */
     @Test
     void authoritativeSnapshotMetadataDropsPersistedBaseAndMarksFullBaseline() {
-        final NbtCompound structures = new NbtCompound();
-        structures.put(CisNbtUtil.STRUCTURE_REFERENCES_KEY, new NbtCompound());
-        final NbtCompound existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+        final CompoundTag structures = new CompoundTag();
+        structures.put(CisNbtUtil.STRUCTURE_REFERENCES_KEY, new CompoundTag());
+        final CompoundTag existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 structures,
                 true,
                 false,
-                new NbtCompound(),
+                new CompoundTag(),
                 true
         );
 
-        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false, null, false, null);
+        final CompoundTag metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false, null, false, null);
 
         assertTrue(CisNbtUtil.hasFullBlockBaseline(metadata));
         assertNull(CisNbtUtil.extractPersistedBaseChunkNbt(metadata));
@@ -67,23 +67,23 @@ class CisSnapshotCaptureTest {
      */
     @Test
     void authoritativeSnapshotMetadataPreservesMigratedAuxiliaryMetadata() {
-        final NbtCompound existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+        final CompoundTag existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 null,
                 true,
                 false,
                 null,
                 true
         );
-        final NbtCompound auxiliary = new NbtCompound();
+        final CompoundTag auxiliary = new CompoundTag();
         auxiliary.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
         auxiliary.putString("PostProcessing", "kept");
         CisNbtUtil.putPreservedAuxiliaryChunkNbt(existingMetadata, auxiliary);
         CisNbtUtil.markMigratedAuthoritativeChunk(existingMetadata);
 
-        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false, null, false, null);
+        final CompoundTag metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false, null, false, null);
 
         assertTrue(CisNbtUtil.isMigratedAuthoritativeChunk(metadata));
-        final NbtCompound preservedAuxiliary = CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
+        final CompoundTag preservedAuxiliary = CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
         assertNotNull(preservedAuxiliary);
         assertEquals("minecraft:full",
                 preservedAuxiliary.getString(CisNbtUtil.STATUS_KEY)
@@ -99,11 +99,11 @@ class CisSnapshotCaptureTest {
      */
     @Test
     void authoritativeSnapshotMetadataStoresSectionsAndDropsBasePayload() {
-        final NbtCompound existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(null, true, false, null, false);
+        final CompoundTag existingMetadata = CisNbtUtil.createChunkMetadataTakingOwnership(null, true, false, null, false);
         existingMetadata.putByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY, new byte[] {1, 2, 3});
-        final NbtList sections = oneSection();
+        final ListTag sections = oneSection();
 
-        final NbtCompound metadata =
+        final CompoundTag metadata =
                 CisSnapshotCapture.createAuthoritativeSnapshotMetadata(existingMetadata, false, sections, true, null);
 
         assertEquals(sections, CisNbtUtil.getStoredSections(metadata));
@@ -119,10 +119,10 @@ class CisSnapshotCaptureTest {
      */
     @Test
     void unlitSnapshotDoesNotInheritStoredLight() {
-        final NbtCompound lit =
+        final CompoundTag lit =
                 CisSnapshotCapture.createAuthoritativeSnapshotMetadata(null, false, oneSection(), true, null);
 
-        final NbtCompound unlit =
+        final CompoundTag unlit =
                 CisSnapshotCapture.createAuthoritativeSnapshotMetadata(lit, false, oneSection(), false, null);
 
         assertTrue(CisNbtUtil.loadsAsFinishedChunk(unlit));
@@ -134,7 +134,7 @@ class CisSnapshotCaptureTest {
      */
     @Test
     void entryWithoutStoredSectionsDoesNotLoadAsFinishedChunk() {
-        final NbtCompound metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(null, false, null, true, null);
+        final CompoundTag metadata = CisSnapshotCapture.createAuthoritativeSnapshotMetadata(null, false, null, true, null);
 
         assertFalse(CisNbtUtil.loadsAsFinishedChunk(metadata));
         assertFalse(CisNbtUtil.loadsWithStoredLight(metadata));
@@ -146,13 +146,13 @@ class CisSnapshotCaptureTest {
      */
     @Test
     void pendingTicksAreStoredAndNeverCarriedOver() {
-        final NbtCompound ticks = new NbtCompound();
-        ticks.put("fluid_ticks", new NbtList());
-        final NbtCompound withTicks =
+        final CompoundTag ticks = new CompoundTag();
+        ticks.put("fluid_ticks", new ListTag());
+        final CompoundTag withTicks =
                 CisSnapshotCapture.createAuthoritativeSnapshotMetadata(null, false, oneSection(), true, ticks);
         assertTrue(withTicks.contains(CisNbtUtil.PENDING_TICKS_KEY));
 
-        final NbtCompound next =
+        final CompoundTag next =
                 CisSnapshotCapture.createAuthoritativeSnapshotMetadata(withTicks, false, oneSection(), true, null);
         assertFalse(next.contains(CisNbtUtil.PENDING_TICKS_KEY));
     }
@@ -162,9 +162,9 @@ class CisSnapshotCaptureTest {
      *
      * @return section list
      */
-    private static NbtList oneSection() {
-        final NbtList sections = new NbtList();
-        final NbtCompound section = new NbtCompound();
+    private static ListTag oneSection() {
+        final ListTag sections = new ListTag();
+        final CompoundTag section = new CompoundTag();
         section.putByte("Y", (byte) 0);
         sections.add(section);
         return sections;

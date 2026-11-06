@@ -18,18 +18,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 /**
  * Regression coverage for long-distance unload/reload churn that previously let
@@ -82,19 +82,19 @@ public final class AsyncSaveDataLossGameTest {
      * @param context test context providing the structure's absolute anchor
      * @return fully populated {@link ChunkTargets} for this test run
      */
-    private static ChunkTargets createTargets(final TestContext context) {
-        final BlockPos anchor = context.getAbsolutePos(new BlockPos(0, 0, 0));
-        final ChunkPos nearChunk = new ChunkPos(anchor);
+    private static ChunkTargets createTargets(final GameTestHelper context) {
+        final BlockPos anchor = context.absolutePos(new BlockPos(0, 0, 0));
+        final ChunkPos nearChunk = ChunkPos.containing(anchor);
         final int farChunkOffset = FAR_BLOCK_DISTANCE >> 4;
-        final ChunkPos farChunk = new ChunkPos(nearChunk.x + farChunkOffset, nearChunk.z + farChunkOffset);
+        final ChunkPos farChunk = new ChunkPos(nearChunk.x() + farChunkOffset, nearChunk.z() + farChunkOffset);
         return new ChunkTargets(nearChunk,
                 farChunk,
-                nearChunk.getBlockPos(8, 100, 8),
-                farChunk.getBlockPos(8, 100, 8),
-                nearChunk.getBlockPos(8, 64, 8),
-                nearChunk.getBlockPos(9, 64, 8),
-                farChunk.getBlockPos(8, 64, 8),
-                farChunk.getBlockPos(9, 64, 8));
+                nearChunk.getBlockAt(8, 100, 8),
+                farChunk.getBlockAt(8, 100, 8),
+                nearChunk.getBlockAt(8, 64, 8),
+                nearChunk.getBlockAt(9, 64, 8),
+                farChunk.getBlockAt(8, 64, 8),
+                farChunk.getBlockAt(9, 64, 8));
     }
 
     /**
@@ -104,9 +104,9 @@ public final class AsyncSaveDataLossGameTest {
      * @param world    server world managing the chunk
      * @param chunkPos chunk to force-load
      */
-    private static void forceAndLoad(final ServerWorld world, final ChunkPos chunkPos) {
-        world.setChunkForced(chunkPos.x, chunkPos.z, true);
-        world.getChunk(chunkPos.x, chunkPos.z);
+    private static void forceAndLoad(final ServerLevel world, final ChunkPos chunkPos) {
+        world.setChunkForced(chunkPos.x(), chunkPos.z(), true);
+        world.getChunk(chunkPos.x(), chunkPos.z());
     }
 
     /**
@@ -118,10 +118,10 @@ public final class AsyncSaveDataLossGameTest {
      * @param destination target block position; the player lands at
      *                    {@code (x+0.5, y, z+0.5)}
      */
-    private static void teleportPlayer(final ServerPlayerEntity player,
-            final ServerWorld world,
+    private static void teleportPlayer(final ServerPlayer player,
+            final ServerLevel world,
             final BlockPos destination) {
-        player.teleport(world,
+        player.teleportTo(world,
                 destination.getX() + 0.5D,
                 destination.getY(),
                 destination.getZ() + 0.5D,
@@ -139,9 +139,9 @@ public final class AsyncSaveDataLossGameTest {
      * @param primary   position for the diamond block
      * @param secondary position for the gold block
      */
-    private static void placeMarkerPattern(final ServerWorld world, final BlockPos primary, final BlockPos secondary) {
-        world.setBlockState(primary, Blocks.DIAMOND_BLOCK.getDefaultState());
-        world.setBlockState(secondary, Blocks.GOLD_BLOCK.getDefaultState());
+    private static void placeMarkerPattern(final ServerLevel world, final BlockPos primary, final BlockPos secondary) {
+        world.setBlockAndUpdate(primary, Blocks.DIAMOND_BLOCK.defaultBlockState());
+        world.setBlockAndUpdate(secondary, Blocks.GOLD_BLOCK.defaultBlockState());
     }
 
     /**
@@ -153,12 +153,12 @@ public final class AsyncSaveDataLossGameTest {
      * @param secondary position that should contain a gold block
      * @return {@code true} iff both blocks are present
      */
-    private static boolean isMarkerPatternPresent(final ServerWorld world,
+    private static boolean isMarkerPatternPresent(final ServerLevel world,
             final BlockPos primary,
             final BlockPos secondary) {
         return world.getBlockState(primary)
-                .isOf(Blocks.DIAMOND_BLOCK) && world.getBlockState(secondary)
-                .isOf(Blocks.GOLD_BLOCK);
+                .is(Blocks.DIAMOND_BLOCK) && world.getBlockState(secondary)
+                .is(Blocks.GOLD_BLOCK);
     }
 
     /**
@@ -168,9 +168,9 @@ public final class AsyncSaveDataLossGameTest {
      * @param world    world owning the chunk
      * @param chunkPos chunk to mark dirty
      */
-    private static void markChunkDirty(final ServerWorld world, final ChunkPos chunkPos) {
-        final Chunk chunk = world.getChunk(chunkPos.x, chunkPos.z);
-        chunk.markNeedsSaving();
+    private static void markChunkDirty(final ServerLevel world, final ChunkPos chunkPos) {
+        final ChunkAccess chunk = world.getChunk(chunkPos.x(), chunkPos.z());
+        chunk.markUnsaved();
     }
 
     /**
@@ -180,14 +180,14 @@ public final class AsyncSaveDataLossGameTest {
      *
      * @param world world whose pending deltas should be flushed
      */
-    private static void flushChunkisState(final ServerWorld world) {
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
+    private static void flushChunkisState(final ServerLevel world) {
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = FabricCisStorageHelper.getStorage(world);
         // Same order as shutdown: drain async saves before the synchronous sweep.
         AsyncCisSaveManager.flushAndClose(world);
-        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending = GlobalChunkTracker.getPendingDeltas(world);
+        final Map<ChunkPos, ChunkDelta<BlockState, CompoundTag>> pending = GlobalChunkTracker.getPendingDeltas(world);
 
-        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
-            final ChunkDelta<BlockState, NbtCompound> delta = entry.getValue();
+        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, CompoundTag>> entry : pending.entrySet()) {
+            final ChunkDelta<BlockState, CompoundTag> delta = entry.getValue();
             if (delta != null && delta.isDirty()) {
                 FabricCisStorageHelper.saveTrackedDelta(world, storage, entry.getKey(), delta);
             }
@@ -210,23 +210,23 @@ public final class AsyncSaveDataLossGameTest {
      * @param chunkPos chunk to verify
      * @param label    human-readable label ("near" / "far") used in failure messages
      */
-    private static void assertPersistedBaseChunkPresent(final TestContext context,
-            final ServerWorld world,
+    private static void assertPersistedBaseChunkPresent(final GameTestHelper context,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final String label) {
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
-        final ChunkDelta<BlockState, NbtCompound> delta = storage.load(new CisChunkPos(chunkPos.x, chunkPos.z));
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = FabricCisStorageHelper.getStorage(world);
+        final ChunkDelta<BlockState, CompoundTag> delta = storage.load(new CisChunkPos(chunkPos.x(), chunkPos.z()));
 
         // Guard: a null delta here means storage returned nothing for this chunk,
         // so the following getChunkMetadata() call would NPE without this check.
         context.assertTrue(true,
-                Text.literal("Expected a persisted Chunkis delta for the " + label + " chunk at " + chunkPos
+                Component.literal("Expected a persisted Chunkis delta for the " + label + " chunk at " + chunkPos
                         + " but storage returned null."));
         // Either anchor makes a delta restorable: persisted base NBT, or a full block baseline
         // written by a full snapshot (block-entity-free chunks get the latter by design).
         context.assertTrue(io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership
                         .hasChunkisPersistenceAnchor(delta),
-                Text.literal("Expected a persistence anchor (base chunk NBT or full baseline) for the " + label
+                Component.literal("Expected a persistence anchor (base chunk NBT or full baseline) for the " + label
                         + " chunk at " + chunkPos + "."));
     }
 
@@ -238,7 +238,7 @@ public final class AsyncSaveDataLossGameTest {
      * @param context test context used to report assertion failures
      * @param targets chunk and block positions used to filter trace events
      */
-    private static void assertTraceTimeline(final TestContext context, final ChunkTargets targets) {
+    private static void assertTraceTimeline(final GameTestHelper context, final ChunkTargets targets) {
         final List<ChunkTraceEvent> events = ChunkTraceStore.snapshotMatching(event ->
                 matchesChunk(event, targets.nearChunk()) || matchesChunk(event, targets.farChunk()));
 
@@ -248,25 +248,25 @@ public final class AsyncSaveDataLossGameTest {
                         ChunkTraceEventType.SAVE_QUEUED) || containsEvent(events,
                         targets.nearChunk(),
                         ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
-                Text.literal("Expected near chunk save timeline evidence in trace store."));
+                Component.literal("Expected near chunk save timeline evidence in trace store."));
         context.assertTrue(
                 containsEvent(events, targets.farChunk(), ChunkTraceEventType.SAVE_TX_START) || containsEvent(events,
                         targets.farChunk(),
                         ChunkTraceEventType.SAVE_QUEUED) || containsEvent(events,
                         targets.farChunk(),
                         ChunkTraceEventType.SAVE_FLUSH_COMPLETED),
-                Text.literal("Expected far chunk save timeline evidence in trace store."));
+                Component.literal("Expected far chunk save timeline evidence in trace store."));
         context.assertTrue(containsEvent(events, targets.nearChunk(), ChunkTraceEventType.LOAD_SOURCE_RESOLVED),
-                Text.literal("Expected near chunk load-source evidence after explicit storage load."));
+                Component.literal("Expected near chunk load-source evidence after explicit storage load."));
         context.assertTrue(containsEvent(events, targets.farChunk(), ChunkTraceEventType.LOAD_SOURCE_RESOLVED),
-                Text.literal("Expected far chunk load-source evidence after explicit storage load."));
+                Component.literal("Expected far chunk load-source evidence after explicit storage load."));
         context.assertTrue(containsEvent(events, targets.nearChunk(), ChunkTraceEventType.REGION_READ_TX_END),
-                Text.literal("Expected near chunk region read evidence after explicit storage load."));
+                Component.literal("Expected near chunk region read evidence after explicit storage load."));
         context.assertTrue(containsEvent(events, targets.farChunk(), ChunkTraceEventType.REGION_READ_TX_END),
-                Text.literal("Expected far chunk region read evidence after explicit storage load."));
+                Component.literal("Expected far chunk region read evidence after explicit storage load."));
         context.assertTrue(events.stream()
                         .noneMatch(AsyncSaveDataLossGameTest::isUnexpectedAssertionFailure),
-                Text.literal("Did not expect assertion failures in the durability trace timeline. "
+                Component.literal("Did not expect assertion failures in the durability trace timeline. "
                         + describeAssertionFailures(events)));
     }
 
@@ -347,7 +347,7 @@ public final class AsyncSaveDataLossGameTest {
      */
     private static boolean matchesChunk(final ChunkTraceEvent event, final ChunkPos chunkPos) {
         final var key = event.chunkKey();
-        return key != null && key.x() == chunkPos.x && key.z() == chunkPos.z;
+        return key != null && key.x() == chunkPos.x() && key.z() == chunkPos.z();
     }
 
     /**
@@ -387,11 +387,11 @@ public final class AsyncSaveDataLossGameTest {
      * @param context Fabric GameTest context
      */
     @GameTest(maxTicks = MAX_TICKS)
-    public void survivesHundredFarChunkRoundTripsWithoutLosingEdits(final TestContext context) {
+    public void survivesHundredFarChunkRoundTripsWithoutLosingEdits(final GameTestHelper context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
         final ChunkTargets targets = createTargets(context);
-        final ServerWorld world = context.getWorld();
+        final ServerLevel world = context.getLevel();
 
         watchOverworldBlock(targets.nearPrimary());
         watchOverworldBlock(targets.nearSecondary());
@@ -406,12 +406,12 @@ public final class AsyncSaveDataLossGameTest {
         markChunkDirty(world, targets.nearChunk());
         markChunkDirty(world, targets.farChunk());
 
-        world.getChunkManager()
+        world.getChunkSource()
                 .save(false);
-        world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
-        world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
+        world.setChunkForced(targets.nearChunk().x(), targets.nearChunk().z(), false);
+        world.setChunkForced(targets.farChunk().x(), targets.farChunk().z(), false);
 
-        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
+        final ServerPlayer player = GameTestPlayers.createServerPlayer(context);
         teleportPlayer(player, world, targets.nearArrival());
 
         for (int i = 0; i < ROUND_TRIPS; i++) {
@@ -423,33 +423,33 @@ public final class AsyncSaveDataLossGameTest {
             final BlockPos destinationSecondary = moveToFar ? targets.farSecondary() : targets.nearSecondary();
             final long teleportTick = INITIAL_DELAY_TICKS + (long) i * 2L;
 
-            context.runAtTick(teleportTick, () -> teleportPlayer(player, world, destinationArrival));
-            context.runAtTick(teleportTick + 1L, () -> {
-                world.getChunk(destination.x, destination.z);
+            context.runAtTickTime(teleportTick, () -> teleportPlayer(player, world, destinationArrival));
+            context.runAtTickTime(teleportTick + 1L, () -> {
+                world.getChunk(destination.x(), destination.z());
                 context.assertTrue(isMarkerPatternPresent(world, destinationPrimary, destinationSecondary),
-                        Text.literal("Lost edited blocks after round trip " + roundTrip + " while loading chunk "
+                        Component.literal("Lost edited blocks after round trip " + roundTrip + " while loading chunk "
                                 + destination));
-                world.getChunkManager()
+                world.getChunkSource()
                         .save(false);
             });
         }
 
-        context.runAtTick(INITIAL_DELAY_TICKS + ROUND_TRIPS * 2L + FINAL_SETTLE_TICKS, () -> {
+        context.runAtTickTime(INITIAL_DELAY_TICKS + ROUND_TRIPS * 2L + FINAL_SETTLE_TICKS, () -> {
             teleportPlayer(player, world, targets.nearArrival());
             forceAndLoad(world, targets.nearChunk());
             teleportPlayer(player, world, targets.farArrival());
             forceAndLoad(world, targets.farChunk());
 
             context.assertTrue(isMarkerPatternPresent(world, targets.nearPrimary(), targets.nearSecondary()),
-                    Text.literal("Near chunk edits disappeared after 100 far round trips."));
+                    Component.literal("Near chunk edits disappeared after 100 far round trips."));
             context.assertTrue(isMarkerPatternPresent(world, targets.farPrimary(), targets.farSecondary()),
-                    Text.literal("Far chunk edits disappeared after 100 far round trips."));
+                    Component.literal("Far chunk edits disappeared after 100 far round trips."));
 
             // Vanilla throttles autosave per chunk (10s); dirtying both chunks guarantees this final
             // save runs, so the trace assertions below see fresh evidence instead of evicted events.
             markChunkDirty(world, targets.nearChunk());
             markChunkDirty(world, targets.farChunk());
-            world.getChunkManager()
+            world.getChunkSource()
                     .save(false);
             flushChunkisState(world);
 
@@ -457,9 +457,9 @@ public final class AsyncSaveDataLossGameTest {
             assertPersistedBaseChunkPresent(context, world, targets.farChunk(), "far");
             assertTraceTimeline(context, targets);
 
-            world.setChunkForced(targets.nearChunk().x, targets.nearChunk().z, false);
-            world.setChunkForced(targets.farChunk().x, targets.farChunk().z, false);
-            context.complete();
+            world.setChunkForced(targets.nearChunk().x(), targets.nearChunk().z(), false);
+            world.setChunkForced(targets.farChunk().x(), targets.farChunk().z(), false);
+            context.succeed();
         });
     }
 

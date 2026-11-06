@@ -6,15 +6,15 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.border.WorldBorder;
-import net.minecraft.world.dimension.PortalForcer;
-import net.minecraft.world.poi.PointOfInterestStorage;
-import net.minecraft.world.poi.PointOfInterestType;
-import net.minecraft.world.poi.PointOfInterestTypes;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.portal.PortalForcer;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -39,8 +39,8 @@ public abstract class PortalForcerMixin {
      * Allocated once - the lambda captures nothing and is safe to share.
      */
     @Unique
-    private static final Predicate<RegistryEntry<PointOfInterestType>> PORTAL_POI_PREDICATE = type -> type.matchesKey(
-            PointOfInterestTypes.NETHER_PORTAL);
+    private static final Predicate<Holder<PoiType>> PORTAL_POI_PREDICATE = type -> type.is(
+            PoiTypes.NETHER_PORTAL);
 
     /**
      * Upper bound for synchronous Chunkis portal-candidate chunk preloads.
@@ -60,7 +60,7 @@ public abstract class PortalForcerMixin {
      */
     @Shadow
     @Final
-    private ServerWorld world;
+    private ServerLevel level;
 
     /**
      * Returns the distinct chunks that contain portal POIs in vanilla's search
@@ -75,13 +75,13 @@ public abstract class PortalForcerMixin {
     private static Set<ChunkPos> collectPortalCandidateChunks(
             final BlockPos pos,
             final int radius,
-            final PointOfInterestStorage poiStorage) {
+            final PoiManager poiStorage) {
 
         final Set<ChunkPos> chunks = new HashSet<>();
-        poiStorage.getInSquare(PORTAL_POI_PREDICATE, pos, radius, PointOfInterestStorage.OccupationStatus.ANY)
+        poiStorage.getInSquare(PORTAL_POI_PREDICATE, pos, radius, PoiManager.Occupancy.ANY)
                 .forEach(point -> {
                     final BlockPos pointPos = point.getPos();
-                    chunks.add(new ChunkPos(pointPos));
+                    chunks.add(ChunkPos.containing(pointPos));
                 });
         return chunks;
     }
@@ -109,13 +109,13 @@ public abstract class PortalForcerMixin {
      * @return total portal POI count across the range
      */
     @Unique
-    private static long countPortalPois(final SearchChunkRange range, final PointOfInterestStorage poiStorage) {
+    private static long countPortalPois(final SearchChunkRange range, final PoiManager poiStorage) {
         long count = 0;
         for (int chunkX = range.minChunkX(); chunkX <= range.maxChunkX(); chunkX++) {
             for (int chunkZ = range.minChunkZ(); chunkZ <= range.maxChunkZ(); chunkZ++) {
                 count += poiStorage.getInChunk(PORTAL_POI_PREDICATE,
                                 new ChunkPos(chunkX, chunkZ),
-                                PointOfInterestStorage.OccupationStatus.ANY)
+                                PoiManager.Occupancy.ANY)
                         .count();
             }
         }
@@ -136,7 +136,7 @@ public abstract class PortalForcerMixin {
      * @param worldBorder  destination world border
      * @param cir          callback info
      */
-    @Inject(method = "getPortalPos", at = @At("HEAD"))
+    @Inject(method = "findClosestPortalPosition", at = @At("HEAD"))
     private void chunkis$loadPortalCandidateChunks(final BlockPos pos,
             final boolean destIsNether,
             final WorldBorder worldBorder,
@@ -144,10 +144,10 @@ public abstract class PortalForcerMixin {
 
         final int radius = portalSearchRadius(destIsNether);
         final SearchChunkRange range = SearchChunkRange.of(pos, radius);
-        final PointOfInterestStorage poiStorage = world.getPointOfInterestStorage();
+        final PoiManager poiStorage = level.getPoiManager();
         final Set<ChunkPos> candidateChunks = new HashSet<>(
                 PortalChunkIndexManager.getPortalChunksInRange(
-                        world,
+                        level,
                         range.minChunkX(),
                         range.maxChunkX(),
                         range.minChunkZ(),
@@ -168,15 +168,15 @@ public abstract class PortalForcerMixin {
                     "Chunkis [PORTAL]: Skipping {} portal candidate chunk preload around {} in {} because {} candidate chunk(s) exceeds limit {}",
                     destIsNether ? "Nether" : "Overworld",
                     pos,
-                    world.getRegistryKey()
-                            .getValue(),
+                    level.dimension()
+                            .identifier(),
                     candidateChunks.size(),
                     MAX_FORCED_PORTAL_CANDIDATE_CHUNKS);
             return;
         }
 
         for (final ChunkPos candidateChunk : candidateChunks) {
-            world.getChunk(candidateChunk.x, candidateChunk.z);
+            level.getChunk(candidateChunk.x(), candidateChunk.z());
         }
 
         if (Chunkis.LOGGER.isDebugEnabled()) {
@@ -185,8 +185,8 @@ public abstract class PortalForcerMixin {
                     candidateChunks.size(),
                     destIsNether ? "Nether" : "Overworld",
                     pos,
-                    world.getRegistryKey()
-                            .getValue(),
+                    level.dimension()
+                            .identifier(),
                     range.chunkCount());
         }
     }
@@ -203,7 +203,7 @@ public abstract class PortalForcerMixin {
      * @param worldBorder  destination world border
      * @param cir          callback info
      */
-    @Inject(method = "getPortalPos", at = @At("HEAD"))
+    @Inject(method = "findClosestPortalPosition", at = @At("HEAD"))
     private void chunkis$loadPortalSearchChunks(final BlockPos pos,
             final boolean destIsNether,
             final WorldBorder worldBorder,
@@ -219,8 +219,8 @@ public abstract class PortalForcerMixin {
                         "Chunkis [PORTAL]: Skipping forced {} portal search preload around {} in {} because {} chunk(s) exceeds limit {}",
                         destIsNether ? "Nether" : "Overworld",
                         pos,
-                        world.getRegistryKey()
-                                .getValue(),
+                        level.dimension()
+                                .identifier(),
                         range.chunkCount(),
                         maxForcedSearchChunks);
             }
@@ -229,7 +229,7 @@ public abstract class PortalForcerMixin {
 
         for (int chunkX = range.minChunkX(); chunkX <= range.maxChunkX(); chunkX++) {
             for (int chunkZ = range.minChunkZ(); chunkZ <= range.maxChunkZ(); chunkZ++) {
-                world.getChunk(chunkX, chunkZ);
+                level.getChunk(chunkX, chunkZ);
             }
         }
     }
@@ -243,7 +243,7 @@ public abstract class PortalForcerMixin {
      * @param worldBorder  destination world border
      * @param cir          callback info containing vanilla's lookup result
      */
-    @Inject(method = "getPortalPos", at = @At("RETURN"))
+    @Inject(method = "findClosestPortalPosition", at = @At("RETURN"))
     private void chunkis$logPortalLookupResult(final BlockPos pos,
             final boolean destIsNether,
             final WorldBorder worldBorder,
@@ -254,26 +254,26 @@ public abstract class PortalForcerMixin {
         if (cir.getReturnValue()
                 .isPresent()) {
             if (Chunkis.LOGGER.isDebugEnabled()) {
-                final long candidates = countPortalPois(range, world.getPointOfInterestStorage());
+                final long candidates = countPortalPois(range, level.getPoiManager());
                 Chunkis.LOGGER.debug(
                         "Chunkis [PORTAL]: Lookup in {} from {} found existing portal with {} candidate POI(s)",
-                        world.getRegistryKey()
-                                .getValue(),
+                        level.dimension()
+                                .identifier(),
                         pos,
                         candidates);
             }
         } else {
-            final long candidates = countPortalPois(range, world.getPointOfInterestStorage());
+            final long candidates = countPortalPois(range, level.getPoiManager());
             if (candidates > 0) {
                 Chunkis.LOGGER.warn("Chunkis [PORTAL]: Lookup in {} from {} found no portal despite {} candidate POI(s)",
-                        world.getRegistryKey()
-                                .getValue(),
+                        level.dimension()
+                                .identifier(),
                         pos,
                         candidates);
             } else if (Chunkis.LOGGER.isDebugEnabled()) {
                 Chunkis.LOGGER.debug("Chunkis [PORTAL]: Lookup in {} from {} found no portal candidate",
-                        world.getRegistryKey()
-                                .getValue(),
+                        level.dimension()
+                                .identifier(),
                         pos);
             }
         }

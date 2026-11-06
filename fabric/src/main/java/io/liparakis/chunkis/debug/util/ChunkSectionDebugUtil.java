@@ -1,8 +1,8 @@
 package io.liparakis.chunkis.debug.util;
 
 import io.liparakis.chunkis.mixin.accessor.ChunkSectionAccessor;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 
 /**
  * Debugging utilities for inspecting empty sections and non-air block counts in Minecraft chunk data.
@@ -24,8 +24,8 @@ public final class ChunkSectionDebugUtil {
      * @param chunk target chunk to scan, may be null
      * @return count of non-empty sections
      */
-    public static int countNonEmptySections(final Chunk chunk) {
-        return chunk == null ? 0 : countNonEmptySections(chunk.getSectionArray());
+    public static int countNonEmptySections(final ChunkAccess chunk) {
+        return chunk == null ? 0 : countNonEmptySections(chunk.getSections());
     }
 
     /**
@@ -34,13 +34,13 @@ public final class ChunkSectionDebugUtil {
      * @param sections target sections array, may be null
      * @return count of non-empty sections
      */
-    public static int countNonEmptySections(final ChunkSection[] sections) {
+    public static int countNonEmptySections(final LevelChunkSection[] sections) {
         if (sections == null) {
             return 0;
         }
         int count = 0;
-        for (final ChunkSection section : sections) {
-            if (section != null && !section.isEmpty()) {
+        for (final LevelChunkSection section : sections) {
+            if (section != null && !section.hasOnlyAir()) {
                 count++;
             }
         }
@@ -53,8 +53,8 @@ public final class ChunkSectionDebugUtil {
      * @param chunk target chunk to scan, may be null
      * @return count of non-air blocks
      */
-    public static int countNonAirBlocks(final Chunk chunk) {
-        return chunk == null ? 0 : countNonAirBlocks(chunk.getSectionArray());
+    public static int countNonAirBlocks(final ChunkAccess chunk) {
+        return chunk == null ? 0 : countNonAirBlocks(chunk.getSections());
     }
 
     /**
@@ -63,14 +63,14 @@ public final class ChunkSectionDebugUtil {
      * @param sections target sections array, may be null
      * @return count of non-air blocks
      */
-    public static int countNonAirBlocks(final ChunkSection[] sections) {
+    public static int countNonAirBlocks(final LevelChunkSection[] sections) {
         if (sections == null) {
             return 0;
         }
 
         int count = 0;
-        for (final ChunkSection section : sections) {
-            if (section == null || section.isEmpty()) {
+        for (final LevelChunkSection section : sections) {
+            if (section == null || section.hasOnlyAir()) {
                 continue;
             }
             count += ((ChunkSectionAccessor) section).chunkis$getNonEmptyBlockCount();
@@ -84,13 +84,13 @@ public final class ChunkSectionDebugUtil {
      * @param chunk target chunk to summarize, may be null
      * @return debug summary string
      */
-    public static String summarize(final Chunk chunk) {
+    public static String summarize(final ChunkAccess chunk) {
         if (chunk == null) {
             return "sections=0, nonAirBlocks=0, status=<null>, empty=true";
         }
         return "sections=" + countNonEmptySections(chunk)
                 + ", nonAirBlocks=" + countNonAirBlocks(chunk)
-                + ", status=" + chunk.getStatus()
+                + ", status=" + chunk.getPersistedStatus()
                 + ", empty=" + (countNonEmptySections(chunk) == 0);
     }
 }

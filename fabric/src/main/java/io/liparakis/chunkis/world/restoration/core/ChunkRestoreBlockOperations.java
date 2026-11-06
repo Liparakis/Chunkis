@@ -8,17 +8,17 @@ import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.Set;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.util.collection.PaletteStorage;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.Palette;
-import net.minecraft.world.chunk.PaletteProvider;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.BitStorage;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.Palette;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.Strategy;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
@@ -59,8 +59,8 @@ final class ChunkRestoreBlockOperations {
      * <p>Restore always runs on the server thread, so we can safely construct a new
      * mutable container per section while reusing the immutable provider definition.</p>
      */
-    private static final PaletteProvider<BlockState> BLOCK_STATE_PALETTE_PROVIDER =
-            PaletteProvider.forBlockStates(Block.STATE_IDS);
+    private static final Strategy<BlockState> BLOCK_STATE_PALETTE_PROVIDER =
+            Strategy.createForBlockStates(Block.BLOCK_STATE_REGISTRY);
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -76,18 +76,18 @@ final class ChunkRestoreBlockOperations {
      *
      * @param chunk chunk to reset
      */
-    static void clearChunkToAir(final WorldChunk chunk) {
-        final ChunkSection[] sections = chunk.getSectionArray();
+    static void clearChunkToAir(final LevelChunk chunk) {
+        final LevelChunkSection[] sections = chunk.getSections();
         final SectionWriteCursor clearCursor = PALETTED_CONTAINER_REFLECTION.available()
                 ? new SectionWriteCursor()
                 : null;
         for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-            final ChunkSection section = sections[sectionIndex];
-            if (section == null || section.isEmpty()) {
+            final LevelChunkSection section = sections[sectionIndex];
+            if (section == null || section.hasOnlyAir()) {
                 continue;
             }
             if (clearCursor != null) {
-                clearCursor.clearToState(section, sectionIndex, Blocks.AIR.getDefaultState());
+                clearCursor.clearToState(section, sectionIndex, Blocks.AIR.defaultBlockState());
                 resetSectionCounts(section);
             } else {
                 // Keep the safe fallback when mapped reflective access is unavailable.
@@ -108,7 +108,7 @@ final class ChunkRestoreBlockOperations {
      *
      * @param section section whose block storage is now air-only
      */
-    private static void resetSectionCounts(final ChunkSection section) {
+    private static void resetSectionCounts(final LevelChunkSection section) {
         final ChunkSectionAccessor accessor = (ChunkSectionAccessor) section;
         accessor.chunkis$setNonEmptyBlockCount((short) 0);
         accessor.chunkis$setRandomTickableBlockCount((short) 0);
@@ -124,10 +124,10 @@ final class ChunkRestoreBlockOperations {
      * @param section section being replaced
      * @return fresh air-backed section with original biome data
      */
-    private static ChunkSection createAirSectionPreservingBiomes(final ChunkSection section) {
-        return new ChunkSection(
-                new PalettedContainer<>(Blocks.AIR.getDefaultState(), BLOCK_STATE_PALETTE_PROVIDER),
-                section.getBiomeContainer()
+    private static LevelChunkSection createAirSectionPreservingBiomes(final LevelChunkSection section) {
+        return new LevelChunkSection(
+                new PalettedContainer<>(Blocks.AIR.defaultBlockState(), BLOCK_STATE_PALETTE_PROVIDER),
+                section.getBiomes()
         );
     }
 
@@ -135,7 +135,7 @@ final class ChunkRestoreBlockOperations {
      * Resolves the direct-storage reflective fast path.
      *
      * <p>If any lookup fails, restore keeps working by falling back to the slower public
-     * {@link PalettedContainer#swapUnsafe(int, int, int, Object)} path.</p>
+     * {@link PalettedContainer#getAndSetUnchecked(int, int, int, Object)} path.</p>
      *
      * @return reflection descriptor, enabled only when all required fields were found
      */
@@ -183,7 +183,7 @@ final class ChunkRestoreBlockOperations {
      * @param operationId         trace correlation ID
      * @return {@code true} if the block was applied
      */
-    static boolean applyBlockChange(final WorldChunk chunk,
+    static boolean applyBlockChange(final LevelChunk chunk,
             final ChunkPos chunkPosition,
             final int localX,
             final int localY,
@@ -191,7 +191,7 @@ final class ChunkRestoreBlockOperations {
             final BlockState state,
             final BlockPos worldPosition,
             @Nullable final BlockState previousState,
-            final ChunkSection[] sections,
+            final LevelChunkSection[] sections,
             final int bottomY,
             final int topYInclusive,
             final boolean tracePayloadWatches,
@@ -243,7 +243,7 @@ final class ChunkRestoreBlockOperations {
                 return false;
             }
 
-            final ChunkSection section = sections[sectionIndex];
+            final LevelChunkSection section = sections[sectionIndex];
 
             if (section == null) {
                 counters.recordNullSection();
@@ -307,7 +307,7 @@ final class ChunkRestoreBlockOperations {
      * @param chunk         target world chunk
      * @param worldPosition absolute coordinates pos
      */
-    private static void removeStaleBlockEntityData(final WorldChunk chunk, final BlockPos worldPosition) {
+    private static void removeStaleBlockEntityData(final LevelChunk chunk, final BlockPos worldPosition) {
         removePendingBlockEntityNbt(chunk, worldPosition);
         removeLiveBlockEntity(chunk, worldPosition);
     }
@@ -318,7 +318,7 @@ final class ChunkRestoreBlockOperations {
      * @param chunk         target world chunk
      * @param worldPosition absolute coordinates pos
      */
-    private static void removePendingBlockEntityNbt(final WorldChunk chunk, final BlockPos worldPosition) {
+    private static void removePendingBlockEntityNbt(final LevelChunk chunk, final BlockPos worldPosition) {
         ((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts()
                 .remove(worldPosition);
     }
@@ -329,7 +329,7 @@ final class ChunkRestoreBlockOperations {
      * @param chunk         target world chunk
      * @param worldPosition absolute coordinates pos
      */
-    private static void removeLiveBlockEntity(final WorldChunk chunk, final BlockPos worldPosition) {
+    private static void removeLiveBlockEntity(final LevelChunk chunk, final BlockPos worldPosition) {
         chunk.getBlockEntities()
                 .remove(worldPosition);
         chunk.removeBlockEntity(worldPosition);
@@ -352,7 +352,7 @@ final class ChunkRestoreBlockOperations {
     /**
      * Reuses per-section palette lookups during restore-time raw block writes.
      *
-     * <p>{@link PalettedContainer#swapUnsafe(int, int, int, Object)} still asks the section
+     * <p>{@link PalettedContainer#getAndSetUnchecked(int, int, int, Object)} still asks the section
      * palette to resolve the raw id for every single block. Restore replays many repeated
      * states per section, so caching those raw ids once per distinct state cuts the hot
      * path down to a storage write.</p>
@@ -374,7 +374,7 @@ final class ChunkRestoreBlockOperations {
         /**
          * Active raw palette storage of the bound container.
          */
-        private PaletteStorage storage;
+        private BitStorage storage;
         /**
          * Active palette resolving block states to raw ids for the bound container.
          */
@@ -436,7 +436,7 @@ final class ChunkRestoreBlockOperations {
          * @param state              state that should occupy every cell
          */
         void clearToState(
-                final ChunkSection section,
+                final LevelChunkSection section,
                 final int targetSectionIndex,
                 final BlockState state
         ) {
@@ -446,7 +446,7 @@ final class ChunkRestoreBlockOperations {
 
             final int paletteId = resolvePaletteId(state);
             if (paletteId == 0) {
-                Arrays.fill(storage.getData(), 0L);
+                Arrays.fill(storage.getRaw(), 0L);
                 return;
             }
             for (int i = 0; i < storage.getSize(); i++) {
@@ -458,7 +458,7 @@ final class ChunkRestoreBlockOperations {
          * Writes one restored block into the target section.
          *
          * <p>Uses the reflective fast path when available; otherwise falls back to
-         * {@link PalettedContainer#swapUnsafe(int, int, int, Object)}.</p>
+         * {@link PalettedContainer#getAndSetUnchecked(int, int, int, Object)}.</p>
          *
          * @param section            target chunk section
          * @param targetSectionIndex target section index inside the chunk section array
@@ -468,7 +468,7 @@ final class ChunkRestoreBlockOperations {
          * @param state              restored block state
          */
         void write(
-                final ChunkSection section,
+                final LevelChunkSection section,
                 final int targetSectionIndex,
                 final int localX,
                 final int localY,
@@ -480,7 +480,7 @@ final class ChunkRestoreBlockOperations {
                 bindSection(section, targetSectionIndex);
             }
             if (!PALETTED_CONTAINER_REFLECTION.available()) {
-                container.swapUnsafe(localX, localY, localZ, state);
+                container.getAndSetUnchecked(localX, localY, localZ, state);
                 return;
             }
 
@@ -512,10 +512,10 @@ final class ChunkRestoreBlockOperations {
          * @param section            target chunk section
          * @param targetSectionIndex section index within the chunk section array
          */
-        private void bindSection(final ChunkSection section, final int targetSectionIndex) {
+        private void bindSection(final LevelChunkSection section, final int targetSectionIndex) {
             rebinds++;
             sectionIndex = targetSectionIndex;
-            container = section.getBlockStateContainer();
+            container = section.getStates();
             paletteIds.clear();
             lastState = null;
             lastPaletteId = -1;
@@ -554,7 +554,7 @@ final class ChunkRestoreBlockOperations {
         private int resolvePaletteId(final BlockState state) {
             recordPaletteLookupKind();
             final Object previousDataRef = dataRef;
-            final int paletteId = palette.index(state, container);
+            final int paletteId = palette.idFor(state, container);
             assert PALETTED_CONTAINER_REFLECTION.dataField() != null;
             final Object currentDataRef = readField(PALETTED_CONTAINER_REFLECTION.dataField(), container);
             if (currentDataRef != previousDataRef) {
@@ -592,7 +592,7 @@ final class ChunkRestoreBlockOperations {
             assert PALETTED_CONTAINER_REFLECTION.dataField() != null;
             dataRef = readField(PALETTED_CONTAINER_REFLECTION.dataField(), container);
             assert PALETTED_CONTAINER_REFLECTION.storageField() != null;
-            storage = (PaletteStorage) readField(PALETTED_CONTAINER_REFLECTION.storageField(), dataRef);
+            storage = (BitStorage) readField(PALETTED_CONTAINER_REFLECTION.storageField(), dataRef);
             assert PALETTED_CONTAINER_REFLECTION.paletteField() != null;
             palette = (Palette<BlockState>) readField(PALETTED_CONTAINER_REFLECTION.paletteField(), dataRef);
         }

@@ -2,7 +2,7 @@ package io.liparakis.chunkis.world.restoration.nbt;
 
 import io.liparakis.chunkis.Chunkis;
 import java.io.IOException;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 
 /**
  * Reads persisted base-chunk metadata from Chunkis chunk metadata envelopes.
@@ -32,8 +32,8 @@ final class PersistedBaseChunkAccess {
      * @param chunkMetadata chunk metadata envelope object
      * @return copied NBT compound or null
      */
-    static NbtCompound extractCopiedBaseChunkNbt(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata) || metadata.isEmpty()) {
+    static CompoundTag extractCopiedBaseChunkNbt(final Object chunkMetadata) {
+        if (!(chunkMetadata instanceof CompoundTag metadata) || metadata.isEmpty()) {
             return null;
         }
 
@@ -48,7 +48,7 @@ final class PersistedBaseChunkAccess {
             }
         }
 
-        final NbtCompound baseChunkNbt = CisNbtUtil.getCompoundOrNull(metadata, CisNbtUtil.BASE_CHUNK_NBT_KEY);
+        final CompoundTag baseChunkNbt = CisNbtUtil.getCompoundOrNull(metadata, CisNbtUtil.BASE_CHUNK_NBT_KEY);
 
         return baseChunkNbt != null && !baseChunkNbt.isEmpty() ? baseChunkNbt.copy() : null;
     }
@@ -60,7 +60,7 @@ final class PersistedBaseChunkAccess {
      * @return true if base chunk compound exists
      */
     static boolean hasPersistedBaseChunkNbt(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata) || metadata.isEmpty()) {
+        if (!(chunkMetadata instanceof CompoundTag metadata) || metadata.isEmpty()) {
             return false;
         }
 
@@ -70,7 +70,7 @@ final class PersistedBaseChunkAccess {
             return true;
         }
 
-        final NbtCompound baseChunkNbt = CisNbtUtil.getCompoundOrNull(metadata, CisNbtUtil.BASE_CHUNK_NBT_KEY);
+        final CompoundTag baseChunkNbt = CisNbtUtil.getCompoundOrNull(metadata, CisNbtUtil.BASE_CHUNK_NBT_KEY);
 
         return baseChunkNbt != null && !baseChunkNbt.isEmpty();
     }

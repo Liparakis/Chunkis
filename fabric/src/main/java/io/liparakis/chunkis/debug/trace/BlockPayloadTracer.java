@@ -7,10 +7,10 @@ import io.liparakis.chunkis.debug.model.watch.PayloadWatchType;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -46,7 +46,7 @@ public final class BlockPayloadTracer {
      * @param message            optional diagnostic detail override message, may be null
      */
     public static void traceBlockSetStateEntered(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final BlockPos pos,
             final BlockState previous,
             final BlockState next,
@@ -84,8 +84,8 @@ public final class BlockPayloadTracer {
                         + " thread=" + Thread.currentThread()
                         .getName()
                         + " classification=" + WatchTraceEmitter.classifySetBlockStateEvent(chunk)
-                        + " authoritative=" + !chunk.getWorld()
-                        .isClient()
+                        + " authoritative=" + !chunk.getLevel()
+                        .isClientSide()
                         + " passiveContext=" + passiveCause
                         + " mutationSuppressed=" + mutationSuppressed
                         + " mutationAccepted=" + mutationAccepted
@@ -102,7 +102,7 @@ public final class BlockPayloadTracer {
      *
      * @param chunk target world chunk
      */
-    public static void traceCapturedBlocks(final WorldChunk chunk) {
+    public static void traceCapturedBlocks(final LevelChunk chunk) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -112,7 +112,7 @@ public final class BlockPayloadTracer {
 
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z)
+                new DebugChunkKey(chunkPos.x(), chunkPos.z())
         )) {
             if (target.type() != PayloadWatchType.BLOCK || !target.hasBlockCoordinates()) {
                 continue;

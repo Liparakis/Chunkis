@@ -14,23 +14,23 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.entity.ChestBlockEntity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.decoration.ArmorStandEntity;
-import net.minecraft.entity.passive.PigEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.pig.Pig;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Tick-driven round-trip scenario: fill an area of chunks with dense, varied terrain, then repeatedly
@@ -60,10 +60,10 @@ final class StressScenario implements StressRun {
      * Terrain blocks and their relative weights.
      */
     private static final BlockState[] TERRAIN = {
-            Blocks.STONE.getDefaultState(), Blocks.DEEPSLATE.getDefaultState(), Blocks.DIRT.getDefaultState(),
-            Blocks.ANDESITE.getDefaultState(), Blocks.GRANITE.getDefaultState(), Blocks.DIORITE.getDefaultState(),
-            Blocks.TUFF.getDefaultState(), Blocks.COAL_ORE.getDefaultState(), Blocks.IRON_ORE.getDefaultState(),
-            Blocks.COPPER_ORE.getDefaultState(), Blocks.AIR.getDefaultState(), Blocks.CLAY.getDefaultState()
+            Blocks.STONE.defaultBlockState(), Blocks.DEEPSLATE.defaultBlockState(), Blocks.DIRT.defaultBlockState(),
+            Blocks.ANDESITE.defaultBlockState(), Blocks.GRANITE.defaultBlockState(), Blocks.DIORITE.defaultBlockState(),
+            Blocks.TUFF.defaultBlockState(), Blocks.COAL_ORE.defaultBlockState(), Blocks.IRON_ORE.defaultBlockState(),
+            Blocks.COPPER_ORE.defaultBlockState(), Blocks.AIR.defaultBlockState(), Blocks.CLAY.defaultBlockState()
     };
 
     /**
@@ -75,8 +75,8 @@ final class StressScenario implements StressRun {
      * Blocks used for player-like edits.
      */
     private static final BlockState[] EDIT_BLOCKS = {
-            Blocks.AIR.getDefaultState(), Blocks.OAK_PLANKS.getDefaultState(), Blocks.COBBLESTONE.getDefaultState(),
-            Blocks.GLASS.getDefaultState(), Blocks.GLOWSTONE.getDefaultState(), Blocks.STONE_BRICKS.getDefaultState()
+            Blocks.AIR.defaultBlockState(), Blocks.OAK_PLANKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState(),
+            Blocks.GLASS.defaultBlockState(), Blocks.GLOWSTONE.defaultBlockState(), Blocks.STONE_BRICKS.defaultBlockState()
     };
 
     /**
@@ -116,12 +116,12 @@ final class StressScenario implements StressRun {
     /**
      * Gametest context, completed when the scenario ends.
      */
-    private final TestContext context;
+    private final GameTestHelper context;
 
     /**
      * Test world.
      */
-    private final ServerWorld world;
+    private final ServerLevel world;
 
     /**
      * Collected measurements.
@@ -221,15 +221,15 @@ final class StressScenario implements StressRun {
      *
      * @param context gametest context
      */
-    StressScenario(final TestContext context) {
+    StressScenario(final GameTestHelper context) {
         this.context = context;
-        this.world = context.getWorld();
+        this.world = context.getLevel();
         final ChunkPos anchor = new ChunkPos(Integer.getInteger("chunkis.stress.anchorX", 40_000),
                 Integer.getInteger("chunkis.stress.anchorZ", 40_000));
         int size = Integer.getInteger("chunkis.stress.size", 8);
         for (int dz = 0; dz < size; dz++) {
             for (int dx = 0; dx < size; dx++) {
-                chunks.add(new ChunkPos(anchor.x + dx, anchor.z + dz));
+                chunks.add(new ChunkPos(anchor.x() + dx, anchor.z() + dz));
             }
         }
         final int touched = Math.max(1, Math.min(chunks.size(),
@@ -240,7 +240,7 @@ final class StressScenario implements StressRun {
         assert world.getServer() != null;
         this.chunkisDir = ChunkisStoragePaths.computeRegionsDirectory(
                         world.getServer()
-                                .getSavePath(WorldSavePath.ROOT), world.getRegistryKey())
+                                .getWorldPath(LevelResource.ROOT), world.dimension())
                 .getParent();
     }
 
@@ -263,17 +263,17 @@ final class StressScenario implements StressRun {
             // As in a world created with Chunkis: the game test server skips the pre-launch step that marks it, and
             // without it untouched chunks would be saved to vanilla region files instead of regenerating.
             io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder
-                    .markAuthoritative(world.getRegistryKey());
+                    .markAuthoritative(world.dimension());
         }
         if (TICKS_PER_SECOND > 0) {
-            world.getServer().getTickManager().setTickRate(TICKS_PER_SECOND);
+            world.getServer().tickRateManager().setTickRate(TICKS_PER_SECOND);
             // Unpaced, the test server runs ticks faster than real time, and each one moves the next tick's due
             // time forward by a full tick: pacing from there would idle until the clock caught up, for minutes.
             ((io.liparakis.chunkis.gametest.mixin.MinecraftServerAccessor) world.getServer())
-                    .chunkis$setTickStartTimeNanos(net.minecraft.util.Util.getMeasuringTimeNano());
+                    .chunkis$setTickStartTimeNanos(net.minecraft.util.Util.getNanos());
             StressBenchGameTest.setPacingTicks(true);
         }
-        chunks.forEach(pos -> world.setChunkForced(pos.x, pos.z, true));
+        chunks.forEach(pos -> world.setChunkForced(pos.x(), pos.z(), true));
         Chunkis.LOGGER.info("Chunkis stress: {} chunks, {} measured rounds, {} edits per chunk", chunks.size(),
                 rounds, editsPerChunk);
     }
@@ -284,11 +284,11 @@ final class StressScenario implements StressRun {
      * @param loaded loaded chunk
      */
     @Override
-    public void onChunkLoad(final WorldChunk loaded) {
-        if (loaded.getWorld() != world) {
+    public void onChunkLoad(final LevelChunk loaded) {
+        if (loaded.getLevel() != world) {
             return;
         }
-        if (step == Step.RELOAD && pendingChunks.remove(loaded.getPos().toLong())) {
+        if (step == Step.RELOAD && pendingChunks.remove(loaded.getPos().pack())) {
             metrics.recordChunkLatency(StressMetrics.Phase.RELOAD, System.nanoTime() - stepStartNanos);
         }
     }
@@ -299,11 +299,11 @@ final class StressScenario implements StressRun {
      * @param unloaded unloaded chunk
      */
     @Override
-    public void onChunkUnload(final WorldChunk unloaded) {
-        if (unloaded.getWorld() != world) {
+    public void onChunkUnload(final LevelChunk unloaded) {
+        if (unloaded.getLevel() != world) {
             return;
         }
-        if (step == Step.UNLOAD && pendingChunks.remove(unloaded.getPos().toLong())) {
+        if (step == Step.UNLOAD && pendingChunks.remove(unloaded.getPos().pack())) {
             metrics.recordChunkLatency(StressMetrics.Phase.UNLOAD, System.nanoTime() - stepStartNanos);
         }
     }
@@ -319,10 +319,10 @@ final class StressScenario implements StressRun {
         switch (step) {
             case WAIT_INITIAL_LOAD -> {
                 if (chunks.stream()
-                        .allMatch(pos -> world.getChunkManager()
-                                .isChunkLoaded(pos.x, pos.z))) {
+                        .allMatch(pos -> world.getChunkSource()
+                                .hasChunk(pos.x(), pos.z()))) {
                     touchedChunks.forEach(this::populate);
-                    world.getChunkManager()
+                    world.getChunkSource()
                             .save(false);
                     AsyncCisSaveManager.flushAndClose(world);
                     enter(Step.START_ROUND);
@@ -335,7 +335,7 @@ final class StressScenario implements StressRun {
                 }
                 resetPending();
                 // Ticket-only (no blocking getChunk), so loading is asynchronous like player movement.
-                chunks.forEach(pos -> world.getChunkManager().setChunkForced(pos, false));
+                chunks.forEach(pos -> world.getChunkSource().updateChunkForced(pos, false));
                 metrics.setPhase(StressMetrics.Phase.UNLOAD);
                 enter(Step.UNLOAD);
             }
@@ -344,7 +344,7 @@ final class StressScenario implements StressRun {
                     metrics.recordPhaseLength(StressMetrics.Phase.UNLOAD, tick - stepStartTick,
                             System.nanoTime() - stepStartNanos);
                     resetPending();
-                    chunks.forEach(pos -> world.getChunkManager().setChunkForced(pos, true));
+                    chunks.forEach(pos -> world.getChunkSource().updateChunkForced(pos, true));
                     metrics.setPhase(StressMetrics.Phase.RELOAD);
                     enter(Step.RELOAD);
                 }
@@ -370,7 +370,7 @@ final class StressScenario implements StressRun {
                     edit(touchedChunks.get(editIndex++));
                 }
                 if (editIndex >= touchedChunks.size()) {
-                    world.getChunkManager()
+                    world.getChunkSource()
                             .save(false);
                     metrics.setPhase(StressMetrics.Phase.SAVE);
                     enter(Step.SAVE);
@@ -397,8 +397,8 @@ final class StressScenario implements StressRun {
      * @return folders measured for vanilla disk use
      */
     private List<Path> vanillaDirs() {
-        final Path dimensionRoot = net.minecraft.world.dimension.DimensionType.getSaveDirectory(
-                world.getRegistryKey(), world.getServer().getSavePath(WorldSavePath.ROOT));
+        final Path dimensionRoot = net.minecraft.world.level.dimension.DimensionType.getStorageFolder(
+                world.dimension(), world.getServer().getWorldPath(LevelResource.ROOT));
         return List.of(dimensionRoot.resolve("region"), dimensionRoot.resolve("entities"));
     }
 
@@ -409,7 +409,7 @@ final class StressScenario implements StressRun {
      * @return true once the chunk's accessible future has completed
      */
     private boolean isAccessible(final long key) {
-        return LoadedChunks.getIfAccessible(world, ChunkPos.getPackedX(key), ChunkPos.getPackedZ(key)) != null;
+        return LoadedChunks.getIfAccessible(world, ChunkPos.getX(key), ChunkPos.getZ(key)) != null;
     }
 
     /**
@@ -430,7 +430,7 @@ final class StressScenario implements StressRun {
      */
     private void resetPending() {
         pendingChunks.clear();
-        chunks.forEach(pos -> pendingChunks.add(pos.toLong()));
+        chunks.forEach(pos -> pendingChunks.add(pos.pack()));
     }
 
     /**
@@ -477,7 +477,7 @@ final class StressScenario implements StressRun {
         config.addProperty("fillHeight", FILL_HEIGHT);
         config.addProperty("ticksPerSecond", TICKS_PER_SECOND);
         config.addProperty("storage", Boolean.getBoolean("chunkis.stress.vanilla") ? "vanilla" : "chunkis");
-        config.addProperty("dimension", world.getRegistryKey().getValue().toString());
+        config.addProperty("dimension", world.dimension().identifier().toString());
         config.addProperty("natural", natural);
         // Reads every stored chunk, about 10 s; a paired A/B does not use the result.
         if (!Boolean.getBoolean("chunkis.stress.skipSizes")) {
@@ -489,8 +489,8 @@ final class StressScenario implements StressRun {
         final Path report = metrics.writeReport(Path.of("chunkis-stress"), config, chunkisDir, retainedHeap);
         Chunkis.LOGGER.info("Chunkis stress: report written to {}", report.toAbsolutePath());
         StressBenchGameTest.setPacingTicks(false);
-        chunks.forEach(pos -> world.setChunkForced(pos.x, pos.z, false));
-        context.complete();
+        chunks.forEach(pos -> world.setChunkForced(pos.x(), pos.z(), false));
+        context.succeed();
     }
 
     /**
@@ -499,43 +499,43 @@ final class StressScenario implements StressRun {
      * @param pos chunk position
      */
     private void populate(final ChunkPos pos) {
-        final WorldChunk chunk = world.getChunk(pos.x, pos.z);
-        final int surfaceY = chunk.sampleHeightmap(Heightmap.Type.MOTION_BLOCKING, 8, 8) + 1;
+        final LevelChunk chunk = world.getChunk(pos.x(), pos.z());
+        final int surfaceY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, 8, 8) + 1;
         // Natural: the generated terrain stays; edits land in the 64 blocks under the surface, the base on top.
         final int groundY = natural ? surfaceY - FILL_HEIGHT : surfaceY;
-        groundYByChunk.put(pos.toLong(), groundY);
+        groundYByChunk.put(pos.pack(), groundY);
         for (int y = groundY; !natural && y < groundY + FILL_HEIGHT; y++) {
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++) {
-                    world.setBlockState(pos.getBlockPos(x, y, z), weightedTerrain(), Block.NOTIFY_LISTENERS);
+                    world.setBlock(pos.getBlockAt(x, y, z), weightedTerrain(), Block.UPDATE_CLIENTS);
                 }
             }
         }
         final int topY = groundY + FILL_HEIGHT;
         for (int i = 0; i < 4; i++) {
-            final BlockPos chestPos = pos.getBlockPos(2 + i * 3, topY, 2);
-            world.setBlockState(chestPos, Blocks.CHEST.getDefaultState(), Block.NOTIFY_LISTENERS);
+            final BlockPos chestPos = pos.getBlockAt(2 + i * 3, topY, 2);
+            world.setBlock(chestPos, Blocks.CHEST.defaultBlockState(), Block.UPDATE_CLIENTS);
             if (world.getBlockEntity(chestPos) instanceof ChestBlockEntity chest) {
                 for (int slot = 0; slot < 27; slot += 2) {
-                    chest.setStack(slot, new ItemStack(slot % 4 == 0 ? Items.COBBLESTONE : Items.IRON_INGOT,
+                    chest.setItem(slot, new ItemStack(slot % 4 == 0 ? Items.COBBLESTONE : Items.IRON_INGOT,
                             1 + random.nextInt(64)));
                 }
             }
         }
-        world.setBlockState(pos.getBlockPos(4, topY, 10), Blocks.FURNACE.getDefaultState(), Block.NOTIFY_LISTENERS);
-        world.setBlockState(pos.getBlockPos(10, topY, 10), Blocks.FURNACE.getDefaultState(), Block.NOTIFY_LISTENERS);
+        world.setBlock(pos.getBlockAt(4, topY, 10), Blocks.FURNACE.defaultBlockState(), Block.UPDATE_CLIENTS);
+        world.setBlock(pos.getBlockAt(10, topY, 10), Blocks.FURNACE.defaultBlockState(), Block.UPDATE_CLIENTS);
         for (int i = 0; i < 2; i++) {
-            final ArmorStandEntity stand = EntityType.ARMOR_STAND.create(world, SpawnReason.COMMAND);
+            final ArmorStand stand = EntityType.ARMOR_STAND.create(world, EntitySpawnReason.COMMAND);
             if (stand != null) {
-                stand.refreshPositionAndAngles(pos.getStartX() + 4.5 + i * 6, topY + 1, pos.getStartZ() + 13.5, 0, 0);
-                world.spawnEntity(stand);
+                stand.snapTo(pos.getMinBlockX() + 4.5 + i * 6, topY + 1, pos.getMinBlockZ() + 13.5, 0, 0);
+                world.addFreshEntity(stand);
             }
-            final PigEntity pig = EntityType.PIG.create(world, SpawnReason.COMMAND);
+            final Pig pig = EntityType.PIG.create(world, EntitySpawnReason.COMMAND);
             if (pig != null) {
-                pig.refreshPositionAndAngles(pos.getStartX() + 7.5 + i * 2, topY + 1, pos.getStartZ() + 7.5, 0, 0);
-                pig.setAiDisabled(true);
-                pig.setPersistent();
-                world.spawnEntity(pig);
+                pig.snapTo(pos.getMinBlockX() + 7.5 + i * 2, topY + 1, pos.getMinBlockZ() + 7.5, 0, 0);
+                pig.setNoAi(true);
+                pig.setPersistenceRequired();
+                world.addFreshEntity(pig);
             }
         }
     }
@@ -546,11 +546,11 @@ final class StressScenario implements StressRun {
      * @param pos chunk position
      */
     private void edit(final ChunkPos pos) {
-        final int groundY = groundYByChunk.get(pos.toLong());
+        final int groundY = groundYByChunk.get(pos.pack());
         for (int i = 0; i < editsPerChunk; i++) {
-            final BlockPos target = pos.getBlockPos(random.nextInt(16), groundY + random.nextInt(FILL_HEIGHT),
+            final BlockPos target = pos.getBlockAt(random.nextInt(16), groundY + random.nextInt(FILL_HEIGHT),
                     random.nextInt(16));
-            world.setBlockState(target, EDIT_BLOCKS[random.nextInt(EDIT_BLOCKS.length)], Block.NOTIFY_ALL);
+            world.setBlock(target, EDIT_BLOCKS[random.nextInt(EDIT_BLOCKS.length)], Block.UPDATE_ALL);
         }
         final BlockState cubeBlock = EDIT_BLOCKS[1 + random.nextInt(EDIT_BLOCKS.length - 1)];
         final int cx = random.nextInt(12);
@@ -559,14 +559,14 @@ final class StressScenario implements StressRun {
         for (int y = 0; y < 4; y++) {
             for (int z = 0; z < 4; z++) {
                 for (int x = 0; x < 4; x++) {
-                    world.setBlockState(pos.getBlockPos(cx + x, cy + y, cz + z), cubeBlock, Block.NOTIFY_ALL);
+                    world.setBlock(pos.getBlockAt(cx + x, cy + y, cz + z), cubeBlock, Block.UPDATE_ALL);
                 }
             }
         }
-        final BlockPos chestPos = pos.getBlockPos(2, groundY + FILL_HEIGHT, 2);
+        final BlockPos chestPos = pos.getBlockAt(2, groundY + FILL_HEIGHT, 2);
         if (world.getBlockEntity(chestPos) instanceof ChestBlockEntity chest) {
-            chest.setStack(random.nextInt(27), new ItemStack(Items.DIAMOND, 1 + random.nextInt(8)));
-            chest.markDirty();
+            chest.setItem(random.nextInt(27), new ItemStack(Items.DIAMOND, 1 + random.nextInt(8)));
+            chest.setChanged();
         }
     }
 

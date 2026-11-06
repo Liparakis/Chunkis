@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.mixin.accessor;
 
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * Reads vanilla's own unsaved flag, which {@code needsSaving()} cannot show since Chunkis also reports its dirty
  * delta through it.
  */
-@Mixin(Chunk.class)
+@Mixin(ChunkAccess.class)
 public interface ChunkSaveFlagAccessor {
 
     /**
@@ -17,6 +17,6 @@ public interface ChunkSaveFlagAccessor {
      *
      * @return whether vanilla considers the chunk changed since its last save
      */
-    @Accessor("needsSaving")
+    @Accessor("unsaved")
     boolean chunkis$vanillaNeedsSaving();
 }

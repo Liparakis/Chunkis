@@ -9,14 +9,14 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Dimension-local index of chunks that currently contain nether portal blocks.
@@ -35,7 +35,7 @@ public final class PortalChunkIndexManager {
     /**
      * Concurrent mapping of world dimensions to their local chunk indices.
      */
-    private static final ConcurrentHashMap<net.minecraft.registry.RegistryKey<World>, PortalChunkIndex> INDICES =
+    private static final ConcurrentHashMap<net.minecraft.resources.ResourceKey<Level>, PortalChunkIndex> INDICES =
             new ConcurrentHashMap<>();
 
     /**
@@ -53,7 +53,7 @@ public final class PortalChunkIndexManager {
      * @param world server world reference
      * @param chunk world chunk reference to analyze
      */
-    public static void updateChunk(final ServerWorld world, final WorldChunk chunk) {
+    public static void updateChunk(final ServerLevel world, final LevelChunk chunk) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(chunk, "chunk");
 
@@ -68,7 +68,7 @@ public final class PortalChunkIndexManager {
      * @param hasPortalBlocks true if chunk has portal blocks
      */
     public static void updateChunk(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos pos,
             final boolean hasPortalBlocks
     ) {
@@ -86,7 +86,7 @@ public final class PortalChunkIndexManager {
      * @return set of ChunkPos containing portals
      */
     public static Set<ChunkPos> getPortalChunksInRange(
-            final ServerWorld world,
+            final ServerLevel world,
             final int minChunkX,
             final int maxChunkX,
             final int minChunkZ,
@@ -100,12 +100,12 @@ public final class PortalChunkIndexManager {
      *
      * @param world server world reference, may be null
      */
-    public static void close(final ServerWorld world) {
+    public static void close(final ServerLevel world) {
         if (world == null) {
             return;
         }
 
-        final PortalChunkIndex index = INDICES.remove(world.getRegistryKey());
+        final PortalChunkIndex index = INDICES.remove(world.dimension());
         if (index != null) {
             index.close();
         }
@@ -135,9 +135,9 @@ public final class PortalChunkIndexManager {
      * @param world server world reference
      * @return resolved PortalChunkIndex helper
      */
-    private static PortalChunkIndex getIndex(final ServerWorld world) {
+    private static PortalChunkIndex getIndex(final ServerLevel world) {
         return INDICES.computeIfAbsent(
-                world.getRegistryKey(),
+                world.dimension(),
                 ignored -> new PortalChunkIndex(resolveIndexPath(world))
         );
     }
@@ -148,11 +148,11 @@ public final class PortalChunkIndexManager {
      * @param world server world reference
      * @return resolved Path string
      */
-    private static Path resolveIndexPath(final ServerWorld world) {
+    private static Path resolveIndexPath(final ServerLevel world) {
         return ChunkisStoragePaths.computePortalIndexFile(
                 Objects.requireNonNull(world.getServer())
-                        .getSavePath(WorldSavePath.ROOT),
-                world.getRegistryKey()
+                        .getWorldPath(LevelResource.ROOT),
+                world.dimension()
         );
     }
 
@@ -162,11 +162,11 @@ public final class PortalChunkIndexManager {
      * @param chunk world chunk reference to analyze
      * @return true if portals were found
      */
-    private static boolean chunkHasPortalBlocks(final WorldChunk chunk) {
+    private static boolean chunkHasPortalBlocks(final LevelChunk chunk) {
         final boolean[] found = {false};
-        final java.util.function.Predicate<BlockState> portalPredicate = state -> state.isOf(Blocks.NETHER_PORTAL);
+        final java.util.function.Predicate<BlockState> portalPredicate = state -> state.is(Blocks.NETHER_PORTAL);
 
-        chunk.forEachBlockMatchingPredicate(portalPredicate, (pos, state) -> found[0] = true);
+        chunk.findBlocks(portalPredicate, (pos, state) -> found[0] = true);
         return found[0];
     }
 
@@ -210,7 +210,7 @@ public final class PortalChunkIndexManager {
         private static LongOpenHashSet load(final Path path) {
             final LongOpenHashSet chunks = new LongOpenHashSet();
 
-            final NbtCompound root = PortalNbtFiles.read(path, "portal index");
+            final CompoundTag root = PortalNbtFiles.read(path, "portal index");
             if (root != null) {
                 root.getLongArray(PORTAL_CHUNKS_KEY)
                         .ifPresent(values -> {
@@ -230,7 +230,7 @@ public final class PortalChunkIndexManager {
          * @param hasPortalBlocks true if portal blocks are present
          */
         synchronized void update(final ChunkPos pos, final boolean hasPortalBlocks) {
-            final long key = pos.toLong();
+            final long key = pos.pack();
             final boolean changed = hasPortalBlocks
                     ? portalChunks.add(key)
                     : portalChunks.remove(key);
@@ -262,7 +262,7 @@ public final class PortalChunkIndexManager {
 
             for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
                 for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
-                    final long key = ChunkPos.toLong(chunkX, chunkZ);
+                    final long key = ChunkPos.pack(chunkX, chunkZ);
                     if (portalChunks.contains(key)) {
                         chunks.add(new ChunkPos(chunkX, chunkZ));
                     }
@@ -295,7 +295,7 @@ public final class PortalChunkIndexManager {
          */
         private void save() {
             try {
-                final NbtCompound root = new NbtCompound();
+                final CompoundTag root = new CompoundTag();
                 root.putLongArray(PORTAL_CHUNKS_KEY, portalChunks.toLongArray());
                 PortalNbtFiles.write(path, root);
                 dirty = false;

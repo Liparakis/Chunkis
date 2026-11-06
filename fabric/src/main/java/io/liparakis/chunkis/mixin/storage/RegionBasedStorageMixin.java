@@ -3,8 +3,8 @@ package io.liparakis.chunkis.mixin.storage;
 import io.liparakis.chunkis.Chunkis;
 import java.io.IOException;
 import java.nio.file.Path;
-import net.minecraft.world.storage.RegionBasedStorage;
-import net.minecraft.world.storage.StorageKey;
+import net.minecraft.world.level.chunk.storage.RegionFileStorage;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * CIS_AUTHORITATIVE guard for vanilla chunk RegionBasedStorage.
  * Uses filesystem path instead of worldKey because RegionBasedStorage has no dimension context.
  */
-@Mixin(RegionBasedStorage.class)
+@Mixin(RegionFileStorage.class)
 public abstract class RegionBasedStorageMixin {
 
     /**
@@ -29,7 +29,7 @@ public abstract class RegionBasedStorageMixin {
      * when it is some other region storage (POI, etc.) that Chunkis never blocks.
      */
     @Unique
-    private net.minecraft.registry.RegistryKey<net.minecraft.world.World> chunkis$guardedDimension;
+    private net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> chunkis$guardedDimension;
 
     /**
      * Derives the owning MCA filename for a chunk position.
@@ -38,8 +38,8 @@ public abstract class RegionBasedStorageMixin {
      * @return region filename in {@code r.<x>.<z>.mca} form
      */
     @Unique
-    private static String chunkis$regionFileName(final net.minecraft.util.math.ChunkPos pos) {
-        return "r." + (pos.x >> 5) + "." + (pos.z >> 5) + ".mca";
+    private static String chunkis$regionFileName(final net.minecraft.world.level.ChunkPos pos) {
+        return "r." + (pos.x() >> 5) + "." + (pos.z() >> 5) + ".mca";
     }
 
     /**
@@ -51,8 +51,8 @@ public abstract class RegionBasedStorageMixin {
      * @param sync       whether vanilla opened the storage in sync mode
      * @param ci         mixin callback
      */
-    @Inject(method = "<init>(Lnet/minecraft/world/storage/StorageKey;Ljava/nio/file/Path;Z)V", at = @At("RETURN"))
-    private void chunkis$captureDirectory(final StorageKey storageKey,
+    @Inject(method = "<init>(Lnet/minecraft/world/level/chunk/storage/RegionStorageInfo;Ljava/nio/file/Path;Z)V", at = @At("RETURN"))
+    private void chunkis$captureDirectory(final RegionStorageInfo storageKey,
             final Path directory,
             final boolean sync,
             final CallbackInfo ci) {
@@ -72,7 +72,7 @@ public abstract class RegionBasedStorageMixin {
         Chunkis.LOGGER.info(
                 "REGION_BASED_STORAGE_INIT path={} classifiedAs={} resolvedDimension={} state={} authoritative={}",
                 directory, cls,
-                dimOpt.map(k -> k.getValue()
+                dimOpt.map(k -> k.identifier()
                                 .toString())
                         .orElse("unknown"),
                 dimOpt.map(k ->
@@ -92,11 +92,11 @@ public abstract class RegionBasedStorageMixin {
      * @param ci  mixin callback
      * @throws IOException if the diagnostic size probe fails
      */
-    @Inject(method = "write(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/NbtCompound;)V",
+    @Inject(method = "write(Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/nbt/CompoundTag;)V",
             at = @At("HEAD"), cancellable = true)
     private void chunkis$blockCisAuthoritativeWrite(
-            final net.minecraft.util.math.ChunkPos pos,
-            final net.minecraft.nbt.NbtCompound nbt,
+            final net.minecraft.world.level.ChunkPos pos,
+            final net.minecraft.nbt.CompoundTag nbt,
             final CallbackInfo ci
     ) throws IOException {
         if (chunkis$shouldBlockVanillaStorage()) {
@@ -120,11 +120,11 @@ public abstract class RegionBasedStorageMixin {
      * @param pos chunk position being read
      * @param cir mixin callback
      */
-    @Inject(method = "getTagAt(Lnet/minecraft/util/math/ChunkPos;)Lnet/minecraft/nbt/NbtCompound;",
+    @Inject(method = "read(Lnet/minecraft/world/level/ChunkPos;)Lnet/minecraft/nbt/CompoundTag;",
             at = @At("HEAD"), cancellable = true)
     private void chunkis$blockCisAuthoritativeRead(
-            final net.minecraft.util.math.ChunkPos pos,
-            final org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<net.minecraft.nbt.NbtCompound> cir
+            final net.minecraft.world.level.ChunkPos pos,
+            final org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<net.minecraft.nbt.CompoundTag> cir
     ) {
         if (chunkis$shouldBlockVanillaStorage()) {
             Chunkis.LOGGER.debug("CIS read redirection active for {} pos={}", chunkis$directory, pos);
@@ -139,11 +139,11 @@ public abstract class RegionBasedStorageMixin {
      * @param scanner vanilla NBT scanner
      * @param ci      mixin callback
      */
-    @Inject(method = "scanChunk(Lnet/minecraft/util/math/ChunkPos;Lnet/minecraft/nbt/scanner/NbtScanner;)V",
+    @Inject(method = "scanChunk(Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/nbt/StreamTagVisitor;)V",
             at = @At("HEAD"), cancellable = true)
     private void chunkis$blockCisAuthoritativeScan(
-            final net.minecraft.util.math.ChunkPos pos,
-            final net.minecraft.nbt.scanner.NbtScanner scanner,
+            final net.minecraft.world.level.ChunkPos pos,
+            final net.minecraft.nbt.StreamTagVisitor scanner,
             final CallbackInfo ci
     ) {
         if (chunkis$shouldBlockVanillaStorage()) {

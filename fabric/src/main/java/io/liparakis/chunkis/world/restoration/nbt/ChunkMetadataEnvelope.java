@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 
 /**
  * Builder for the persisted Chunkis chunk-metadata envelope.
@@ -29,14 +29,14 @@ final class ChunkMetadataEnvelope {
      * @param portalChunk                 true if target is portal chunk
      * @return NBT compound containing envelope structure
      */
-    static NbtCompound create(
-            final NbtCompound structureData,
+    static CompoundTag create(
+            final CompoundTag structureData,
             final boolean suppressInitialRepopulation,
             final boolean fullBlockBaseline,
-            final NbtCompound baseChunkNbt,
+            final CompoundTag baseChunkNbt,
             final boolean portalChunk
     ) {
-        final NbtCompound metadata = new NbtCompound();
+        final CompoundTag metadata = new CompoundTag();
 
         if (structureData != null && !structureData.isEmpty()) {
             metadata.put(CisNbtUtil.STRUCTURES_KEY, structureData);
@@ -66,12 +66,12 @@ final class ChunkMetadataEnvelope {
      * @param portalChunk                 portal chunk mapping
      * @return NBT compound containing flags configuration sub-nest
      */
-    private static NbtCompound createChunkisMetadata(
+    private static CompoundTag createChunkisMetadata(
             final boolean suppressInitialRepopulation,
             final boolean fullBlockBaseline,
             final boolean portalChunk
     ) {
-        final NbtCompound chunkisMetadata = new NbtCompound();
+        final CompoundTag chunkisMetadata = new CompoundTag();
         chunkisMetadata.putBoolean(
                 CisNbtUtil.SUPPRESS_INITIAL_REPOPULATION_KEY,
                 suppressInitialRepopulation

@@ -3,8 +3,8 @@ package io.liparakis.chunkis.mixin.world.tick;
 import io.liparakis.chunkis.world.tracking.settle.GenerationSettling;
 import io.liparakis.chunkis.world.tracking.settle.GenerationTickDuck;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import net.minecraft.world.tick.ChunkTickScheduler;
-import net.minecraft.world.tick.OrderedTick;
+import net.minecraft.world.ticks.LevelChunkTicks;
+import net.minecraft.world.ticks.ScheduledTick;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Keeps which of a chunk's pending ticks come from generation; see {@link GenerationSettling}.
  */
-@Mixin(ChunkTickScheduler.class)
+@Mixin(LevelChunkTicks.class)
 public class ChunkTickSchedulerMixin implements GenerationTickDuck {
 
     /**
@@ -39,8 +39,8 @@ public class ChunkTickSchedulerMixin implements GenerationTickDuck {
      * @param orderedTick tick being scheduled
      * @param ci          callback info
      */
-    @Inject(method = "scheduleTick", at = @At("HEAD"))
-    private void chunkis$recordTickOrigin(final OrderedTick<?> orderedTick, final CallbackInfo ci) {
+    @Inject(method = "schedule", at = @At("HEAD"))
+    private void chunkis$recordTickOrigin(final ScheduledTick<?> orderedTick, final CallbackInfo ci) {
         GenerationSettling.onScheduled(this, orderedTick.pos().asLong());
     }
 }

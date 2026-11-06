@@ -9,14 +9,14 @@ import io.liparakis.chunkis.command.report.StorageReportRenderer;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.util.Util;
-import net.minecraft.command.permission.Permission;
-import net.minecraft.command.permission.PermissionLevel;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
 
 /**
  * Builds the command for reporting physical and logical Chunkis storage usage.
@@ -44,8 +44,8 @@ public final class StorageReportCommand {
      *
      * @return the storage command subtree
      */
-    static LiteralArgumentBuilder<ServerCommandSource> createNode() {
-        return CommandManager.literal("storage")
+    static LiteralArgumentBuilder<CommandSourceStack> createNode() {
+        return Commands.literal("storage")
                 .then(reportNode("report"));
     }
 
@@ -54,7 +54,7 @@ public final class StorageReportCommand {
      *
      * @param dispatcher command dispatcher registry
      */
-    static void registerLegacy(final CommandDispatcher<ServerCommandSource> dispatcher) {
+    static void registerLegacy(final CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(reportNode("chunkis_storage_report"));
     }
 
@@ -64,12 +64,12 @@ public final class StorageReportCommand {
      * @param literal command literal to use
      * @return storage-report command node
      */
-    private static LiteralArgumentBuilder<ServerCommandSource> reportNode(final String literal) {
-        return CommandManager.literal(literal)
-                .requires(source -> source.getPermissions()
-                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+    private static LiteralArgumentBuilder<CommandSourceStack> reportNode(final String literal) {
+        return Commands.literal(literal)
+                .requires(source -> source.permissions()
+                        .hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
                 .executes(context -> run(context, DEFAULT_TOP_REGIONS))
-                .then(CommandManager.argument("topRegions", IntegerArgumentType.integer(1, 32))
+                .then(Commands.argument("topRegions", IntegerArgumentType.integer(1, 32))
                         .executes(context -> run(
                                 context,
                                 IntegerArgumentType.getInteger(context, "topRegions")
@@ -87,25 +87,25 @@ public final class StorageReportCommand {
      * @param topRegions number of top region sizing entries to highlight
      * @return 1 once the report has been started
      */
-    private static int run(final CommandContext<ServerCommandSource> context, final int topRegions) {
-        final ServerCommandSource source = context.getSource();
-        final ServerWorld world = source.getWorld();
+    private static int run(final CommandContext<CommandSourceStack> context, final int topRegions) {
+        final CommandSourceStack source = context.getSource();
+        final ServerLevel world = source.getLevel();
         final MinecraftServer server = source.getServer();
 
-        source.sendFeedback(() -> Text.literal("[Chunkis] Building storage report in the background..."), false);
+        source.sendSuccess(() -> Component.literal("[Chunkis] Building storage report in the background..."), false);
         CompletableFuture.supplyAsync(() -> {
                     try {
                         return StorageMetricsAnalyzer.inspectWorld(world, topRegions);
                     } catch (final IOException e) {
                         throw new CompletionException(e);
                     }
-                }, Util.getIoWorkerExecutor())
+                }, Util.ioPool())
                 .whenComplete((report, error) -> server.execute(() -> {
                     if (error != null) {
                         final Throwable cause = error instanceof CompletionException && error.getCause() != null
                                 ? error.getCause()
                                 : error;
-                        source.sendError(Text.literal("[Chunkis] Storage report failed: " + cause.getMessage()));
+                        source.sendFailure(Component.literal("[Chunkis] Storage report failed: " + cause.getMessage()));
                         return;
                     }
                     StorageReportRenderer.sendReport(source, world, report, topRegions);

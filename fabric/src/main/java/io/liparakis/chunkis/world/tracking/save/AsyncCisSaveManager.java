@@ -1,7 +1,6 @@
 package io.liparakis.chunkis.world.tracking.save;
 
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import net.minecraft.world.chunk.PalettedContainer;
 import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
@@ -17,14 +16,15 @@ import io.liparakis.chunkis.world.entity.capture.StoredEntityFingerprints;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.PalettedContainer;
 
 /**
  * Per-dimension facade for coalesced async CIS saves.
@@ -43,7 +43,7 @@ public final class AsyncCisSaveManager {
     /**
      * Backing registry mapping active async workers per dimension world key.
      */
-    private static final ConcurrentHashMap<RegistryKey<World>, AsyncCisSaveWorker> WORKERS =
+    private static final ConcurrentHashMap<ResourceKey<Level>, AsyncCisSaveWorker> WORKERS =
             new ConcurrentHashMap<>();
 
     /**
@@ -53,25 +53,6 @@ public final class AsyncCisSaveManager {
      */
     private AsyncCisSaveManager() {
         throw new AssertionError("Utility class");
-    }
-
-    /**
-     * Snapshots a live delta and queues it for background persistence.
-     *
-     * @param world       world that owns the chunk
-     * @param storage     storage instance used to encode and persist the snapshot
-     * @param pos         chunk position being saved
-     * @param liveDelta   mutable live delta to snapshot
-     * @param operationId trace correlation id
-     */
-    public static void submit(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
-            final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> liveDelta,
-            final String operationId
-    ) {
-        submit(world, storage, pos, liveDelta, null, false, operationId);
     }
 
     /**
@@ -88,10 +69,10 @@ public final class AsyncCisSaveManager {
      * @param operationId    trace correlation id
      */
     public static void submit(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ServerLevel world,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> liveDelta,
+            final ChunkDelta<BlockState, CompoundTag> liveDelta,
             final PalettedContainer<BlockState>[] deferredBlocks,
             final boolean unloading,
             final String operationId
@@ -105,12 +86,12 @@ public final class AsyncCisSaveManager {
         final long generation = liveDelta.getMutationGeneration();
         // Block-entity and entity payloads are only ever replaced in a delta, never changed in place, so the
         // snapshot shares them; the metadata is copied, all but the parts a capture replaces whole.
-        final UnaryOperator<NbtCompound> sharePayloads = UnaryOperator.identity();
-        final ChunkDeltaView<BlockState, NbtCompound> snapshot;
+        final UnaryOperator<CompoundTag> sharePayloads = UnaryOperator.identity();
+        final ChunkDeltaView<BlockState, CompoundTag> snapshot;
         if (deferredBlocks != null) {
             snapshot = new DeferredBlocksSnapshotView(
                     liveDelta.snapshotViewWithoutBlocks(sharePayloads, CisNbtUtil::copySharingCapturedState), deferredBlocks,
-                    world.getBottomY(), liveDelta.getWrittenBlocksPrint(), unloading);
+                    world.getMinY(), liveDelta.getWrittenBlocksPrint(), unloading);
         } else if (liveDelta.isBlockPayloadReleased()) {
             // No chunk to copy the blocks from (it unloaded): they are the stored entry's plus the recorded edits,
             // read on the worker.
@@ -127,8 +108,8 @@ public final class AsyncCisSaveManager {
                 ChunkTraceReason.NONE,
                 SUBMIT_SOURCE,
                 "queued async save generation " + generation,
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 DebugChunkKeys.of(pos),
                 null,
@@ -137,8 +118,8 @@ public final class AsyncCisSaveManager {
                 null
         );
         PayloadWatchTracer.traceDeltaStage(
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 pos,
                 snapshot,
@@ -169,14 +150,14 @@ public final class AsyncCisSaveManager {
      *
      * @param world the world whose worker should be flushed; {@code null} is a no-op
      */
-    public static void flushAndClose(final ServerWorld world) {
+    public static void flushAndClose(final ServerLevel world) {
         if (world == null) {
             return;
         }
-        final AsyncCisSaveWorker worker = WORKERS.remove(world.getRegistryKey());
+        final AsyncCisSaveWorker worker = WORKERS.remove(world.dimension());
         if (worker != null) {
             worker.close();
-            if (world.getServer() != null && world.getServer().isOnThread()) {
+            if (world.getServer().isSameThread()) {
                 worker.applyWrittenCompletions();
             }
         }
@@ -197,11 +178,11 @@ public final class AsyncCisSaveManager {
      * @param world world whose queue should be inspected; {@code null} returns an empty map
      * @return queued saves keyed by chunk position
      */
-    public static Map<DebugChunkKey, PendingSaveSnapshot> snapshot(final ServerWorld world) {
+    public static Map<DebugChunkKey, PendingSaveSnapshot> snapshot(final ServerLevel world) {
         if (world == null) {
             return Map.of();
         }
-        final AsyncCisSaveWorker worker = WORKERS.get(world.getRegistryKey());
+        final AsyncCisSaveWorker worker = WORKERS.get(world.dimension());
         return worker == null ? Map.of() : worker.snapshot();
     }
 
@@ -211,8 +192,8 @@ public final class AsyncCisSaveManager {
      * @param world target server world
      * @return async worker instance mapping
      */
-    private static AsyncCisSaveWorker workerFor(final ServerWorld world) {
-        return WORKERS.computeIfAbsent(world.getRegistryKey(), ignored -> new AsyncCisSaveWorker(world));
+    private static AsyncCisSaveWorker workerFor(final ServerLevel world) {
+        return WORKERS.computeIfAbsent(world.dimension(), ignored -> new AsyncCisSaveWorker(world));
     }
 
     /**

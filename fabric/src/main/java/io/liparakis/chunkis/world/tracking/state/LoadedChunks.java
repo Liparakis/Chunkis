@@ -1,11 +1,11 @@
 package io.liparakis.chunkis.world.tracking.state;
 
 import io.liparakis.chunkis.mixin.accessor.ServerChunkLoadingManagerAccessor;
-import net.minecraft.server.world.ChunkHolder;
-import net.minecraft.server.world.ServerChunkLoadingManager;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * Non-blocking lookup of a fully loaded chunk.
@@ -32,14 +32,14 @@ public final class LoadedChunks {
      * @param chunkZ chunk Z
      * @return the accessible chunk, or {@code null}
      */
-    public static WorldChunk getIfAccessible(final ServerWorld world, final int chunkX, final int chunkZ) {
-        if (!world.getServer().isOnThread()) {
-            return world.getChunkManager().getWorldChunk(chunkX, chunkZ, false);
+    public static LevelChunk getIfAccessible(final ServerLevel world, final int chunkX, final int chunkZ) {
+        if (!world.getServer().isSameThread()) {
+            return world.getChunkSource().getChunk(chunkX, chunkZ, false);
         }
-        final ChunkHolder holder = world.getChunkManager().chunkLoadingManager
-                .getCurrentChunkHolder(ChunkPos.toLong(chunkX, chunkZ));
-        return holder == null ? null : holder.getAccessibleFuture()
-                .getNow(ChunkHolder.UNLOADED_WORLD_CHUNK)
+        final ChunkHolder holder = world.getChunkSource().chunkMap
+                .getUpdatingChunkIfPresent(ChunkPos.pack(chunkX, chunkZ));
+        return holder == null ? null : holder.getFullChunkFuture()
+                .getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK)
                 .orElse(null);
     }
 
@@ -54,17 +54,17 @@ public final class LoadedChunks {
      * @param chunkZ chunk Z
      * @return the held chunk, or {@code null} once its unload save ran or before it is full
      */
-    public static WorldChunk getHeld(final ServerWorld world, final int chunkX, final int chunkZ) {
-        if (!world.getServer().isOnThread()) {
+    public static LevelChunk getHeld(final ServerLevel world, final int chunkX, final int chunkZ) {
+        if (!world.getServer().isSameThread()) {
             return getIfAccessible(world, chunkX, chunkZ);
         }
-        final long pos = ChunkPos.toLong(chunkX, chunkZ);
-        final ServerChunkLoadingManager manager = world.getChunkManager().chunkLoadingManager;
-        ChunkHolder holder = manager.getCurrentChunkHolder(pos);
+        final long pos = ChunkPos.pack(chunkX, chunkZ);
+        final ChunkMap manager = world.getChunkSource().chunkMap;
+        ChunkHolder holder = manager.getUpdatingChunkIfPresent(pos);
         if (holder == null) {
             holder = ((ServerChunkLoadingManagerAccessor) manager).chunkis$getChunksToUnload()
                     .get(pos);
         }
-        return holder != null && holder.getLatest() instanceof WorldChunk chunk ? chunk : null;
+        return holder != null && holder.getLatestChunk() instanceof LevelChunk chunk ? chunk : null;
     }
 }

@@ -6,15 +6,19 @@
 
 A Fabric mod that saves worlds in **CIS**, a versioned alternative to vanilla region storage.
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11-3fb950?style=flat-square)](https://fabricmc.net/use/) ![Java](https://img.shields.io/badge/Java-21%2B-59636e?style=flat-square) [![Build](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml/badge.svg)](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/License-MIT-59636e?style=flat-square)](LICENSE)
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.1.2-3fb950?style=flat-square)](https://fabricmc.net/use/) ![Java](https://img.shields.io/badge/Java-25%2B-59636e?style=flat-square) [![Build](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml/badge.svg)](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/License-MIT-59636e?style=flat-square)](LICENSE)
 
 **[Download](https://github.com/Liparakis/Chunkis/releases)** &nbsp; · &nbsp; **[Install](#install)** &nbsp; · &nbsp; **[Wiki](https://github.com/Liparakis/Chunkis/wiki)** &nbsp; · &nbsp; **[Report an issue](https://github.com/Liparakis/Chunkis/issues)**
 
 </div>
 
+> This branch targets Minecraft 26.1.2. The latest published 1.21.11 release remains [v4.1.1](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.1).
+
 ## Performance
 
 <sub>Ryzen 7 5700X at 4.6 GHz · 32 GB DDR4-3600 · Unpinned · 6 November 2026</sub>
+
+These published measurements are from Minecraft 1.21.11.
 
 Three alternating runs per side, each unloading, reloading, editing, and saving **4,096 natural-terrain chunks** over two measured rounds. Related measurements sit together in the chart; percentiles are averaged across runs. Results vary with the world, hardware, and background activity.
 
@@ -27,7 +31,7 @@ Three alternating runs per side, each unloading, reloading, editing, and saving 
 > [!WARNING]
 > **Back up your world before the first launch.** There is no converter from CIS back to vanilla. Dedicated-server migration is not available yet.
 
-1. Set up [Fabric Loader](https://fabricmc.net/use/) **0.16.5+** and [Fabric API](https://modrinth.com/mod/fabric-api) for the Minecraft version above.
+1. Set up [Fabric Loader](https://fabricmc.net/use/) **0.20.1+** and [Fabric API](https://modrinth.com/mod/fabric-api) for the Minecraft version above.
 2. Put the Chunkis release jar in `mods/`.
 3. Launch with Fabric. Existing singleplayer worlds migrate automatically when opened.
 

@@ -4,7 +4,7 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.api.ChunkisMutationGuardDuck;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * Checks safety constraints before taking snapshots of live world chunks.
@@ -26,7 +26,7 @@ public final class SnapshotSafetyChecker {
      * @param chunk target world chunk
      * @return true if taking snapshot is unsafe
      */
-    public static boolean isSnapshotUnsafe(final WorldChunk chunk) {
+    public static boolean isSnapshotUnsafe(final LevelChunk chunk) {
         if (PendingChunkMutationSuppression.currentCause(chunk)
                 != ChunkMutationTrackingScope.Cause.NONE) {
             return true;

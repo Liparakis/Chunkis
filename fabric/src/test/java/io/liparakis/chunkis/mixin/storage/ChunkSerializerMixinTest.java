@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.lang.reflect.Method;
 import java.util.Set;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -37,7 +37,7 @@ class ChunkSerializerMixinTest {
      * @return true if the proto chunk should be reset to empty, false otherwise
      * @throws ReflectiveOperationException if reflection fails
      */
-    private static boolean shouldResetProtoChunkToEmpty(final NbtCompound metadata)
+    private static boolean shouldResetProtoChunkToEmpty(final CompoundTag metadata)
             throws ReflectiveOperationException {
         final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.mixin.storage.ChunkSerializerMixin");
         final Method method = mixinClass.getDeclaredMethod(
@@ -76,7 +76,7 @@ class ChunkSerializerMixinTest {
      */
     @Test
     void authoritativeFullBaselineDoesNotResetProtoChunkToEmpty() throws ReflectiveOperationException {
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+        final CompoundTag metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 null,
                 true,
                 true,
@@ -94,7 +94,7 @@ class ChunkSerializerMixinTest {
      */
     @Test
     void sparseReplayWithoutPersistedBaseResetsProtoChunkToEmpty() throws ReflectiveOperationException {
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+        final CompoundTag metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 null,
                 true,
                 false,

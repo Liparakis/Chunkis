@@ -4,13 +4,13 @@ import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -41,7 +41,7 @@ public final class BlockEntityPayloadTracer {
             final ChunkPos chunkPos,
             final BlockPos pos,
             @Nullable final BlockEntity blockEntity,
-            @Nullable final NbtCompound nbt
+            @Nullable final CompoundTag nbt
     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
@@ -96,7 +96,7 @@ public final class BlockEntityPayloadTracer {
      * @param message  reason why capture was skipped
      */
     public static void traceSkippedBlockEntityCapture(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final BlockPos pos,
             final String message
@@ -139,11 +139,11 @@ public final class BlockEntityPayloadTracer {
      * @param operationId active restore operation ID
      */
     public static void traceRestoredBlockEntity(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final BlockPos pos,
             final BlockEntity blockEntity,
-            final NbtCompound nbt,
+            final CompoundTag nbt,
             final String operationId
     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
@@ -182,7 +182,7 @@ public final class BlockEntityPayloadTracer {
      * @param message     reason why restore was skipped
      */
     public static void traceRestoreBlockEntitySkipped(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final BlockPos pos,
             final String operationId,
@@ -224,7 +224,7 @@ public final class BlockEntityPayloadTracer {
             final String worldId,
             final ChunkPos chunkPos,
             @Nullable final String operationId,
-            @Nullable final NbtCompound chunkNbt,
+            @Nullable final CompoundTag chunkNbt,
             final String stage,
             final String source
     ) {
@@ -232,11 +232,11 @@ public final class BlockEntityPayloadTracer {
             return;
         }
 
-        final NbtList blockEntities = chunkNbt.getList("block_entities")
+        final ListTag blockEntities = chunkNbt.getList("block_entities")
                 .orElse(null);
         final int blockEntityCount = blockEntities != null ? blockEntities.size() : 0;
         final int sectionCount = chunkNbt.getList("sections")
-                .map(NbtList::size)
+                .map(ListTag::size)
                 .orElse(0);
         final Object status = chunkNbt.getString("Status")
                 .orElse("<missing>");
@@ -249,7 +249,7 @@ public final class BlockEntityPayloadTracer {
                 continue;
             }
 
-            final NbtCompound matched = findBlockEntityNbt(blockEntities, target);
+            final CompoundTag matched = findBlockEntityNbt(blockEntities, target);
             WatchTraceEmitter.traceWatch(
                     matched != null ? ChunkTraceEventType.WATCH_CAPTURED : ChunkTraceEventType.WATCH_FAILED,
                     stage,
@@ -278,15 +278,15 @@ public final class BlockEntityPayloadTracer {
      * Performs find block entity nbt.
      */
     @Nullable
-    private static NbtCompound findBlockEntityNbt(
-            @Nullable final NbtList blockEntities,
+    private static CompoundTag findBlockEntityNbt(
+            @Nullable final ListTag blockEntities,
             final PayloadWatchTarget target
     ) {
         if (blockEntities == null || !target.hasBlockCoordinates()) {
             return null;
         }
-        for (final NbtElement element : blockEntities) {
-            if (!(element instanceof NbtCompound compound)) {
+        for (final Tag element : blockEntities) {
+            if (!(element instanceof CompoundTag compound)) {
                 continue;
             }
             final int x = compound.getInt("x")

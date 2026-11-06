@@ -13,13 +13,13 @@ import io.liparakis.chunkis.world.tracking.ownership.OwnedDeltaAccess;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -31,9 +31,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Mixin into {@link BlockEntity} that intercepts {@code markDirty()} calls to
  * integrate with the Chunkis delta-tracking and global chunk-tracking systems.
  *
- * <p>When a block entity marks itself dirty on a {@link ServerWorld}, this mixin:</p>
+ * <p>When a block entity marks itself dirty on a {@link ServerLevel}, this mixin:</p>
  * <ol>
- *   <li>Resolves the {@link WorldChunk} containing the block entity.</li>
+ *   <li>Resolves the {@link LevelChunk} containing the block entity.</li>
  *   <li>If the chunk implements {@link ChunkisDeltaDuck}, traces the pre-dirty
  *       state, captures base chunk data if missing, marks the delta and chunk dirty,
  *       and proactively captures the block entity's current NBT state.</li>
@@ -51,7 +51,7 @@ public abstract class BlockEntityMixin {
      * Shadowed reference to the enclosing world context.
      */
     @Shadow
-    protected World world;
+    protected Level level;
 
     /**
      * Shadowed method resolving the block entity's block coordinates position.
@@ -59,10 +59,10 @@ public abstract class BlockEntityMixin {
      * @return block coordinates position
      */
     @Shadow
-    public abstract BlockPos getPos();
+    public abstract BlockPos getBlockPos();
 
     /**
-     * Injected at the head of {@link BlockEntity#markDirty()} to trigger Chunkis
+     * Injected at the head of {@link BlockEntity#setChanged()} to trigger Chunkis
      * delta and global dirty tracking.
      *
      * <p>Guards are applied via early returns to keep nesting flat. The chunk
@@ -72,12 +72,12 @@ public abstract class BlockEntityMixin {
      * @param ci the Mixin {@link CallbackInfo}; unused but required by the
      *           injection contract
      */
-    @Inject(method = "markDirty()V", at = @At("HEAD"))
+    @Inject(method = "setChanged()V", at = @At("HEAD"))
     private void chunkis$onMarkDirty(final CallbackInfo ci) {
-        if (!(world instanceof ServerWorld serverWorld)) {
+        if (!(level instanceof ServerLevel serverWorld)) {
             return;
         }
-        final WorldChunk chunk = serverWorld.getWorldChunk(getPos());
+        final LevelChunk chunk = serverWorld.getChunkAt(getBlockPos());
         if (chunk == null) {
             return;
         }
@@ -111,16 +111,16 @@ public abstract class BlockEntityMixin {
      */
     @Unique
     @SuppressWarnings("unchecked")
-    private void handleChunkDelta(final WorldChunk chunk, final ServerWorld serverWorld) {
+    private void handleChunkDelta(final LevelChunk chunk, final ServerLevel serverWorld) {
         if (!(chunk instanceof ChunkisDeltaDuck)) {
             return;
         }
-        final ChunkDelta<BlockState, NbtCompound> delta = OwnedDeltaAccess.getOrClaim(chunk,
+        final ChunkDelta<BlockState, CompoundTag> delta = OwnedDeltaAccess.getOrClaim(chunk,
                 ChunkTraceReason.PLAYER_OR_COMMAND_EDIT, "BlockEntityMixin#handleChunkDelta");
 
         BaseChunkCaptureUtil.captureBaseChunkIfMissing(serverWorld, chunk, delta);
         delta.markDirty("BlockEntityMixin#handleChunkDelta");
-        chunk.markNeedsSaving();
+        chunk.markUnsaved();
         captureBlockEntityNbt(serverWorld, delta);
     }
 
@@ -144,19 +144,19 @@ public abstract class BlockEntityMixin {
     @Unique
     @SuppressWarnings("ConstantConditions")
     private void captureBlockEntityNbt(
-            final ServerWorld serverWorld,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+            final ServerLevel serverWorld,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         try {
             ChunkBlockEntityCapture.captureBlockEntity(
                     (BlockEntity) (Object) this,
-                    serverWorld.getRegistryManager(),
+                    serverWorld.registryAccess(),
                     delta
             );
             PayloadWatchTracer.traceDeltaStage(
-                    serverWorld.getRegistryKey()
-                            .getValue()
+                    serverWorld.dimension()
+                            .identifier()
                             .toString(),
-                    new net.minecraft.util.math.ChunkPos(getPos()),
+                    net.minecraft.world.level.ChunkPos.containing(getBlockPos()),
                     delta,
                     null,
                     ChunkTraceEventType.WATCH_CAPTURED,
@@ -168,7 +168,7 @@ public abstract class BlockEntityMixin {
         } catch (final Exception e) {
             Chunkis.LOGGER.error(
                     "Chunkis: Failed to proactively capture block entity NBT at {}",
-                    getPos(), e
+                    getBlockPos(), e
             );
         }
     }

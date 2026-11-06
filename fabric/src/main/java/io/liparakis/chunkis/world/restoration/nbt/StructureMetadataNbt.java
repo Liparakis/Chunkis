@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 
 /**
  * Read helpers for vanilla structure metadata stored in Chunkis chunk metadata.
@@ -27,8 +27,8 @@ final class StructureMetadataNbt {
      * @param root serialized chunk NBT
      * @return copied structures compound, or {@code null}
      */
-    static NbtCompound extractStructureData(final NbtCompound root) {
-        final NbtCompound structures = getCompoundOrNull(root, CisNbtUtil.STRUCTURES_KEY);
+    static CompoundTag extractStructureData(final CompoundTag root) {
+        final CompoundTag structures = getCompoundOrNull(root, CisNbtUtil.STRUCTURES_KEY);
         return hasStructureData(structures) ? structures.copy() : null;
     }
 
@@ -38,12 +38,12 @@ final class StructureMetadataNbt {
      * @param chunkMetadata metadata stored in the delta
      * @return copied structure metadata, or {@code null}
      */
-    static NbtCompound extractPersistedStructureMetadata(final NbtCompound chunkMetadata) {
+    static CompoundTag extractPersistedStructureMetadata(final CompoundTag chunkMetadata) {
         if (chunkMetadata == null || chunkMetadata.isEmpty()) {
             return null;
         }
 
-        final NbtCompound envelopedStructures = getCompoundOrNull(chunkMetadata, CisNbtUtil.STRUCTURES_KEY);
+        final CompoundTag envelopedStructures = getCompoundOrNull(chunkMetadata, CisNbtUtil.STRUCTURES_KEY);
 
         if (envelopedStructures != null) {
             return hasStructureData(envelopedStructures) ? envelopedStructures.copy() : null;
@@ -58,7 +58,7 @@ final class StructureMetadataNbt {
      * @param structures vanilla structures compound
      * @return {@code true} if structure starts or references exist
      */
-    static boolean hasStructureData(final NbtCompound structures) {
+    static boolean hasStructureData(final CompoundTag structures) {
         return structures != null && !structures.isEmpty() && (getCompoundOrNull(structures,
                 CisNbtUtil.STRUCTURE_STARTS_KEY)
                 != null || getCompoundOrNull(structures,
@@ -72,7 +72,7 @@ final class StructureMetadataNbt {
      * @param key    nested compound key
      * @return nested compound, or {@code null}
      */
-    static NbtCompound getCompoundOrNull(final NbtCompound parent, final String key) {
+    static CompoundTag getCompoundOrNull(final CompoundTag parent, final String key) {
         if (parent == null || !parent.contains(key)) {
             return null;
         }

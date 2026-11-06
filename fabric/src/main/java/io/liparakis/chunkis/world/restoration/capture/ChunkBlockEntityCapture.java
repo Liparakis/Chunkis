@@ -5,16 +5,15 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.core.model.CisConstants;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import java.util.Objects;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.BlockEntityType;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
@@ -64,7 +63,7 @@ public final class ChunkBlockEntityCapture {
      *
      * <p>Intended for proactive hooks where the caller already knows the block
      * entity is relevant. Save-time chunk sweeps use
-     * {@link #captureBlockEntities(WorldChunk, RegistryWrapper.WrapperLookup, ChunkDelta)}
+     * {@link #captureBlockEntities(LevelChunk, HolderLookup.Provider, ChunkDelta)}
      * so stale entries can be validated against the chunk's current block state.</p>
      *
      * @param blockEntity     block entity to capture; must not be {@code null}
@@ -73,24 +72,24 @@ public final class ChunkBlockEntityCapture {
      */
     public static void captureBlockEntity(
             final BlockEntity blockEntity,
-            final RegistryWrapper.WrapperLookup registryManager,
-            final ChunkDelta<?, NbtCompound> delta
+            final HolderLookup.Provider registryManager,
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         Objects.requireNonNull(blockEntity, "blockEntity");
         Objects.requireNonNull(registryManager, "registryManager");
         Objects.requireNonNull(delta, "delta");
 
-        final BlockPos pos = blockEntity.getPos();
+        final BlockPos pos = blockEntity.getBlockPos();
         // World may be null if the BE has been detached; getWorld() instanceof handles that.
-        final ServerWorld serverWorld = asServerWorld(blockEntity.getWorld());
-        final ChunkPos chunkPos = serverWorld != null ? new ChunkPos(pos) : null;
+        final ServerLevel serverWorld = asServerWorld(blockEntity.getLevel());
+        final ChunkPos chunkPos = serverWorld != null ? ChunkPos.containing(pos) : null;
 
         if (blockEntity.isRemoved()) {
             traceSkipped(serverWorld, chunkPos, pos, "capture skipped: block entity removed");
             return;
         }
 
-        final NbtCompound nbt = trySerializeBlockEntity(blockEntity, registryManager);
+        final CompoundTag nbt = trySerializeBlockEntity(blockEntity, registryManager);
         if (isEmptyNbt(nbt)) {
             traceSkipped(serverWorld, chunkPos, pos, "capture skipped: block entity serialized empty NBT");
             return;
@@ -112,15 +111,15 @@ public final class ChunkBlockEntityCapture {
      * @param delta           destination delta; must not be {@code null}
      */
     public static void captureBlockEntities(
-            final WorldChunk chunk,
-            final RegistryWrapper.WrapperLookup registryManager,
-            final ChunkDelta<?, NbtCompound> delta
+            final LevelChunk chunk,
+            final HolderLookup.Provider registryManager,
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         Objects.requireNonNull(chunk, "chunk");
         Objects.requireNonNull(registryManager, "registryManager");
         Objects.requireNonNull(delta, "delta");
 
-        final ServerWorld serverWorld = asServerWorld(chunk.getWorld());
+        final ServerLevel serverWorld = asServerWorld(chunk.getLevel());
         final ChunkPos chunkPos = chunk.getPos();
 
         for (final BlockEntity blockEntity : chunk.getBlockEntities()
@@ -147,18 +146,18 @@ public final class ChunkBlockEntityCapture {
      * @param delta           destination delta
      */
     private static void captureBlockEntityFromChunkSweep(
-            @Nullable final ServerWorld serverWorld,
+            @Nullable final ServerLevel serverWorld,
             final ChunkPos chunkPos,
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             @Nullable final BlockEntity blockEntity,
-            final RegistryWrapper.WrapperLookup registryManager,
-            final ChunkDelta<?, NbtCompound> delta
+            final HolderLookup.Provider registryManager,
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         if (blockEntity == null || blockEntity.isRemoved()) {
             return;
         }
 
-        final BlockPos pos = blockEntity.getPos();
+        final BlockPos pos = blockEntity.getBlockPos();
         final BlockState state = chunk.getBlockState(pos);
 
         if (!state.hasBlockEntity()) {
@@ -167,7 +166,7 @@ public final class ChunkBlockEntityCapture {
             return;
         }
 
-        final NbtCompound nbt = trySerializeBlockEntity(blockEntity, registryManager);
+        final CompoundTag nbt = trySerializeBlockEntity(blockEntity, registryManager);
         if (isEmptyNbt(nbt)) {
             traceSkipped(serverWorld, chunkPos, pos, "capture skipped: block entity serialized empty NBT");
             return;
@@ -188,12 +187,12 @@ public final class ChunkBlockEntityCapture {
      * @return serialized NBT with an {@value #BLOCK_ENTITY_ID_KEY} field, or {@code null}
      */
     @Nullable
-    private static NbtCompound trySerializeBlockEntity(
+    private static CompoundTag trySerializeBlockEntity(
             final BlockEntity blockEntity,
-            final RegistryWrapper.WrapperLookup registryManager
+            final HolderLookup.Provider registryManager
     ) {
         try {
-            final NbtCompound nbt = blockEntity.createNbtWithIdentifyingData(registryManager);
+            final CompoundTag nbt = blockEntity.saveWithFullMetadata(registryManager);
             if (nbt == null || nbt.isEmpty()) {
                 return null;
             }
@@ -201,7 +200,7 @@ public final class ChunkBlockEntityCapture {
         } catch (final Exception e) {
             LOGGER.warn(
                     "Chunkis: Failed to serialize block entity at {} of type {}",
-                    blockEntity.getPos(),
+                    blockEntity.getBlockPos(),
                     blockEntity.getType(),
                     e
             );
@@ -220,15 +219,15 @@ public final class ChunkBlockEntityCapture {
      * @return updated {@code nbt}, or {@code null} if the type is unregistered
      */
     @Nullable
-    private static NbtCompound injectBlockEntityId(
+    private static CompoundTag injectBlockEntityId(
             final BlockEntity blockEntity,
-            final NbtCompound nbt
+            final CompoundTag nbt
     ) {
-        final var typeId = BlockEntityType.getId(blockEntity.getType());
+        final var typeId = net.minecraft.core.registries.BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(blockEntity.getType());
         if (typeId == null) {
             LOGGER.warn(
                     "Chunkis: Block entity at {} has unregistered type: {}",
-                    blockEntity.getPos(),
+                    blockEntity.getBlockPos(),
                     blockEntity.getType()
             );
             return null;
@@ -251,8 +250,8 @@ public final class ChunkBlockEntityCapture {
      */
     private static void storeInDelta(
             final BlockPos worldPos,
-            final NbtCompound nbt,
-            final ChunkDelta<?, NbtCompound> delta
+            final CompoundTag nbt,
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         delta.addBlockEntityData(
                 worldPos.getX() & CisConstants.COORD_MASK,
@@ -273,18 +272,18 @@ public final class ChunkBlockEntityCapture {
      * @param delta       destination delta
      */
     private static void storeCapturedBlockEntity(
-            @Nullable final ServerWorld serverWorld,
+            @Nullable final ServerLevel serverWorld,
             @Nullable final ChunkPos chunkPos,
             final BlockPos worldPos,
             final BlockEntity blockEntity,
-            final NbtCompound nbt,
-            final ChunkDelta<?, NbtCompound> delta
+            final CompoundTag nbt,
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         storeInDelta(worldPos, nbt, delta);
         if (serverWorld != null && chunkPos != null) {
             PayloadWatchTracer.traceCapturedBlockEntity(
-                    serverWorld.getRegistryKey()
-                            .getValue()
+                    serverWorld.dimension()
+                            .identifier()
                             .toString(),
                     chunkPos,
                     worldPos,
@@ -303,7 +302,7 @@ public final class ChunkBlockEntityCapture {
      */
     private static void removeFromDelta(
             final BlockPos worldPos,
-            final ChunkDelta<?, NbtCompound> delta
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         delta.removeBlockEntityData(
                 worldPos.getX() & CisConstants.COORD_MASK,
@@ -325,7 +324,7 @@ public final class ChunkBlockEntityCapture {
      * @param reason      human-readable skip reason
      */
     private static void traceSkipped(
-            @Nullable final ServerWorld serverWorld,
+            @Nullable final ServerLevel serverWorld,
             @Nullable final ChunkPos chunkPos,
             final BlockPos pos,
             final String reason
@@ -336,17 +335,17 @@ public final class ChunkBlockEntityCapture {
     }
 
     /**
-     * Casts {@code world} to {@link ServerWorld} if possible, otherwise returns {@code null}.
+     * Casts {@code world} to {@link ServerLevel} if possible, otherwise returns {@code null}.
      *
      * <p>Used to avoid repeated {@code instanceof} checks in callers that need the
      * server world for both tracing and registry key access.</p>
      *
      * @param world world to check; may be {@code null}
-     * @return the world as a {@link ServerWorld}, or {@code null}
+     * @return the world as a {@link ServerLevel}, or {@code null}
      */
     @Nullable
-    private static ServerWorld asServerWorld(@Nullable final World world) {
-        return world instanceof ServerWorld sw ? sw : null;
+    private static ServerLevel asServerWorld(@Nullable final Level world) {
+        return world instanceof ServerLevel sw ? sw : null;
     }
 
     /**
@@ -356,7 +355,7 @@ public final class ChunkBlockEntityCapture {
      * @param nbt compound to inspect; may be {@code null}
      * @return {@code true} if null or empty
      */
-    private static boolean isEmptyNbt(@Nullable final NbtCompound nbt) {
+    private static boolean isEmptyNbt(@Nullable final CompoundTag nbt) {
         return nbt == null || nbt.isEmpty();
     }
 }

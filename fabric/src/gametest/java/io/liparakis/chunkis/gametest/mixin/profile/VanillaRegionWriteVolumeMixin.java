@@ -3,8 +3,8 @@ package io.liparakis.chunkis.gametest.mixin.profile;
 import io.liparakis.chunkis.gametest.stress.WriteVolume;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.storage.RegionFile;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.storage.RegionFile;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -32,7 +32,7 @@ public abstract class VanillaRegionWriteVolumeMixin {
      * @param buf payload, header included
      * @param ci  callback
      */
-    @Inject(method = "writeChunk", at = @At("HEAD"))
+    @Inject(method = "write", at = @At("HEAD"))
     private void chunkis$count(final ChunkPos pos, final ByteBuffer buf, final CallbackInfo ci) {
         if (WriteVolume.ENABLED) {
             final int bytes = buf.remaining();

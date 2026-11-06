@@ -18,14 +18,14 @@ import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
 import java.io.IOException;
 import java.util.List;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * Mirrors vanilla's per-chunk entity save into the Chunkis delta.
@@ -72,9 +72,9 @@ public final class VanillaEntitySaveCapture {
      * @param chunkPos chunk whose entities vanilla is saving
      * @param entities entities vanilla is saving for that chunk
      */
-    public static void capture(final ServerWorld world, final ChunkPos chunkPos,
+    public static void capture(final ServerLevel world, final ChunkPos chunkPos,
             final List<? extends Entity> entities) {
-        final WorldChunk chunk = LoadedChunks.getHeld(world, chunkPos.x, chunkPos.z);
+        final LevelChunk chunk = LoadedChunks.getHeld(world, chunkPos.x(), chunkPos.z());
         if (chunk instanceof ChunkisDeltaDuck deltaDuck) {
             captureLoaded(world, chunk, deltaDuck, entities);
         } else {
@@ -89,14 +89,14 @@ public final class VanillaEntitySaveCapture {
      * @param world world owning the entities
      * @return {@code true} when vanilla's write would never reach disk
      */
-    public static boolean isVanillaWriteBlocked(final ServerWorld world) {
-        return MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey()) && !C2meSaveBridge.isUnavailable();
+    public static boolean isVanillaWriteBlocked(final ServerLevel world) {
+        return MigrationStateServiceHolder.isAuthoritative(world.dimension()) && !C2meSaveBridge.isUnavailable();
     }
 
     /**
      * Captures entities for a chunk that is still loaded.
      */
-    private static void captureLoaded(final ServerWorld world, final WorldChunk chunk,
+    private static void captureLoaded(final ServerLevel world, final LevelChunk chunk,
             final ChunkisDeltaDuck deltaDuck, final List<? extends Entity> entities) {
         final boolean owned = ChunkDeltaOwnership.hasChunkisOwnedState(deltaDuck.chunkis$getDelta());
         if (owned && entities.isEmpty() && holdsNoEntities(deltaDuck.chunkis$getDelta())) {
@@ -109,7 +109,7 @@ public final class VanillaEntitySaveCapture {
         if (!owned && LiveEntitySnapshotCapture.countSavableLiveEntities(world, chunk) == 0) {
             return;
         }
-        final ChunkDelta<BlockState, NbtCompound> delta = OwnedDeltaAccess.getOrClaim(chunk,
+        final ChunkDelta<BlockState, CompoundTag> delta = OwnedDeltaAccess.getOrClaim(chunk,
                 ChunkTraceReason.EXPLICIT_CHUNKIS_MUTATION, SOURCE);
         if (!owned) {
             BaseChunkCaptureUtil.captureBaseChunkIfMissing(world, chunk, delta);
@@ -128,13 +128,13 @@ public final class VanillaEntitySaveCapture {
     }
 
     /**
-     * Captures entities for a chunk whose {@link WorldChunk} is no longer reachable.
+     * Captures entities for a chunk whose {@link LevelChunk} is no longer reachable.
      */
     @SuppressWarnings("unchecked")
-    private static void captureUnloaded(final ServerWorld world, final ChunkPos chunkPos,
+    private static void captureUnloaded(final ServerLevel world, final ChunkPos chunkPos,
             final List<? extends Entity> entities) {
-        ChunkDelta<BlockState, NbtCompound> delta =
-                (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(world, chunkPos);
+        ChunkDelta<BlockState, CompoundTag> delta =
+                (ChunkDelta<BlockState, CompoundTag>) GlobalChunkTracker.getDelta(world, chunkPos);
         if (delta == null) {
             if (StoredEntityFingerprints.consumeIfMatches(world, chunkPos,
                     LiveEntitySnapshotCapture.fingerprintSavable(chunkPos, entities))) {
@@ -144,11 +144,11 @@ public final class VanillaEntitySaveCapture {
             delta = loadStoredDelta(world, chunkPos, entities.size());
         }
         if (delta == null) {
-            if (!entities.isEmpty() && MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey())) {
+            if (!entities.isEmpty() && MigrationStateServiceHolder.isAuthoritative(world.dimension())) {
                 Chunkis.LOGGER.warn("Chunkis: Skipped saving {} entity/entities for unloaded chunk {} in {}: "
                                 + "chunk has no Chunkis state to attach them to", entities.size(), chunkPos,
-                        world.getRegistryKey()
-                                .getValue());
+                        world.dimension()
+                                .identifier());
             }
             return;
         }
@@ -172,16 +172,16 @@ public final class VanillaEntitySaveCapture {
      * <p>A clean tracker entry means any async write already finished, so the
      * stored entry is current. The entry is never cleared on read failure.</p>
      */
-    private static ChunkDelta<BlockState, NbtCompound> loadStoredDelta(final ServerWorld world,
+    private static ChunkDelta<BlockState, CompoundTag> loadStoredDelta(final ServerLevel world,
             final ChunkPos chunkPos, final int entityCount) {
         if (!FabricCisStorageHelper.isStorageOpen(world)) {
             return null;
         }
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = FabricCisStorageHelper.getStorage(world);
         final CisChunkPos cisPos = FabricCisStorageHelper.toStoragePos(chunkPos);
         try {
             // Entities only: the blocks stay the stored entry's (a released delta), not decoded on this thread.
-            final ChunkDelta<BlockState, NbtCompound> delta = storage.loadReleasedWithoutClearing(cisPos);
+            final ChunkDelta<BlockState, CompoundTag> delta = storage.loadReleasedWithoutClearing(cisPos);
             if (delta == null) {
                 return null;
             }
@@ -190,8 +190,8 @@ public final class VanillaEntitySaveCapture {
         } catch (final IOException e) {
             Chunkis.LOGGER.warn("Chunkis: Failed to read CIS chunk {} in {} while saving {} entity/entities; "
                             + "entity changes since the last chunk save were not persisted", chunkPos,
-                    world.getRegistryKey()
-                            .getValue(), entityCount, e);
+                    world.dimension()
+                            .identifier(), entityCount, e);
             return null;
         }
     }

@@ -4,7 +4,7 @@ import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinator;
 import io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinatorHolder;
 import java.lang.reflect.Method;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 /**
  * Routes chunk saves made by C2ME's chunk system through Chunkis.
@@ -49,7 +49,7 @@ public final class C2meSaveBridge {
      * @return the completed C2ME save result to return in place of C2ME's own save when Chunkis handled the chunk,
      *         or {@code null} when C2ME should save it as usual
      */
-    public static Object saveThroughChunkis(final Object loadingContext, final Chunk chunk) {
+    public static Object saveThroughChunkis(final Object loadingContext, final ChunkAccess chunk) {
         if (unavailable) {
             return null;
         }
@@ -100,7 +100,7 @@ public final class C2meSaveBridge {
         try {
             for (final Method method : Class.forName(className, false, loader).getDeclaredMethods()) {
                 if (method.getName().equals("asyncSave") && method.getParameterCount() == 2
-                        && method.getParameterTypes()[1].isAssignableFrom(Chunk.class)) {
+                        && method.getParameterTypes()[1].isAssignableFrom(ChunkAccess.class)) {
                     return true;
                 }
             }

@@ -10,17 +10,17 @@ import io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinator;
 import io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinatorHolder;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ChunkHolder;
-import net.minecraft.server.world.ServerChunkLoadingManager;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Util;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.storage.VersionedChunkStorage;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.storage.SimpleRegionStorage;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -34,13 +34,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Routes {@link ServerChunkLoadingManager} chunk load and save through Chunkis' CIS
+ * Routes {@link ChunkMap} chunk load and save through Chunkis' CIS
  * delta storage instead of vanilla MCA files.
  *
  * <p>Thin hooks only: the save path lives in {@link ChunkSaveCoordinator} and the
  * synthetic load path in {@link SyntheticLoadNbtProvider}, one of each per world.</p>
  */
-@Mixin(ServerChunkLoadingManager.class)
+@Mixin(ChunkMap.class)
 public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordinatorHolder {
 
     /**
@@ -60,16 +60,16 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      */
     @Shadow
     @Final
-    ServerWorld world;
+    ServerLevel level;
 
     /**
-     * Save path for {@link #world}, created on first use.
+     * Save path for {@link #level}, created on first use.
      */
     @Unique
     private ChunkSaveCoordinator chunkis$saveCoordinator;
 
     /**
-     * Synthetic load path for {@link #world}, created on first use.
+     * Synthetic load path for {@link #level}, created on first use.
      */
     @Unique
     private SyntheticLoadNbtProvider chunkis$loadProvider;
@@ -88,7 +88,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
     @Override
     public ChunkSaveCoordinator chunkis$saveCoordinator() {
         if (chunkis$saveCoordinator == null) {
-            chunkis$saveCoordinator = new ChunkSaveCoordinator(world);
+            chunkis$saveCoordinator = new ChunkSaveCoordinator(level);
         }
         return chunkis$saveCoordinator;
     }
@@ -101,7 +101,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
     @Unique
     private SyntheticLoadNbtProvider chunkis$loadProvider() {
         if (chunkis$loadProvider == null) {
-            chunkis$loadProvider = new SyntheticLoadNbtProvider(world);
+            chunkis$loadProvider = new SyntheticLoadNbtProvider(level);
         }
         return chunkis$loadProvider;
     }
@@ -114,9 +114,9 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @param vanillaLimit vanilla's limit
      * @return the limit to use
      */
-    @ModifyConstant(method = "unloadChunks", constant = @Constant(intValue = 2000))
+    @ModifyConstant(method = "processUnloads", constant = @Constant(intValue = 2000))
     private int chunkis$unloadBacklogLimit(final int vanillaLimit) {
-        return MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey()) ? UNLOAD_BACKLOG_LIMIT : vanillaLimit;
+        return MigrationStateServiceHolder.isAuthoritative(level.dimension()) ? UNLOAD_BACKLOG_LIMIT : vanillaLimit;
     }
 
     /**
@@ -127,9 +127,9 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @param forced unloads vanilla forces this tick
      * @return unloads to force
      */
-    @ModifyVariable(method = "unloadChunks", at = @At("STORE"), ordinal = 0)
+    @ModifyVariable(method = "processUnloads", at = @At("STORE"), ordinal = 0)
     private int chunkis$minimumForcedUnloads(final int forced) {
-        return MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey())
+        return MigrationStateServiceHolder.isAuthoritative(level.dimension())
                 ? Math.max(forced, MIN_FORCED_UNLOADS)
                 : forced;
     }
@@ -160,14 +160,14 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @param cir      callback; replaced when Chunkis handles the load
      */
     @Inject(
-            method = "getUpdatedChunkNbt(Lnet/minecraft/util/math/ChunkPos;)Ljava/util/concurrent/CompletableFuture;",
+            method = "readChunk(Lnet/minecraft/world/level/ChunkPos;)Ljava/util/concurrent/CompletableFuture;",
             at = @At("HEAD"),
             cancellable = true)
     private void chunkis$onGetUpdatedChunkNbt(
             final ChunkPos chunkPos,
-            final CallbackInfoReturnable<CompletableFuture<Optional<NbtCompound>>> cir) {
+            final CallbackInfoReturnable<CompletableFuture<Optional<CompoundTag>>> cir) {
         final SyntheticLoadNbtProvider provider = chunkis$loadProvider();
-        final boolean authoritative = MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey());
+        final boolean authoritative = MigrationStateServiceHolder.isAuthoritative(level.dimension());
         if (!provider.mayProvide(chunkPos)) {
             if (authoritative) {
                 cir.setReturnValue(chunkis$unfinishedOrVanillaChunkNbt(chunkPos));
@@ -175,7 +175,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
             return;
         }
         cir.setReturnValue(CompletableFuture
-                .supplyAsync(() -> provider.provide(chunkPos), Util.getMainWorkerExecutor().named("chunkisLoad"))
+                .supplyAsync(() -> provider.provide(chunkPos), Util.backgroundExecutor().forName("chunkisLoad"))
                 .thenCompose(root -> root != null
                         ? CompletableFuture.completedFuture(Optional.of(root))
                         : authoritative ? chunkis$unfinishedOrVanillaChunkNbt(chunkPos)
@@ -190,13 +190,13 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @return the chunk's NBT, if any
      */
     @Unique
-    private CompletableFuture<Optional<NbtCompound>> chunkis$unfinishedOrVanillaChunkNbt(final ChunkPos chunkPos) {
+    private CompletableFuture<Optional<CompoundTag>> chunkis$unfinishedOrVanillaChunkNbt(final ChunkPos chunkPos) {
         return chunkis$saveCoordinator().unfinishedChunks()
                 .read(chunkPos)
                 .thenCompose(nbt -> nbt.isPresent()
-                        ? CompletableFuture.supplyAsync(() -> nbt.map(this::updateChunkNbt)
+                        ? CompletableFuture.supplyAsync(() -> nbt.map(this::upgradeChunkTag)
                                 .map(UnfinishedChunkStore::markIfGenerating),
-                        Util.getMainWorkerExecutor().named("upgradeChunk"))
+                        Util.backgroundExecutor().forName("upgradeChunk"))
                         : chunkis$vanillaChunkNbt(chunkPos));
     }
 
@@ -207,9 +207,9 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @return the region-file NBT, upgraded to the current version
      */
     @Unique
-    private CompletableFuture<Optional<NbtCompound>> chunkis$vanillaChunkNbt(final ChunkPos chunkPos) {
-        return ((VersionedChunkStorage) (Object) this).getNbt(chunkPos)
-                .thenApplyAsync(nbt -> nbt.map(this::updateChunkNbt), Util.getMainWorkerExecutor().named("upgradeChunk"));
+    private CompletableFuture<Optional<CompoundTag>> chunkis$vanillaChunkNbt(final ChunkPos chunkPos) {
+        return ((SimpleRegionStorage) (Object) this).read(chunkPos)
+                .thenApplyAsync(nbt -> nbt.map(this::upgradeChunkTag), Util.backgroundExecutor().forName("upgradeChunk"));
     }
 
     /**
@@ -219,7 +219,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @return upgraded NBT
      */
     @Shadow
-    private native NbtCompound updateChunkNbt(NbtCompound nbt);
+    private native CompoundTag upgradeChunkTag(CompoundTag nbt);
 
     /**
      * Saves chunks Chunkis owns through CIS storage.
@@ -232,11 +232,11 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @param cir         callback; set when Chunkis handled the save
      */
     @Inject(
-            method = "save(Lnet/minecraft/world/chunk/Chunk;)Z",
+            method = "save(Lnet/minecraft/world/level/chunk/ChunkAccess;)Z",
             at = @At("HEAD"),
             cancellable = true)
     private void chunkis$onSave(
-            final Chunk chunkToSave,
+            final ChunkAccess chunkToSave,
             final CallbackInfoReturnable<Boolean> cir) {
         switch (chunkis$saveCoordinator().save(chunkToSave)) {
             case VANILLA -> {
@@ -266,7 +266,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
             return;
         }
         PayloadWatchTracer.traceEntityChunkTransfer(
-                world,
+                level,
                 entity,
                 null,
                 stage,
@@ -282,7 +282,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      */
     @Unique
     @SuppressWarnings("unchecked")
-    private void chunkis$replayPendingEntities(final WorldChunk chunk) {
+    private void chunkis$replayPendingEntities(final LevelChunk chunk) {
         if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)) {
             return;
         }
@@ -292,13 +292,13 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
         if (!(deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta)) {
             return;
         }
-        final ChunkDelta<BlockState, NbtCompound> delta =
-                (ChunkDelta<BlockState, NbtCompound>) rawDelta;
+        final ChunkDelta<BlockState, CompoundTag> delta =
+                (ChunkDelta<BlockState, CompoundTag>) rawDelta;
         if (delta.countPendingEntities() == 0) {
             return;
         }
         io.liparakis.chunkis.world.restoration.core.ChunkRestorer.replayPendingEntitiesIfNeeded(
-                world,
+                level,
                 chunk,
                 delta,
                 deltaDuck.chunkis$getRestoreOperationId()
@@ -311,7 +311,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @param entity target loaded entity
      * @param ci     callback info helper
      */
-    @Inject(method = "loadEntity", at = @At("HEAD"))
+    @Inject(method = "addEntity", at = @At("HEAD"))
     private void chunkis$traceWatchedEntityLoad(final Entity entity, final CallbackInfo ci) {
         chunkis$traceWatchedEntityTransfer(
                 entity,
@@ -327,7 +327,7 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @param entity target unloaded entity
      * @param ci     callback info helper
      */
-    @Inject(method = "unloadEntity", at = @At("HEAD"))
+    @Inject(method = "removeEntity", at = @At("HEAD"))
     private void chunkis$traceWatchedEntityUnload(final Entity entity, final CallbackInfo ci) {
         chunkis$traceWatchedEntityTransfer(
                 entity,
@@ -343,17 +343,17 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @param holder chunk holder instance
      * @param cir    callback info returnable wrapper
      */
-    @Inject(method = "makeChunkEntitiesTickable", at = @At("RETURN"))
+    @Inject(method = "prepareEntityTickingChunk", at = @At("RETURN"))
     private void chunkis$traceChunkEntitiesTickable(
             final ChunkHolder holder,
-            final CallbackInfoReturnable<CompletableFuture<net.minecraft.server.world.OptionalChunk<WorldChunk>>> cir
+            final CallbackInfoReturnable<CompletableFuture<net.minecraft.server.level.ChunkResult<LevelChunk>>> cir
     ) {
         cir.getReturnValue()
                 .thenAccept(optionalChunk ->
-                        optionalChunk.ifPresent(chunk -> {
+                        optionalChunk.ifSuccess(chunk -> {
                             chunkis$replayPendingEntities(chunk);
                             PayloadWatchTracer.traceEntityChunkReentry(
-                                    world,
+                                    level,
                                     chunk,
                                     "chunk-entities-tickable",
                                     "ThreadedAnvilChunkStorageMixin#chunkis$traceChunkEntitiesTickable",
@@ -368,17 +368,17 @@ public abstract class ThreadedAnvilChunkStorageMixin implements ChunkSaveCoordin
      * @param holder chunk holder instance
      * @param cir    callback info returnable wrapper
      */
-    @Inject(method = "makeChunkTickable", at = @At("RETURN"))
+    @Inject(method = "prepareTickingChunk", at = @At("RETURN"))
     private void chunkis$traceChunkTickable(
             final ChunkHolder holder,
-            final CallbackInfoReturnable<CompletableFuture<net.minecraft.server.world.OptionalChunk<WorldChunk>>> cir
+            final CallbackInfoReturnable<CompletableFuture<net.minecraft.server.level.ChunkResult<LevelChunk>>> cir
     ) {
         cir.getReturnValue()
                 .thenAccept(optionalChunk ->
-                        optionalChunk.ifPresent(chunk -> {
+                        optionalChunk.ifSuccess(chunk -> {
                             chunkis$replayPendingEntities(chunk);
                             PayloadWatchTracer.traceEntityChunkReentry(
-                                    world,
+                                    level,
                                     chunk,
                                     "chunk-tickable",
                                     "ThreadedAnvilChunkStorageMixin#chunkis$traceChunkTickable",

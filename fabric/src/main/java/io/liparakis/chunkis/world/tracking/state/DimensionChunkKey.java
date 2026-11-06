@@ -2,9 +2,9 @@ package io.liparakis.chunkis.world.tracking.state;
 
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import java.util.Objects;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 
 /**
  * Identifies a chunk within a specific world dimension.
@@ -14,7 +14,7 @@ public final class DimensionChunkKey {
     /**
      * Owning dimension world key.
      */
-    private final RegistryKey<World> dimension;
+    private final ResourceKey<Level> dimension;
 
     /**
      * Packed coordinates identifier key.
@@ -32,7 +32,7 @@ public final class DimensionChunkKey {
      * @param dimension owning dimension world key
      * @param chunkKey  packed coordinates identifier key
      */
-    private DimensionChunkKey(final RegistryKey<World> dimension, final long chunkKey) {
+    private DimensionChunkKey(final ResourceKey<Level> dimension, final long chunkKey) {
         this.dimension = dimension;
         this.chunkKey = chunkKey;
         this.hash = 31 * dimension.hashCode() + Long.hashCode(chunkKey);
@@ -45,8 +45,8 @@ public final class DimensionChunkKey {
      * @param pos       chunk coordinates
      * @return resolved DimensionChunkKey
      */
-    public static DimensionChunkKey of(final RegistryKey<World> dimension, final ChunkPos pos) {
-        return of(dimension, pos.x, pos.z);
+    public static DimensionChunkKey of(final ResourceKey<Level> dimension, final ChunkPos pos) {
+        return of(dimension, pos.x(), pos.z());
     }
 
     /**
@@ -58,7 +58,7 @@ public final class DimensionChunkKey {
      * @return resolved DimensionChunkKey
      */
     public static DimensionChunkKey of(
-            final RegistryKey<World> dimension,
+            final ResourceKey<Level> dimension,
             final int chunkX,
             final int chunkZ
     ) {
@@ -84,7 +84,7 @@ public final class DimensionChunkKey {
      *
      * @return registry key
      */
-    public RegistryKey<World> dimension() {
+    public ResourceKey<Level> dimension() {
         return dimension;
     }
 

@@ -3,8 +3,8 @@ package io.liparakis.chunkis.world.tracking.ownership;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.ChunkDeltaView;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
 
 /**
  * Guards against persisting sparse Chunkis payloads without a persisted base chunk.
@@ -92,7 +92,7 @@ public final class DeltaPersistenceGuard {
      * @param caller caller label
      */
     public static void logRejectedSparseDeltaWithoutBase(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos pos,
             final ChunkDeltaView<?, ?> delta,
             final String path,
@@ -103,8 +103,8 @@ public final class DeltaPersistenceGuard {
         Chunkis.LOGGER.error(
                 "Chunkis [INVALID_SAVE]: Rejected base-less sparse delta for {} in {} path={} caller={} shape={} suppressInitialRepopulation={}",
                 pos != null ? pos : "<unknown>",
-                world != null ? world.getRegistryKey()
-                                .getValue() : "<unknown>",
+                world != null ? world.dimension()
+                                .identifier() : "<unknown>",
                 path,
                 caller,
                 describeDeltaShape(delta),
@@ -192,10 +192,10 @@ public final class DeltaPersistenceGuard {
      * @return descriptive keys text list
      */
     private static String describeMetadataKeys(final Object metadata) {
-        if (!(metadata instanceof net.minecraft.nbt.NbtCompound compound) || compound.isEmpty()) {
+        if (!(metadata instanceof net.minecraft.nbt.CompoundTag compound) || compound.isEmpty()) {
             return "[]";
         }
-        return compound.getKeys()
+        return compound.keySet()
                 .toString();
     }
 }

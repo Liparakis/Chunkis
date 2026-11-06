@@ -5,14 +5,14 @@ import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.HeightLimitView;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.PalettesFactory;
-import net.minecraft.world.chunk.SerializedChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.LevelHeightAccessor;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
+import net.minecraft.world.level.chunk.storage.SerializableChunkData;
 
 /**
  * Builds an authoritative CIS chunk snapshot from serialized vanilla (MCA) chunk NBT.
@@ -34,19 +34,19 @@ public final class ChunkSnapshotBuilder {
      * Captures one authoritative full CIS snapshot from raw serialized chunk
      * data.
      */
-    public static ChunkDelta<BlockState, NbtCompound> buildChunkDelta(final HeightLimitView heightLimitView,
-            final PalettesFactory palettesFactory,
-            final NbtCompound sourceNbt,
-            final NbtCompound entitySourceNbt,
+    public static ChunkDelta<BlockState, CompoundTag> buildChunkDelta(final LevelHeightAccessor heightLimitView,
+            final PalettedContainerFactory palettesFactory,
+            final CompoundTag sourceNbt,
+            final CompoundTag entitySourceNbt,
             final ChunkPos chunkPos) {
-        final SerializedChunk serialized = SerializedChunk.fromNbt(heightLimitView, palettesFactory, sourceNbt);
+        final SerializableChunkData serialized = SerializableChunkData.parse(heightLimitView, palettesFactory, sourceNbt);
         if (serialized == null) {
             throw new IllegalStateException("Vanilla could not deserialize chunk " + chunkPos);
         }
 
-        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();
-        final NbtCompound structureData = CisNbtUtil.extractStructureData(sourceNbt);
-        final NbtCompound preservedAuxiliary = CisNbtUtil.extractPreservedAuxiliaryChunkNbtFromChunkRoot(sourceNbt);
+        final ChunkDelta<BlockState, CompoundTag> delta = new ChunkDelta<>();
+        final CompoundTag structureData = CisNbtUtil.extractStructureData(sourceNbt);
+        final CompoundTag preservedAuxiliary = CisNbtUtil.extractPreservedAuxiliaryChunkNbtFromChunkRoot(sourceNbt);
         final boolean portalChunk = captureBlocks(serialized, delta);
 
         delta.setSuppressInitialRepopulation(true);
@@ -59,9 +59,9 @@ public final class ChunkSnapshotBuilder {
     /**
      * Compatibility overload for callers that only have chunk-region NBT.
      */
-    public static ChunkDelta<BlockState, NbtCompound> buildChunkDelta(final HeightLimitView heightLimitView,
-            final PalettesFactory palettesFactory,
-            final NbtCompound sourceNbt,
+    public static ChunkDelta<BlockState, CompoundTag> buildChunkDelta(final LevelHeightAccessor heightLimitView,
+            final PalettedContainerFactory palettesFactory,
+            final CompoundTag sourceNbt,
             final ChunkPos chunkPos) {
         return buildChunkDelta(heightLimitView, palettesFactory, sourceNbt, null, chunkPos);
     }
@@ -71,13 +71,13 @@ public final class ChunkSnapshotBuilder {
      *
      * @return {@code true} when at least one nether portal block was observed
      */
-    private static boolean captureBlocks(final SerializedChunk serialized,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static boolean captureBlocks(final SerializableChunkData serialized,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         boolean portalChunk = false;
 
-        for (final SerializedChunk.SectionData sectionData : serialized.sectionData()) {
-            final ChunkSection section = sectionData.chunkSection();
-            if (section == null || section.isEmpty()) {
+        for (final SerializableChunkData.SectionData sectionData : serialized.sectionData()) {
+            final LevelChunkSection section = sectionData.chunkSection();
+            if (section == null || section.hasOnlyAir()) {
                 continue;
             }
 
@@ -91,7 +91,7 @@ public final class ChunkSnapshotBuilder {
                         }
 
                         delta.addBlockChange(localX, sectionBottomY + localY, localZ, state);
-                        if (!portalChunk && state.isOf(Blocks.NETHER_PORTAL)) {
+                        if (!portalChunk && state.is(Blocks.NETHER_PORTAL)) {
                             portalChunk = true;
                         }
                     }
@@ -105,17 +105,17 @@ public final class ChunkSnapshotBuilder {
     /**
      * Captures serialized block entities using local chunk X/Z coordinates.
      */
-    private static void captureBlockEntities(final SerializedChunk serialized,
-            final NbtCompound sourceNbt,
+    private static void captureBlockEntities(final SerializableChunkData serialized,
+            final CompoundTag sourceNbt,
             final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
-        final int chunkStartX = chunkPos.getStartX();
-        final int chunkStartZ = chunkPos.getStartZ();
+            final ChunkDelta<BlockState, CompoundTag> delta) {
+        final int chunkStartX = chunkPos.getMinBlockX();
+        final int chunkStartZ = chunkPos.getMinBlockZ();
 
-        for (final NbtCompound blockEntityNbt : serialized.blockEntities()) {
+        for (final CompoundTag blockEntityNbt : serialized.blockEntities()) {
             addBlockEntityPayload(delta, chunkStartX, chunkStartZ, blockEntityNbt);
         }
-        for (final NbtCompound blockEntityNbt : CisNbtUtil.extractCompoundList(chunkPayloadRoot(sourceNbt),
+        for (final CompoundTag blockEntityNbt : CisNbtUtil.extractCompoundList(chunkPayloadRoot(sourceNbt),
                 "block_entities")) {
             addBlockEntityPayload(delta, chunkStartX, chunkStartZ, blockEntityNbt);
         }
@@ -124,10 +124,10 @@ public final class ChunkSnapshotBuilder {
     /**
      * Adds one block-entity payload using local chunk coordinates.
      */
-    private static void addBlockEntityPayload(final ChunkDelta<BlockState, NbtCompound> delta,
+    private static void addBlockEntityPayload(final ChunkDelta<BlockState, CompoundTag> delta,
             final int chunkStartX,
             final int chunkStartZ,
-            final NbtCompound blockEntityNbt) {
+            final CompoundTag blockEntityNbt) {
         if (blockEntityNbt == null || !blockEntityNbt.contains("id")) {
             throw new IllegalStateException("Block entity payload is missing required id field");
         }
@@ -144,19 +144,19 @@ public final class ChunkSnapshotBuilder {
     /**
      * Captures serialized chunk entities from both inline and external entity storage.
      */
-    private static void captureEntities(final SerializedChunk serialized,
-            final NbtCompound sourceNbt,
-            final NbtCompound entitySourceNbt,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static void captureEntities(final SerializableChunkData serialized,
+            final CompoundTag sourceNbt,
+            final CompoundTag entitySourceNbt,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         final Set<String> seen = new HashSet<>();
 
-        for (final NbtCompound entityNbt : serialized.entities()) {
+        for (final CompoundTag entityNbt : serialized.entities()) {
             addEntityPayload(delta, seen, entityNbt);
         }
-        for (final NbtCompound entityNbt : extractEntityPayloads(chunkPayloadRoot(sourceNbt))) {
+        for (final CompoundTag entityNbt : extractEntityPayloads(chunkPayloadRoot(sourceNbt))) {
             addEntityPayload(delta, seen, entityNbt);
         }
-        for (final NbtCompound entityNbt : extractEntityPayloads(chunkPayloadRoot(entitySourceNbt))) {
+        for (final CompoundTag entityNbt : extractEntityPayloads(chunkPayloadRoot(entitySourceNbt))) {
             addEntityPayload(delta, seen, entityNbt);
         }
     }
@@ -164,9 +164,9 @@ public final class ChunkSnapshotBuilder {
     /**
      * Captures one serialized chunk entity as a pending entity.
      */
-    private static void addEntityPayload(final ChunkDelta<BlockState, NbtCompound> delta,
+    private static void addEntityPayload(final ChunkDelta<BlockState, CompoundTag> delta,
             final Set<String> seen,
-            final NbtCompound entityNbt) {
+            final CompoundTag entityNbt) {
         if (entityNbt == null) {
             return;
         }
@@ -180,7 +180,7 @@ public final class ChunkSnapshotBuilder {
     /**
      * Produces a stable dedupe key for migrated entity payloads.
      */
-    private static String entityPayloadKey(final NbtCompound entityNbt) {
+    private static String entityPayloadKey(final CompoundTag entityNbt) {
         return entityNbt.getIntArray("UUID")
                 .map(array -> "uuid:" + java.util.Arrays.toString(array))
                 .orElseGet(() -> "nbt:" + entityNbt);
@@ -189,15 +189,15 @@ public final class ChunkSnapshotBuilder {
     /**
      * Extracts entity payload compounds from modern or legacy root layouts.
      */
-    static List<NbtCompound> extractEntityPayloads(final NbtCompound root) {
-        final List<NbtCompound> payloads = CisNbtUtil.extractCompoundList(root, "Entities");
+    static List<CompoundTag> extractEntityPayloads(final CompoundTag root) {
+        final List<CompoundTag> payloads = CisNbtUtil.extractCompoundList(root, "Entities");
         return payloads.isEmpty() ? CisNbtUtil.extractCompoundList(root, "entities") : payloads;
     }
 
     /**
      * Returns the nested legacy {@code Level} payload root when present.
      */
-    static NbtCompound chunkPayloadRoot(final NbtCompound root) {
+    static CompoundTag chunkPayloadRoot(final CompoundTag root) {
         if (root == null) {
             return null;
         }
@@ -208,10 +208,10 @@ public final class ChunkSnapshotBuilder {
     /**
      * Creates authoritative migrated metadata.
      */
-    public static NbtCompound createMigratedChunkMetadata(final NbtCompound structureData,
-            final NbtCompound preservedAuxiliaryChunkNbt,
+    public static CompoundTag createMigratedChunkMetadata(final CompoundTag structureData,
+            final CompoundTag preservedAuxiliaryChunkNbt,
             final boolean portalChunk) {
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(structureData,
+        final CompoundTag metadata = CisNbtUtil.createChunkMetadataTakingOwnership(structureData,
                 true,
                 true,
                 null,
@@ -225,7 +225,7 @@ public final class ChunkSnapshotBuilder {
      * Returns whether a translated chunk record is an empty placeholder that
      * should be omitted entirely so future loads treat it as absent.
      */
-    static boolean isOmittableEmptyChunk(final ChunkDelta<BlockState, NbtCompound> delta) {
+    static boolean isOmittableEmptyChunk(final ChunkDelta<BlockState, CompoundTag> delta) {
         return delta.getBlockChangesCount() == 0 && delta.getBlockEntities()
                 .isEmpty() && delta.countPendingEntities() == 0;
     }

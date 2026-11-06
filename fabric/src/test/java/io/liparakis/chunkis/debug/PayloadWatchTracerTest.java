@@ -13,8 +13,8 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import java.util.List;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -43,7 +43,7 @@ class PayloadWatchTracerTest {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block("minecraft:overworld", 8, -60, 8));
 
-        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<BlockState, CompoundTag> delta = new ChunkDelta<>();
         PayloadWatchTracer.traceDeltaStage(
                 "minecraft:overworld",
                 new DebugChunkKey(0, 0),

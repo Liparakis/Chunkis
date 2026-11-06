@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 
 /**
  * Reads and writes the synthetic Chunkis load-path marker nested under chunk NBT.
@@ -30,8 +30,8 @@ final class SyntheticChunkisLoadMarker {
      * @param root serialized chunk NBT root compound
      * @return true if a Chunkis synthetic-load marker exists
      */
-    static boolean hasDeltaMarker(final NbtCompound root) {
-        final NbtCompound chunkisData = CisNbtUtil.getCompoundOrNull(root, CisNbtUtil.CHUNKIS_DATA_KEY);
+    static boolean hasDeltaMarker(final CompoundTag root) {
+        final CompoundTag chunkisData = CisNbtUtil.getCompoundOrNull(root, CisNbtUtil.CHUNKIS_DATA_KEY);
         return chunkisData != null
                 && (chunkisData.getBoolean(CisNbtUtil.HAS_DELTA_KEY)
                 .orElse(false)
@@ -45,10 +45,10 @@ final class SyntheticChunkisLoadMarker {
      * @param baseChunkUsage base chunk usage status
      */
     static void putLoadBaseChunkUsage(
-            final NbtCompound root,
+            final CompoundTag root,
             final CisNbtUtil.PersistedBaseChunkUsage baseChunkUsage
     ) {
-        final NbtCompound chunkisData = getOrCreateCompound(root, CisNbtUtil.CHUNKIS_DATA_KEY);
+        final CompoundTag chunkisData = getOrCreateCompound(root, CisNbtUtil.CHUNKIS_DATA_KEY);
         chunkisData.putString(CisNbtUtil.LOAD_BASE_CHUNK_USAGE_KEY, baseChunkUsage.name());
     }
 
@@ -60,16 +60,16 @@ final class SyntheticChunkisLoadMarker {
      * @return found or created nested compound
      */
     @SuppressWarnings("SameParameterValue")
-    private static NbtCompound getOrCreateCompound(
-            final NbtCompound parent,
+    private static CompoundTag getOrCreateCompound(
+            final CompoundTag parent,
             final String key
     ) {
-        final NbtCompound existing = CisNbtUtil.getCompoundOrNull(parent, key);
+        final CompoundTag existing = CisNbtUtil.getCompoundOrNull(parent, key);
         if (existing != null) {
             return existing;
         }
 
-        final NbtCompound created = new NbtCompound();
+        final CompoundTag created = new CompoundTag();
         parent.put(key, created);
         return created;
     }

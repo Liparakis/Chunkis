@@ -3,12 +3,12 @@ package io.liparakis.chunkis.api;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import java.util.Optional;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 /**
  * Public read-oriented API for querying Chunkis runtime state.
@@ -56,7 +56,7 @@ public interface ChunkisApi {
      * @return shared storage instance for {@code world}
      * @throws NullPointerException if {@code world} is {@code null}
      */
-    CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage(ServerWorld world);
+    CisStorage<Block, BlockState, Property<?>, CompoundTag> getStorage(ServerLevel world);
 
     /**
      * Returns the delta currently attached to a chunk, if any.
@@ -68,7 +68,7 @@ public interface ChunkisApi {
      * @return attached delta, or empty when the chunk does not expose Chunkis state
      * @throws NullPointerException if {@code chunk} is {@code null}
      */
-    Optional<ChunkDelta<BlockState, NbtCompound>> getDelta(Chunk chunk);
+    Optional<ChunkDelta<BlockState, CompoundTag>> getDelta(ChunkAccess chunk);
 
     /**
      * Returns whether the chunk currently carries a non-empty attached delta.
@@ -81,7 +81,7 @@ public interface ChunkisApi {
      * @return {@code true} when the attached delta exists and is non-empty
      * @throws NullPointerException if {@code chunk} is {@code null}
      */
-    boolean hasChunkisData(Chunk chunk);
+    boolean hasChunkisData(ChunkAccess chunk);
 
     class Holder {
 

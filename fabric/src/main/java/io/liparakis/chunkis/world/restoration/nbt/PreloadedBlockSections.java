@@ -11,15 +11,15 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.LongStream;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.collection.PackedIntegerArray;
-import net.minecraft.world.chunk.PaletteProvider;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.ReadableContainer;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.SimpleBitStorage;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.PalettedContainerRO;
+import net.minecraft.world.level.chunk.Strategy;
 
 /**
  * Moves a finished chunk's block baseline off the server thread: the load builds each section's block container
@@ -55,7 +55,7 @@ public final class PreloadedBlockSections {
     /**
      * Built containers waiting for vanilla's chunk reader, by their section's NBT compound (identity, weak keys).
      */
-    private static final ConcurrentMap<NbtCompound, Prebuilt> PREBUILT = new MapMaker().weakKeys().makeMap();
+    private static final ConcurrentMap<CompoundTag, Prebuilt> PREBUILT = new MapMaker().weakKeys().makeMap();
 
     /**
      * Container taken for the section vanilla's reader is building on this thread.
@@ -94,8 +94,8 @@ public final class PreloadedBlockSections {
      * @param root  load root built by {@link CisNbtUtil#buildLoadChunkNbt}
      * @param delta delta the root was built from; not modified
      */
-    public static void embed(final ServerWorld world, final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+    public static void embed(final ServerLevel world, final CompoundTag root,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         if (!CisNbtUtil.loadsAsFinishedChunk(delta.getChunkMetadata())) {
             return;
         }
@@ -112,11 +112,11 @@ public final class PreloadedBlockSections {
         if (built == null) {
             return;
         }
-        final NbtList sections = root.getListOrEmpty(CisNbtUtil.SECTIONS_KEY);
-        final NbtCompound[] entries = new NbtCompound[built.length];
+        final ListTag sections = root.getListOrEmpty(CisNbtUtil.SECTIONS_KEY);
+        final CompoundTag[] entries = new CompoundTag[built.length];
         for (int i = 0; i < sections.size(); i++) {
-            final NbtCompound entry = sections.getCompoundOrEmpty(i);
-            final int index = entry.getByte(StoredSections.Y_KEY, (byte) 0) - world.getBottomSectionCoord();
+            final CompoundTag entry = sections.getCompoundOrEmpty(i);
+            final int index = entry.getByteOr(StoredSections.Y_KEY, (byte) 0) - world.getMinSectionY();
             if (index >= 0 && index < entries.length) {
                 entries[index] = entry;
             }
@@ -126,7 +126,7 @@ public final class PreloadedBlockSections {
                 return;
             }
         }
-        final PaletteProvider<BlockState> provider = world.getPalettesFactory().blockStatesStrategy();
+        final Strategy<BlockState> provider = world.palettedContainerFactory().blockStatesStrategy();
         final Embedding embedding = new Embedding(generation, new AtomicInteger(), contentPrint(built));
         for (int i = 0; i < built.length; i++) {
             if (built[i] != null) {
@@ -143,7 +143,7 @@ public final class PreloadedBlockSections {
      * @param section section NBT compound vanilla's reader is at
      * @return {@code true} when a container was built for it; vanilla must then skip its {@code block_states}
      */
-    public static boolean take(final NbtCompound section) {
+    public static boolean take(final CompoundTag section) {
         final Prebuilt prebuilt = PREBUILT.remove(section);
         if (prebuilt == null) {
             // Every section read passes here first, so a container left by a read that failed midway is dropped.
@@ -177,11 +177,11 @@ public final class PreloadedBlockSections {
      * @param loaded     the containers and their fingerprint
      * @return {@code false} when they do not fit the root, and the caller must build the sections instead
      */
-    private static boolean embedLoadedSections(final ServerWorld world, final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta, final long generation,
+    private static boolean embedLoadedSections(final ServerLevel world, final CompoundTag root,
+            final ChunkDelta<BlockState, CompoundTag> delta, final long generation,
             final RecentChunkBlocks.LoadedSections loaded) {
         final PalettedContainer<BlockState>[] containers = loaded.sections();
-        final NbtCompound[] entries = sectionEntries(world, root, world.countVerticalSections());
+        final CompoundTag[] entries = sectionEntries(world, root, world.getSectionsCount());
         if (containers.length != entries.length) {
             return false;
         }
@@ -209,12 +209,12 @@ public final class PreloadedBlockSections {
      * @param count number of sections
      * @return entries by section index, {@code null} where the root has none
      */
-    private static NbtCompound[] sectionEntries(final ServerWorld world, final NbtCompound root, final int count) {
-        final NbtList sections = root.getListOrEmpty(CisNbtUtil.SECTIONS_KEY);
-        final NbtCompound[] entries = new NbtCompound[count];
+    private static CompoundTag[] sectionEntries(final ServerLevel world, final CompoundTag root, final int count) {
+        final ListTag sections = root.getListOrEmpty(CisNbtUtil.SECTIONS_KEY);
+        final CompoundTag[] entries = new CompoundTag[count];
         for (int i = 0; i < sections.size(); i++) {
-            final NbtCompound entry = sections.getCompoundOrEmpty(i);
-            final int index = entry.getByte(StoredSections.Y_KEY, (byte) 0) - world.getBottomSectionCoord();
+            final CompoundTag entry = sections.getCompoundOrEmpty(i);
+            final int index = entry.getByteOr(StoredSections.Y_KEY, (byte) 0) - world.getMinSectionY();
             if (index >= 0 && index < entries.length) {
                 entries[index] = entry;
             }
@@ -248,12 +248,12 @@ public final class PreloadedBlockSections {
      * @param world world the chunk belongs to
      * @param delta delta whose blocks were only attached
      */
-    public static void buildAttachedInstructions(final ServerWorld world,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+    public static void buildAttachedInstructions(final ServerLevel world,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         if (!(delta.blocksOnlySource() instanceof RecentChunkBlocks.LoadedSections loaded)) {
             throw new IllegalStateException("Chunkis: delta has no attached blocks to build instructions from");
         }
-        RecentChunkBlocks.appendBlocks(delta, loaded.sections(), world.getBottomY(), 0);
+        RecentChunkBlocks.appendBlocks(delta, loaded.sections(), world.getMinY(), 0);
         delta.endBlocksOnlyAttached();
     }
 
@@ -292,11 +292,11 @@ public final class PreloadedBlockSections {
      * @return indices by section index, {@code null} for sections holding only air, or {@code null} when a
      *         block cannot be placed
      */
-    private static SectionIndices[] buildSectionIndices(final ServerWorld world,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
-        final PaletteProvider<BlockState> provider = world.getPalettesFactory().blockStatesStrategy();
-        final int bottomY = world.getBottomY();
-        final SectionIndices[] sections = new SectionIndices[world.countVerticalSections()];
+    private static SectionIndices[] buildSectionIndices(final ServerLevel world,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
+        final Strategy<BlockState> provider = world.palettedContainerFactory().blockStatesStrategy();
+        final int bottomY = world.getMinY();
+        final SectionIndices[] sections = new SectionIndices[world.getSectionsCount()];
         final int[] placed = {0};
         final boolean[] outside = {false};
         delta.forEachBlockInstruction((x, y, z, paletteId, state) -> {
@@ -306,9 +306,9 @@ public final class PreloadedBlockSections {
                 return;
             }
             if (sections[index] == null) {
-                sections[index] = new SectionIndices(provider.getSize());
+                sections[index] = new SectionIndices(provider.entryCount());
             }
-            sections[index].set(provider.computeIndex(x, y & 15, z), paletteId, state);
+            sections[index].set(provider.getIndex(x, y & 15, z), paletteId, state);
             placed[0]++;
         });
         // Instructions whose state did not resolve are skipped; the restore would skip them too, but report them.
@@ -429,20 +429,20 @@ public final class PreloadedBlockSections {
          * @param provider block-state palette provider
          * @return the container
          */
-        PalettedContainer<BlockState> build(final PaletteProvider<BlockState> provider) {
+        PalettedContainer<BlockState> build(final Strategy<BlockState> provider) {
             int air = UNSET;
             for (int i = 0; filled < indices.length && i < indices.length; i++) {
                 if (indices[i] == UNSET) {
                     if (air == UNSET) {
-                        air = indexOf(Blocks.AIR.getDefaultState());
+                        air = indexOf(Blocks.AIR.defaultBlockState());
                     }
                     indices[i] = air;
                 }
             }
-            final int bits = provider.createTypeFromSize(palette.size()).bitsInStorage();
+            final int bits = provider.getConfigurationForPaletteSize(palette.size()).bitsInStorage();
             final Optional<LongStream> data = bits == 0 ? Optional.empty()
-                    : Optional.of(LongStream.of(new PackedIntegerArray(bits, indices.length, indices).getData()));
-            return PalettedContainer.read(provider, new ReadableContainer.Serialized<>(List.copyOf(palette), data))
+                    : Optional.of(LongStream.of(new SimpleBitStorage(bits, indices.length, indices).getRaw()));
+            return PalettedContainer.unpack(provider, new PalettedContainerRO.PackedData<>(List.copyOf(palette), data))
                     .getOrThrow(message -> new IllegalStateException("Chunkis: Failed building a block section: "
                             + message));
         }

@@ -21,9 +21,9 @@
     ],
     "accessWidener": "chunkis.accesswidener",
     "depends": {
-        "fabricloader": ">=0.16.5",
-        "minecraft": "~1.21.11",
-        "java": ">=21",
+        "fabricloader": ">=${loader_version}",
+        "minecraft": "~26.1.2",
+        "java": ">=25",
         "fabric-api": "*"
     }
 }

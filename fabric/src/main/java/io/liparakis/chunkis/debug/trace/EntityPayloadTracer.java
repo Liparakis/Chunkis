@@ -7,13 +7,13 @@ import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.EntityWatchTracker;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import java.util.List;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -38,15 +38,15 @@ public final class EntityPayloadTracer {
      * @param entities list of captured entity compounds
      */
     public static void traceCapturedEntities(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
-            final List<NbtCompound> entities
+            final List<CompoundTag> entities
     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches() || entities.isEmpty()) {
             return;
         }
 
-        for (final NbtCompound entityNbt : entities) {
+        for (final CompoundTag entityNbt : entities) {
             final String entityUuid = PayloadWatchSummaries.entityUuid(entityNbt);
             if (entityUuid == null) {
                 continue;
@@ -83,10 +83,10 @@ public final class EntityPayloadTracer {
      * @param operationId active restore operation ID
      */
     public static void traceRestoredEntity(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final Entity entity,
-            final NbtCompound nbt,
+            final CompoundTag nbt,
             final String operationId
     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
@@ -94,7 +94,7 @@ public final class EntityPayloadTracer {
         }
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
-                entity.getUuidAsString()
+                entity.getStringUUID()
         );
         if (target == null) {
             return;
@@ -123,9 +123,9 @@ public final class EntityPayloadTracer {
      * @param source      class/method trace source label
      */
     public static void traceRestoreEntityInstructionVisited(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
-            final NbtCompound nbt,
+            final CompoundTag nbt,
             final String operationId,
             final String source
     ) {
@@ -152,9 +152,9 @@ public final class EntityPayloadTracer {
      * @param source      class/method trace source label
      */
     public static void traceRestoreEntityApplyAttempt(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
-            final NbtCompound nbt,
+            final CompoundTag nbt,
             final String operationId,
             final String source
     ) {
@@ -181,7 +181,7 @@ public final class EntityPayloadTracer {
      * @param message     reason why restore was skipped
      */
     public static void traceRestoreEntitySkipped(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final String entityUuid,
             final String operationId,
@@ -221,9 +221,9 @@ public final class EntityPayloadTracer {
      * @param source        class/method trace source label
      */
     public static void traceEntityPresenceAfterChunkFull(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+            final ServerLevel world,
+            final LevelChunk chunk,
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             @Nullable final String operationId,
             final String source
     ) {
@@ -237,7 +237,7 @@ public final class EntityPayloadTracer {
             final PayloadWatchTarget target = match.target();
             final String resolvedOperationId = match.operationId();
             final Entity liveEntity = match.liveEntity();
-            final NbtCompound expectedNbt = match.expectedNbt();
+            final CompoundTag expectedNbt = match.expectedNbt();
             EntityWatchTracker.assertReloadedAfterUnload(
                     worldId,
                     chunkPos,
@@ -277,9 +277,9 @@ public final class EntityPayloadTracer {
      * @param message       custom detail description message text
      */
     public static void traceEntityReplayState(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+            final ServerLevel world,
+            final LevelChunk chunk,
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             @Nullable final String operationId,
             final ChunkTraceEventType eventType,
             final String stage,
@@ -296,7 +296,7 @@ public final class EntityPayloadTracer {
             final PayloadWatchTarget target = match.target();
             final String resolvedOperationId = match.operationId();
             final Entity liveEntity = match.liveEntity();
-            final NbtCompound expectedNbt = match.expectedNbt();
+            final CompoundTag expectedNbt = match.expectedNbt();
             WatchTraceEmitter.traceWatch(
                     eventType,
                     stage,
@@ -322,7 +322,7 @@ public final class EntityPayloadTracer {
      * @param source      class/method trace source label
      */
     public static void traceLiveEntityRemoved(
-            final ServerWorld world,
+            final ServerLevel world,
             final Entity entity,
             final Entity.RemovalReason reason,
             @Nullable final String operationId,
@@ -334,13 +334,13 @@ public final class EntityPayloadTracer {
 
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
-                entity.getUuidAsString()
+                entity.getStringUUID()
         );
         if (target == null) {
             return;
         }
 
-        final ChunkPos chunkPos = entity.getChunkPos();
+        final ChunkPos chunkPos = entity.chunkPosition();
         WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_ENTITY_REMOVED,
                 "live-remove",
@@ -366,7 +366,7 @@ public final class EntityPayloadTracer {
      * @param message     description detail text
      */
     public static void traceEntityChunkTransfer(
-            final ServerWorld world,
+            final ServerLevel world,
             final Entity entity,
             @Nullable final String operationId,
             final String stage,
@@ -379,12 +379,12 @@ public final class EntityPayloadTracer {
 
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
-                entity.getUuidAsString()
+                entity.getStringUUID()
         );
         if (target == null) {
             return;
         }
-        EntityWatchTracker.markTransfer(target, stage, entity.getChunkPos());
+        EntityWatchTracker.markTransfer(target, stage, entity.chunkPosition());
 
         WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_CAPTURED,
@@ -392,7 +392,7 @@ public final class EntityPayloadTracer {
                 source,
                 message,
                 PayloadWatchSummaries.worldId(world),
-                entity.getChunkPos(),
+                entity.chunkPosition(),
                 operationId,
                 target,
                 PayloadWatchSummaries.summarizeLiveEntity(target, entity, source),
@@ -411,9 +411,9 @@ public final class EntityPayloadTracer {
      * @param message description detail text
      */
     public static void traceEntityTrackingEvent(
-            final ServerWorld world,
+            final ServerLevel world,
             final Entity entity,
-            final ServerPlayerEntity player,
+            final ServerPlayer player,
             final String stage,
             final String source,
             final String message
@@ -424,7 +424,7 @@ public final class EntityPayloadTracer {
 
         final PayloadWatchTarget target = ChunkTraceWatchpoints.watchedEntity(
                 PayloadWatchSummaries.worldId(world),
-                entity.getUuidAsString()
+                entity.getStringUUID()
         );
         if (target == null) {
             return;
@@ -432,7 +432,7 @@ public final class EntityPayloadTracer {
         if ("entity-tracking-start".equals(stage)) {
             EntityWatchTracker.clearPendingReload(target);
         }
-        EntityWatchTracker.rememberChunk(target, entity.getChunkPos());
+        EntityWatchTracker.rememberChunk(target, entity.chunkPosition());
 
         WatchTraceEmitter.traceWatch(
                 ChunkTraceEventType.WATCH_CAPTURED,
@@ -440,13 +440,13 @@ public final class EntityPayloadTracer {
                 source,
                 message,
                 PayloadWatchSummaries.worldId(world),
-                entity.getChunkPos(),
+                entity.chunkPosition(),
                 null,
                 target,
                 PayloadWatchSummaries.summarizeLiveEntity(target, entity, source)
                         + " player=" + player.getName()
                         .getString()
-                        + " playerId=" + player.getUuidAsString(),
+                        + " playerId=" + player.getStringUUID(),
                 null
         );
     }
@@ -461,8 +461,8 @@ public final class EntityPayloadTracer {
      * @param message description detail text
      */
     public static void traceEntityChunkReentry(
-            final ServerWorld world,
-            final WorldChunk chunk,
+            final ServerLevel world,
+            final LevelChunk chunk,
             final String stage,
             final String source,
             final String message
@@ -491,7 +491,7 @@ public final class EntityPayloadTracer {
                     liveEntity != null
                             ? PayloadWatchSummaries.summarizeLiveEntity(target, liveEntity, source)
                             : target.describe()
-                              + " chunkStatus=" + chunk.getStatus()
+                              + " chunkStatus=" + chunk.getPersistedStatus()
                               + " chunkInstanceId=" + PayloadWatchSummaries.chunkInstanceId(chunk)
                               + " source=" + source
                               + " thread=" + Thread.currentThread()

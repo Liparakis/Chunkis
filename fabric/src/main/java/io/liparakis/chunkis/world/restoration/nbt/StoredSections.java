@@ -5,25 +5,25 @@ import io.liparakis.chunkis.world.restoration.core.PalettedContainerFields;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.LongStream;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
+import net.minecraft.core.Holder;
+import net.minecraft.core.SectionPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.nbt.NbtString;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.ChunkSectionPos;
-import net.minecraft.world.LightType;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.ChunkNibbleArray;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.Palette;
-import net.minecraft.world.chunk.PaletteProvider;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.ReadableContainer;
-import net.minecraft.world.chunk.SingularPalette;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.chunk.light.LightingProvider;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.chunk.DataLayer;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.Palette;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.PalettedContainerRO;
+import net.minecraft.world.level.chunk.SingleValuePalette;
+import net.minecraft.world.level.chunk.Strategy;
+import net.minecraft.world.level.lighting.LevelLightEngine;
 
 /**
  * Stores what a full-baseline chunk needs, besides its blocks, to load as a finished chunk: its biomes,
@@ -69,23 +69,23 @@ public final class StoredSections {
      * @param chunk loaded chunk
      * @return one entry per section holding data
      */
-    public static NbtList encode(final WorldChunk chunk) {
-        final Codec<ReadableContainer<RegistryEntry<Biome>>> codec = chunk.getWorld().getPalettesFactory()
+    public static ListTag encode(final LevelChunk chunk) {
+        final Codec<PalettedContainerRO<Holder<Biome>>> codec = chunk.getLevel().palettedContainerFactory()
                 .biomeContainerCodec();
-        final PaletteProvider<RegistryEntry<Biome>> biomeProvider = chunk.getWorld().getPalettesFactory()
+        final Strategy<Holder<Biome>> biomeProvider = chunk.getLevel().palettedContainerFactory()
                 .biomeStrategy();
-        final LightingProvider lighting = chunk.getWorld().getChunkManager().getLightingProvider();
-        final boolean storeLight = chunk.isLightOn();
+        final LevelLightEngine lighting = chunk.getLevel().getChunkSource().getLightEngine();
+        final boolean storeLight = chunk.isLightCorrect();
         final ChunkPos pos = chunk.getPos();
-        final ChunkSection[] sections = chunk.getSectionArray();
-        final NbtList encoded = new NbtList();
-        for (int sectionY = lighting.getBottomY(); sectionY < lighting.getTopY(); sectionY++) {
-            final NbtCompound entry = new NbtCompound();
-            final int index = chunk.sectionCoordToIndex(sectionY);
+        final LevelChunkSection[] sections = chunk.getSections();
+        final ListTag encoded = new ListTag();
+        for (int sectionY = lighting.getMinLightSection(); sectionY < lighting.getMaxLightSection(); sectionY++) {
+            final CompoundTag entry = new CompoundTag();
+            final int index = chunk.getSectionIndexFromSectionY(sectionY);
             if (index >= 0 && index < sections.length) {
-                NbtElement biomes = encodeBiomes(sections[index].getBiomeContainer(), biomeProvider);
+                Tag biomes = encodeBiomes(sections[index].getBiomes(), biomeProvider);
                 if (biomes == null) {
-                    biomes = codec.encodeStart(NbtOps.INSTANCE, sections[index].getBiomeContainer())
+                    biomes = codec.encodeStart(NbtOps.INSTANCE, sections[index].getBiomes())
                             .getOrThrow(message -> new IllegalStateException(
                                     "Chunkis: Failed encoding biomes of chunk " + pos + " section " + index + ": "
                                             + message));
@@ -93,9 +93,9 @@ public final class StoredSections {
                 entry.put(BIOMES_KEY, biomes);
             }
             if (storeLight) {
-                final ChunkSectionPos sectionPos = ChunkSectionPos.from(pos, sectionY);
-                putLight(entry, BLOCK_LIGHT_KEY, lighting.get(LightType.BLOCK).getLightSection(sectionPos));
-                putLight(entry, SKY_LIGHT_KEY, lighting.get(LightType.SKY).getLightSection(sectionPos));
+                final SectionPos sectionPos = SectionPos.of(pos, sectionY);
+                putLight(entry, BLOCK_LIGHT_KEY, lighting.getLayerListener(LightLayer.BLOCK).getDataLayerData(sectionPos));
+                putLight(entry, SKY_LIGHT_KEY, lighting.getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos));
             }
             if (!entry.isEmpty()) {
                 entry.putByte(Y_KEY, (byte) sectionY);
@@ -110,20 +110,20 @@ public final class StoredSections {
      * ids and, past one entry, the packed {@code data}), without going through the codec, which cost more than
      * the rest of a save's section capture. Runs on the server thread with every save of a stored chunk.
      *
-     * <p>A section of one biome skips {@link ReadableContainer#serialize}, which would lock the container and
+     * <p>A section of one biome skips {@link PalettedContainerRO#pack}, which would lock the container and
      * repack its 64 entries only to find that one biome again.</p>
      *
      * @param biomes   biome container of one section
      * @param provider biome palette provider
      * @return the encoded container, or {@code null} when a biome has no registry key and the codec must encode it
      */
-    public static NbtCompound encodeBiomes(final ReadableContainer<RegistryEntry<Biome>> biomes,
-            final PaletteProvider<RegistryEntry<Biome>> provider) {
-        final RegistryEntry<Biome> onlyBiome = onlyBiome(biomes);
+    public static CompoundTag encodeBiomes(final PalettedContainerRO<Holder<Biome>> biomes,
+            final Strategy<Holder<Biome>> provider) {
+        final Holder<Biome> onlyBiome = onlyBiome(biomes);
         if (onlyBiome != null) {
             return encodeBiomes(List.of(onlyBiome), Optional.empty());
         }
-        final ReadableContainer.Serialized<RegistryEntry<Biome>> serialized = biomes.serialize(provider);
+        final PalettedContainerRO.PackedData<Holder<Biome>> serialized = biomes.pack(provider);
         return encodeBiomes(serialized.paletteEntries(), serialized.storage());
     }
 
@@ -133,13 +133,13 @@ public final class StoredSections {
      * @param biomes biome container of one section
      * @return its one biome, or {@code null} when the palette has to be looked through
      */
-    private static RegistryEntry<Biome> onlyBiome(final ReadableContainer<RegistryEntry<Biome>> biomes) {
-        if (!PalettedContainerFields.AVAILABLE || !(biomes instanceof PalettedContainer<RegistryEntry<Biome>> container)) {
+    private static Holder<Biome> onlyBiome(final PalettedContainerRO<Holder<Biome>> biomes) {
+        if (!PalettedContainerFields.AVAILABLE || !(biomes instanceof PalettedContainer<Holder<Biome>> container)) {
             return null;
         }
-        final Palette<RegistryEntry<Biome>> palette = PalettedContainerFields.palette(
+        final Palette<Holder<Biome>> palette = PalettedContainerFields.palette(
                 PalettedContainerFields.data(container));
-        return palette instanceof SingularPalette<RegistryEntry<Biome>> ? palette.get(0) : null;
+        return palette instanceof SingleValuePalette<Holder<Biome>> ? palette.valueFor(0) : null;
     }
 
     /**
@@ -149,17 +149,17 @@ public final class StoredSections {
      * @param storage packed data, empty for one entry
      * @return the encoded container, or {@code null} when a biome has no registry key
      */
-    private static NbtCompound encodeBiomes(final List<RegistryEntry<Biome>> biomes,
+    private static CompoundTag encodeBiomes(final List<Holder<Biome>> biomes,
             final Optional<LongStream> storage) {
-        final NbtList palette = new NbtList();
-        for (final RegistryEntry<Biome> biome : biomes) {
-            final var key = biome.getKey();
+        final ListTag palette = new ListTag();
+        for (final Holder<Biome> biome : biomes) {
+            final var key = biome.unwrapKey();
             if (key.isEmpty()) {
                 return null;
             }
-            palette.add(NbtString.of(key.get().getValue().toString()));
+            palette.add(StringTag.valueOf(key.get().identifier().toString()));
         }
-        final NbtCompound encoded = new NbtCompound();
+        final CompoundTag encoded = new CompoundTag();
         encoded.put("palette", palette);
         storage.ifPresent(data -> encoded.putLongArray("data", data.toArray()));
         return encoded;
@@ -172,9 +172,9 @@ public final class StoredSections {
      * @param key   light key
      * @param light light section, or {@code null}
      */
-    private static void putLight(final NbtCompound entry, final String key, final ChunkNibbleArray light) {
-        if (light != null && !light.isUninitialized()) {
-            entry.putByteArray(key, light.asByteArray().clone());
+    private static void putLight(final CompoundTag entry, final String key, final DataLayer light) {
+        if (light != null && !light.isEmpty()) {
+            entry.putByteArray(key, light.getData().clone());
         }
     }
 }

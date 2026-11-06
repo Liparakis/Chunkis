@@ -9,24 +9,24 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.decoration.ArmorStandEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerEntityManager;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.entity.EntityTrackingStatus;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.entity.PersistentEntitySectionManager;
+import net.minecraft.world.level.entity.Visibility;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * Verifies that vanilla's entity save refreshes Chunkis entity payloads.
@@ -50,20 +50,20 @@ public final class VanillaEntitySaveCaptureGameTest {
      * @throws ReflectiveOperationException if the entity manager internals are missing
      */
     @SuppressWarnings("unchecked")
-    private static void saveEntities(final ServerWorld world, final BlockPos pos)
+    private static void saveEntities(final ServerLevel world, final BlockPos pos)
             throws ReflectiveOperationException {
-        final Field managerField = ServerWorld.class.getDeclaredField("entityManager");
+        final Field managerField = ServerLevel.class.getDeclaredField("entityManager");
         managerField.setAccessible(true);
-        final ServerEntityManager<?> manager = (ServerEntityManager<?>) managerField.get(world);
-        final Field accessField = ServerEntityManager.class.getDeclaredField("dataAccess");
+        final PersistentEntitySectionManager<?> manager = (PersistentEntitySectionManager<?>) managerField.get(world);
+        final Field accessField = PersistentEntitySectionManager.class.getDeclaredField("permanentStorage");
         accessField.setAccessible(true);
-        final net.minecraft.world.storage.ChunkDataAccess<Entity> dataAccess =
-                (net.minecraft.world.storage.ChunkDataAccess<Entity>) accessField.get(manager);
-        final net.minecraft.util.math.ChunkPos chunkPos = new net.minecraft.util.math.ChunkPos(pos);
-        final java.util.List<Entity> entities = world.getOtherEntities(null, new net.minecraft.util.math.Box(
-                chunkPos.getStartX(), world.getBottomY(), chunkPos.getStartZ(),
-                chunkPos.getEndX() + 1, world.getTopYInclusive() + 1, chunkPos.getEndZ() + 1));
-        dataAccess.writeChunkData(new net.minecraft.world.storage.ChunkDataList<>(chunkPos, entities));
+        final net.minecraft.world.level.entity.EntityPersistentStorage<Entity> dataAccess =
+                (net.minecraft.world.level.entity.EntityPersistentStorage<Entity>) accessField.get(manager);
+        final net.minecraft.world.level.ChunkPos chunkPos = net.minecraft.world.level.ChunkPos.containing(pos);
+        final java.util.List<Entity> entities = world.getEntities(null, new net.minecraft.world.phys.AABB(
+                chunkPos.getMinBlockX(), world.getMinY(), chunkPos.getMinBlockZ(),
+                chunkPos.getMaxBlockX() + 1, world.getMaxY() + 1, chunkPos.getMaxBlockZ() + 1));
+        dataAccess.storeEntities(new net.minecraft.world.level.entity.ChunkEntities<>(chunkPos, entities));
     }
 
     /**
@@ -73,16 +73,16 @@ public final class VanillaEntitySaveCaptureGameTest {
      * @param entity entity to look up
      * @return stored entity NBT, or {@code null}
      */
-    private static NbtCompound storedPayload(final ServerWorld world, final Entity entity) {
-        final ChunkDelta<?, ?> delta = ((ChunkisDeltaDuck) world.getWorldChunk(entity.getBlockPos()))
+    private static CompoundTag storedPayload(final ServerLevel world, final Entity entity) {
+        final ChunkDelta<?, ?> delta = ((ChunkisDeltaDuck) world.getChunkAt(entity.blockPosition()))
                 .chunkis$getDelta();
         if (delta == null) {
             return null;
         }
-        final AtomicReference<NbtCompound> found = new AtomicReference<>();
+        final AtomicReference<CompoundTag> found = new AtomicReference<>();
         delta.forEachEntity(nbt -> {
-            if (nbt instanceof NbtCompound compound
-                    && EntityPayloadNbt.hasUuid(compound, entity.getUuidAsString())) {
+            if (nbt instanceof CompoundTag compound
+                    && EntityPayloadNbt.hasUuid(compound, entity.getStringUUID())) {
                 found.set(compound);
             }
         });
@@ -97,54 +97,54 @@ public final class VanillaEntitySaveCaptureGameTest {
      * @throws ReflectiveOperationException if the entity manager cannot be reached
      */
     @GameTest(maxTicks = 100)
-    public void entitySaveRefreshesPayloadsChangedAfterSpawn(final TestContext context)
+    public void entitySaveRefreshesPayloadsChangedAfterSpawn(final GameTestHelper context)
             throws ReflectiveOperationException {
-        final ServerWorld world = context.getWorld();
-        final BlockPos spawnPos = context.getAbsolutePos(new BlockPos(1, 2, 1));
+        final ServerLevel world = context.getLevel();
+        final BlockPos spawnPos = context.absolutePos(new BlockPos(1, 2, 1));
         // Move within the same chunk wherever the test structure happens to be placed.
-        final net.minecraft.util.math.ChunkPos chunk = new net.minecraft.util.math.ChunkPos(spawnPos);
+        final net.minecraft.world.level.ChunkPos chunk = net.minecraft.world.level.ChunkPos.containing(spawnPos);
         final BlockPos movedPos = new BlockPos(
-                chunk.getStartX() + ((spawnPos.getX() - chunk.getStartX() + 8) & 15),
+                chunk.getMinBlockX() + ((spawnPos.getX() - chunk.getMinBlockX() + 8) & 15),
                 spawnPos.getY(),
-                chunk.getStartZ() + ((spawnPos.getZ() - chunk.getStartZ() + 8) & 15));
+                chunk.getMinBlockZ() + ((spawnPos.getZ() - chunk.getMinBlockZ() + 8) & 15));
 
-        final Entity cow = Objects.requireNonNull(EntityType.COW.create(world, SpawnReason.COMMAND));
-        cow.refreshPositionAndAngles(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F, 0.0F);
+        final Entity cow = Objects.requireNonNull(EntityType.COW.create(world, EntitySpawnReason.COMMAND));
+        cow.snapTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F, 0.0F);
         cow.setNoGravity(true);
-        world.spawnEntity(cow);
+        world.addFreshEntity(cow);
 
-        final ArmorStandEntity armorStand = Objects.requireNonNull(EntityType.ARMOR_STAND.create(world,
-                SpawnReason.COMMAND));
-        armorStand.refreshPositionAndAngles(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F,
+        final ArmorStand armorStand = Objects.requireNonNull(EntityType.ARMOR_STAND.create(world,
+                EntitySpawnReason.COMMAND));
+        armorStand.snapTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F,
                 0.0F);
-        world.spawnEntity(armorStand);
+        world.addFreshEntity(armorStand);
 
-        cow.refreshPositionAndAngles(movedPos.getX() + 0.5D, movedPos.getY(), movedPos.getZ() + 0.5D, 0.0F, 0.0F);
-        armorStand.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.DIAMOND_HELMET));
-        context.assertTrue(cow.getChunkPos()
-                        .equals(armorStand.getChunkPos()),
-                Text.literal("Test entities must share a chunk; move the test structure."));
+        cow.snapTo(movedPos.getX() + 0.5D, movedPos.getY(), movedPos.getZ() + 0.5D, 0.0F, 0.0F);
+        armorStand.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.DIAMOND_HELMET));
+        context.assertTrue(cow.chunkPosition()
+                        .equals(armorStand.chunkPosition()),
+                Component.literal("Test entities must share a chunk; move the test structure."));
 
         saveEntities(world, spawnPos);
 
-        final NbtCompound cowPayload = storedPayload(world, cow);
-        context.assertTrue(cowPayload != null, Text.literal("Expected cow payload in delta after entity save."));
+        final CompoundTag cowPayload = storedPayload(world, cow);
+        context.assertTrue(cowPayload != null, Component.literal("Expected cow payload in delta after entity save."));
         context.assertTrue(EntityPayloadNbt.findBlockPos(cowPayload)
                         .map(movedPos::equals)
                         .orElse(false),
-                Text.literal("Expected cow payload at moved position " + movedPos + " but was "
+                Component.literal("Expected cow payload at moved position " + movedPos + " but was "
                         + EntityPayloadNbt.describeRawPos(cowPayload)));
 
-        final NbtCompound standPayload = storedPayload(world, armorStand);
+        final CompoundTag standPayload = storedPayload(world, armorStand);
         context.assertTrue(standPayload != null,
-                Text.literal("Expected armor stand payload in delta after entity save."));
+                Component.literal("Expected armor stand payload in delta after entity save."));
         context.assertTrue(standPayload.toString()
                         .contains("minecraft:diamond_helmet"),
-                Text.literal("Expected armor stand payload to keep its helmet but was " + standPayload));
+                Component.literal("Expected armor stand payload to keep its helmet but was " + standPayload));
 
         cow.discard();
         armorStand.discard();
-        context.complete();
+        context.succeed();
     }
 
     /**
@@ -156,22 +156,22 @@ public final class VanillaEntitySaveCaptureGameTest {
      */
     @GameTest(maxTicks = 100)
     @SuppressWarnings("unchecked")
-    public void entitySaveKeepsUnreplayedPendingPayloads(final TestContext context)
+    public void entitySaveKeepsUnreplayedPendingPayloads(final GameTestHelper context)
             throws ReflectiveOperationException {
-        final ServerWorld world = context.getWorld();
-        final BlockPos pos = context.getAbsolutePos(new BlockPos(1, 2, 1));
+        final ServerLevel world = context.getLevel();
+        final BlockPos pos = context.absolutePos(new BlockPos(1, 2, 1));
 
         // Spawning claims the chunk's delta, like a real player edit.
-        final Entity anchor = Objects.requireNonNull(EntityType.COW.create(world, SpawnReason.COMMAND));
-        anchor.refreshPositionAndAngles(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
+        final Entity anchor = Objects.requireNonNull(EntityType.COW.create(world, EntitySpawnReason.COMMAND));
+        anchor.snapTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
         anchor.setNoGravity(true);
-        world.spawnEntity(anchor);
+        world.addFreshEntity(anchor);
 
         final java.util.UUID pendingUuid = java.util.UUID.randomUUID();
-        final NbtCompound pending = new NbtCompound();
+        final CompoundTag pending = new CompoundTag();
         pending.putString("id", "minecraft:pig");
-        pending.putIntArray("UUID", net.minecraft.util.Uuids.toIntArray(pendingUuid));
-        final ChunkDelta<?, NbtCompound> delta = (ChunkDelta<?, NbtCompound>) ((ChunkisDeltaDuck) world.getWorldChunk(pos))
+        pending.putIntArray("UUID", net.minecraft.core.UUIDUtil.uuidToIntArray(pendingUuid));
+        final ChunkDelta<?, CompoundTag> delta = (ChunkDelta<?, CompoundTag>) ((ChunkisDeltaDuck) world.getChunkAt(pos))
                 .chunkis$getDelta();
         delta.addPendingEntity(pending);
 
@@ -179,10 +179,10 @@ public final class VanillaEntitySaveCaptureGameTest {
 
         final boolean[] stillPending = {false};
         delta.forEachPendingEntity(nbt -> stillPending[0] |= EntityPayloadNbt.hasUuid(nbt, pendingUuid.toString()));
-        context.assertTrue(stillPending[0], Text.literal("Expected unreplayed pending payload to survive entity save."));
+        context.assertTrue(stillPending[0], Component.literal("Expected unreplayed pending payload to survive entity save."));
 
         anchor.discard();
-        context.complete();
+        context.succeed();
     }
 
     /**
@@ -199,40 +199,40 @@ public final class VanillaEntitySaveCaptureGameTest {
      */
     @GameTest(maxTicks = 100)
     @SuppressWarnings("unchecked")
-    public void entitySaveOfHiddenUnclaimedChunkClaimsIt(final TestContext context)
+    public void entitySaveOfHiddenUnclaimedChunkClaimsIt(final GameTestHelper context)
             throws ReflectiveOperationException {
-        final ServerWorld world = context.getWorld();
-        final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-        final ChunkPos target = new ChunkPos(anchor.x + 2700, anchor.z - 2700);
-        world.setChunkForced(target.x, target.z, true);
-        final WorldChunk chunk = world.getChunk(target.x, target.z);
-        final BlockPos pos = world.getTopPosition(Heightmap.Type.MOTION_BLOCKING, target.getBlockPos(8, 0, 8));
-        final MobEntity cow = Objects.requireNonNull(EntityType.COW.create(world, SpawnReason.COMMAND));
-        cow.refreshPositionAndAngles(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
-        cow.setAiDisabled(true);
+        final ServerLevel world = context.getLevel();
+        final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+        final ChunkPos target = new ChunkPos(anchor.x() + 2700, anchor.z() - 2700);
+        world.setChunkForced(target.x(), target.z(), true);
+        final LevelChunk chunk = world.getChunk(target.x(), target.z());
+        final BlockPos pos = world.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, target.getBlockAt(8, 0, 8));
+        final Mob cow = Objects.requireNonNull(EntityType.COW.create(world, EntitySpawnReason.COMMAND));
+        cow.snapTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
+        cow.setNoAi(true);
         cow.setNoGravity(true);
-        context.assertTrue(world.tryLoadEntity(cow), Text.literal("Could not load the cow into " + target + "."));
+        context.assertTrue(world.addWithUUID(cow), Component.literal("Could not load the cow into " + target + "."));
         context.assertFalse(ChunkDeltaOwnership.hasChunkisOwnedState(((ChunkisDeltaDuck) chunk).chunkis$getDelta()),
-                Text.literal("Chunk " + target + " must start unclaimed; pick another chunk."));
+                Component.literal("Chunk " + target + " must start unclaimed; pick another chunk."));
 
-        final Field managerField = ServerWorld.class.getDeclaredField("entityManager");
+        final Field managerField = ServerLevel.class.getDeclaredField("entityManager");
         managerField.setAccessible(true);
-        final ServerEntityManager<Entity> manager = (ServerEntityManager<Entity>) managerField.get(world);
-        final Field accessField = ServerEntityManager.class.getDeclaredField("dataAccess");
+        final PersistentEntitySectionManager<Entity> manager = (PersistentEntitySectionManager<Entity>) managerField.get(world);
+        final Field accessField = PersistentEntitySectionManager.class.getDeclaredField("permanentStorage");
         accessField.setAccessible(true);
-        final net.minecraft.world.storage.ChunkDataAccess<Entity> dataAccess =
-                (net.minecraft.world.storage.ChunkDataAccess<Entity>) accessField.get(manager);
-        manager.updateTrackingStatus(target, EntityTrackingStatus.HIDDEN);
+        final net.minecraft.world.level.entity.EntityPersistentStorage<Entity> dataAccess =
+                (net.minecraft.world.level.entity.EntityPersistentStorage<Entity>) accessField.get(manager);
+        manager.updateChunkStatus(target, Visibility.HIDDEN);
         try {
-            dataAccess.writeChunkData(new net.minecraft.world.storage.ChunkDataList<>(target, List.of(cow)));
+            dataAccess.storeEntities(new net.minecraft.world.level.entity.ChunkEntities<>(target, List.of(cow)));
         } finally {
-            manager.updateTrackingStatus(target, EntityTrackingStatus.TRACKED);
+            manager.updateChunkStatus(target, Visibility.TRACKED);
         }
 
         context.assertTrue(storedPayload(world, cow) != null,
-                Text.literal("Expected the hidden cow of unclaimed chunk " + target + " in its delta."));
+                Component.literal("Expected the hidden cow of unclaimed chunk " + target + " in its delta."));
         cow.discard();
-        world.setChunkForced(target.x, target.z, false);
-        context.complete();
+        world.setChunkForced(target.x(), target.z(), false);
+        context.succeed();
     }
 }

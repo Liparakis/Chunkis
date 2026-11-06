@@ -3,13 +3,13 @@ package io.liparakis.chunkis.world.entity.capture;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Uuids;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -53,7 +53,7 @@ public final class EntityPayloadNbt {
      * @return parsed UUID, or empty when {@code nbt} is {@code null}, the field is
      *         absent, or the array has the wrong length
      */
-    public static Optional<UUID> findUuid(@Nullable final NbtCompound nbt) {
+    public static Optional<UUID> findUuid(@Nullable final CompoundTag nbt) {
         if (nbt == null) {
             return Optional.empty();
         }
@@ -67,7 +67,7 @@ public final class EntityPayloadNbt {
      * @param nbt compound to read; may be {@code null}
      * @return {@link UUID#toString()} of the parsed UUID, or empty
      */
-    public static Optional<String> findUuidString(@Nullable final NbtCompound nbt) {
+    public static Optional<String> findUuidString(@Nullable final CompoundTag nbt) {
         return findUuid(nbt).map(UUID::toString);
     }
 
@@ -79,7 +79,7 @@ public final class EntityPayloadNbt {
      * @param entityUuid UUID string to match; returns {@code false} when {@code null} or blank
      * @return {@code true} iff the compound's UUID field equals {@code entityUuid}
      */
-    public static boolean hasUuid(@Nullable final NbtCompound nbt, final String entityUuid) {
+    public static boolean hasUuid(@Nullable final CompoundTag nbt, final String entityUuid) {
         return entityUuid != null
                 && !entityUuid.isBlank()
                 && findUuidString(nbt).map(entityUuid::equals)
@@ -92,7 +92,7 @@ public final class EntityPayloadNbt {
      * @param nbt compound to read; may be {@code null}
      * @return parsed identifier, or empty when absent or unparseable
      */
-    public static Optional<Identifier> findTypeId(@Nullable final NbtCompound nbt) {
+    public static Optional<Identifier> findTypeId(@Nullable final CompoundTag nbt) {
         if (nbt == null) {
             return Optional.empty();
         }
@@ -102,13 +102,13 @@ public final class EntityPayloadNbt {
 
     /**
      * Resolves the entity type from the {@code id} field, looking it up in
-     * {@link net.minecraft.registry.Registries#ENTITY_TYPE}.
+     * {@link net.minecraft.core.registries.BuiltInRegistries#ENTITY_TYPE}.
      *
      * @param nbt compound to read; may be {@code null}
      * @return registered entity type, or empty when the id is absent or unknown
      */
-    public static Optional<EntityType<?>> findEntityType(@Nullable final NbtCompound nbt) {
-        return findTypeId(nbt).map(Registries.ENTITY_TYPE::get);
+    public static Optional<EntityType<?>> findEntityType(@Nullable final CompoundTag nbt) {
+        return findTypeId(nbt).map(BuiltInRegistries.ENTITY_TYPE::getValue);
     }
 
     /**
@@ -124,7 +124,7 @@ public final class EntityPayloadNbt {
      * @return floored block position, or empty when {@code nbt} is {@code null} or
      *         the list has fewer than three elements
      */
-    public static Optional<BlockPos> findBlockPos(@Nullable final NbtCompound nbt) {
+    public static Optional<BlockPos> findBlockPos(@Nullable final CompoundTag nbt) {
         if (nbt == null) {
             return Optional.empty();
         }
@@ -147,7 +147,7 @@ public final class EntityPayloadNbt {
      * @param nbt compound to read; may be {@code null}
      * @return raw position string, or {@code "<missing>"}
      */
-    public static String describeRawPos(@Nullable final NbtCompound nbt) {
+    public static String describeRawPos(@Nullable final CompoundTag nbt) {
         if (nbt == null) {
             return "<missing>";
         }
@@ -157,7 +157,7 @@ public final class EntityPayloadNbt {
     }
 
     /**
-     * Wraps {@link Uuids#toUuid} to return empty rather than throwing when the
+     * Wraps {@link UUIDUtil#uuidFromIntArray} to return empty rather than throwing when the
      * int array is the wrong length or otherwise invalid.
      *
      * @param rawUuid raw four-element int array from NBT
@@ -165,7 +165,7 @@ public final class EntityPayloadNbt {
      */
     private static Optional<UUID> safeUuidFromIntArray(final int[] rawUuid) {
         try {
-            return Optional.of(Uuids.toUuid(rawUuid));
+            return Optional.of(UUIDUtil.uuidFromIntArray(rawUuid));
         } catch (final IllegalArgumentException ignored) {
             return Optional.empty();
         }
@@ -181,7 +181,7 @@ public final class EntityPayloadNbt {
      * @param entity source entity
      */
     public static void ensureEntityIdPresent(
-            final NbtCompound nbt,
+            final CompoundTag nbt,
             final Entity entity
     ) {
         Objects.requireNonNull(nbt, "nbt");
@@ -199,7 +199,7 @@ public final class EntityPayloadNbt {
      * @return registry ID string
      */
     private static String resolveEntityId(final Entity entity) {
-        return Registries.ENTITY_TYPE.getId(entity.getType())
+        return BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType())
                 .toString();
     }
 

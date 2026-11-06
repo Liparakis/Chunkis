@@ -3,10 +3,10 @@ package io.liparakis.chunkis.world.tracking.save;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.file.Path;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -25,9 +25,9 @@ class FabricCisStorageHelperTest {
      */
     @Test
     void overworldUsesRootChunkisDirectory() {
-        final RegistryKey<World> overworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("minecraft", "overworld"));
+        final ResourceKey<Level> overworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("minecraft", "overworld"));
 
         assertEquals(
                 SAVE_ROOT.resolve("chunkis")
@@ -38,19 +38,19 @@ class FabricCisStorageHelperTest {
                         .resolve("global_ids.json"),
                 ChunkisStoragePaths.computeMappingFile(SAVE_ROOT, overworld));
         assertEquals(
-                SAVE_ROOT.resolve("region"),
+                SAVE_ROOT.resolve("dimensions").resolve("minecraft").resolve("overworld").resolve("region"),
                 ChunkisStoragePaths.computeVanillaRegionDirectory(SAVE_ROOT, overworld));
     }
 
     /**
      * Verifies that non-overworld dimensions use normalized paths for Chunkis data
-     * while vanilla Nether regions retain the legacy {@code DIM-1} directory.
+     * and vanilla Nether regions use Minecraft's normalized dimension directory.
      */
     @Test
     void nonOverworldUsesDimensionLocalChunkisDirectory() {
-        final RegistryKey<World> nether = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("minecraft", "the_nether"));
+        final ResourceKey<Level> nether = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("minecraft", "the_nether"));
         final Path dimensionChunkisDir = SAVE_ROOT.resolve("dimensions")
                 .resolve("minecraft")
                 .resolve("the_nether")
@@ -63,7 +63,7 @@ class FabricCisStorageHelperTest {
                 dimensionChunkisDir.resolve("global_ids.json"),
                 ChunkisStoragePaths.computeMappingFile(SAVE_ROOT, nether));
         assertEquals(
-                SAVE_ROOT.resolve("DIM-1")
+                SAVE_ROOT.resolve("dimensions").resolve("minecraft").resolve("the_nether")
                         .resolve("region"),
                 ChunkisStoragePaths.computeVanillaRegionDirectory(SAVE_ROOT, nether));
     }
@@ -74,9 +74,9 @@ class FabricCisStorageHelperTest {
      */
     @Test
     void customDimensionNamedOverworldStillUsesDimensionDirectory() {
-        final RegistryKey<World> customOverworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("example", "overworld"));
+        final ResourceKey<Level> customOverworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("example", "overworld"));
         final Path dimensionBase = SAVE_ROOT.resolve("dimensions")
                 .resolve("example")
                 .resolve("overworld");

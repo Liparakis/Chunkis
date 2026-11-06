@@ -12,15 +12,15 @@ import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScop
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
 import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
 import java.util.UUID;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -53,14 +53,14 @@ final class EntityReplayDiagnostics {
      * @param searchBox    precomputed chunk-column query box
      */
     static void traceReplayDecision(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
+            final ServerLevel world,
+            final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> runtimeDelta,
             final String entityUuid,
-            @Nullable final NbtCompound entityNbt,
+            @Nullable final CompoundTag entityNbt,
             final boolean materialized,
             final String decision,
-            final Box searchBox
+            final AABB searchBox
     ) {
         // Gathering the details costs a world query and a large format per replay: only for an enabled trace.
         if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.ENTITY_REPLAY, ChunkTraceSeverity.INFO)) {
@@ -74,10 +74,10 @@ final class EntityReplayDiagnostics {
                 .orElse(null);
         final BlockPos nbtBlockPos = EntityPayloadNbt.findBlockPos(entityNbt)
                 .orElse(null);
-        final boolean chunkLoaded = LoadedChunks.getIfAccessible(world, chunkPos.x, chunkPos.z) != null;
-        final boolean entityTicking = nbtBlockPos != null && world.shouldTickEntityAt(nbtBlockPos);
+        final boolean chunkLoaded = LoadedChunks.getIfAccessible(world, chunkPos.x(), chunkPos.z()) != null;
+        final boolean entityTicking = nbtBlockPos != null && world.isPositionEntityTicking(nbtBlockPos);
         final ChunkMutationTrackingScope.Cause pendingSuppression =
-                PendingChunkMutationSuppression.currentCause(world.getRegistryKey(), chunkPos);
+                PendingChunkMutationSuppression.currentCause(world.dimension(), chunkPos);
         final ChunkMutationTrackingScope.Cause chunkSuppression =
                 chunk instanceof ChunkisMutationGuardDuck guardDuck
                         ? guardDuck.chunkis$getMutationTrackingScope()
@@ -97,7 +97,7 @@ final class EntityReplayDiagnostics {
                 EntityPayloadNbt.describeRawPos(entityNbt),
                 liveEntity != null && liveEntity.isAlive() && !liveEntity.isRemoved(),
                 liveEntity == null ? "<missing>" : liveEntity.getType(),
-                liveEntity == null ? "<missing>" : liveEntity.getChunkPos().x + "," + liveEntity.getChunkPos().z,
+                liveEntity == null ? "<missing>" : liveEntity.chunkPosition().x() + "," + liveEntity.chunkPosition().z(),
                 chunkLoaded,
                 entityTicking,
                 pendingSuppression,
@@ -118,10 +118,10 @@ final class EntityReplayDiagnostics {
                 io.liparakis.chunkis.debug.model.ChunkTraceReason.ENTITY_REPLAY,
                 "EntityReplayDiagnostics#traceReplayDecision",
                 message,
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
-                new io.liparakis.chunkis.debug.model.key.DebugChunkKey(chunkPos.x, chunkPos.z),
+                new io.liparakis.chunkis.debug.model.key.DebugChunkKey(chunkPos.x(), chunkPos.z()),
                 null,
                 null,
                 null,

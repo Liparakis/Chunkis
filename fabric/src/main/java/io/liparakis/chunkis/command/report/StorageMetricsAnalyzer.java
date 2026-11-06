@@ -36,12 +36,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.WorldSavePath;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Analyzer that scans and collects storage metrics for both Vanilla region MCA files and Chunkis CIS files.
@@ -124,13 +124,13 @@ public final class StorageMetricsAnalyzer {
      * @return a compiled StorageReport populated with sizing and layout metrics
      * @throws IOException if directory or file reads fail
      */
-    public static StorageReport inspectWorld(final ServerWorld world, final int topRegions) throws IOException {
+    public static StorageReport inspectWorld(final ServerLevel world, final int topRegions) throws IOException {
         final Path saveRoot = Objects.requireNonNull(world.getServer())
-                .getSavePath(WorldSavePath.ROOT);
-        final Path chunkisDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, world.getRegistryKey());
-        final Path vanillaDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, world.getRegistryKey());
+                .getWorldPath(LevelResource.ROOT);
+        final Path chunkisDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, world.dimension());
+        final Path vanillaDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, world.dimension());
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage =
                 FabricCisStorageHelper.getStorage(world);
 
         final Map<String, CisRegionInspector.RegionSpaceUsage> regionSpaceByName =
@@ -187,7 +187,7 @@ public final class StorageMetricsAnalyzer {
      * @throws IOException if reading the file channel or payload fails
      */
     private static RegionInspection inspectRegion(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final Path regionPath,
             final CisRegionInspector.RegionSpaceUsage regionSpace
     ) throws IOException {
@@ -226,7 +226,7 @@ public final class StorageMetricsAnalyzer {
                 final byte[] raw = CisPayloadDiagnosticsReader.RegionFileReader.decompressChunkPayload(compressed);
                 final ChunkPayloadDiagnostics payload = CisPayloadDiagnosticsReader.inspectChunkPayload(raw);
 
-                final ChunkDelta<BlockState, NbtCompound> delta = storage.loadWithoutClearing(pos);
+                final ChunkDelta<BlockState, CompoundTag> delta = storage.loadWithoutClearing(pos);
                 final CisChunk<BlockState> encoderChunk = buildEncoderChunk(delta);
                 final EncoderInputDiagnostics encoderInput = inspectEncoderInput(encoderChunk);
                 final DenseSectionAnalysis denseAnalysis = inspectDenseSections(pos, payload, encoderChunk);
@@ -296,7 +296,7 @@ public final class StorageMetricsAnalyzer {
      * @param delta the chunk delta to parse
      * @return a temporary CisChunk representation
      */
-    private static CisChunk<BlockState> buildEncoderChunk(final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static CisChunk<BlockState> buildEncoderChunk(final ChunkDelta<BlockState, CompoundTag> delta) {
         final CisChunk<BlockState> chunk = new CisChunk<>();
         delta.forEachBlock((x, y, z, state) -> {
             if (state != null && !state.isAir()) {

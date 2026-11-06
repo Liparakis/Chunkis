@@ -8,7 +8,7 @@ pluginManagement {
         gradlePluginPortal()
     }
     plugins {
-        id("fabric-loom").version("1.14-SNAPSHOT")
+        id("net.fabricmc.fabric-loom").version("1.15.5")
     }
 }
 

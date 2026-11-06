@@ -9,9 +9,9 @@ import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -33,20 +33,20 @@ class OfflineMcaCisTranslatorTest {
      * @param entityId the entity ID to add to the delta
      * @return a new ChunkDelta populated with mock data
      */
-    private static ChunkDelta<BlockState, NbtCompound> migratedDelta(final String entityId) {
-        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>(BlockState::isAir);
+    private static ChunkDelta<BlockState, CompoundTag> migratedDelta(final String entityId) {
+        final ChunkDelta<BlockState, CompoundTag> delta = new ChunkDelta<>(BlockState::isAir);
 
-        final NbtCompound blockEntity = new NbtCompound();
+        final CompoundTag blockEntity = new CompoundTag();
         blockEntity.putString("id", "minecraft:chest");
         delta.addBlockEntityData(1, 70, 2, blockEntity);
 
-        final NbtCompound entity = new NbtCompound();
+        final CompoundTag entity = new CompoundTag();
         entity.putString("id", entityId);
         delta.addPendingEntity(entity);
 
-        final NbtCompound auxiliary = new NbtCompound();
+        final CompoundTag auxiliary = new CompoundTag();
         auxiliary.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
-        final NbtCompound metadata = ChunkSnapshotBuilder.createMigratedChunkMetadata(
+        final CompoundTag metadata = ChunkSnapshotBuilder.createMigratedChunkMetadata(
                 null,
                 auxiliary,
                 false
@@ -61,9 +61,9 @@ class OfflineMcaCisTranslatorTest {
      */
     @Test
     void migratedChunkShapeRequiresMatchingPayloadNotJustMarkers() {
-        final ChunkDelta<BlockState, NbtCompound> expected = migratedDelta("minecraft:pig");
-        final ChunkDelta<BlockState, NbtCompound> matching = migratedDelta("minecraft:pig");
-        final ChunkDelta<BlockState, NbtCompound> mismatched = migratedDelta("minecraft:cow");
+        final ChunkDelta<BlockState, CompoundTag> expected = migratedDelta("minecraft:pig");
+        final ChunkDelta<BlockState, CompoundTag> matching = migratedDelta("minecraft:pig");
+        final ChunkDelta<BlockState, CompoundTag> mismatched = migratedDelta("minecraft:cow");
 
         assertTrue(MigrationChunkValidator.matchesMigratedChunkShape(expected, matching)
                 .valid());
@@ -76,9 +76,9 @@ class OfflineMcaCisTranslatorTest {
      */
     @Test
     void omittableEmptyChunkRequiresNoBlocksBlockEntitiesOrEntities() {
-        final ChunkDelta<BlockState, NbtCompound> empty = new ChunkDelta<>(BlockState::isAir);
-        final ChunkDelta<BlockState, NbtCompound> entityOnly = new ChunkDelta<>(BlockState::isAir);
-        entityOnly.addPendingEntity(new NbtCompound());
+        final ChunkDelta<BlockState, CompoundTag> empty = new ChunkDelta<>(BlockState::isAir);
+        final ChunkDelta<BlockState, CompoundTag> entityOnly = new ChunkDelta<>(BlockState::isAir);
+        entityOnly.addPendingEntity(new CompoundTag());
 
         assertTrue(ChunkSnapshotBuilder.isOmittableEmptyChunk(empty));
         assertFalse(ChunkSnapshotBuilder.isOmittableEmptyChunk(entityOnly));
@@ -137,13 +137,13 @@ class OfflineMcaCisTranslatorTest {
      */
     @Test
     void extractEntityPayloadsReadsModernExternalEntityList() {
-        final NbtCompound entity = new NbtCompound();
+        final CompoundTag entity = new CompoundTag();
         entity.putString("id", "minecraft:villager");
 
-        final NbtList entities = new NbtList();
+        final ListTag entities = new ListTag();
         entities.add(entity);
 
-        final NbtCompound root = new NbtCompound();
+        final CompoundTag root = new CompoundTag();
         root.put("Entities", entities);
 
         assertEquals(1,
@@ -161,9 +161,9 @@ class OfflineMcaCisTranslatorTest {
      */
     @Test
     void chunkPayloadRootFallsBackToLegacyLevelCompound() {
-        final NbtCompound level = new NbtCompound();
+        final CompoundTag level = new CompoundTag();
         level.putString("marker", "level-root");
-        final NbtCompound root = new NbtCompound();
+        final CompoundTag root = new CompoundTag();
         root.put("Level", level);
 
         assertEquals("level-root",

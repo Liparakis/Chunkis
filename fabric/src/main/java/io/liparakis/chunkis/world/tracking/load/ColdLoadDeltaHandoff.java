@@ -3,12 +3,12 @@ package io.liparakis.chunkis.world.tracking.load;
 import io.liparakis.chunkis.core.ChunkDelta;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Hands the delta the load hook built its synthetic NBT from (decoded from storage, or the
@@ -25,7 +25,7 @@ public final class ColdLoadDeltaHandoff {
     /**
      * Decoded deltas waiting for their chunk to be converted.
      */
-    private static final Map<Key, ChunkDelta<BlockState, NbtCompound>> PENDING = new ConcurrentHashMap<>();
+    private static final Map<Key, ChunkDelta<BlockState, CompoundTag>> PENDING = new ConcurrentHashMap<>();
 
     /**
      * Static holder; not instantiable.
@@ -41,8 +41,8 @@ public final class ColdLoadDeltaHandoff {
      * @param pos   chunk position
      * @param delta decoded delta, or {@code null}
      */
-    static void offer(final ServerWorld world, final ChunkPos pos, final ChunkDelta<BlockState, NbtCompound> delta) {
-        final Key key = new Key(world.getRegistryKey(), pos.toLong());
+    static void offer(final ServerLevel world, final ChunkPos pos, final ChunkDelta<BlockState, CompoundTag> delta) {
+        final Key key = new Key(world.dimension(), pos.pack());
         if (delta == null) {
             PENDING.remove(key);
         } else {
@@ -57,8 +57,8 @@ public final class ColdLoadDeltaHandoff {
      * @param pos   chunk position
      * @return decoded delta, or {@code null} when the load hook decoded none
      */
-    public static ChunkDelta<BlockState, NbtCompound> take(final ServerWorld world, final ChunkPos pos) {
-        return PENDING.remove(new Key(world.getRegistryKey(), pos.toLong()));
+    public static ChunkDelta<BlockState, CompoundTag> take(final ServerLevel world, final ChunkPos pos) {
+        return PENDING.remove(new Key(world.dimension(), pos.pack()));
     }
 
     /**
@@ -68,6 +68,6 @@ public final class ColdLoadDeltaHandoff {
         PENDING.clear();
     }
 
-    private record Key(RegistryKey<World> world, long pos) {
+    private record Key(ResourceKey<Level> world, long pos) {
     }
 }

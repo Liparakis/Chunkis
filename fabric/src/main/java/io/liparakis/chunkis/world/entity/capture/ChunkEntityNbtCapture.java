@@ -3,11 +3,11 @@ package io.liparakis.chunkis.world.entity.capture;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.UUID;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.storage.NbtWriteView;
-import net.minecraft.util.ErrorReporter;
-import net.minecraft.util.Uuids;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.storage.TagValueOutput;
 
 /**
  * Serializes live {@link Entity} instances to NBT for storage in Chunkis delta payloads.
@@ -31,10 +31,10 @@ public final class ChunkEntityNbtCapture {
     }
 
     /**
-     * Serializes {@code entity} to an {@link NbtCompound} suitable for storage in a Chunkis chunk
+     * Serializes {@code entity} to an {@link CompoundTag} suitable for storage in a Chunkis chunk
      * delta.
      *
-     * <p>Uses Minecraft's {@link NbtWriteView} / {@link ErrorReporter.Logging}
+     * <p>Uses Minecraft's {@link TagValueOutput} / {@link ProblemReporter.ScopedCollector}
      * pipeline so that per-field serialization errors are captured and logged rather than propagated
      * as exceptions. After serialization, {@link CisNbtUtil#ensureEntityIdPresent} injects the entity
      * type ID if the vanilla serializer omitted it.</p>
@@ -46,19 +46,19 @@ public final class ChunkEntityNbtCapture {
      * @param entity the entity to serialize; must not be {@code null}
      * @return serialized NBT, or {@code null} on failure
      */
-    public static NbtCompound serializeEntityNbt(final Entity entity) {
-        try (final ErrorReporter.Logging logging = new ErrorReporter.Logging(
-                entity.getErrorReporterContext(), Chunkis.LOGGER)) {
-            final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
-            if (!entity.saveSelfData(writeView)) {
+    public static CompoundTag serializeEntityNbt(final Entity entity) {
+        try (final ProblemReporter.ScopedCollector logging = new ProblemReporter.ScopedCollector(
+                entity.problemPath(), Chunkis.LOGGER)) {
+            final TagValueOutput writeView = TagValueOutput.createWithContext(logging, entity.registryAccess());
+            if (!entity.saveAsPassenger(writeView)) {
                 return null;
             }
-            final NbtCompound nbt = writeView.getNbt();
+            final CompoundTag nbt = writeView.buildResult();
             EntityPayloadNbt.ensureEntityIdPresent(nbt, entity);
             return nbt;
         } catch (final Exception e) {
             Chunkis.LOGGER.debug("Chunkis: Skipped entity capture for {} in chunk {}", entity.getType(),
-                    entity.getChunkPos(), e);
+                    entity.chunkPosition(), e);
             return null;
         }
     }
@@ -69,9 +69,9 @@ public final class ChunkEntityNbtCapture {
      *
      * @param entityNbt entity NBT compound; may be {@code null}
      * @return UUID as a string, or {@code null}
-     * @see #parseEntityUuid(NbtCompound)
+     * @see #parseEntityUuid(CompoundTag)
      */
-    public static String entityUuid(final NbtCompound entityNbt) {
+    public static String entityUuid(final CompoundTag entityNbt) {
         final UUID uuid = parseEntityUuid(entityNbt);
         return uuid == null ? null : uuid.toString();
     }
@@ -79,14 +79,14 @@ public final class ChunkEntityNbtCapture {
     /**
      * Parses the {@code UUID} int-array field from {@code entityNbt}.
      *
-     * <p>{@link Uuids#toUuid} throws {@link IllegalArgumentException} if the
+     * <p>{@link UUIDUtil#uuidFromIntArray} throws {@link IllegalArgumentException} if the
      * stored array is not exactly 4 ints. This is treated as a missing UUID (returns {@code null})
      * since corrupt NBT cannot be meaningfully recovered from at this layer.</p>
      *
      * @param entityNbt entity NBT compound; may be {@code null}
      * @return parsed {@link UUID}, or {@code null} if missing or invalid
      */
-    public static UUID parseEntityUuid(final NbtCompound entityNbt) {
+    public static UUID parseEntityUuid(final CompoundTag entityNbt) {
         if (entityNbt == null) {
             return null;
         }

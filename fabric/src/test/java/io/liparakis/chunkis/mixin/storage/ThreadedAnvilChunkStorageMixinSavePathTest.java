@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import java.lang.reflect.Method;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -24,8 +24,8 @@ final class ThreadedAnvilChunkStorageMixinSavePathTest {
      * @return the claimed {@link ChunkDelta}
      * @throws Exception if reflection or execution fails
      */
-    private static ChunkDelta<BlockState, NbtCompound> invokeClaimAfterEntityCapture(
-            final ChunkDelta<BlockState, NbtCompound> delta) throws Exception {
+    private static ChunkDelta<BlockState, CompoundTag> invokeClaimAfterEntityCapture(
+            final ChunkDelta<BlockState, CompoundTag> delta) throws Exception {
         final Class<?> mixinClass = Class.forName("io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinator");
         final Method method = mixinClass.getDeclaredMethod(
                 "claimEntityCapturedDelta",
@@ -34,8 +34,8 @@ final class ThreadedAnvilChunkStorageMixinSavePathTest {
                 String.class
         );
         method.setAccessible(true);
-        @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> claimed =
-                (ChunkDelta<BlockState, NbtCompound>) method.invoke(
+        @SuppressWarnings("unchecked") final ChunkDelta<BlockState, CompoundTag> claimed =
+                (ChunkDelta<BlockState, CompoundTag>) method.invoke(
                         null,
                         delta,
                         "EXPLICIT_CHUNKIS_MUTATION",
@@ -60,9 +60,9 @@ final class ThreadedAnvilChunkStorageMixinSavePathTest {
      */
     @Test
     void capturedEntityDeltaIsClaimedWhenPresent() throws Exception {
-        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<BlockState, CompoundTag> delta = new ChunkDelta<>();
 
-        final ChunkDelta<BlockState, NbtCompound> claimed = invokeClaimAfterEntityCapture(delta);
+        final ChunkDelta<BlockState, CompoundTag> claimed = invokeClaimAfterEntityCapture(delta);
 
         assertSame(delta, claimed);
         assertTrue(delta.hasOwnershipClaim());

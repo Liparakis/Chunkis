@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import java.util.List;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -22,8 +22,8 @@ class LiveEntitySnapshotCaptureTest {
      * @param tick a field that changes for live mobs
      * @return payload compound
      */
-    private static NbtCompound entity(final String id, final int tick) {
-        final NbtCompound nbt = new NbtCompound();
+    private static CompoundTag entity(final String id, final int tick) {
+        final CompoundTag nbt = new CompoundTag();
         nbt.putString("id", id);
         nbt.putInt("Age", tick);
         return nbt;
@@ -34,7 +34,7 @@ class LiveEntitySnapshotCaptureTest {
      */
     @Test
     void sameEntitiesIgnoresRuntimeOrder() {
-        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<BlockState, CompoundTag> delta = new ChunkDelta<>();
         delta.putEntity(1, entity("minecraft:item_frame", 0));
         delta.putEntity(2, entity("minecraft:armor_stand", 0));
 
@@ -47,7 +47,7 @@ class LiveEntitySnapshotCaptureTest {
      */
     @Test
     void sameEntitiesDetectsChanges() {
-        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<BlockState, CompoundTag> delta = new ChunkDelta<>();
         delta.putEntity(1, entity("minecraft:cow", 5));
 
         assertFalse(LiveEntitySnapshotCapture.sameEntities(delta, List.of(),
@@ -56,7 +56,7 @@ class LiveEntitySnapshotCaptureTest {
         assertFalse(LiveEntitySnapshotCapture.sameEntities(delta, List.of(),
                 List.of(entity("minecraft:cow", 5), entity("minecraft:pig", 1)), List.of()));
 
-        final NbtCompound pending = entity("minecraft:pig", 0);
+        final CompoundTag pending = entity("minecraft:pig", 0);
         delta.addPendingEntity(pending);
         assertFalse(LiveEntitySnapshotCapture.sameEntities(delta, List.of(pending),
                 List.of(entity("minecraft:cow", 5)), List.of()));
@@ -69,7 +69,7 @@ class LiveEntitySnapshotCaptureTest {
      */
     @Test
     void emptyEntityListLeavesADeltaWithoutEntitiesAlone() {
-        final ChunkDelta<BlockState, NbtCompound> empty = new ChunkDelta<>();
+        final ChunkDelta<BlockState, CompoundTag> empty = new ChunkDelta<>();
         assertSame(empty, LiveEntitySnapshotCapture.capture(null, null, List.of(), empty, null, "test"));
         assertFalse(empty.isDirty());
     }

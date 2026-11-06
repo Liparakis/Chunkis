@@ -3,10 +3,10 @@ package io.liparakis.chunkis.mixin.compat;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import io.liparakis.chunkis.integration.c2me.C2meChunkPromotion;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.ProtoChunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.ProtoChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 
@@ -33,9 +33,9 @@ public abstract class C2meServerAccessibleMixin {
      * @return constructed full chunk
      */
     @WrapMethod(method = "toFullChunk", remap = false, require = 1)
-    private static WorldChunk chunkis$constructBeforePublication(final ProtoChunk proto,
-            final ServerWorld world, final Operation<WorldChunk> original) {
+    private static LevelChunk chunkis$constructBeforePublication(final ProtoChunk proto,
+            final ServerLevel world, final Operation<LevelChunk> original) {
         final ChunkPos pos = proto.getPos();
-        return C2meChunkPromotion.construct(world, pos.x, pos.z, () -> original.call(proto, world));
+        return C2meChunkPromotion.construct(world, pos.x(), pos.z(), () -> original.call(proto, world));
     }
 }

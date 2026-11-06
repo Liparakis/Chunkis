@@ -2,8 +2,8 @@ package io.liparakis.chunkis.integration.migration.state;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.world.World;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 /**
  * Process-local registry of dimensions whose CIS data is authoritative.
@@ -26,9 +26,9 @@ public final class MigrationStateServiceHolder {
      *
      * @param worldKey dimension key to record
      */
-    public static void markAuthoritative(final RegistryKey<World> worldKey) {
+    public static void markAuthoritative(final ResourceKey<Level> worldKey) {
         if (worldKey != null) {
-            AUTHORITATIVE_DIMENSIONS.add(worldKey.getValue()
+            AUTHORITATIVE_DIMENSIONS.add(worldKey.identifier()
                     .toString());
         }
     }
@@ -39,8 +39,8 @@ public final class MigrationStateServiceHolder {
      * @param worldKey dimension key to query
      * @return {@code true} if vanilla storage should be blocked for the dimension
      */
-    public static boolean isAuthoritative(final RegistryKey<World> worldKey) {
-        return worldKey != null && AUTHORITATIVE_DIMENSIONS.contains(worldKey.getValue()
+    public static boolean isAuthoritative(final ResourceKey<Level> worldKey) {
+        return worldKey != null && AUTHORITATIVE_DIMENSIONS.contains(worldKey.identifier()
                 .toString());
     }
 

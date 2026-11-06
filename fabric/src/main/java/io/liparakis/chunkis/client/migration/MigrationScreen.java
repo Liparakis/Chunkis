@@ -2,10 +2,10 @@ package io.liparakis.chunkis.client.migration;
 
 import io.liparakis.chunkis.integration.migration.MigrationProgressTracker;
 import java.util.Locale;
-import net.minecraft.client.gui.Click;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.Component;
 
 /**
  * Full-screen MCA-to-CIS conversion status display shown while startup waits for
@@ -91,7 +91,7 @@ public final class MigrationScreen extends Screen {
      * Creates the migration progress screen.
      */
     public MigrationScreen() {
-        super(Text.literal("Converting MCA to CIS"));
+        super(Component.literal("Converting MCA to CIS"));
     }
 
     /**
@@ -153,20 +153,20 @@ public final class MigrationScreen extends Screen {
     /**
      * Draws a filled panel with the overlay border style.
      */
-    private static void drawPanel(final DrawContext context,
+    private static void drawPanel(final GuiGraphicsExtractor context,
             final int x,
             final int y,
             final int panelWidth,
             final int panelHeight) {
         context.fill(x, y, x + panelWidth, y + panelHeight, PANEL_BACKGROUND);
-        context.drawStrokedRectangle(x, y, panelWidth, panelHeight, PANEL_BORDER);
+        context.outline(x, y, panelWidth, panelHeight, PANEL_BORDER);
     }
 
     /**
      * Draws a clamped progress bar with a filled and track portion.
      */
     @SuppressWarnings("SameParameterValue")
-    private static void drawProgressBar(final DrawContext context,
+    private static void drawProgressBar(final GuiGraphicsExtractor context,
             final int x,
             final int y,
             final int progressWidth,
@@ -177,7 +177,7 @@ public final class MigrationScreen extends Screen {
         if (filledWidth > 0) {
             context.fill(x, y, x + filledWidth, y + progressHeight, BLUE);
         }
-        context.drawStrokedRectangle(x, y, progressWidth, progressHeight, PANEL_BORDER);
+        context.outline(x, y, progressWidth, progressHeight, PANEL_BORDER);
     }
 
     /**
@@ -341,7 +341,7 @@ public final class MigrationScreen extends Screen {
      * Renders the responsive summary panel, worker table, and scrollbar.
      */
     @Override
-    public void render(final DrawContext context, final int mouseX, final int mouseY, final float delta) {
+    public void extractRenderState(final GuiGraphicsExtractor context, final int mouseX, final int mouseY, final float delta) {
         // Startup can already have consumed the single blur pass allowed per frame.
         // A translucent overlay keeps this screen reliable during that transition.
         context.fill(0, 0, width, height, 0xD0000000);
@@ -351,7 +351,7 @@ public final class MigrationScreen extends Screen {
         final int panelX = (width - panelWidth) / 2;
         final int titleY = Math.max(30, height / 10);
         final String world = snapshot.worldId() == null ? "world" : snapshot.worldId();
-        context.drawCenteredTextWithShadow(textRenderer,
+        context.centeredText(font,
                 "Converting " + world + " from MCA to CIS",
                 width / 2,
                 titleY,
@@ -367,7 +367,7 @@ public final class MigrationScreen extends Screen {
                 snapshot.totalRegions(),
                 formatDuration(elapsedSeconds(snapshot.startedAtNanos())),
                 formatDuration(etaSeconds(snapshot)));
-        context.drawCenteredTextWithShadow(textRenderer, summary, width / 2, progressY + 8, WHITE);
+        context.centeredText(font, summary, width / 2, progressY + 8, WHITE);
         drawProgressBar(context, panelX + 12, progressY + 20, panelWidth - 24, 16, overall);
 
         if (snapshot.workers()
@@ -447,7 +447,7 @@ public final class MigrationScreen extends Screen {
      * Starts scrollbar dragging or jumps to the clicked track position.
      */
     @Override
-    public boolean mouseClicked(final Click click, final boolean doubleClick) {
+    public boolean mouseClicked(final MouseButtonEvent click, final boolean doubleClick) {
         if (click.button() == 0 && maxScroll > 0 && isInsideScrollbar(click.x(), click.y())) {
             final int trackY = scrollTrackY();
             final int trackHeight = scrollTrackHeight();
@@ -467,7 +467,7 @@ public final class MigrationScreen extends Screen {
      * Updates the scroll index while dragging the scrollbar thumb.
      */
     @Override
-    public boolean mouseDragged(final Click click, final double deltaX, final double deltaY) {
+    public boolean mouseDragged(final MouseButtonEvent click, final double deltaX, final double deltaY) {
         if (!draggingScrollbar) {
             return super.mouseDragged(click, deltaX, deltaY);
         }
@@ -485,7 +485,7 @@ public final class MigrationScreen extends Screen {
      * Stops scrollbar dragging when the mouse button is released.
      */
     @Override
-    public boolean mouseReleased(final Click click) {
+    public boolean mouseReleased(final MouseButtonEvent click) {
         draggingScrollbar = false;
         return super.mouseReleased(click);
     }
@@ -523,7 +523,7 @@ public final class MigrationScreen extends Screen {
     /**
      * Draws the track and thumb for the current worker-table viewport.
      */
-    private void drawScrollbar(final DrawContext context, final int x, final int y,
+    private void drawScrollbar(final GuiGraphicsExtractor context, final int x, final int y,
             final int height, final int totalRows) {
         final int barX = x + tableWidth - 12;
         final int trackY = y + 4;
@@ -537,35 +537,35 @@ public final class MigrationScreen extends Screen {
     /**
      * Draws headers for dense, compact, or full-width table layouts.
      */
-    private void drawHeaders(final DrawContext context, final int x, final int y, final int panelWidth,
+    private void drawHeaders(final GuiGraphicsExtractor context, final int x, final int y, final int panelWidth,
             final boolean compact, final boolean dense) {
         if (dense) {
-            context.drawTextWithShadow(textRenderer, "THREAD", x + 8, y + 8, MUTED);
-            context.drawTextWithShadow(textRenderer, "REGION", x + 90, y + 8, MUTED);
-            context.drawTextWithShadow(textRenderer, "PROGRESS", x + 190, y + 8, MUTED);
-            context.drawTextWithShadow(textRenderer, "STATUS", x + panelWidth - 110, y + 8, MUTED);
-            context.drawTextWithShadow(textRenderer, "ETA", x + panelWidth - 48, y + 8, MUTED);
+            context.text(font, "THREAD", x + 8, y + 8, MUTED);
+            context.text(font, "REGION", x + 90, y + 8, MUTED);
+            context.text(font, "PROGRESS", x + 190, y + 8, MUTED);
+            context.text(font, "STATUS", x + panelWidth - 110, y + 8, MUTED);
+            context.text(font, "ETA", x + panelWidth - 48, y + 8, MUTED);
             return;
         }
         if (compact) {
-            context.drawTextWithShadow(textRenderer, "THREAD", x + 16, y + 6, MUTED);
-            context.drawTextWithShadow(textRenderer, "REGION", x + 100, y + 6, MUTED);
-            context.drawTextWithShadow(textRenderer, "STATUS", x + 280, y + 6, MUTED);
-            context.drawTextWithShadow(textRenderer, "PROGRESS", x + 100, y + 18, MUTED);
-            context.drawTextWithShadow(textRenderer, "TIME / ETA", x + 300, y + 18, MUTED);
+            context.text(font, "THREAD", x + 16, y + 6, MUTED);
+            context.text(font, "REGION", x + 100, y + 6, MUTED);
+            context.text(font, "STATUS", x + 280, y + 6, MUTED);
+            context.text(font, "PROGRESS", x + 100, y + 18, MUTED);
+            context.text(font, "TIME / ETA", x + 300, y + 18, MUTED);
             return;
         }
-        context.drawTextWithShadow(textRenderer, "THREAD", x + 16, y + 10, MUTED);
-        context.drawTextWithShadow(textRenderer, "REGION", x + 150, y + 10, MUTED);
-        context.drawTextWithShadow(textRenderer, "PROGRESS", x + 290, y + 10, MUTED);
-        context.drawTextWithShadow(textRenderer, "STATUS", x + panelWidth - 270, y + 10, MUTED);
-        context.drawTextWithShadow(textRenderer, "TIME / ETA", x + panelWidth - 130, y + 10, MUTED);
+        context.text(font, "THREAD", x + 16, y + 10, MUTED);
+        context.text(font, "REGION", x + 150, y + 10, MUTED);
+        context.text(font, "PROGRESS", x + 290, y + 10, MUTED);
+        context.text(font, "STATUS", x + panelWidth - 270, y + 10, MUTED);
+        context.text(font, "TIME / ETA", x + panelWidth - 130, y + 10, MUTED);
     }
 
     /**
      * Dispatches one worker row to the layout appropriate for the screen width.
      */
-    private void drawWorkerRow(final DrawContext context,
+    private void drawWorkerRow(final GuiGraphicsExtractor context,
             final MigrationProgressTracker.WorkerProgress worker,
             final int x,
             final int y,
@@ -582,13 +582,13 @@ public final class MigrationScreen extends Screen {
             return;
         }
         context.fill(x + 1, y, x + panelWidth - 1, y + rowHeight - 2, 0xB0080A0E);
-        context.drawTextWithShadow(textRenderer,
+        context.text(font,
                 "●",
                 x + 16,
                 y + 12,
                 worker.state() == MigrationProgressTracker.WorkerState.QUEUED ? MUTED : GREEN);
-        context.drawTextWithShadow(textRenderer, "Thread " + worker.worker(), x + 34, y + 12, WHITE);
-        context.drawTextWithShadow(textRenderer, worker.regionFileName(), x + 150, y + 12, WHITE);
+        context.text(font, "Thread " + worker.worker(), x + 34, y + 12, WHITE);
+        context.text(font, worker.regionFileName(), x + 150, y + 12, WHITE);
 
         final int statusX = x + panelWidth - 270;
         final int progressX = x + 290;
@@ -599,40 +599,40 @@ public final class MigrationScreen extends Screen {
                 progressWidth,
                 16,
                 workerProgress(worker));
-        context.drawTextWithShadow(textRenderer,
+        context.text(font,
                 String.format(Locale.ROOT, "%3.0f%%", workerProgress(worker) * 100.0),
                 progressX + progressWidth + 12,
                 y + 12,
                 WHITE);
-        context.drawTextWithShadow(textRenderer, status(worker), statusX, y + 12, statusColor(worker));
-        context.drawTextWithShadow(textRenderer, formatDuration(elapsedSeconds(worker.startedAtNanos())) + " / "
+        context.text(font, status(worker), statusX, y + 12, statusColor(worker));
+        context.text(font, formatDuration(elapsedSeconds(worker.startedAtNanos())) + " / "
                 + formatEta(worker), x + panelWidth - 130, y + 12, MUTED);
     }
 
     /**
      * Draws a two-line worker row for compact screens.
      */
-    private void drawCompactWorkerRow(final DrawContext context,
+    private void drawCompactWorkerRow(final GuiGraphicsExtractor context,
             final MigrationProgressTracker.WorkerProgress worker,
             final int x,
             final int y,
             final int panelWidth,
             final int rowHeight) {
         context.fill(x + 1, y, x + panelWidth - 1, y + rowHeight - 2, 0xB0080A0E);
-        context.drawTextWithShadow(textRenderer, "●", x + 16, y + 5,
+        context.text(font, "●", x + 16, y + 5,
                 worker.state() == MigrationProgressTracker.WorkerState.QUEUED ? MUTED : GREEN);
-        context.drawTextWithShadow(textRenderer, "Thread " + worker.worker(), x + 34, y + 5, WHITE);
-        context.drawTextWithShadow(textRenderer, worker.regionFileName(), x + 100, y + 5, WHITE);
-        context.drawTextWithShadow(textRenderer, status(worker), x + 280, y + 5, statusColor(worker));
+        context.text(font, "Thread " + worker.worker(), x + 34, y + 5, WHITE);
+        context.text(font, worker.regionFileName(), x + 100, y + 5, WHITE);
+        context.text(font, status(worker), x + 280, y + 5, statusColor(worker));
 
         final int progressX = x + 100;
         final int progressWidth = Math.clamp(panelWidth - 258, 40, 150);
         final int barY = y + rowHeight - 14;
         drawProgressBar(context, progressX, barY, progressWidth, 10, workerProgress(worker));
-        context.drawTextWithShadow(textRenderer,
+        context.text(font,
                 String.format(Locale.ROOT, "%3.0f%%", workerProgress(worker) * 100.0),
                 progressX + progressWidth + 8, barY, WHITE);
-        context.drawTextWithShadow(textRenderer,
+        context.text(font,
                 formatShortDuration(elapsedSeconds(worker.startedAtNanos())) + " / "
                         + formatShortEta(worker),
                 x + 300, barY, MUTED);
@@ -641,26 +641,26 @@ public final class MigrationScreen extends Screen {
     /**
      * Draws a single-line worker row when many workers are visible.
      */
-    private void drawDenseWorkerRow(final DrawContext context,
+    private void drawDenseWorkerRow(final GuiGraphicsExtractor context,
             final MigrationProgressTracker.WorkerProgress worker,
             final int x,
             final int y,
             final int panelWidth,
             final int rowHeight) {
         context.fill(x + 1, y, x + panelWidth - 1, y + rowHeight - 1, 0xB0080A0E);
-        context.drawTextWithShadow(textRenderer, "●", x + 8, y + 2,
+        context.text(font, "●", x + 8, y + 2,
                 worker.state() == MigrationProgressTracker.WorkerState.QUEUED ? MUTED : GREEN);
-        context.drawTextWithShadow(textRenderer, "T" + worker.worker(), x + 24, y + 2, WHITE);
-        context.drawTextWithShadow(textRenderer, worker.regionFileName(), x + 90, y + 2, WHITE);
+        context.text(font, "T" + worker.worker(), x + 24, y + 2, WHITE);
+        context.text(font, worker.regionFileName(), x + 90, y + 2, WHITE);
 
         final int progressX = x + 190;
         final int statusX = x + panelWidth - 110;
         final int progressWidth = Math.clamp(statusX - progressX - 42, 35, 100);
         drawProgressBar(context, progressX, y + 2, progressWidth, 8, workerProgress(worker));
-        context.drawTextWithShadow(textRenderer,
+        context.text(font,
                 String.format(Locale.ROOT, "%3.0f%%", workerProgress(worker) * 100.0),
                 progressX + progressWidth + 5, y + 2, WHITE);
-        context.drawTextWithShadow(textRenderer, shortStatus(worker), statusX, y + 2, statusColor(worker));
-        context.drawTextWithShadow(textRenderer, formatShortEta(worker), x + panelWidth - 48, y + 2, MUTED);
+        context.text(font, shortStatus(worker), statusX, y + 2, statusColor(worker));
+        context.text(font, formatShortEta(worker), x + panelWidth - 48, y + 2, MUTED);
     }
 }

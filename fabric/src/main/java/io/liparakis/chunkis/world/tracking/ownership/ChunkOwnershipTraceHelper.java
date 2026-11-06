@@ -9,9 +9,9 @@ import io.liparakis.chunkis.debug.model.ChunkisDebugDomain;
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 
 /**
  * Emits debug traces summarizing chunk ownership decisions.
@@ -39,7 +39,7 @@ public final class ChunkOwnershipTraceHelper {
      * @param passiveCause tracking suppression context cause
      */
     public static void traceDecision(
-            final RegistryKey<World> worldKey,
+            final ResourceKey<Level> worldKey,
             final ChunkPos pos,
             final String decision,
             final ChunkTraceReason reason,
@@ -52,7 +52,7 @@ public final class ChunkOwnershipTraceHelper {
         }
         traceDecision(
                 worldKey,
-                pos != null ? new DebugChunkKey(pos.x, pos.z) : null,
+                pos != null ? new DebugChunkKey(pos.x(), pos.z()) : null,
                 decision,
                 reason,
                 source,
@@ -73,7 +73,7 @@ public final class ChunkOwnershipTraceHelper {
      * @param passiveCause tracking suppression context cause
      */
     public static void traceDecision(
-            final RegistryKey<World> worldKey,
+            final ResourceKey<Level> worldKey,
             final DebugChunkKey chunkKey,
             final String decision,
             final ChunkTraceReason reason,
@@ -91,7 +91,7 @@ public final class ChunkOwnershipTraceHelper {
                 reason,
                 source,
                 describeDecision(decision, delta, passiveCause),
-                worldKey != null ? worldKey.getValue()
+                worldKey != null ? worldKey.identifier()
                                    .toString() : null,
                 chunkKey,
                 null,

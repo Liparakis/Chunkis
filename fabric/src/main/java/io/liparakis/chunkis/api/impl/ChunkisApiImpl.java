@@ -6,12 +6,12 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import java.util.Optional;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 /**
  * Internal implementation of the {@link ChunkisApi} interface.
@@ -55,7 +55,7 @@ public final class ChunkisApiImpl implements ChunkisApi {
      * @return true if the chunk is a ChunkisDeltaDuck
      */
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    private static boolean isChunkisDuck(final Chunk chunk) {
+    private static boolean isChunkisDuck(final ChunkAccess chunk) {
         return chunk instanceof ChunkisDeltaDuck;
     }
 
@@ -73,12 +73,12 @@ public final class ChunkisApiImpl implements ChunkisApi {
      * Casts the given chunk to {@link ChunkisDeltaDuck}.
      *
      * <p>
-     * Only call after confirming {@link #isChunkisDuck(Chunk)} returns true.
+     * Only call after confirming {@link #isChunkisDuck(ChunkAccess)} returns true.
      *
      * @param chunk the chunk to cast
      * @return the chunk as a ChunkisDeltaDuck
      */
-    private static ChunkisDeltaDuck asDuck(final Chunk chunk) {
+    private static ChunkisDeltaDuck asDuck(final ChunkAccess chunk) {
         return (ChunkisDeltaDuck) chunk;
     }
 
@@ -86,7 +86,7 @@ public final class ChunkisApiImpl implements ChunkisApi {
      * {@inheritDoc}
      */
     @Override
-    public CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage(final ServerWorld world) {
+    public CisStorage<Block, BlockState, Property<?>, CompoundTag> getStorage(final ServerLevel world) {
         return FabricCisStorageHelper.getStorage(world);
     }
 
@@ -100,12 +100,12 @@ public final class ChunkisApiImpl implements ChunkisApi {
      */
     @Override
     @SuppressWarnings("unchecked")
-    public Optional<ChunkDelta<BlockState, NbtCompound>> getDelta(final Chunk chunk) {
+    public Optional<ChunkDelta<BlockState, CompoundTag>> getDelta(final ChunkAccess chunk) {
         if (!isChunkisDuck(chunk)) {
             return Optional.empty();
         }
 
-        final ChunkDelta<BlockState, NbtCompound> rawDelta = (ChunkDelta<BlockState, NbtCompound>) asDuck(chunk)
+        final ChunkDelta<BlockState, CompoundTag> rawDelta = (ChunkDelta<BlockState, CompoundTag>) asDuck(chunk)
                 .chunkis$getDelta();
         if (rawDelta == null) {
             return Optional.empty();
@@ -118,7 +118,7 @@ public final class ChunkisApiImpl implements ChunkisApi {
      * {@inheritDoc}
      */
     @Override
-    public boolean hasChunkisData(final Chunk chunk) {
+    public boolean hasChunkisData(final ChunkAccess chunk) {
         if (!isChunkisDuck(chunk)) {
             return false;
         }

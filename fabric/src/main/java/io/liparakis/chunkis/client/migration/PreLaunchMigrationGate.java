@@ -2,12 +2,14 @@ package io.liparakis.chunkis.client.migration;
 
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.integration.migration.offline.PreLaunchMigrationCoordinator;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.MessageScreen;
-import net.minecraft.resource.ResourcePackManager;
-import net.minecraft.server.SaveLoader;
-import net.minecraft.text.Text;
-import net.minecraft.world.level.storage.LevelStorage;
+import java.util.Optional;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.GenericMessageScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.WorldStem;
+import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.world.level.storage.LevelStorageSource;
+import net.minecraft.world.level.gamerules.GameRules;
 
 /**
  * Keeps the client event loop rendering while pre-launch conversion runs on a
@@ -34,13 +36,15 @@ public final class PreLaunchMigrationGate {
      * @param session         locked world save session
      * @param dataPackManager resource-pack manager for startup
      * @param saveLoader      loaded world save configuration
+     * @param gameRules       startup game-rule overrides supplied by Minecraft
      * @param newWorld        whether startup is creating a new world
      * @return {@code true} while migration owns startup; otherwise {@code false}
      */
-    public static synchronized boolean shouldBlockStartup(final MinecraftClient client,
-            final LevelStorage.Session session,
-            final ResourcePackManager dataPackManager,
-            final SaveLoader saveLoader,
+    public static synchronized boolean shouldBlockStartup(final Minecraft client,
+            final LevelStorageSource.LevelStorageAccess session,
+            final PackRepository dataPackManager,
+            final WorldStem saveLoader,
+            final Optional<GameRules> gameRules,
             final boolean newWorld) {
         if (state == State.RESUMING) {
             state = State.IDLE;
@@ -51,8 +55,8 @@ public final class PreLaunchMigrationGate {
         }
 
         state = State.RUNNING;
-        final PendingStart pendingStart = new PendingStart(session, dataPackManager, saveLoader, newWorld);
-        client.setScreenAndRender(new MigrationScreen());
+        final PendingStart pendingStart = new PendingStart(session, dataPackManager, saveLoader, gameRules, newWorld);
+        client.setScreenAndShow(new MigrationScreen());
         final Thread coordinator = new Thread(() -> runMigration(client, pendingStart), "Chunkis-Migration-Gate");
         coordinator.setDaemon(true);
         coordinator.start();
@@ -62,7 +66,7 @@ public final class PreLaunchMigrationGate {
     /**
      * Runs conversion off-thread and posts either resume or failure to the client thread.
      */
-    private static void runMigration(final MinecraftClient client, final PendingStart pendingStart) {
+    private static void runMigration(final Minecraft client, final PendingStart pendingStart) {
         try {
             PreLaunchMigrationCoordinator.runBeforeIntegratedServerStart(pendingStart.session(),
                     pendingStart.saveLoader(),
@@ -78,23 +82,24 @@ public final class PreLaunchMigrationGate {
     /**
      * Resumes integrated-server startup after successful migration.
      */
-    private static synchronized void resumeStartup(final MinecraftClient client, final PendingStart pendingStart) {
+    private static synchronized void resumeStartup(final Minecraft client, final PendingStart pendingStart) {
         if (state != State.RUNNING) {
             return;
         }
         state = State.RESUMING;
-        client.startIntegratedServer(pendingStart.session(),
+        client.doWorldLoad(pendingStart.session(),
                 pendingStart.dataPackManager(),
                 pendingStart.saveLoader(),
+                pendingStart.gameRules(),
                 pendingStart.newWorld());
     }
 
     /**
      * Displays a user-visible migration failure and resets the gate.
      */
-    private static synchronized void showFailure(final MinecraftClient client, final Throwable error) {
+    private static synchronized void showFailure(final Minecraft client, final Throwable error) {
         state = State.IDLE;
-        client.setScreenAndRender(new MessageScreen(Text.literal(
+        client.setScreenAndShow(new GenericMessageScreen(Component.literal(
                 "Chunkis migration failed: " + (error.getMessage() == null ? error.getClass()
                                                                              .getSimpleName() : error.getMessage()))));
     }
@@ -112,8 +117,8 @@ public final class PreLaunchMigrationGate {
     /**
      * Startup arguments retained while the background migration is running.
      */
-    private record PendingStart(LevelStorage.Session session, ResourcePackManager dataPackManager,
-                                SaveLoader saveLoader, boolean newWorld) {
+    private record PendingStart(LevelStorageSource.LevelStorageAccess session, PackRepository dataPackManager,
+                                WorldStem saveLoader, Optional<GameRules> gameRules, boolean newWorld) {
 
     }
 }

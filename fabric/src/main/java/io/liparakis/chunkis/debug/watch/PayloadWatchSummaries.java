@@ -5,13 +5,13 @@ import io.liparakis.chunkis.debug.model.watch.PayloadWatchTarget;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -69,7 +69,7 @@ public final class PayloadWatchSummaries {
             final Object chunkStatus,
             final String source,
             final String threadName,
-            @Nullable final WorldChunk chunk
+            @Nullable final LevelChunk chunk
     ) {
         if (!target.hasBlockCoordinates()) {
             return target.describe()
@@ -103,10 +103,10 @@ public final class PayloadWatchSummaries {
     public static String summarizeBlockEntity(
             final PayloadWatchTarget target,
             @Nullable final BlockEntity blockEntity,
-            @Nullable final NbtCompound nbt
+            @Nullable final CompoundTag nbt
     ) {
         final String type = blockEntity != null
-                ? String.valueOf(net.minecraft.block.entity.BlockEntityType.getId(blockEntity.getType()))
+                ? String.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(blockEntity.getType()))
                 : nbt != null ? nbt.getString("id")
                                 .orElse("<missing-id>") : "<missing>";
         return "pos=" + target.blockX() + ',' + target.blockY() + ',' + target.blockZ()
@@ -123,7 +123,7 @@ public final class PayloadWatchSummaries {
      */
     public static String summarizeEntity(
             final PayloadWatchTarget target,
-            final NbtCompound nbt
+            final CompoundTag nbt
     ) {
         return "uuid=" + target.entityUuid()
                 + " type=" + nbt.getString("id")
@@ -145,9 +145,9 @@ public final class PayloadWatchSummaries {
      */
     public static String summarizeExpectedEntityAndPresence(
             final PayloadWatchTarget target,
-            @Nullable final NbtCompound expectedNbt,
+            @Nullable final CompoundTag expectedNbt,
             @Nullable final Entity liveEntity,
-            final WorldChunk chunk
+            final LevelChunk chunk
     ) {
         return "uuid=" + target.entityUuid()
                 + " expectedType=" + (expectedNbt != null ? expectedNbt.getString("id")
@@ -155,7 +155,7 @@ public final class PayloadWatchSummaries {
                 : "<unknown>")
                 + " actualServerEntityPresent=" + (liveEntity != null)
                 + " actualServerEntityType=" + (liveEntity != null ? liveEntity.getType() : "<missing>")
-                + " chunkStatus=" + chunk.getStatus()
+                + " chunkStatus=" + chunk.getPersistedStatus()
                 + " chunkInstanceId=" + chunkInstanceId(chunk)
                 + " thread=" + Thread.currentThread()
                 .getName();
@@ -181,9 +181,9 @@ public final class PayloadWatchSummaries {
                 + " actualServerEntityType=" + entity.getType()
                 + " removalReason=" + reason
                 + " pos=[" + entity.getX() + ',' + entity.getY() + ',' + entity.getZ() + ']'
-                + " blockPos=" + entity.getBlockPos()
+                + " blockPos=" + entity.blockPosition()
                 .toShortString()
-                + " chunk=" + entity.getChunkPos().x + ',' + entity.getChunkPos().z
+                + " chunk=" + entity.chunkPosition().x() + ',' + entity.chunkPosition().z()
                 + " isAlive=" + entity.isAlive()
                 + " isRemoved=" + entity.isRemoved()
                 + " source=" + source
@@ -208,9 +208,9 @@ public final class PayloadWatchSummaries {
                 + " actualServerEntityPresent=" + !entity.isRemoved()
                 + " actualServerEntityType=" + entity.getType()
                 + " pos=[" + entity.getX() + ',' + entity.getY() + ',' + entity.getZ() + ']'
-                + " blockPos=" + entity.getBlockPos()
+                + " blockPos=" + entity.blockPosition()
                 .toShortString()
-                + " chunk=" + entity.getChunkPos().x + ',' + entity.getChunkPos().z
+                + " chunk=" + entity.chunkPosition().x() + ',' + entity.chunkPosition().z()
                 + " isAlive=" + entity.isAlive()
                 + " isRemoved=" + entity.isRemoved()
                 + " source=" + source
@@ -224,14 +224,14 @@ public final class PayloadWatchSummaries {
      * @param nbt source compound NBT, if any, may be null
      * @return estimated byte count
      */
-    public static int nbtSize(@Nullable final NbtCompound nbt) {
+    public static int nbtSize(@Nullable final CompoundTag nbt) {
         if (nbt == null) {
             return 0;
         }
         try {
             final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             try (DataOutputStream output = new DataOutputStream(buffer)) {
-                net.minecraft.nbt.NbtIo.writeCompound(nbt, output);
+                net.minecraft.nbt.NbtIo.write(nbt, output);
             }
             return buffer.size();
         } catch (final IOException ignored) {
@@ -246,7 +246,7 @@ public final class PayloadWatchSummaries {
      * @param nbt source entity NBT compound, if any, may be null
      * @return resolved UUID string if found, or null
      */
-    public static @Nullable String entityUuid(@Nullable final NbtCompound nbt) {
+    public static @Nullable String entityUuid(@Nullable final CompoundTag nbt) {
         if (nbt == null) {
             return null;
         }
@@ -260,9 +260,9 @@ public final class PayloadWatchSummaries {
      * @param world target server world
      * @return registry path identifier string
      */
-    public static String worldId(final ServerWorld world) {
-        return world.getRegistryKey()
-                .getValue()
+    public static String worldId(final ServerLevel world) {
+        return world.dimension()
+                .identifier()
                 .toString();
     }
 
@@ -272,10 +272,10 @@ public final class PayloadWatchSummaries {
      * @param chunk target world chunk
      * @return registry path identifier string
      */
-    public static String worldId(final WorldChunk chunk) {
-        return chunk.getWorld()
-                .getRegistryKey()
-                .getValue()
+    public static String worldId(final LevelChunk chunk) {
+        return chunk.getLevel()
+                .dimension()
+                .identifier()
                 .toString();
     }
 
@@ -285,7 +285,7 @@ public final class PayloadWatchSummaries {
      * @param chunk target chunk instance, if any, may be null
      * @return unique string identifier
      */
-    public static String chunkInstanceId(@Nullable final Chunk chunk) {
+    public static String chunkInstanceId(@Nullable final ChunkAccess chunk) {
         return chunk != null
                 ? chunk.getClass()
                   .getSimpleName() + '@' + Integer.toHexString(System.identityHashCode(chunk))

@@ -1,8 +1,20 @@
 package io.liparakis.chunkis.world.restoration.capture;
 
-import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.Heightmap;
 import java.util.Map;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.BitStorage;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.Palette;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.levelgen.Heightmap;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.core.BlockInstruction;
 import io.liparakis.chunkis.core.ChunkDelta;
@@ -19,18 +31,6 @@ import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppr
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.IdentityHashMap;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.collection.PaletteStorage;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.Palette;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.WorldChunk;
 
 /**
  * Captures an authoritative compact CIS snapshot from a live chunk.
@@ -81,8 +81,8 @@ public final class CisSnapshotCapture {
      * @param operationId active load/save operation ID
      * @return updated block delta
      */
-    public static ChunkDelta<BlockState, NbtCompound> capture(final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> target,
+    public static ChunkDelta<BlockState, CompoundTag> capture(final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> target,
             final String operationId) {
         if (CisNbtUtil.hasFullBlockBaseline(target.getChunkMetadata()) && !target.isDirty()) {
             return target;
@@ -101,16 +101,16 @@ public final class CisSnapshotCapture {
         final int liveNonAirBlocks = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
         backUpOnBaselineShrink(chunk, previousNonAirBlocks, liveNonAirBlocks, operationId);
         PayloadWatchTracer.traceCapturedBlocks(chunk);
-        final ChunkSection[] sections = chunk.getSectionArray();
+        final LevelChunkSection[] sections = chunk.getSections();
         final long[] fingerprints = SectionCaptureCache.fingerprints(sections);
         final boolean[] changedSections = SectionCaptureCache.changedSections(previousCapture, fingerprints,
                 sections.length);
-        final Long2ObjectMap<NbtCompound> previousBlockEntities = new Long2ObjectOpenHashMap<>(target.getBlockEntities());
+        final Long2ObjectMap<CompoundTag> previousBlockEntities = new Long2ObjectOpenHashMap<>(target.getBlockEntities());
         if (previousCapture == null) {
             target.clearBlockPayloads(false);
         } else {
             // Unchanged sections keep the instructions the previous snapshot (plus live edits) built.
-            final int chunkBottomY = chunk.getBottomY();
+            final int chunkBottomY = chunk.getMinY();
             target.retainBlockInstructions(pos -> !isInChangedSection(changedSections, chunkBottomY, pos));
             target.clearBlockEntityPayloads(false);
         }
@@ -141,23 +141,23 @@ public final class CisSnapshotCapture {
      * @param operationId          save operation id
      * @return a copy of every section's block container, {@code null} where a section holds only air
      */
-    public static PalettedContainer<BlockState>[] captureDeferringBlocks(final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> target, final boolean nonBlockStateCurrent,
+    public static PalettedContainer<BlockState>[] captureDeferringBlocks(final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> target, final boolean nonBlockStateCurrent,
             final String operationId) {
         final int liveNonAirBlocks = ChunkSectionDebugUtil.countNonAirBlocks(chunk);
         backUpOnBaselineShrink(chunk, SectionCaptureCache.lastNonAirBlocks(target), liveNonAirBlocks, operationId);
         PayloadWatchTracer.traceCapturedBlocks(chunk);
-        final ChunkSection[] sections = chunk.getSectionArray();
+        final LevelChunkSection[] sections = chunk.getSections();
         @SuppressWarnings("unchecked")
         final PalettedContainer<BlockState>[] blocks = new PalettedContainer[sections.length];
         for (int i = 0; i < sections.length; i++) {
-            if (sections[i] != null && !sections[i].isEmpty()) {
-                blocks[i] = sections[i].getBlockStateContainer().copy();
+            if (sections[i] != null && !sections[i].hasOnlyAir()) {
+                blocks[i] = sections[i].getStates().copy();
             }
         }
         SectionCaptureCache.recordNonAirBlocks(target, liveNonAirBlocks);
         if (!nonBlockStateCurrent) {
-            final Long2ObjectMap<NbtCompound> previousBlockEntities =
+            final Long2ObjectMap<CompoundTag> previousBlockEntities =
                     new Long2ObjectOpenHashMap<>(target.getBlockEntities());
             target.clearBlockEntityPayloads(false);
             captureNonBlockState(chunk, target, previousBlockEntities);
@@ -171,11 +171,11 @@ public final class CisSnapshotCapture {
      * @param chunk loaded chunk
      * @return heightmaps by type id
      */
-    private static NbtCompound captureHeightmaps(final WorldChunk chunk) {
-        final NbtCompound heightmaps = new NbtCompound();
-        for (final Map.Entry<Heightmap.Type, Heightmap> entry : chunk.getHeightmaps()) {
-            if (ChunkStatus.FULL.getHeightmapTypes().contains(entry.getKey())) {
-                heightmaps.putLongArray(entry.getKey().getId(), entry.getValue().asLongArray().clone());
+    private static CompoundTag captureHeightmaps(final LevelChunk chunk) {
+        final CompoundTag heightmaps = new CompoundTag();
+        for (final Map.Entry<Heightmap.Types, Heightmap> entry : chunk.getHeightmaps()) {
+            if (ChunkStatus.FULL.heightmapsAfter().contains(entry.getKey())) {
+                heightmaps.putLongArray(entry.getKey().getSerializationKey(), entry.getValue().getRawData().clone());
             }
         }
         return heightmaps;
@@ -188,17 +188,17 @@ public final class CisSnapshotCapture {
      * @param target                delta receiving the snapshot
      * @param previousBlockEntities block-entity payloads the delta held before this capture
      */
-    private static void captureNonBlockState(final WorldChunk chunk, final ChunkDelta<BlockState, NbtCompound> target,
-            final Long2ObjectMap<NbtCompound> previousBlockEntities) {
+    private static void captureNonBlockState(final LevelChunk chunk, final ChunkDelta<BlockState, CompoundTag> target,
+            final Long2ObjectMap<CompoundTag> previousBlockEntities) {
         ChunkBlockEntityCapture.captureBlockEntities(chunk,
-                chunk.getWorld()
-                        .getRegistryManager(),
+                chunk.getLevel()
+                        .registryAccess(),
                 target);
         retainUncapturedBlockEntities(chunk, previousBlockEntities, target);
 
-        final NbtCompound existingMetadata = target.getChunkMetadata();
-        final NbtCompound metadata = createAuthoritativeSnapshotMetadata(existingMetadata,
-                BaseChunkCaptureUtil.hasPortalBlocks(chunk), StoredSections.encode(chunk), chunk.isLightOn(),
+        final CompoundTag existingMetadata = target.getChunkMetadata();
+        final CompoundTag metadata = createAuthoritativeSnapshotMetadata(existingMetadata,
+                BaseChunkCaptureUtil.hasPortalBlocks(chunk), StoredSections.encode(chunk), chunk.isLightCorrect(),
                 PendingTicksNbt.capture(chunk));
         // Taken with the blocks, so a load of exactly these blocks need not rebuild them on the server thread.
         metadata.put(CisNbtUtil.STORED_HEIGHTMAPS_KEY, captureHeightmaps(chunk));
@@ -219,24 +219,24 @@ public final class CisSnapshotCapture {
      * @param liveNonAirBlocks     non-air blocks in the chunk now
      * @param operationId          save operation id
      */
-    private static void backUpOnBaselineShrink(final WorldChunk chunk, final int previousNonAirBlocks,
+    private static void backUpOnBaselineShrink(final LevelChunk chunk, final int previousNonAirBlocks,
             final int liveNonAirBlocks, final String operationId) {
         if (!isSuspiciousBaselineShrink(previousNonAirBlocks, liveNonAirBlocks)) {
             return;
         }
-        final java.nio.file.Path backup = FabricCisStorageHelper.getStorage((ServerWorld) chunk.getWorld())
+        final java.nio.file.Path backup = FabricCisStorageHelper.getStorage((ServerLevel) chunk.getLevel())
                 .backupEntry(FabricCisStorageHelper.toStoragePos(chunk.getPos()), "pre-shrink");
         Chunkis.LOGGER.warn("Chunkis: Full snapshot of {} in {} drops non-air blocks from {} to {}; saving it and "
                         + "keeping the previous entry at {} (suppressionCause={} chunkStatus={} saveOperationId={})",
                 chunk.getPos(),
-                chunk.getWorld()
-                        .getRegistryKey()
-                        .getValue(),
+                chunk.getLevel()
+                        .dimension()
+                        .identifier(),
                 previousNonAirBlocks,
                 liveNonAirBlocks,
                 backup != null ? backup : "<no backup>",
                 PendingChunkMutationSuppression.currentCause(chunk),
-                chunk.getStatus(),
+                chunk.getPersistedStatus(),
                 operationId);
     }
 
@@ -254,10 +254,10 @@ public final class CisSnapshotCapture {
      * @param previous block-entity payloads stored before the sweep
      * @param target   delta that now holds the freshly captured payloads
      */
-    public static void retainUncapturedBlockEntities(final WorldChunk chunk, final Long2ObjectMap<NbtCompound> previous,
-            final ChunkDelta<BlockState, NbtCompound> target) {
-        final Long2ObjectMap<NbtCompound> captured = target.getBlockEntities();
-        final BlockPos.Mutable worldPos = new BlockPos.Mutable();
+    public static void retainUncapturedBlockEntities(final LevelChunk chunk, final Long2ObjectMap<CompoundTag> previous,
+            final ChunkDelta<BlockState, CompoundTag> target) {
+        final Long2ObjectMap<CompoundTag> captured = target.getBlockEntities();
+        final BlockPos.MutableBlockPos worldPos = new BlockPos.MutableBlockPos();
         previous.forEach((packedPos, nbt) -> {
             if (nbt == null || captured.containsKey(packedPos)) {
                 return;
@@ -266,8 +266,8 @@ public final class CisSnapshotCapture {
             final int y = BlockInstruction.unpackY(packedPos);
             final int z = BlockInstruction.unpackZ(packedPos);
             worldPos.set(chunk.getPos()
-                    .getStartX() + x, y, chunk.getPos()
-                    .getStartZ() + z);
+                    .getMinBlockX() + x, y, chunk.getPos()
+                    .getMinBlockZ() + z);
             if (chunk.getBlockState(worldPos)
                     .hasBlockEntity() || !isRegisteredBlockEntityType(nbt)) {
                 target.addBlockEntityData(x, y, z, nbt, false);
@@ -278,10 +278,10 @@ public final class CisSnapshotCapture {
     /**
      * Returns whether the payload's {@code id} names a registered block-entity type.
      */
-    static boolean isRegisteredBlockEntityType(final NbtCompound nbt) {
+    static boolean isRegisteredBlockEntityType(final CompoundTag nbt) {
         return nbt.getString("id")
                 .map(Identifier::tryParse)
-                .map(Registries.BLOCK_ENTITY_TYPE::containsId)
+                .map(BuiltInRegistries.BLOCK_ENTITY_TYPE::containsKey)
                 .orElse(false);
     }
 
@@ -302,7 +302,7 @@ public final class CisSnapshotCapture {
      * @param target block delta instance
      * @return non-air block count
      */
-    private static int countPersistedNonAirBlocks(final ChunkDelta<BlockState, NbtCompound> target) {
+    private static int countPersistedNonAirBlocks(final ChunkDelta<BlockState, CompoundTag> target) {
         if (target == null || !CisNbtUtil.hasFullBlockBaseline(target.getChunkMetadata())) {
             return 0;
         }
@@ -320,10 +320,10 @@ public final class CisSnapshotCapture {
     /**
      * Performs create authoritative snapshot metadata.
      */
-    static NbtCompound createAuthoritativeSnapshotMetadata(final NbtCompound existingMetadata,
-            final boolean portalChunk, final NbtList storedSections, final boolean storedLight,
-            final NbtCompound pendingTicks) {
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(CisNbtUtil.extractPersistedStructureMetadata(
+    static CompoundTag createAuthoritativeSnapshotMetadata(final CompoundTag existingMetadata,
+            final boolean portalChunk, final ListTag storedSections, final boolean storedLight,
+            final CompoundTag pendingTicks) {
+        final CompoundTag metadata = CisNbtUtil.createChunkMetadataTakingOwnership(CisNbtUtil.extractPersistedStructureMetadata(
                 existingMetadata), true, true, null, portalChunk);
         if (storedSections != null) {
             metadata.put(CisNbtUtil.STORED_SECTIONS_KEY, storedSections);
@@ -343,8 +343,8 @@ public final class CisSnapshotCapture {
      * @param chunk restored live chunk
      * @param delta runtime delta holding the restored baseline
      */
-    public static void recordRestoredBaseline(final WorldChunk chunk, final ChunkDelta<BlockState, NbtCompound> delta) {
-        SectionCaptureCache.record(delta, SectionCaptureCache.fingerprints(chunk.getSectionArray()),
+    public static void recordRestoredBaseline(final LevelChunk chunk, final ChunkDelta<BlockState, CompoundTag> delta) {
+        SectionCaptureCache.record(delta, SectionCaptureCache.fingerprints(chunk.getSections()),
                 ChunkSectionDebugUtil.countNonAirBlocks(chunk));
     }
 
@@ -355,14 +355,14 @@ public final class CisSnapshotCapture {
      * @param target          delta receiving the instructions
      * @param changedSections per-section flags; only flagged sections are read
      */
-    private static void captureAuthoritativeBlockBaseline(final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> target, final boolean[] changedSections) {
-        final ChunkSection[] sections = chunk.getSectionArray();
-        final int chunkBottomY = chunk.getBottomY();
+    private static void captureAuthoritativeBlockBaseline(final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> target, final boolean[] changedSections) {
+        final LevelChunkSection[] sections = chunk.getSections();
+        final int chunkBottomY = chunk.getMinY();
         int expectedBlocks = 0;
         for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-            final ChunkSection section = sections[sectionIndex];
-            if (changedSections[sectionIndex] && section != null && !section.isEmpty()) {
+            final LevelChunkSection section = sections[sectionIndex];
+            if (changedSections[sectionIndex] && section != null && !section.hasOnlyAir()) {
                 expectedBlocks += ((ChunkSectionAccessor) section).chunkis$getNonEmptyBlockCount();
             }
         }
@@ -370,11 +370,11 @@ public final class CisSnapshotCapture {
         final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
 
         for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-            final ChunkSection section = sections[sectionIndex];
-            if (!changedSections[sectionIndex] || section == null || section.isEmpty()) {
+            final LevelChunkSection section = sections[sectionIndex];
+            if (!changedSections[sectionIndex] || section == null || section.hasOnlyAir()) {
                 continue;
             }
-            final PalettedContainer<BlockState> container = section.getBlockStateContainer();
+            final PalettedContainer<BlockState> container = section.getStates();
             if (!captureSectionByPaletteIndex(container, target, chunkBottomY, sectionIndex, paletteIds)) {
                 captureSectionByState(container, target, chunkBottomY, sectionIndex, paletteIds);
             }
@@ -391,7 +391,7 @@ public final class CisSnapshotCapture {
      * @param paletteIds   delta palette ids by state, shared across a chunk's sections
      */
     public static void appendSectionBlocks(final PalettedContainer<BlockState> container,
-            final ChunkDelta<BlockState, NbtCompound> target, final int chunkBottomY, final int sectionIndex,
+            final ChunkDelta<BlockState, CompoundTag> target, final int chunkBottomY, final int sectionIndex,
             final IdentityHashMap<BlockState, Integer> paletteIds) {
         if (!captureSectionByPaletteIndex(container, target, chunkBottomY, sectionIndex, paletteIds)) {
             captureSectionByState(container, target, chunkBottomY, sectionIndex, paletteIds);
@@ -410,7 +410,7 @@ public final class CisSnapshotCapture {
      * @return false when the caller must fall back to {@link #captureSectionByState}
      */
     private static boolean captureSectionByPaletteIndex(final PalettedContainer<BlockState> container,
-            final ChunkDelta<BlockState, NbtCompound> target, final int chunkBottomY, final int sectionIndex,
+            final ChunkDelta<BlockState, CompoundTag> target, final int chunkBottomY, final int sectionIndex,
             final IdentityHashMap<BlockState, Integer> paletteIds) {
         if (!PalettedContainerFields.AVAILABLE) {
             return false;
@@ -423,16 +423,16 @@ public final class CisSnapshotCapture {
         }
         final int[] deltaIds = new int[paletteSize];
         for (int i = 0; i < paletteSize; i++) {
-            final BlockState state = palette.get(i);
+            final BlockState state = palette.valueFor(i);
             if (state == null) {
                 return false;
             }
             deltaIds[i] = state.isAir() ? -1 : deltaPaletteId(target, state, paletteIds);
         }
-        final PaletteStorage storage = PalettedContainerFields.storage(data);
+        final BitStorage storage = PalettedContainerFields.storage(data);
         // One bulk unpack instead of a packed read per position.
         final int[] indices = SECTION_INDICES.get();
-        storage.writePaletteIndices(indices);
+        storage.unpack(indices);
         // Packed into a buffer and appended in one copy instead of one append call per block.
         final long[] packed = SECTION_PACKED.get();
         int count = 0;
@@ -459,7 +459,7 @@ public final class CisSnapshotCapture {
      */
     @SuppressWarnings("unchecked")
     private static void captureSectionByState(final PalettedContainer<BlockState> container,
-            final ChunkDelta<BlockState, NbtCompound> target, final int chunkBottomY, final int sectionIndex,
+            final ChunkDelta<BlockState, CompoundTag> target, final int chunkBottomY, final int sectionIndex,
             final IdentityHashMap<BlockState, Integer> paletteIds) {
         final PalettedContainerAccessor<BlockState> rawContainer = (PalettedContainerAccessor<BlockState>) container;
         for (int index = 0; index < SECTION_SIZE * SECTION_SIZE * SECTION_SIZE; index++) {
@@ -478,7 +478,7 @@ public final class CisSnapshotCapture {
      * @param paletteIds cache from block state to delta palette id
      * @return delta palette id
      */
-    private static int deltaPaletteId(final ChunkDelta<BlockState, NbtCompound> target, final BlockState state,
+    private static int deltaPaletteId(final ChunkDelta<BlockState, CompoundTag> target, final BlockState state,
             final IdentityHashMap<BlockState, Integer> paletteIds) {
         final Integer cached = paletteIds.get(state);
         if (cached != null) {
@@ -499,7 +499,7 @@ public final class CisSnapshotCapture {
      * @param index        section-local storage index
      * @param paletteId    delta palette id
      */
-    private static void appendSectionBlock(final ChunkDelta<BlockState, NbtCompound> target, final int chunkBottomY,
+    private static void appendSectionBlock(final ChunkDelta<BlockState, CompoundTag> target, final int chunkBottomY,
             final int sectionIndex, final int index, final int paletteId) {
         target.appendDecodedBlockFast(index & (SECTION_SIZE - 1),
                 toWorldY(chunkBottomY, sectionIndex, index >>> 8),

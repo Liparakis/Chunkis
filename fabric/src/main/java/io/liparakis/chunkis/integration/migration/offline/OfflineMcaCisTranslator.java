@@ -27,24 +27,24 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.core.Holder;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.registry.DynamicRegistryManager;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.HeightLimitView;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.PalettesFactory;
-import net.minecraft.world.chunk.SerializedChunk;
-import net.minecraft.world.dimension.DimensionType;
-import net.minecraft.world.storage.RegionFile;
-import net.minecraft.world.storage.StorageKey;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelHeightAccessor;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
+import net.minecraft.world.level.chunk.storage.RegionFile;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
+import net.minecraft.world.level.chunk.storage.SerializableChunkData;
+import net.minecraft.world.level.dimension.DimensionType;
 import org.slf4j.Logger;
 
 /**
@@ -53,7 +53,7 @@ import org.slf4j.Logger;
  *
  * <p>This translator does not depend on live {@code ServerWorld} instances. It
  * reads raw chunk NBT from vanilla region files, deserializes through
- * {@link SerializedChunk#fromNbt(HeightLimitView, PalettesFactory, NbtCompound)},
+ * {@link SerializableChunkData#parse(LevelHeightAccessor, PalettedContainerFactory, CompoundTag)},
  * captures one authoritative full CIS snapshot per present chunk, validates the
  * written chunk records, and retires fully converted regions to
  * {@code .backup}.</p>
@@ -116,10 +116,10 @@ public final class OfflineMcaCisTranslator {
      * @throws IOException if storage initialization or report writing fails
      */
     public static OfflineWorldMigrationReport translateWorld(final Path saveRoot,
-            final RegistryKey<World> worldKey,
-            final DynamicRegistryManager registryManager,
-            final RegistryEntry<DimensionType> dimensionType) throws IOException {
-        final String worldId = worldKey.getValue()
+            final ResourceKey<Level> worldKey,
+            final RegistryAccess registryManager,
+            final Holder<DimensionType> dimensionType) throws IOException {
+        final String worldId = worldKey.identifier()
                 .toString();
         final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, worldKey);
         final Path entityDir = ChunkisStoragePaths.computeVanillaEntitiesDirectory(saveRoot, worldKey);
@@ -130,7 +130,7 @@ public final class OfflineMcaCisTranslator {
             return OfflineWorldMigrationReport.empty(worldKey);
         }
 
-        final StorageKey storageKey = new StorageKey("chunk", worldKey, "chunk");
+        final RegionStorageInfo storageKey = new RegionStorageInfo("chunk", worldKey, "chunk");
         final List<RegionTask> regions = collectRegionTasks(regionDir, entityDir, storageKey);
         if (regions.isEmpty()) {
             return OfflineWorldMigrationReport.empty(worldKey);
@@ -138,11 +138,11 @@ public final class OfflineMcaCisTranslator {
 
         final Path storageDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, worldKey);
         final Path mappingFile = ChunkisStoragePaths.computeMappingFile(saveRoot, worldKey);
-        final HeightLimitView heightLimitView = HeightLimitView.create(dimensionType.value()
+        final LevelHeightAccessor heightLimitView = LevelHeightAccessor.create(dimensionType.value()
                         .minY(),
                 dimensionType.value()
                         .height());
-        final PalettesFactory palettesFactory = PalettesFactory.fromRegistryManager(registryManager);
+        final PalettedContainerFactory palettesFactory = PalettedContainerFactory.create(registryManager);
 
         final int workers = workerCountFor(regions.size(),
                 Runtime.getRuntime()
@@ -161,7 +161,7 @@ public final class OfflineMcaCisTranslator {
         final List<RegionCoordinates> retirable = new ArrayList<>();
         MigrationProgressTracker.begin(worldId, regions.size(), totalChunks, totalBytes, workers);
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = buildStorage(storageDir, mappingFile);
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = buildStorage(storageDir, mappingFile);
         final AtomicInteger workerNumbers = new AtomicInteger();
         final ExecutorService executor = Executors.newFixedThreadPool(workers, runnable -> {
             final int workerNumber = workerNumbers.incrementAndGet();
@@ -259,7 +259,7 @@ public final class OfflineMcaCisTranslator {
      */
     private static List<RegionTask> collectRegionTasks(final Path regionDir,
             final Path entityDir,
-            final StorageKey storageKey)
+            final RegionStorageInfo storageKey)
             throws IOException {
         final List<RegionTask> tasks = new ArrayList<>();
         for (final RegionCoordinates region : collectRegions(regionDir)) {
@@ -302,10 +302,10 @@ public final class OfflineMcaCisTranslator {
     /**
      * Converts one queued region task and publishes its worker progress.
      */
-    private static OfflineRegionMigrationReport translateTask(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
-            final RegistryKey<World> worldKey,
-            final HeightLimitView heightLimitView,
-            final PalettesFactory palettesFactory,
+    private static OfflineRegionMigrationReport translateTask(final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
+            final ResourceKey<Level> worldKey,
+            final LevelHeightAccessor heightLimitView,
+            final PalettedContainerFactory palettesFactory,
             final Path regionDir,
             final Path entityDir,
             final RegionTask task) {
@@ -336,7 +336,7 @@ public final class OfflineMcaCisTranslator {
             LOGGER.error("Failed to migrate region {}", mcaPath.getFileName(), e);
             MigrationProgressTracker.updateRegion(worker, task.presentChunks(), 0, Math.max(1, task.presentChunks()));
             MigrationProgressTracker.completeRegion(worker);
-            return new OfflineRegionMigrationReport(worldKey.getValue()
+            return new OfflineRegionMigrationReport(worldKey.identifier()
                     .toString(),
                     mcaPath.getFileName()
                             .toString(),
@@ -352,17 +352,17 @@ public final class OfflineMcaCisTranslator {
      * Translates one MCA region file and retires it when every present chunk
      * converts and validates successfully.
      */
-    private static OfflineRegionMigrationReport translateRegion(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
-            final RegistryKey<World> worldKey,
-            final HeightLimitView heightLimitView,
-            final PalettesFactory palettesFactory,
+    private static OfflineRegionMigrationReport translateRegion(final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
+            final ResourceKey<Level> worldKey,
+            final LevelHeightAccessor heightLimitView,
+            final PalettedContainerFactory palettesFactory,
             final Path mcaPath,
             final Path entityMcaPath,
             final int regionX,
             final int regionZ,
             final int worker) throws IOException {
-        final StorageKey storageKey = new StorageKey("chunk", worldKey, "chunk");
-        final StorageKey entityStorageKey = new StorageKey("entities", worldKey, "entities");
+        final RegionStorageInfo storageKey = new RegionStorageInfo("chunk", worldKey, "chunk");
+        final RegionStorageInfo entityStorageKey = new RegionStorageInfo("entities", worldKey, "entities");
         int presentChunks = 0;
         int processedChunks = 0;
         int handledChunks = 0;
@@ -377,7 +377,7 @@ public final class OfflineMcaCisTranslator {
                     final ChunkPos chunkPos = new ChunkPos((regionX << 5) + localX, (regionZ << 5) + localZ);
                     final boolean headerPresent = regionFile.hasChunk(chunkPos);
 
-                    try (DataInputStream input = regionFile.getChunkInputStream(chunkPos)) {
+                    try (DataInputStream input = regionFile.getChunkDataInputStream(chunkPos)) {
                         if (input == null) {
                             if (headerPresent) {
                                 // Vanilla returns null for a header entry it cannot read; that is a failure.
@@ -390,14 +390,14 @@ public final class OfflineMcaCisTranslator {
                         }
 
                         presentChunks++;
-                        final NbtCompound sourceNbt = NbtIo.readCompound(input,
-                                NbtSizeTracker.of(FabricNbtAdapter.MAX_NBT_SIZE));
+                        final CompoundTag sourceNbt = NbtIo.read(input,
+                                NbtAccounter.create(FabricNbtAdapter.MAX_NBT_SIZE));
                         if (sourceNbt == null) {
                             failedChunks++;
                             continue;
                         }
 
-                        final ChunkDelta<BlockState, NbtCompound> delta = ChunkSnapshotBuilder.buildChunkDelta(heightLimitView,
+                        final ChunkDelta<BlockState, CompoundTag> delta = ChunkSnapshotBuilder.buildChunkDelta(heightLimitView,
                                 palettesFactory,
                                 sourceNbt,
                                 loadOptionalEntityChunkNbt(entityRegionFile, chunkPos),
@@ -417,7 +417,7 @@ public final class OfflineMcaCisTranslator {
                                     mcaPath.getFileName());
                             continue;
                         }
-                        if (!storage.replace(new CisChunkPos(chunkPos.x, chunkPos.z), delta)) {
+                        if (!storage.replace(new CisChunkPos(chunkPos.x(), chunkPos.z()), delta)) {
                             failedChunks++;
                             LOGGER.error("Failed to save migrated chunk {} from {}", chunkPos, mcaPath.getFileName());
                             continue;
@@ -447,7 +447,7 @@ public final class OfflineMcaCisTranslator {
         }
 
         // Retirement happens in translateWorld after CIS storage is flushed and closed.
-        final OfflineRegionMigrationReport report = new OfflineRegionMigrationReport(worldKey.getValue()
+        final OfflineRegionMigrationReport report = new OfflineRegionMigrationReport(worldKey.identifier()
                 .toString(),
                 mcaPath.getFileName()
                         .toString(),
@@ -476,9 +476,9 @@ public final class OfflineMcaCisTranslator {
      * Clears any stale CIS entry for an omitted placeholder without mutating the
      * source MCA region before its verified backup is created.
      */
-    private static boolean clearOmittedEmptyChunk(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+    private static boolean clearOmittedEmptyChunk(final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos chunkPos) {
-        final CisChunkPos cisChunkPos = new CisChunkPos(chunkPos.x, chunkPos.z);
+        final CisChunkPos cisChunkPos = new CisChunkPos(chunkPos.x(), chunkPos.z());
         if (!storage.contains(cisChunkPos)) {
             return true;
         }
@@ -489,7 +489,7 @@ public final class OfflineMcaCisTranslator {
     /**
      * Opens a region file only when the target path exists.
      */
-    private static RegionFile openOptionalRegionFile(final StorageKey storageKey, final Path regionPath)
+    private static RegionFile openOptionalRegionFile(final RegionStorageInfo storageKey, final Path regionPath)
             throws IOException {
         if (regionPath == null || !Files.exists(regionPath)) {
             return null;
@@ -500,20 +500,20 @@ public final class OfflineMcaCisTranslator {
     /**
      * Loads one chunk payload from an optional external entity-region file.
      */
-    private static NbtCompound loadOptionalEntityChunkNbt(final RegionFile entityRegionFile, final ChunkPos chunkPos)
+    private static CompoundTag loadOptionalEntityChunkNbt(final RegionFile entityRegionFile, final ChunkPos chunkPos)
             throws IOException {
         if (entityRegionFile == null) {
             return null;
         }
-        try (DataInputStream input = entityRegionFile.getChunkInputStream(chunkPos)) {
-            return input == null ? null : NbtIo.readCompound(input, NbtSizeTracker.of(FabricNbtAdapter.MAX_NBT_SIZE));
+        try (DataInputStream input = entityRegionFile.getChunkDataInputStream(chunkPos)) {
+            return input == null ? null : NbtIo.read(input, NbtAccounter.create(FabricNbtAdapter.MAX_NBT_SIZE));
         }
     }
 
     /**
      * Builds a standalone CIS storage instance rooted at the supplied paths.
      */
-    private static CisStorage<Block, BlockState, Property<?>, NbtCompound> buildStorage(final Path storageDir,
+    private static CisStorage<Block, BlockState, Property<?>, CompoundTag> buildStorage(final Path storageDir,
             final Path mappingFile) throws IOException {
         Files.createDirectories(storageDir);
         Files.createDirectories(mappingFile.getParent());
@@ -526,7 +526,7 @@ public final class OfflineMcaCisTranslator {
                 registryAdapter,
                 stateAdapter,
                 packer);
-        return new CisStorage<>(storageDir, mapping, nbtAdapter, Blocks.AIR.getDefaultState());
+        return new CisStorage<>(storageDir, mapping, nbtAdapter, Blocks.AIR.defaultBlockState());
     }
 
     /**

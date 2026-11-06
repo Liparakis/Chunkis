@@ -20,26 +20,26 @@ import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.pig.Pig;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.AABB;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.LeavesBlock;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.ChestBlockEntity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.passive.PigEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
 import java.util.List;
 import java.util.UUID;
 
@@ -68,14 +68,14 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param chestPos  the position for the chest
      */
     private static void placeMarkerPattern(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos primary,
             final BlockPos secondary,
             final BlockPos chestPos
     ) {
-        world.setBlockState(primary, Blocks.DIAMOND_BLOCK.getDefaultState());
-        world.setBlockState(secondary, Blocks.GOLD_BLOCK.getDefaultState());
-        world.setBlockState(chestPos, Blocks.CHEST.getDefaultState());
+        world.setBlockAndUpdate(primary, Blocks.DIAMOND_BLOCK.defaultBlockState());
+        world.setBlockAndUpdate(secondary, Blocks.GOLD_BLOCK.defaultBlockState());
+        world.setBlockAndUpdate(chestPos, Blocks.CHEST.defaultBlockState());
     }
 
     /**
@@ -88,17 +88,17 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return true if the blocks match the expected pattern
      */
     private static boolean isMarkerPatternPresent(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos primary,
             final BlockPos secondary,
             final BlockPos chestPos
     ) {
         return world.getBlockState(primary)
-                .isOf(Blocks.DIAMOND_BLOCK)
+                .is(Blocks.DIAMOND_BLOCK)
                 && world.getBlockState(secondary)
-                .isOf(Blocks.GOLD_BLOCK)
+                .is(Blocks.GOLD_BLOCK)
                 && world.getBlockState(chestPos)
-                .isOf(Blocks.CHEST);
+                .is(Blocks.CHEST);
     }
 
     /**
@@ -109,11 +109,11 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param destination the destination block position
      */
     private static void teleportPlayer(
-            final ServerPlayerEntity player,
-            final ServerWorld world,
+            final ServerPlayer player,
+            final ServerLevel world,
             final BlockPos destination
     ) {
-        player.teleport(
+        player.teleportTo(
                 world,
                 destination.getX() + 0.5D,
                 destination.getY(),
@@ -131,9 +131,9 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param world    the server world
      * @param chunkPos the position of the chunk to force load
      */
-    private static void forceAndLoad(final ServerWorld world, final ChunkPos chunkPos) {
-        world.setChunkForced(chunkPos.x, chunkPos.z, true);
-        world.getChunk(chunkPos.x, chunkPos.z);
+    private static void forceAndLoad(final ServerLevel world, final ChunkPos chunkPos) {
+        world.setChunkForced(chunkPos.x(), chunkPos.z(), true);
+        world.getChunk(chunkPos.x(), chunkPos.z());
     }
 
     /**
@@ -145,8 +145,8 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return the offset ChunkPos
      */
     private static ChunkPos getOffsetChunkPos(final BlockPos anchor, final int offset) {
-        final ChunkPos anchorChunk = new ChunkPos(anchor);
-        return new ChunkPos(anchorChunk.x + offset, anchorChunk.z + offset);
+        final ChunkPos anchorChunk = ChunkPos.containing(anchor);
+        return new ChunkPos(anchorChunk.x() + offset, anchorChunk.z() + offset);
     }
 
     /**
@@ -157,19 +157,19 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return the initialized scenario
      */
     private static AirDeletionScenario createAirDeletionScenario(
-            final TestContext context,
+            final GameTestHelper context,
             final int chunkOffset
     ) {
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
+        final ServerLevel world = context.getLevel();
+        final BlockPos anchor = context.absolutePos(BlockPos.ZERO);
         final ChunkPos targetChunk = getOffsetChunkPos(anchor, chunkOffset);
-        final BlockPos targetArrival = targetChunk.getBlockPos(8, 100, 8);
+        final BlockPos targetArrival = targetChunk.getBlockAt(8, 100, 8);
         return new AirDeletionScenario(
                 world,
                 targetChunk,
                 targetArrival,
-                targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE),
-                targetChunk.getBlockPos(8, 64, 8)
+                targetArrival.offset(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE),
+                targetChunk.getBlockAt(8, 64, 8)
         );
     }
 
@@ -182,14 +182,14 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return the prepared test setup
      */
     private static AirDeletionTestSetup createAirDeletionTestSetup(
-            final TestContext context,
+            final GameTestHelper context,
             final int chunkOffset
     ) {
         final AirDeletionScenario scenario = createAirDeletionScenario(context, chunkOffset);
         watchBlocks(scenario.primary());
         forceAndLoad(scenario.world(), scenario.targetChunk());
         scenario.world()
-                .setBlockState(scenario.primary(), Blocks.DIAMOND_BLOCK.getDefaultState());
+                .setBlockAndUpdate(scenario.primary(), Blocks.DIAMOND_BLOCK.defaultBlockState());
         return new AirDeletionTestSetup(
                 scenario,
                 GameTestPlayers.createServerPlayer(context)
@@ -226,24 +226,24 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param targetChunk the chunk position where the pig should be placed
      * @return the configured PigEntity, or null if creation fails
      */
-    private static PigEntity createConfiguredPig(
-            final TestContext context,
-            final ServerWorld world,
+    private static Pig createConfiguredPig(
+            final GameTestHelper context,
+            final ServerLevel world,
             final ChunkPos targetChunk
     ) {
-        final PigEntity pig = EntityType.PIG.create(world, SpawnReason.COMMAND);
+        final Pig pig = EntityType.PIG.create(world, EntitySpawnReason.COMMAND);
         if (pig == null) {
-            context.throwGameTestException(Text.literal("Failed to create pig entity."));
+            context.fail(Component.literal("Failed to create pig entity."));
             return null;
         }
-        pig.refreshPositionAndAngles(
-                targetChunk.getStartX() + 14.5D,
+        pig.snapTo(
+                targetChunk.getMinBlockX() + 14.5D,
                 115.0D,
-                targetChunk.getStartZ() + 4.5D,
+                targetChunk.getMinBlockZ() + 4.5D,
                 0.0F,
                 0.0F
         );
-        pig.setAiDisabled(true);
+        pig.setNoAi(true);
         pig.setNoGravity(true);
         pig.setInvulnerable(true);
         return pig;
@@ -257,15 +257,15 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return true if a chest block entity matches and is present
      */
     private static boolean hasMatchingChestBlockEntity(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos chestPos
     ) {
         final BlockEntity blockEntity = world.getBlockEntity(chestPos);
         return world.getBlockState(chestPos)
-                .isOf(Blocks.CHEST)
+                .is(Blocks.CHEST)
                 && blockEntity instanceof ChestBlockEntity
-                && blockEntity.getCachedState()
-                .isOf(Blocks.CHEST);
+                && blockEntity.getBlockState()
+                .is(Blocks.CHEST);
     }
 
     /**
@@ -276,7 +276,7 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return true if the delta contains a block change for the local coordinates of the position
      */
     private static boolean containsBlockInstructionAt(
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final BlockPos pos
     ) {
         final int localX = pos.getX() & 15;
@@ -300,9 +300,9 @@ public final class PersistedBaseChunkReloadGameTest {
     private static boolean isEventForChunk(final ChunkTraceEvent event, final ChunkPos chunkPos) {
         return event.chunkKey() != null
                 && event.chunkKey()
-                .x() == chunkPos.x
+                .x() == chunkPos.x()
                 && event.chunkKey()
-                .z() == chunkPos.z;
+                .z() == chunkPos.z();
     }
 
     /**
@@ -347,9 +347,9 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return configured jungle leaves block state
      */
     private static BlockState naturalJungleLeaves(final int distance) {
-        return Blocks.JUNGLE_LEAVES.getDefaultState()
-                .with(LeavesBlock.PERSISTENT, false)
-                .with(LeavesBlock.DISTANCE, distance);
+        return Blocks.JUNGLE_LEAVES.defaultBlockState()
+                .setValue(LeavesBlock.PERSISTENT, false)
+                .setValue(LeavesBlock.DISTANCE, distance);
     }
 
     /**
@@ -358,7 +358,7 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param chunk loaded world chunk
      * @return true if a live Chunkis delta is attached and restorable
      */
-    private static boolean hasAttachedRestorableDelta(final WorldChunk chunk) {
+    private static boolean hasAttachedRestorableDelta(final LevelChunk chunk) {
         if (!(chunk instanceof ChunkisDeltaDuck duck)
                 || !(duck.chunkis$getDelta() instanceof ChunkDelta<?, ?> delta)) {
             return false;
@@ -372,7 +372,7 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param chunk loaded world chunk, may be {@code null}
      * @return compact live delta description
      */
-    private static String describeAttachedDelta(final WorldChunk chunk) {
+    private static String describeAttachedDelta(final LevelChunk chunk) {
         if (chunk == null) {
             return "chunk=null";
         }
@@ -416,27 +416,27 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return true if the entity is present and active
      */
     private static boolean hasEntityWithUuid(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final UUID uuid
     ) {
-        for (final var entity : world.iterateEntities()) {
-            if (uuid.equals(entity.getUuid()) && entity.getChunkPos()
+        for (final var entity : world.getAllEntities()) {
+            if (uuid.equals(entity.getUUID()) && entity.chunkPosition()
                     .equals(chunkPos) && entity.isAlive()) {
                 return true;
             }
         }
-        return !world.getOtherEntities(
-                        null,
-                        new Box(
-                                chunkPos.getStartX(),
-                                world.getBottomY(),
-                                chunkPos.getStartZ(),
-                                chunkPos.getEndX() + 1,
-                                world.getBottomY() + world.getHeight(),
-                                chunkPos.getEndZ() + 1
+        return !world.getEntities(
+                        (net.minecraft.world.entity.Entity) null,
+                        new AABB(
+                                chunkPos.getMinBlockX(),
+                                world.getMinY(),
+                                chunkPos.getMinBlockZ(),
+                                chunkPos.getMaxBlockX() + 1,
+                                world.getMinY() + world.getHeight(),
+                                chunkPos.getMaxBlockZ() + 1
                         ),
-                        entity -> uuid.equals(entity.getUuid())
+                        entity -> uuid.equals(entity.getUUID())
                 )
                 .isEmpty();
     }
@@ -451,17 +451,17 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return the string state description
      */
     private static String describeEntityState(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
-            final PigEntity pig,
+            final Pig pig,
             final UUID uuid
     ) {
         return "removed=" + pig.isRemoved()
                 + ", alive=" + pig.isAlive()
-                + ", chunk=" + pig.getChunkPos()
-                + ", pos=" + pig.getBlockPos()
-                + ", targetChunkLoaded=" + (world.getChunkManager()
-                .getWorldChunk(chunkPos.x, chunkPos.z, false)
+                + ", chunk=" + pig.chunkPosition()
+                + ", pos=" + pig.blockPosition()
+                + ", targetChunkLoaded=" + (world.getChunkSource()
+                .getChunk(chunkPos.x(), chunkPos.z(), false)
                 != null)
                 + ", queryVisible=" + hasEntityWithUuid(world, chunkPos, uuid);
     }
@@ -474,10 +474,10 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param entityUuid entity to look for
      * @return true when the stored delta contains the entity
      */
-    private static boolean storedDeltaContainsEntity(final ServerWorld world, final ChunkPos chunkPos,
+    private static boolean storedDeltaContainsEntity(final ServerLevel world, final ChunkPos chunkPos,
             final UUID entityUuid) {
         return containsEntityUuid(FabricCisStorageHelper.getStorage(world)
-                .load(new CisChunkPos(chunkPos.x, chunkPos.z)), entityUuid);
+                .load(new CisChunkPos(chunkPos.x(), chunkPos.z())), entityUuid);
     }
 
     /**
@@ -490,19 +490,19 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param stage      description of the current test stage for logging
      */
     private static void assertStoredDeltaContainsEntity(
-            final TestContext context,
-            final ServerWorld world,
+            final GameTestHelper context,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final UUID entityUuid,
             final String stage
     ) {
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage =
                 FabricCisStorageHelper.getStorage(world);
-        final ChunkDelta<BlockState, NbtCompound> storedDelta =
-                storage.load(new CisChunkPos(chunkPos.x, chunkPos.z));
+        final ChunkDelta<BlockState, CompoundTag> storedDelta =
+                storage.load(new CisChunkPos(chunkPos.x(), chunkPos.z()));
         context.assertTrue(
                 containsEntityUuid(storedDelta, entityUuid),
-                Text.literal("Stored delta was missing watched entity after " + stage
+                Component.literal("Stored delta was missing watched entity after " + stage
                         + ". Save trace: " + describeSaveTrace(chunkPos))
         );
     }
@@ -516,7 +516,7 @@ public final class PersistedBaseChunkReloadGameTest {
      * @return true if the delta contains a matching entity payload
      */
     private static boolean containsEntityUuid(
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final UUID entityUuid
     ) {
         final boolean[] found = {false};
@@ -655,30 +655,30 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 320)
-    public void persistedEntityReloadRestoresPig(final TestContext context) {
+    public void persistedEntityReloadRestoresPig(final GameTestHelper context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
+        final ServerLevel world = context.getLevel();
+        final BlockPos anchor = context.absolutePos(BlockPos.ZERO);
         final ChunkPos targetChunk = getOffsetChunkPos(anchor, 660);
-        final BlockPos targetArrival = targetChunk.getBlockPos(8, 115, 8);
-        final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
+        final BlockPos targetArrival = targetChunk.getBlockAt(8, 115, 8);
+        final BlockPos farArrival = targetArrival.offset(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
 
         forceAndLoad(world, targetChunk);
-        final PigEntity pig = createConfiguredPig(context, world, targetChunk);
+        final Pig pig = createConfiguredPig(context, world, targetChunk);
         if (pig == null) {
             return;
         }
-        final UUID pigUuid = pig.getUuid();
+        final UUID pigUuid = pig.getUUID();
         watchEntity(pigUuid);
-        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
-        context.assertTrue(world.spawnEntity(pig), Text.literal("Expected pig spawn to succeed."));
+        final ServerPlayer player = GameTestPlayers.createServerPlayer(context);
+        context.assertTrue(world.addFreshEntity(pig), Component.literal("Expected pig spawn to succeed."));
 
-        context.runAtTick(60, () -> {
+        context.runAtTickTime(60, () -> {
             context.assertTrue(
-                    pig.isAlive() && !pig.isRemoved() && pig.getChunkPos()
+                    pig.isAlive() && !pig.isRemoved() && pig.chunkPosition()
                             .equals(targetChunk),
-                    Text.literal("Spawned pig was not alive in the target chunk before save. State: "
+                    Component.literal("Spawned pig was not alive in the target chunk before save. State: "
                             + describeEntityState(world, targetChunk, pig, pigUuid))
             );
             teleportPlayer(player, world, targetArrival);
@@ -687,44 +687,44 @@ public final class PersistedBaseChunkReloadGameTest {
         // concurrent tests), so retry the save each tick instead of assuming one pass writes it.
         final java.util.concurrent.atomic.AtomicBoolean saved = new java.util.concurrent.atomic.AtomicBoolean();
         for (long tick = 60L; tick <= 80L; tick++) {
-            context.runAtTick(tick, () -> {
+            context.runAtTickTime(tick, () -> {
                 if (saved.get()) {
                     return;
                 }
-                world.getChunkManager()
+                world.getChunkSource()
                         .save(false);
                 AsyncCisSaveManager.flushAndClose(world);
                 if (storedDeltaContainsEntity(world, targetChunk, pigUuid)) {
                     saved.set(true);
-                    world.setChunkForced(targetChunk.x, targetChunk.z, false);
+                    world.setChunkForced(targetChunk.x(), targetChunk.z(), false);
                 }
             });
         }
-        context.runAtTick(81L, () -> assertStoredDeltaContainsEntity(context, world, targetChunk, pigUuid,
+        context.runAtTickTime(81L, () -> assertStoredDeltaContainsEntity(context, world, targetChunk, pigUuid,
                 "initial persisted pig save"));
 
-        context.runAtTick(85, () -> teleportPlayer(player, world, farArrival));
-        context.runAtTick(110, () -> context.assertTrue(
-                world.getChunkManager()
-                        .getWorldChunk(targetChunk.x, targetChunk.z, false) == null,
-                Text.literal("Target chunk never unloaded before reload attempt. Load trace: "
+        context.runAtTickTime(85, () -> teleportPlayer(player, world, farArrival));
+        context.runAtTickTime(110, () -> context.assertTrue(
+                world.getChunkSource()
+                        .getChunk(targetChunk.x(), targetChunk.z(), false) == null,
+                Component.literal("Target chunk never unloaded before reload attempt. Load trace: "
                         + describeLoadTrace(targetChunk))
         ));
-        context.runAtTick(130, () -> {
+        context.runAtTickTime(130, () -> {
             teleportPlayer(player, world, targetArrival);
-            world.setChunkForced(targetChunk.x, targetChunk.z, true);
-            world.getChunk(targetChunk.x, targetChunk.z);
+            world.setChunkForced(targetChunk.x(), targetChunk.z(), true);
+            world.getChunk(targetChunk.x(), targetChunk.z());
         });
-        context.runAtTick(170, () -> {
+        context.runAtTickTime(170, () -> {
             context.assertTrue(
                     hasEntityWithUuid(world, targetChunk, pigUuid),
-                    Text.literal("Reloaded chunk did not restore the persisted pig entity. Timeline: "
+                    Component.literal("Reloaded chunk did not restore the persisted pig entity. Timeline: "
                             + describeEntityTimeline(pigUuid)
                             + ". State: " + describeEntityState(world, targetChunk, pig, pigUuid)
                             + ". Load trace: " + describeLoadTrace(targetChunk))
             );
-            world.setChunkForced(targetChunk.x, targetChunk.z, false);
-            context.complete();
+            world.setChunkForced(targetChunk.x(), targetChunk.z(), false);
+            context.succeed();
         });
     }
 
@@ -734,55 +734,55 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 220)
-    public void restoredChunkAirDeletionSurvivesSecondReload(final TestContext context) {
+    public void restoredChunkAirDeletionSurvivesSecondReload(final GameTestHelper context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
         final AirDeletionTestSetup setup = createAirDeletionTestSetup(context, 640);
         final AirDeletionScenario scenario = setup.scenario();
-        final ServerWorld world = scenario.world();
+        final ServerLevel world = scenario.world();
         final ChunkPos targetChunk = scenario.targetChunk();
         final BlockPos targetArrival = scenario.targetArrival();
         final BlockPos farArrival = scenario.farArrival();
         final BlockPos primary = scenario.primary();
-        final ServerPlayerEntity player = setup.player();
+        final ServerPlayer player = setup.player();
         teleportPlayer(player, world, targetArrival);
-        world.getChunkManager()
+        world.getChunkSource()
                 .save(false);
         AsyncCisSaveManager.flushAndClose(world);
-        world.setChunkForced(targetChunk.x, targetChunk.z, false);
+        world.setChunkForced(targetChunk.x(), targetChunk.z(), false);
 
-        context.runAtTick(20, () -> teleportPlayer(player, world, farArrival));
-        context.runAtTick(50, () -> {
+        context.runAtTickTime(20, () -> teleportPlayer(player, world, farArrival));
+        context.runAtTickTime(50, () -> {
             teleportPlayer(player, world, targetArrival);
-            world.getChunk(targetChunk.x, targetChunk.z);
+            world.getChunk(targetChunk.x(), targetChunk.z());
             context.assertTrue(
                     world.getBlockState(primary)
-                            .isOf(Blocks.DIAMOND_BLOCK),
-                    Text.literal("Expected first reload to restore the original block before deletion.")
+                            .is(Blocks.DIAMOND_BLOCK),
+                    Component.literal("Expected first reload to restore the original block before deletion.")
             );
-            world.setBlockState(primary, Blocks.AIR.getDefaultState());
+            world.setBlockAndUpdate(primary, Blocks.AIR.defaultBlockState());
             context.assertTrue(
                     world.getBlockState(primary)
                             .isAir(),
-                    Text.literal("Expected watched block to be air immediately after deletion on restored chunk.")
+                    Component.literal("Expected watched block to be air immediately after deletion on restored chunk.")
             );
-            world.getChunkManager()
+            world.getChunkSource()
                     .save(false);
             AsyncCisSaveManager.flushAndClose(world);
-            world.setChunkForced(targetChunk.x, targetChunk.z, false);
+            world.setChunkForced(targetChunk.x(), targetChunk.z(), false);
         });
-        context.runAtTick(90, () -> teleportPlayer(player, world, farArrival));
-        context.runAtTick(130, () -> {
+        context.runAtTickTime(90, () -> teleportPlayer(player, world, farArrival));
+        context.runAtTickTime(130, () -> {
             teleportPlayer(player, world, targetArrival);
-            world.getChunk(targetChunk.x, targetChunk.z);
+            world.getChunk(targetChunk.x(), targetChunk.z());
         });
-        context.runAtTick(150, () -> {
+        context.runAtTickTime(150, () -> {
             context.assertTrue(
                     world.getBlockState(primary)
                             .isAir(),
-                    Text.literal("Reloaded restored chunk resurrected a block that had been deleted to air.")
+                    Component.literal("Reloaded restored chunk resurrected a block that had been deleted to air.")
             );
-            context.complete();
+            context.succeed();
         });
     }
 
@@ -792,58 +792,58 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 120)
-    public void persistedBaseChunkReloadPreservesAirDeletion(final TestContext context) {
+    public void persistedBaseChunkReloadPreservesAirDeletion(final GameTestHelper context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
         final AirDeletionTestSetup setup = createAirDeletionTestSetup(context, 620);
         final AirDeletionScenario scenario = setup.scenario();
 
         scenario.world()
-                .setBlockState(scenario.primary(), Blocks.AIR.getDefaultState());
+                .setBlockAndUpdate(scenario.primary(), Blocks.AIR.defaultBlockState());
 
         context.assertTrue(
                 scenario.world()
                         .getBlockState(scenario.primary())
                         .isAir(),
-                Text.literal("Expected watched block to be air immediately after deletion.")
+                Component.literal("Expected watched block to be air immediately after deletion.")
         );
 
         teleportPlayer(setup.player(), scenario.world(), scenario.targetArrival());
         scenario.world()
-                .getChunkManager()
+                .getChunkSource()
                 .save(false);
         AsyncCisSaveManager.flushAndClose(scenario.world());
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage =
                 FabricCisStorageHelper.getStorage(scenario.world());
-        final ChunkDelta<BlockState, NbtCompound> storedDelta =
-                storage.load(new CisChunkPos(scenario.targetChunk().x, scenario.targetChunk().z));
+        final ChunkDelta<BlockState, CompoundTag> storedDelta =
+                storage.load(new CisChunkPos(scenario.targetChunk().x(), scenario.targetChunk().z()));
 
         context.assertFalse(
                 CisNbtUtil.hasPersistedBaseChunkNbt(storedDelta.getChunkMetadata())
                         && CisNbtUtil.hasFullBlockBaseline(storedDelta.getChunkMetadata())
                         && !containsBlockInstructionAt(storedDelta, scenario.primary()),
-                Text.literal(
+                Component.literal(
                         "Stored full-baseline delta kept base snapshot metadata while omitting the watched air deletion.")
         );
 
         scenario.world()
-                .setChunkForced(scenario.targetChunk().x, scenario.targetChunk().z, false);
+                .setChunkForced(scenario.targetChunk().x(), scenario.targetChunk().z(), false);
 
-        context.runAtTick(20, () -> teleportPlayer(setup.player(), scenario.world(), scenario.farArrival()));
-        context.runAtTick(50, () -> teleportPlayer(setup.player(), scenario.world(), scenario.targetArrival()));
-        context.runAtTick(60, () -> {
+        context.runAtTickTime(20, () -> teleportPlayer(setup.player(), scenario.world(), scenario.farArrival()));
+        context.runAtTickTime(50, () -> teleportPlayer(setup.player(), scenario.world(), scenario.targetArrival()));
+        context.runAtTickTime(60, () -> {
             scenario.world()
-                    .getChunk(scenario.targetChunk().x, scenario.targetChunk().z);
+                    .getChunk(scenario.targetChunk().x(), scenario.targetChunk().z());
 
             context.assertTrue(
                     scenario.world()
                             .getBlockState(scenario.primary())
                             .isAir(),
-                    Text.literal("Reloaded chunk resurrected a block that had been deleted to air.")
+                    Component.literal("Reloaded chunk resurrected a block that had been deleted to air.")
             );
 
-            context.complete();
+            context.succeed();
         });
     }
 
@@ -853,42 +853,42 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 300)
-    public void persistedBaseChunkReloadDoesNotRestoreEmpty(final TestContext context) {
+    public void persistedBaseChunkReloadDoesNotRestoreEmpty(final GameTestHelper context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
+        final ServerLevel world = context.getLevel();
+        final BlockPos anchor = context.absolutePos(BlockPos.ZERO);
         // Move 10,000 blocks away to ensure it's not kept loaded by the gametest structure
         final ChunkPos targetChunk = getOffsetChunkPos(anchor, 600);
-        final BlockPos targetArrival = targetChunk.getBlockPos(8, 100, 8);
-        final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
-        final BlockPos primary = targetChunk.getBlockPos(8, 64, 8);
-        final BlockPos secondary = targetChunk.getBlockPos(9, 64, 8);
-        final BlockPos chestPos = targetChunk.getBlockPos(10, 64, 8);
+        final BlockPos targetArrival = targetChunk.getBlockAt(8, 100, 8);
+        final BlockPos farArrival = targetArrival.offset(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
+        final BlockPos primary = targetChunk.getBlockAt(8, 64, 8);
+        final BlockPos secondary = targetChunk.getBlockAt(9, 64, 8);
+        final BlockPos chestPos = targetChunk.getBlockAt(10, 64, 8);
 
         watchBlocks(primary, secondary, chestPos);
 
-        world.setChunkForced(targetChunk.x, targetChunk.z, true);
-        final WorldChunk chunk = world.getChunk(targetChunk.x, targetChunk.z);
+        world.setChunkForced(targetChunk.x(), targetChunk.z(), true);
+        final LevelChunk chunk = world.getChunk(targetChunk.x(), targetChunk.z());
         placeMarkerPattern(world, primary, secondary, chestPos);
 
-        final ChunkDelta<BlockState, NbtCompound> delta = new ChunkDelta<>(BlockState::isAir);
+        final ChunkDelta<BlockState, CompoundTag> delta = new ChunkDelta<>(BlockState::isAir);
         BaseChunkCaptureUtil.captureBaseChunk(world, chunk, delta);
 
         context.assertTrue(
                 CisNbtUtil.hasPersistedBaseChunkNbt(delta.getChunkMetadata()),
-                Text.literal("Expected persisted base chunk NBT after capture.")
+                Component.literal("Expected persisted base chunk NBT after capture.")
         );
 
         context.assertTrue(
                 delta.getBlockInstructions()
                         .isEmpty(),
-                Text.literal("Expected base capture to clear sparse block payloads.")
+                Component.literal("Expected base capture to clear sparse block payloads.")
         );
 
-        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
+        final ServerPlayer player = GameTestPlayers.createServerPlayer(context);
         teleportPlayer(player, world, targetArrival);
-        world.setChunkForced(targetChunk.x, targetChunk.z, false);
+        world.setChunkForced(targetChunk.x(), targetChunk.z(), false);
 
         // Wait for vanilla to really unload the chunk instead of assuming a tick count. A chunk that only
         // dropped below FULL is still in memory and returning re-promotes it without a storage load, so the
@@ -900,43 +900,43 @@ public final class PersistedBaseChunkReloadGameTest {
                 unloaded.set(true);
             }
         });
-        context.runAtTick(20, () -> teleportPlayer(player, world, farArrival));
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> context.assertTrue(unloaded.get(),
-                        Text.literal("Waiting for target chunk " + targetChunk + " to unload.")))
-                .createAndAdd(() -> {
+        context.runAtTickTime(20, () -> teleportPlayer(player, world, farArrival));
+        context.startSequence()
+                .thenWaitUntil(() -> context.assertTrue(unloaded.get(),
+                        Component.literal("Waiting for target chunk " + targetChunk + " to unload.")))
+                .thenWaitUntil(() -> {
                     // The unload's own save stores the chunk in the current form; wait for it to land so it
                     // cannot overwrite the legacy entry written next.
                     AsyncCisSaveManager.flushAndClose(world);
                     // flushAndClose closes the storage instance; look it up again rather than reuse one.
                     context.assertTrue(CisNbtUtil.hasFullBlockBaseline(FabricCisStorageHelper.getStorage(world)
-                                    .load(new CisChunkPos(targetChunk.x, targetChunk.z)).getChunkMetadata()),
-                            Text.literal("Waiting for the unload save of " + targetChunk + "."));
+                                    .load(new CisChunkPos(targetChunk.x(), targetChunk.z())).getChunkMetadata()),
+                            Component.literal("Waiting for the unload save of " + targetChunk + "."));
                 })
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     context.assertTrue(FabricCisStorageHelper.getStorage(world)
-                                    .save(new CisChunkPos(targetChunk.x, targetChunk.z), delta),
-                            Text.literal("Failed writing the legacy base-chunk entry."));
+                                    .save(new CisChunkPos(targetChunk.x(), targetChunk.z()), delta),
+                            Component.literal("Failed writing the legacy base-chunk entry."));
                     GlobalChunkTracker.forgetChunk(world, targetChunk);
                     teleportPlayer(player, world, targetArrival);
                 })
-                .createAndAdd(() -> {
-                    world.getChunk(targetChunk.x, targetChunk.z);
+                .thenWaitUntil(() -> {
+                    world.getChunk(targetChunk.x(), targetChunk.z());
 
                     context.assertTrue(
                             isMarkerPatternPresent(world, primary, secondary, chestPos),
-                            Text.literal("Reloaded chunk restored empty instead of from persisted base chunk NBT.")
+                            Component.literal("Reloaded chunk restored empty instead of from persisted base chunk NBT.")
                     );
                     context.assertTrue(
                             hasMatchingChestBlockEntity(world, chestPos),
-                            Text.literal("Expected chest block entity to match its restored chest block state.")
+                            Component.literal("Expected chest block entity to match its restored chest block state.")
                     );
                     context.assertTrue(
                             containsBaseChunkAppliedTrace(targetChunk),
-                            Text.literal("Expected BASE_NBT_APPLIED trace event on reload.")
+                            Component.literal("Expected BASE_NBT_APPLIED trace event on reload.")
                     );
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -945,37 +945,37 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 300)
-    public void fullBaselineReloadChurnDoesNotAcceptUnexpectedRealEditsOrLosePig(final TestContext context) {
+    public void fullBaselineReloadChurnDoesNotAcceptUnexpectedRealEditsOrLosePig(final GameTestHelper context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
+        final ServerLevel world = context.getLevel();
+        final BlockPos anchor = context.absolutePos(BlockPos.ZERO);
         final ChunkPos targetChunk = getOffsetChunkPos(anchor, 700);
-        final BlockPos targetArrival = targetChunk.getBlockPos(8, 115, 8);
-        final BlockPos farArrival = targetArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
-        final BlockPos primary = targetChunk.getBlockPos(8, 64, 8);
-        final BlockPos secondary = targetChunk.getBlockPos(9, 64, 8);
+        final BlockPos targetArrival = targetChunk.getBlockAt(8, 115, 8);
+        final BlockPos farArrival = targetArrival.offset(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
+        final BlockPos primary = targetChunk.getBlockAt(8, 64, 8);
+        final BlockPos secondary = targetChunk.getBlockAt(9, 64, 8);
         final int churnCycles = 12;
 
         forceAndLoad(world, targetChunk);
-        world.setBlockState(primary, Blocks.DIAMOND_BLOCK.getDefaultState());
-        world.setBlockState(secondary, Blocks.GOLD_BLOCK.getDefaultState());
+        world.setBlockAndUpdate(primary, Blocks.DIAMOND_BLOCK.defaultBlockState());
+        world.setBlockAndUpdate(secondary, Blocks.GOLD_BLOCK.defaultBlockState());
 
-        final PigEntity pig = createConfiguredPig(context, world, targetChunk);
+        final Pig pig = createConfiguredPig(context, world, targetChunk);
         if (pig == null) {
             return;
         }
-        final UUID pigUuid = pig.getUuid();
+        final UUID pigUuid = pig.getUUID();
         watchBlocks(primary, secondary);
         watchEntity(pigUuid);
-        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
-        context.assertTrue(world.spawnEntity(pig), Text.literal("Expected pig spawn to succeed."));
+        final ServerPlayer player = GameTestPlayers.createServerPlayer(context);
+        context.assertTrue(world.addFreshEntity(pig), Component.literal("Expected pig spawn to succeed."));
 
-        context.runAtTick(5, () -> {
+        context.runAtTickTime(5, () -> {
             context.assertTrue(
-                    pig.isAlive() && !pig.isRemoved() && pig.getChunkPos()
+                    pig.isAlive() && !pig.isRemoved() && pig.chunkPosition()
                             .equals(targetChunk),
-                    Text.literal("Spawned pig was not alive in the target chunk before churn seed save. State: "
+                    Component.literal("Spawned pig was not alive in the target chunk before churn seed save. State: "
                             + describeEntityState(world, targetChunk, pig, pigUuid))
             );
             teleportPlayer(player, world, targetArrival);
@@ -986,7 +986,7 @@ public final class PersistedBaseChunkReloadGameTest {
         final java.util.concurrent.atomic.AtomicBoolean seeded = new java.util.concurrent.atomic.AtomicBoolean();
         final java.util.concurrent.atomic.AtomicLong seedEventId = new java.util.concurrent.atomic.AtomicLong();
         for (long tick = 5L; tick <= 60L; tick++) {
-            context.runAtTick(tick, () -> {
+            context.runAtTickTime(tick, () -> {
                 if (seeded.get()) {
                     return;
                 }
@@ -999,37 +999,37 @@ public final class PersistedBaseChunkReloadGameTest {
                     // The seed edits above are real edits by design; only edits after the seed save count.
                     seedEventId.set(ChunkTraceStore.snapshotMatching(event -> true).stream()
                             .mapToLong(ChunkTraceEvent::eventId).max().orElse(-1L));
-                    world.setChunkForced(targetChunk.x, targetChunk.z, false);
+                    world.setChunkForced(targetChunk.x(), targetChunk.z(), false);
                 }
             });
         }
-        context.runAtTick(61L, () -> assertStoredDeltaContainsEntity(context, world, targetChunk, pigUuid,
+        context.runAtTickTime(61L, () -> assertStoredDeltaContainsEntity(context, world, targetChunk, pigUuid,
                 "full-baseline churn seed save"));
 
         for (int i = 0; i < churnCycles; i++) {
             final long cycleStart = 65L + (long) i * 14L;
-            context.runAtTick(cycleStart, () -> teleportPlayer(player, world, farArrival));
-            context.runAtTick(cycleStart + 4L, () -> teleportPlayer(player, world, targetArrival));
-            context.runAtTick(cycleStart + 8L, () -> {
-                world.getChunk(targetChunk.x, targetChunk.z);
-                world.getChunkManager()
+            context.runAtTickTime(cycleStart, () -> teleportPlayer(player, world, farArrival));
+            context.runAtTickTime(cycleStart + 4L, () -> teleportPlayer(player, world, targetArrival));
+            context.runAtTickTime(cycleStart + 8L, () -> {
+                world.getChunk(targetChunk.x(), targetChunk.z());
+                world.getChunkSource()
                         .save(false);
             });
         }
 
-        context.runAtTick(65L + churnCycles * 14L + 30L, () -> {
-            world.getChunk(targetChunk.x, targetChunk.z);
+        context.runAtTickTime(65L + churnCycles * 14L + 30L, () -> {
+            world.getChunk(targetChunk.x(), targetChunk.z());
             context.assertTrue(
                     world.getBlockState(primary)
-                            .isOf(Blocks.DIAMOND_BLOCK)
+                            .is(Blocks.DIAMOND_BLOCK)
                             && world.getBlockState(secondary)
-                            .isOf(Blocks.GOLD_BLOCK),
-                    Text.literal("Repeated full-baseline churn changed restored marker blocks.")
+                            .is(Blocks.GOLD_BLOCK),
+                    Component.literal("Repeated full-baseline churn changed restored marker blocks.")
             );
-            if (world.canSpawnEntitiesAt(targetChunk)) {
+            if (world.canSpawnEntitiesInChunk(targetChunk)) {
                 context.assertTrue(
                         hasEntityWithUuid(world, targetChunk, pigUuid),
-                        Text.literal("Repeated full-baseline churn lost the persisted pig entity. Timeline: "
+                        Component.literal("Repeated full-baseline churn lost the persisted pig entity. Timeline: "
                                 + describeEntityTimeline(pigUuid)
                                 + ". State: " + describeEntityState(world, targetChunk, pig, pigUuid))
                 );
@@ -1044,10 +1044,10 @@ public final class PersistedBaseChunkReloadGameTest {
             }
             context.assertFalse(
                     containsUnexpectedRealEditTrace(targetChunk, seedEventId.get()),
-                    Text.literal("Repeated full-baseline churn accepted post-restore real edits for the restored chunk.")
+                    Component.literal("Repeated full-baseline churn accepted post-restore real edits for the restored chunk.")
             );
 
-            context.complete();
+            context.succeed();
         });
     }
 
@@ -1059,133 +1059,133 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 160)
-    public void mixedBaselineNeighborReloadPreservesCrossChunkBorderFixture(final TestContext context) {
+    public void mixedBaselineNeighborReloadPreservesCrossChunkBorderFixture(final GameTestHelper context) {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(BlockPos.ORIGIN);
+        final ServerLevel world = context.getLevel();
+        final BlockPos anchor = context.absolutePos(BlockPos.ZERO);
         final ChunkPos leftChunkPos = getOffsetChunkPos(anchor, 760);
-        final ChunkPos rightChunkPos = new ChunkPos(leftChunkPos.x + 1, leftChunkPos.z);
-        final BlockPos leftArrival = leftChunkPos.getBlockPos(14, 100, 8);
-        final BlockPos farArrival = leftArrival.add(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
-        final BlockPos leftLogBase = leftChunkPos.getBlockPos(15, 64, 8);
-        final BlockPos leftLogTop = leftChunkPos.getBlockPos(15, 65, 8);
-        final BlockPos leftLeaf = leftChunkPos.getBlockPos(15, 66, 8);
-        final BlockPos rightLeafNear = rightChunkPos.getBlockPos(0, 66, 8);
-        final BlockPos rightLeafFar = rightChunkPos.getBlockPos(1, 66, 8);
+        final ChunkPos rightChunkPos = new ChunkPos(leftChunkPos.x() + 1, leftChunkPos.z());
+        final BlockPos leftArrival = leftChunkPos.getBlockAt(14, 100, 8);
+        final BlockPos farArrival = leftArrival.offset(FAR_BLOCK_DISTANCE, 0, FAR_BLOCK_DISTANCE);
+        final BlockPos leftLogBase = leftChunkPos.getBlockAt(15, 64, 8);
+        final BlockPos leftLogTop = leftChunkPos.getBlockAt(15, 65, 8);
+        final BlockPos leftLeaf = leftChunkPos.getBlockAt(15, 66, 8);
+        final BlockPos rightLeafNear = rightChunkPos.getBlockAt(0, 66, 8);
+        final BlockPos rightLeafFar = rightChunkPos.getBlockAt(1, 66, 8);
 
         watchBlocks(leftLogBase, leftLogTop, leftLeaf, rightLeafNear, rightLeafFar);
         forceAndLoad(world, leftChunkPos);
         forceAndLoad(world, rightChunkPos);
 
-        world.setBlockState(leftLogBase, Blocks.JUNGLE_LOG.getDefaultState());
-        world.setBlockState(leftLogTop, Blocks.JUNGLE_LOG.getDefaultState());
-        world.setBlockState(leftLeaf, naturalJungleLeaves(1));
-        world.setBlockState(rightLeafNear, naturalJungleLeaves(2));
-        world.setBlockState(rightLeafFar, naturalJungleLeaves(2));
+        world.setBlockAndUpdate(leftLogBase, Blocks.JUNGLE_LOG.defaultBlockState());
+        world.setBlockAndUpdate(leftLogTop, Blocks.JUNGLE_LOG.defaultBlockState());
+        world.setBlockAndUpdate(leftLeaf, naturalJungleLeaves(1));
+        world.setBlockAndUpdate(rightLeafNear, naturalJungleLeaves(2));
+        world.setBlockAndUpdate(rightLeafFar, naturalJungleLeaves(2));
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage =
                 FabricCisStorageHelper.getStorage(world);
-        final WorldChunk leftChunk = world.getChunk(leftChunkPos.x, leftChunkPos.z);
-        final WorldChunk rightChunk = world.getChunk(rightChunkPos.x, rightChunkPos.z);
+        final LevelChunk leftChunk = world.getChunk(leftChunkPos.x(), leftChunkPos.z());
+        final LevelChunk rightChunk = world.getChunk(rightChunkPos.x(), rightChunkPos.z());
 
-        final ChunkDelta<BlockState, NbtCompound> leftDelta = new ChunkDelta<>(BlockState::isAir);
+        final ChunkDelta<BlockState, CompoundTag> leftDelta = new ChunkDelta<>(BlockState::isAir);
         BaseChunkCaptureUtil.captureBaseChunk(world, leftChunk, leftDelta);
         CisSnapshotCapture.capture(leftChunk, leftDelta, "gametest-mixed-border-left");
-        storage.save(new CisChunkPos(leftChunkPos.x, leftChunkPos.z), leftDelta);
+        storage.save(new CisChunkPos(leftChunkPos.x(), leftChunkPos.z()), leftDelta);
 
-        final ChunkDelta<BlockState, NbtCompound> rightDelta = new ChunkDelta<>(BlockState::isAir);
+        final ChunkDelta<BlockState, CompoundTag> rightDelta = new ChunkDelta<>(BlockState::isAir);
         BaseChunkCaptureUtil.captureBaseChunk(world, rightChunk, rightDelta);
-        storage.save(new CisChunkPos(rightChunkPos.x, rightChunkPos.z), rightDelta);
-        final ChunkDelta<BlockState, NbtCompound> storedRightDelta =
-                storage.load(new CisChunkPos(rightChunkPos.x, rightChunkPos.z), "gametest-mixed-border-right-readback");
+        storage.save(new CisChunkPos(rightChunkPos.x(), rightChunkPos.z()), rightDelta);
+        final ChunkDelta<BlockState, CompoundTag> storedRightDelta =
+                storage.load(new CisChunkPos(rightChunkPos.x(), rightChunkPos.z()), "gametest-mixed-border-right-readback");
 
         context.assertTrue(
                 !CisNbtUtil.hasPersistedBaseChunkNbt(leftDelta.getChunkMetadata())
                         && CisNbtUtil.hasFullBlockBaseline(leftDelta.getChunkMetadata()),
-                Text.literal("Expected left chunk to persist as full-baseline snapshot.")
+                Component.literal("Expected left chunk to persist as full-baseline snapshot.")
         );
         context.assertTrue(
                 CisNbtUtil.hasPersistedBaseChunkNbt(rightDelta.getChunkMetadata())
                         && !CisNbtUtil.hasFullBlockBaseline(rightDelta.getChunkMetadata()),
-                Text.literal("Expected right chunk to persist as base-backed sparse chunk.")
+                Component.literal("Expected right chunk to persist as base-backed sparse chunk.")
         );
         context.assertTrue(
                 ChunkDeltaOwnership.hasRestorableChunkisState(storedRightDelta)
                         && CisNbtUtil.hasPersistedBaseChunkNbt(storedRightDelta.getChunkMetadata())
                         && !CisNbtUtil.hasFullBlockBaseline(storedRightDelta.getChunkMetadata()),
-                Text.literal("Expected right base-backed sparse chunk to round-trip through storage: "
+                Component.literal("Expected right base-backed sparse chunk to round-trip through storage: "
                         + describeDelta(storedRightDelta))
         );
 
         GlobalChunkTracker.forgetChunk(world, leftChunkPos);
         GlobalChunkTracker.forgetChunk(world, rightChunkPos);
 
-        final ServerPlayerEntity player = GameTestPlayers.createServerPlayer(context);
+        final ServerPlayer player = GameTestPlayers.createServerPlayer(context);
         teleportPlayer(player, world, leftArrival);
-        world.setChunkForced(leftChunkPos.x, leftChunkPos.z, false);
-        world.setChunkForced(rightChunkPos.x, rightChunkPos.z, false);
+        world.setChunkForced(leftChunkPos.x(), leftChunkPos.z(), false);
+        world.setChunkForced(rightChunkPos.x(), rightChunkPos.z(), false);
 
-        context.runAtTick(20, () -> teleportPlayer(player, world, farArrival));
+        context.runAtTickTime(20, () -> teleportPlayer(player, world, farArrival));
 
-        context.runAtTick(50, () -> context.assertTrue(
-                world.getChunkManager()
-                        .getWorldChunk(leftChunkPos.x, leftChunkPos.z, false) == null
-                        && world.getChunkManager()
-                        .getWorldChunk(rightChunkPos.x, rightChunkPos.z, false) == null,
-                Text.literal("Expected both border chunks to unload before reload.")
+        context.runAtTickTime(50, () -> context.assertTrue(
+                world.getChunkSource()
+                        .getChunk(leftChunkPos.x(), leftChunkPos.z(), false) == null
+                        && world.getChunkSource()
+                        .getChunk(rightChunkPos.x(), rightChunkPos.z(), false) == null,
+                Component.literal("Expected both border chunks to unload before reload.")
         ));
 
-        context.runAtTick(70, () -> {
-            world.setChunkForced(rightChunkPos.x, rightChunkPos.z, true);
-            world.getChunk(rightChunkPos.x, rightChunkPos.z);
-            world.scheduleBlockTick(rightLeafNear, Blocks.JUNGLE_LEAVES, 1);
+        context.runAtTickTime(70, () -> {
+            world.setChunkForced(rightChunkPos.x(), rightChunkPos.z(), true);
+            world.getChunk(rightChunkPos.x(), rightChunkPos.z());
+            world.scheduleTick(rightLeafNear, Blocks.JUNGLE_LEAVES, 1);
         });
 
-        context.runAtTick(90, () -> {
+        context.runAtTickTime(90, () -> {
             final BlockState state = world.getBlockState(rightLeafNear);
             context.assertTrue(
-                    state.isOf(Blocks.JUNGLE_LEAVES)
-                            && state.get(LeavesBlock.DISTANCE) < LeavesBlock.MAX_DISTANCE,
-                    Text.literal("Sparse-side natural leaf lost its log distance before neighbor reload: " + state)
+                    state.is(Blocks.JUNGLE_LEAVES)
+                            && state.getValue(LeavesBlock.DISTANCE) < LeavesBlock.DECAY_DISTANCE,
+                    Component.literal("Sparse-side natural leaf lost its log distance before neighbor reload: " + state)
             );
             teleportPlayer(player, world, leftArrival);
-            world.setChunkForced(leftChunkPos.x, leftChunkPos.z, true);
-            world.getChunk(leftChunkPos.x, leftChunkPos.z);
+            world.setChunkForced(leftChunkPos.x(), leftChunkPos.z(), true);
+            world.getChunk(leftChunkPos.x(), leftChunkPos.z());
         });
-        context.runAtTick(110, () -> {
+        context.runAtTickTime(110, () -> {
             context.assertTrue(
                     world.getBlockState(leftLogBase)
-                            .isOf(Blocks.JUNGLE_LOG)
+                            .is(Blocks.JUNGLE_LOG)
                             && world.getBlockState(leftLogTop)
-                            .isOf(Blocks.JUNGLE_LOG)
+                            .is(Blocks.JUNGLE_LOG)
                             && world.getBlockState(leftLeaf)
-                            .isOf(Blocks.JUNGLE_LEAVES)
+                            .is(Blocks.JUNGLE_LEAVES)
                             && world.getBlockState(rightLeafNear)
-                            .isOf(Blocks.JUNGLE_LEAVES)
+                            .is(Blocks.JUNGLE_LEAVES)
                             && world.getBlockState(rightLeafFar)
-                            .isOf(Blocks.JUNGLE_LEAVES),
-                    Text.literal("Cross-chunk border fixture was cut at reload.")
+                            .is(Blocks.JUNGLE_LEAVES),
+                    Component.literal("Cross-chunk border fixture was cut at reload.")
             );
 
-            final WorldChunk reloadedLeft = world.getChunkManager()
-                    .getWorldChunk(leftChunkPos.x, leftChunkPos.z, false);
-            final WorldChunk reloadedRight = world.getChunkManager()
-                    .getWorldChunk(rightChunkPos.x, rightChunkPos.z, false);
+            final LevelChunk reloadedLeft = world.getChunkSource()
+                    .getChunk(leftChunkPos.x(), leftChunkPos.z(), false);
+            final LevelChunk reloadedRight = world.getChunkSource()
+                    .getChunk(rightChunkPos.x(), rightChunkPos.z(), false);
             context.assertTrue(
                     hasAttachedRestorableDelta(reloadedLeft),
-                    Text.literal("Reloaded left full-baseline chunk did not keep a live Chunkis delta attached: "
+                    Component.literal("Reloaded left full-baseline chunk did not keep a live Chunkis delta attached: "
                             + describeAttachedDelta(reloadedLeft))
             );
             context.assertTrue(
                     hasAttachedRestorableDelta(reloadedRight),
-                    Text.literal("Reloaded right base-backed chunk did not keep a live Chunkis delta attached: "
+                    Component.literal("Reloaded right base-backed chunk did not keep a live Chunkis delta attached: "
                             + describeAttachedDelta(reloadedRight))
             );
 
-            world.setChunkForced(leftChunkPos.x, leftChunkPos.z, false);
-            world.setChunkForced(rightChunkPos.x, rightChunkPos.z, false);
-            context.complete();
+            world.setChunkForced(leftChunkPos.x(), leftChunkPos.z(), false);
+            world.setChunkForced(rightChunkPos.x(), rightChunkPos.z(), false);
+            context.succeed();
         });
     }
 
@@ -1199,7 +1199,7 @@ public final class PersistedBaseChunkReloadGameTest {
      * @param primary       target block pos to watch and modify
      */
     private record AirDeletionScenario(
-            ServerWorld world,
+            ServerLevel world,
             ChunkPos targetChunk,
             BlockPos targetArrival,
             BlockPos farArrival,
@@ -1216,7 +1216,7 @@ public final class PersistedBaseChunkReloadGameTest {
      */
     private record AirDeletionTestSetup(
             AirDeletionScenario scenario,
-            ServerPlayerEntity player
+            ServerPlayer player
     ) {
 
     }

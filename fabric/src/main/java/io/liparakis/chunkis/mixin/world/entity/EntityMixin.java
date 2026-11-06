@@ -7,13 +7,13 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.replay.ScheduledEntityReplayQueue;
 import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -37,7 +37,7 @@ public abstract class EntityMixin {
      * Shadowed reference to the world containing the entity.
      */
     @Shadow
-    private World world;
+    private Level level;
 
     /**
      * Decides if the entity payload should be kept when removal occurs.
@@ -63,7 +63,7 @@ public abstract class EntityMixin {
             final CallbackInfo ci
     ) {
         final Entity self = (Entity) (Object) this;
-        if (!(this.world instanceof ServerWorld serverWorld)) {
+        if (!(this.level instanceof ServerLevel serverWorld)) {
             return;
         }
         PayloadWatchTracer.traceLiveEntityRemoved(
@@ -84,13 +84,13 @@ public abstract class EntityMixin {
      * @param player player beginning to track
      * @param ci     callback info helper
      */
-    @Inject(method = "onStartedTrackingBy", at = @At("HEAD"))
+    @Inject(method = "startSeenByPlayer", at = @At("HEAD"))
     private void chunkis$traceStartedTrackingBy(
-            final ServerPlayerEntity player,
+            final ServerPlayer player,
             final CallbackInfo ci
     ) {
         final Entity self = (Entity) (Object) this;
-        if (!(this.world instanceof ServerWorld serverWorld)) {
+        if (!(this.level instanceof ServerLevel serverWorld)) {
             return;
         }
         PayloadWatchTracer.traceEntityTrackingEvent(
@@ -109,13 +109,13 @@ public abstract class EntityMixin {
      * @param player player ending track
      * @param ci     callback info helper
      */
-    @Inject(method = "onStoppedTrackingBy", at = @At("HEAD"))
+    @Inject(method = "stopSeenByPlayer", at = @At("HEAD"))
     private void chunkis$traceStoppedTrackingBy(
-            final ServerPlayerEntity player,
+            final ServerPlayer player,
             final CallbackInfo ci
     ) {
         final Entity self = (Entity) (Object) this;
-        if (!(this.world instanceof ServerWorld serverWorld)) {
+        if (!(this.level instanceof ServerLevel serverWorld)) {
             return;
         }
         PayloadWatchTracer.traceEntityTrackingEvent(
@@ -136,21 +136,21 @@ public abstract class EntityMixin {
      */
     @Unique
     @SuppressWarnings("unchecked")
-    private void chunkis$removeEntityPayload(final ServerWorld world, final Entity entity) {
-        final ChunkPos chunkPos = entity.getChunkPos();
-        final WorldChunk chunk = LoadedChunks.getIfAccessible(world, chunkPos.x, chunkPos.z);
+    private void chunkis$removeEntityPayload(final ServerLevel world, final Entity entity) {
+        final ChunkPos chunkPos = entity.chunkPosition();
+        final LevelChunk chunk = LoadedChunks.getIfAccessible(world, chunkPos.x(), chunkPos.z());
         if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)
                 || !(deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta)) {
-            ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
+            ScheduledEntityReplayQueue.acknowledge(entity.getStringUUID());
             return;
         }
-        final ChunkDelta<?, NbtCompound> delta = (ChunkDelta<?, NbtCompound>) rawDelta;
-        final String targetUuid = entity.getUuidAsString();
+        final ChunkDelta<?, CompoundTag> delta = (ChunkDelta<?, CompoundTag>) rawDelta;
+        final String targetUuid = entity.getStringUUID();
         delta.removeEntity(entity.getId());
         delta.removeEntitiesMatching(nbt -> EntityPayloadNbt.hasUuid(nbt, targetUuid));
         // Without this, autosave skips an already-saved chunk and the removed entity comes back.
-        chunk.markNeedsSaving();
+        chunk.markUnsaved();
         GlobalChunkTracker.markDirty(chunk, REMOVE_SOURCE);
-        ScheduledEntityReplayQueue.acknowledge(entity.getUuidAsString());
+        ScheduledEntityReplayQueue.acknowledge(entity.getStringUUID());
     }
 }

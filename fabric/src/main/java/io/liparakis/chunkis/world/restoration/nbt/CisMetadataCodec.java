@@ -5,7 +5,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 
 /**
@@ -45,7 +45,7 @@ public final class CisMetadataCodec {
      * @return encoded length-prefixed payload
      * @throws IOException if NBT serialization fails
      */
-    public static byte[] serializeRawPayload(final NbtCompound metadata) throws IOException {
+    public static byte[] serializeRawPayload(final CompoundTag metadata) throws IOException {
         Objects.requireNonNull(metadata, "metadata");
 
         final LengthPrefixedByteArrayOutputStream buffer =
@@ -53,7 +53,7 @@ public final class CisMetadataCodec {
 
         try (DataOutputStream output = new DataOutputStream(buffer)) {
             output.writeInt(0);
-            NbtIo.writeCompound(metadata, output);
+            NbtIo.write(metadata, output);
             output.flush();
         }
 
@@ -71,12 +71,12 @@ public final class CisMetadataCodec {
      * @return raw serialized compound bytes
      * @throws IOException if serialization fails
      */
-    static byte[] serializeRawCompound(final NbtCompound payload) throws IOException {
+    static byte[] serializeRawCompound(final CompoundTag payload) throws IOException {
         Objects.requireNonNull(payload, "payload");
 
         try (java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream(4096);
                 java.io.DataOutputStream output = new java.io.DataOutputStream(buffer)) {
-            NbtIo.writeCompound(payload, output);
+            NbtIo.write(payload, output);
             output.flush();
             return buffer.toByteArray();
         }
@@ -89,12 +89,12 @@ public final class CisMetadataCodec {
      * @return parsed compound
      * @throws IOException if parsing fails
      */
-    static NbtCompound deserializeRawCompound(final byte[] payload) throws IOException {
+    static CompoundTag deserializeRawCompound(final byte[] payload) throws IOException {
         Objects.requireNonNull(payload, "payload");
 
         try (java.io.ByteArrayInputStream input = new java.io.ByteArrayInputStream(payload);
                 java.io.DataInputStream dataInput = new java.io.DataInputStream(input)) {
-            return NbtIo.readCompound(dataInput);
+            return NbtIo.read(dataInput);
         }
     }
 
@@ -109,7 +109,7 @@ public final class CisMetadataCodec {
      * @return encoded CIS metadata payload including length prefix
      * @throws IOException if serialization fails
      */
-    public static byte[] serializeChunkMetadataForStorage(final NbtCompound metadata) throws IOException {
+    public static byte[] serializeChunkMetadataForStorage(final CompoundTag metadata) throws IOException {
         return serializeRawPayload(packPersistedBaseChunkPayload(metadata));
     }
 
@@ -121,7 +121,7 @@ public final class CisMetadataCodec {
      * @return original metadata when no rewrite is needed, otherwise a packed copy
      * @throws IOException if base chunk serialization fails
      */
-    static NbtCompound packPersistedBaseChunkPayload(final NbtCompound metadata) throws IOException {
+    static CompoundTag packPersistedBaseChunkPayload(final CompoundTag metadata) throws IOException {
         Objects.requireNonNull(metadata, "metadata");
 
         if (metadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
@@ -129,12 +129,12 @@ public final class CisMetadataCodec {
             return metadata;
         }
 
-        final NbtCompound baseChunkNbt = CisNbtUtil.getCompoundOrNull(metadata, CisNbtUtil.BASE_CHUNK_NBT_KEY);
+        final CompoundTag baseChunkNbt = CisNbtUtil.getCompoundOrNull(metadata, CisNbtUtil.BASE_CHUNK_NBT_KEY);
         if (baseChunkNbt == null || baseChunkNbt.isEmpty()) {
             return metadata;
         }
 
-        final NbtCompound packed = metadata.copy();
+        final CompoundTag packed = metadata.copy();
         packed.remove(CisNbtUtil.BASE_CHUNK_NBT_KEY);
         packed.putByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY, serializeRawCompound(baseChunkNbt));
         return packed;

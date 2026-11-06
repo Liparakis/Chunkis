@@ -2,7 +2,7 @@ package io.liparakis.chunkis.gametest.mixin;
 
 import io.liparakis.chunkis.gametest.OverloadedUnloadGameTest;
 import java.util.function.BooleanSupplier;
-import net.minecraft.server.world.ServerChunkLoadingManager;
+import net.minecraft.server.level.ChunkMap;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 /**
  * Lets a test run vanilla's chunk unload loop as an overloaded server does: with no tick time left.
  */
-@Mixin(ServerChunkLoadingManager.class)
+@Mixin(ChunkMap.class)
 public abstract class NoUnloadBudgetMixin {
 
     /**
@@ -19,7 +19,7 @@ public abstract class NoUnloadBudgetMixin {
      * @param shouldKeepTicking vanilla's budget
      * @return the budget to use
      */
-    @ModifyVariable(method = "unloadChunks", at = @At("HEAD"), argsOnly = true)
+    @ModifyVariable(method = "processUnloads", at = @At("HEAD"), argsOnly = true)
     private BooleanSupplier chunkis$noUnloadBudget(final BooleanSupplier shouldKeepTicking) {
         return OverloadedUnloadGameTest.noBudget() ? () -> false : shouldKeepTicking;
     }

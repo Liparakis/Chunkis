@@ -3,15 +3,15 @@ package io.liparakis.chunkis.mixin.world.block;
 import io.liparakis.chunkis.portal.PortalArrivalFallback;
 import io.liparakis.chunkis.portal.PortalLinkManager;
 import java.util.Optional;
-import net.minecraft.block.NetherPortalBlock;
-import net.minecraft.entity.Entity;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.TeleportTarget;
-import net.minecraft.world.World;
-import net.minecraft.world.border.WorldBorder;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.NetherPortalBlock;
+import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.portal.TeleportTransition;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -51,14 +51,14 @@ public abstract class NetherPortalBlockMixin {
      */
     @Unique
     private static Optional<BlockPos> chunkis$findExistingDestinationPortal(
-            final ServerWorld destinationWorld,
+            final ServerLevel destinationWorld,
             final BlockPos scaledDestinationPos,
             final boolean destinationIsNether,
             final WorldBorder worldBorder
     ) {
         return destinationWorld
                 .getPortalForcer()
-                .getPortalPos(scaledDestinationPos, destinationIsNether, worldBorder);
+                .findClosestPortalPosition(scaledDestinationPos, destinationIsNether, worldBorder);
     }
 
     /**
@@ -71,14 +71,14 @@ public abstract class NetherPortalBlockMixin {
      */
     @Unique
     private static boolean chunkis$isNetherOverworldPair(
-            final World sourceWorld,
-            final ServerWorld destinationWorld
+            final Level sourceWorld,
+            final ServerLevel destinationWorld
     ) {
-        final RegistryKey<World> sourceKey = sourceWorld.getRegistryKey();
-        final RegistryKey<World> destinationKey = destinationWorld.getRegistryKey();
+        final ResourceKey<Level> sourceKey = sourceWorld.dimension();
+        final ResourceKey<Level> destinationKey = destinationWorld.dimension();
 
-        return sourceKey == World.NETHER && destinationKey == World.OVERWORLD
-                || sourceKey == World.OVERWORLD && destinationKey == World.NETHER;
+        return sourceKey == Level.NETHER && destinationKey == Level.OVERWORLD
+                || sourceKey == Level.OVERWORLD && destinationKey == Level.NETHER;
     }
 
     /**
@@ -103,24 +103,24 @@ public abstract class NetherPortalBlockMixin {
      * @param cir                  callback return value
      */
     @Inject(
-            method = "getOrCreateExitPortalTarget",
+            method = "getExitPortal",
             at = @At("HEAD"),
             cancellable = true
     )
     private void chunkis$replaceUnsafePortalCreation(
-            final ServerWorld destinationWorld,
+            final ServerLevel destinationWorld,
             final Entity entity,
             final BlockPos sourcePortalPos,
             final BlockPos scaledDestinationPos,
             final boolean destinationIsNether,
             final WorldBorder worldBorder,
-            final CallbackInfoReturnable<TeleportTarget> cir
+            final CallbackInfoReturnable<TeleportTransition> cir
     ) {
-        if (!(entity instanceof ServerPlayerEntity)) {
+        if (!(entity instanceof ServerPlayer)) {
             return;
         }
 
-        if (!(entity.getEntityWorld() instanceof ServerWorld sourceWorld)) {
+        if (!(entity.level() instanceof ServerLevel sourceWorld)) {
             return;
         }
 
@@ -128,7 +128,7 @@ public abstract class NetherPortalBlockMixin {
             return;
         }
 
-        final Optional<TeleportTarget> linkedTarget =
+        final Optional<TeleportTransition> linkedTarget =
                 PortalLinkManager.getLinkedTarget(
                         destinationWorld,
                         entity,

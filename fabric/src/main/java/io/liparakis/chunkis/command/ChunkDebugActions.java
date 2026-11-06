@@ -30,22 +30,22 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.text.Text;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.PalettesFactory;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.storage.RegionFile;
-import net.minecraft.world.storage.StorageKey;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.PalettedContainerFactory;
+import net.minecraft.world.level.chunk.storage.RegionFile;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Execution actions backing the Chunkis debug and trace commands.
@@ -95,7 +95,7 @@ public final class ChunkDebugActions {
      * @param message success feedback message
      * @return 1 on success
      */
-    public static int setLevel(final ServerCommandSource source, final ChunkisDebugLevel level, final String message) {
+    public static int setLevel(final CommandSourceStack source, final ChunkisDebugLevel level, final String message) {
         ChunkisDebugConfig.setLevel(level);
         sendFeedback(source, "[Chunkis] " + message, true);
         return 1;
@@ -107,7 +107,7 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return 1 on success
      */
-    public static int clear(final ServerCommandSource source) {
+    public static int clear(final CommandSourceStack source) {
         ChunkTraceStore.clear();
         sendFeedback(source, "[Chunkis] Cleared in-memory trace events.", true);
         return 1;
@@ -120,7 +120,7 @@ public final class ChunkDebugActions {
      * @param count  maximum trace count to fetch
      * @return number of events printed
      */
-    public static int latest(final ServerCommandSource source, final int count) {
+    public static int latest(final CommandSourceStack source, final int count) {
         final List<ChunkTraceEvent> newestFirst = ChunkTraceStore.latest(count);
         if (newestFirst.isEmpty()) {
             sendFeedback(source, "[Chunkis] No trace events stored.", false);
@@ -135,7 +135,7 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return number of suspects printed
      */
-    public static int listSuspects(final ServerCommandSource source) {
+    public static int listSuspects(final CommandSourceStack source) {
         final List<ChunkTraceSuspect> suspects = ChunkTraceStore.suspects();
         if (suspects.isEmpty()) {
             sendFeedback(source, "[Chunkis] No suspicious chunks recorded.", false);
@@ -153,7 +153,7 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return 1 on success
      */
-    public static int clearSuspects(final ServerCommandSource source) {
+    public static int clearSuspects(final CommandSourceStack source) {
         ChunkTraceStore.clearSuspects();
         sendFeedback(source, "[Chunkis] Cleared retained suspect snapshots.", true);
         return 1;
@@ -166,10 +166,10 @@ public final class ChunkDebugActions {
      * @param suspectId identifier of the suspect
      * @return 1 if found, 0 if not found
      */
-    public static int showSuspect(final ServerCommandSource source, final long suspectId) {
+    public static int showSuspect(final CommandSourceStack source, final long suspectId) {
         final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(suspectId);
         if (suspect == null) {
-            source.sendError(Text.literal("[Chunkis] No suspect with id " + suspectId));
+            source.sendFailure(Component.literal("[Chunkis] No suspect with id " + suspectId));
             return 0;
         }
         sendFeedback(source, ChunkDebugCommand.formatSuspectDetail(suspect), false);
@@ -184,10 +184,10 @@ public final class ChunkDebugActions {
      * @param chunkZ chunk Z position
      * @return 1 if found, 0 if not found
      */
-    public static int showSuspectChunk(final ServerCommandSource source, final int chunkX, final int chunkZ) {
+    public static int showSuspectChunk(final CommandSourceStack source, final int chunkX, final int chunkZ) {
         final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(new DebugChunkKey(chunkX, chunkZ));
         if (suspect == null) {
-            source.sendError(Text.literal("[Chunkis] No suspicious trace for chunk " + chunkX + "," + chunkZ));
+            source.sendFailure(Component.literal("[Chunkis] No suspicious trace for chunk " + chunkX + "," + chunkZ));
             return 0;
         }
         sendFeedback(source, ChunkDebugCommand.formatSuspectDetail(suspect), false);
@@ -201,10 +201,10 @@ public final class ChunkDebugActions {
      * @param suspectId identifier of the suspect
      * @return number of timeline events printed
      */
-    public static int showSuspectTimeline(final ServerCommandSource source, final long suspectId) {
+    public static int showSuspectTimeline(final CommandSourceStack source, final long suspectId) {
         final ChunkTraceSuspect suspect = ChunkTraceStore.suspect(suspectId);
         if (suspect == null) {
-            source.sendError(Text.literal("[Chunkis] No suspect with id " + suspectId));
+            source.sendFailure(Component.literal("[Chunkis] No suspect with id " + suspectId));
             return 0;
         }
         final List<ChunkTraceEvent> timeline = ChunkTraceStore.suspectTimeline(suspectId);
@@ -228,7 +228,7 @@ public final class ChunkDebugActions {
      * @param count  maximum entries limit
      * @return number of failures printed
      */
-    public static int listFailures(final ServerCommandSource source, final int count) {
+    public static int listFailures(final CommandSourceStack source, final int count) {
         final List<ChunkTraceEvent> newestFirst = ChunkTraceStore.latestFailures(count);
         if (newestFirst.isEmpty()) {
             sendFeedback(source, "[Chunkis] No suspicious failure events stored.", false);
@@ -244,10 +244,10 @@ public final class ChunkDebugActions {
      * @param eventId identifier of the trace event
      * @return 1 if found, 0 if not found
      */
-    public static int showFailure(final ServerCommandSource source, final long eventId) {
+    public static int showFailure(final CommandSourceStack source, final long eventId) {
         final ChunkTraceEvent event = ChunkTraceStore.findEvent(eventId);
         if (event == null) {
-            source.sendError(Text.literal("[Chunkis] No trace event with id " + eventId));
+            source.sendFailure(Component.literal("[Chunkis] No trace event with id " + eventId));
             return 0;
         }
         sendFeedback(source, ChunkDebugCommand.formatEvent(event), false);
@@ -262,7 +262,7 @@ public final class ChunkDebugActions {
      * @param chunkZ chunk Z position
      * @return 1 on success
      */
-    public static int watchChunk(final ServerCommandSource source, final int chunkX, final int chunkZ) {
+    public static int watchChunk(final CommandSourceStack source, final int chunkX, final int chunkZ) {
         ChunkTraceWatchpoints.watchChunk(new DebugChunkKey(chunkX, chunkZ));
         sendFeedback(source, "[Chunkis] Watching chunk " + chunkX + "," + chunkZ, true);
         return 1;
@@ -276,7 +276,7 @@ public final class ChunkDebugActions {
      * @param regionZ region Z position
      * @return 1 on success
      */
-    public static int watchRegion(final ServerCommandSource source, final int regionX, final int regionZ) {
+    public static int watchRegion(final CommandSourceStack source, final int regionX, final int regionZ) {
         ChunkTraceWatchpoints.watchRegion(new DebugRegionKey(regionX, regionZ));
         sendFeedback(source, "[Chunkis] Watching region " + regionX + "," + regionZ, true);
         return 1;
@@ -291,7 +291,7 @@ public final class ChunkDebugActions {
      * @param z      block Z
      * @return 1 on success
      */
-    public static int watchBlock(final ServerCommandSource source, final int x, final int y, final int z) {
+    public static int watchBlock(final CommandSourceStack source, final int x, final int y, final int z) {
         final String worldId = worldIdOf(source);
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.block(worldId, x, y, z));
         sendFeedback(source, "[Chunkis] Watching block " + x + "," + y + "," + z + " in " + worldId, true);
@@ -307,7 +307,7 @@ public final class ChunkDebugActions {
      * @param z      block entity Z
      * @return 1 on success
      */
-    public static int watchBlockEntity(final ServerCommandSource source, final int x, final int y, final int z) {
+    public static int watchBlockEntity(final CommandSourceStack source, final int x, final int y, final int z) {
         final String worldId = worldIdOf(source);
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.blockEntity(worldId, x, y, z));
         sendFeedback(source, "[Chunkis] Watching block entity " + x + "," + y + "," + z + " in " + worldId, true);
@@ -321,7 +321,7 @@ public final class ChunkDebugActions {
      * @param uuid   entity UUID
      * @return 1 on success
      */
-    public static int watchEntity(final ServerCommandSource source, final String uuid) {
+    public static int watchEntity(final CommandSourceStack source, final String uuid) {
         final String worldId = worldIdOf(source);
         ChunkTraceWatchpoints.watchPayload(PayloadWatchTarget.entity(worldId, uuid));
         sendFeedback(source, "[Chunkis] Watching entity " + uuid + " in " + worldId, true);
@@ -334,7 +334,7 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return 1 on success
      */
-    public static int clearWatchpoints(final ServerCommandSource source) {
+    public static int clearWatchpoints(final CommandSourceStack source) {
         ChunkTraceWatchpoints.clear();
         sendFeedback(source, "[Chunkis] Cleared trace watchpoints.", true);
         return 1;
@@ -346,7 +346,7 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return 1 on success
      */
-    public static int listWatchpoints(final ServerCommandSource source) {
+    public static int listWatchpoints(final CommandSourceStack source) {
         sendFeedback(source, "[Chunkis] " + ChunkDebugCommand.formatWatchpointSummary(), false);
         return 1;
     }
@@ -358,9 +358,9 @@ public final class ChunkDebugActions {
      * @param count  maximum count limit
      * @return number of events printed, 0 if no watchpoints configured
      */
-    public static int latestWatched(final ServerCommandSource source, final int count) {
+    public static int latestWatched(final CommandSourceStack source, final int count) {
         if (ChunkTraceWatchpoints.isEmpty()) {
-            source.sendError(Text.literal("[Chunkis] No watchpoints configured."));
+            source.sendFailure(Component.literal("[Chunkis] No watchpoints configured."));
             return 0;
         }
         final List<ChunkTraceEvent> newestFirst = ChunkTraceStore.latestMatching(count, ChunkTraceWatchpoints::matches);
@@ -377,13 +377,13 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return number of watched chunks analyzed
      */
-    public static int pendingWatched(final ServerCommandSource source) {
+    public static int pendingWatched(final CommandSourceStack source) {
         final List<DebugChunkKey> watchedChunks = ChunkTraceWatchpoints.watchedChunks();
         if (watchedChunks.isEmpty()) {
-            source.sendError(Text.literal("[Chunkis] No chunk watchpoints configured."));
+            source.sendFailure(Component.literal("[Chunkis] No chunk watchpoints configured."));
             return 0;
         }
-        final var world = source.getWorld();
+        final var world = source.getLevel();
         final var trackerPending = GlobalChunkTracker.getPendingDeltas(world);
         final var asyncPending = AsyncCisSaveManager.snapshot(world);
         for (final DebugChunkKey chunkKey : watchedChunks) {
@@ -401,14 +401,14 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return number of inspected chunks
      */
-    public static int inspectNeighborChunks(final ServerCommandSource source) {
-        final var world = source.getWorld();
-        final ChunkPos center = new ChunkPos(BlockPos.ofFloored(source.getPosition()));
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
+    public static int inspectNeighborChunks(final CommandSourceStack source) {
+        final var world = source.getLevel();
+        final ChunkPos center = ChunkPos.containing(BlockPos.containing(source.getPosition()));
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = FabricCisStorageHelper.getStorage(world);
 
         for (int dz = -1; dz <= 1; dz++) {
             for (int dx = -1; dx <= 1; dx++) {
-                final ChunkPos pos = new ChunkPos(center.x + dx, center.z + dz);
+                final ChunkPos pos = new ChunkPos(center.x() + dx, center.z() + dz);
                 sendFeedback(source,
                         ChunkDebugCommand.formatChunkInspectSnapshot(inspectChunk(world, storage, pos)),
                         false);
@@ -424,9 +424,9 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return {@code 1} after emitting diagnostic output
      */
-    public static int inspectCurrentChunkAgainstMca(final ServerCommandSource source) {
-        final ChunkPos center = new ChunkPos(BlockPos.ofFloored(source.getPosition()));
-        return inspectChunkAgainstMca(source, center.x, center.z);
+    public static int inspectCurrentChunkAgainstMca(final CommandSourceStack source) {
+        final ChunkPos center = ChunkPos.containing(BlockPos.containing(source.getPosition()));
+        return inspectChunkAgainstMca(source, center.x(), center.z());
     }
 
     /**
@@ -435,9 +435,9 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return {@code 1} on success
      */
-    public static int remigrateCurrentChunkFromMca(final ServerCommandSource source) {
-        final ChunkPos center = new ChunkPos(BlockPos.ofFloored(source.getPosition()));
-        return remigrateChunkFromMca(source, center.x, center.z);
+    public static int remigrateCurrentChunkFromMca(final CommandSourceStack source) {
+        final ChunkPos center = ChunkPos.containing(BlockPos.containing(source.getPosition()));
+        return remigrateChunkFromMca(source, center.x(), center.z());
     }
 
     /**
@@ -449,12 +449,12 @@ public final class ChunkDebugActions {
      * @param chunkZ chunk Z coordinate
      * @return {@code 1} after emitting diagnostic output
      */
-    public static int inspectChunkAgainstMca(final ServerCommandSource source, final int chunkX, final int chunkZ) {
-        final var world = source.getWorld();
+    public static int inspectChunkAgainstMca(final CommandSourceStack source, final int chunkX, final int chunkZ) {
+        final var world = source.getLevel();
         final ChunkPos pos = new ChunkPos(chunkX, chunkZ);
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = FabricCisStorageHelper.getStorage(world);
 
-        final ChunkDelta<BlockState, NbtCompound> cisDelta;
+        final ChunkDelta<BlockState, CompoundTag> cisDelta;
         try {
             cisDelta = storage.contains(FabricCisStorageHelper.toStoragePos(pos)) ? storage.loadWithoutClearing(
                     FabricCisStorageHelper.toStoragePos(pos)) : null;
@@ -465,7 +465,7 @@ public final class ChunkDebugActions {
             return 0;
         }
 
-        final NbtCompound mcaRoot;
+        final CompoundTag mcaRoot;
         try {
             mcaRoot = loadMcaChunkNbt(source, pos);
         } catch (final IOException e) {
@@ -475,9 +475,9 @@ public final class ChunkDebugActions {
             return 0;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> mcaDelta = mcaRoot == null ? null
+        final ChunkDelta<BlockState, CompoundTag> mcaDelta = mcaRoot == null ? null
                 : ChunkSnapshotBuilder.buildChunkDelta(world,
-                        PalettesFactory.fromRegistryManager(world.getRegistryManager()),
+                        PalettedContainerFactory.create(world.registryAccess()),
                         mcaRoot,
                         pos);
 
@@ -510,7 +510,7 @@ public final class ChunkDebugActions {
     /**
      * Performs send sample line.
      */
-    private static void sendSampleLine(final ServerCommandSource source,
+    private static void sendSampleLine(final CommandSourceStack source,
             final String label,
             final List<String> samples) {
         if (samples == null || samples.isEmpty()) {
@@ -522,14 +522,14 @@ public final class ChunkDebugActions {
     /**
      * Emits the current in-memory chunk and delta state that the next save would use.
      */
-    private static void sendLiveChunkComparisonState(final ServerCommandSource source,
-            final net.minecraft.server.world.ServerWorld world,
+    private static void sendLiveChunkComparisonState(final CommandSourceStack source,
+            final net.minecraft.server.level.ServerLevel world,
             final ChunkPos pos) {
         final ChunkDeltas deltas = getChunkDeltas(world, pos);
-        final WorldChunk liveChunk = deltas.liveChunk();
-        final ChunkDelta<BlockState, NbtCompound> attachedDelta = deltas.attachedDelta();
-        final ChunkDelta<BlockState, NbtCompound> trackedDelta = deltas.trackedDelta();
-        @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> activeDelta = (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getActiveDelta(
+        final LevelChunk liveChunk = deltas.liveChunk();
+        final ChunkDelta<BlockState, CompoundTag> attachedDelta = deltas.attachedDelta();
+        final ChunkDelta<BlockState, CompoundTag> trackedDelta = deltas.trackedDelta();
+        @SuppressWarnings("unchecked") final ChunkDelta<BlockState, CompoundTag> activeDelta = (ChunkDelta<BlockState, CompoundTag>) GlobalChunkTracker.getActiveDelta(
                 world,
                 pos);
 
@@ -551,12 +551,12 @@ public final class ChunkDebugActions {
      * @param chunkZ chunk Z coordinate
      * @return {@code 1} on success, {@code 0} on failure
      */
-    public static int remigrateChunkFromMca(final ServerCommandSource source, final int chunkX, final int chunkZ) {
-        final var world = source.getWorld();
+    public static int remigrateChunkFromMca(final CommandSourceStack source, final int chunkX, final int chunkZ) {
+        final var world = source.getLevel();
         final ChunkPos pos = new ChunkPos(chunkX, chunkZ);
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = FabricCisStorageHelper.getStorage(world);
 
-        final NbtCompound mcaRoot;
+        final CompoundTag mcaRoot;
         try {
             mcaRoot = loadMcaChunkNbt(source, pos);
         } catch (final IOException e) {
@@ -570,17 +570,17 @@ public final class ChunkDebugActions {
             return 0;
         }
 
-        if (world.getChunkManager()
-                .isChunkLoaded(chunkX, chunkZ)) {
+        if (world.getChunkSource()
+                .hasChunk(chunkX, chunkZ)) {
             // The loaded chunk's live state would be saved back over the remigrated entry.
             sendFeedback(source, "[Chunkis] Remigrate refused: chunk " + chunkX + "," + chunkZ
                     + " is loaded; move away until it unloads and retry.", false);
             return 0;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> rebuilt = ChunkSnapshotBuilder.buildChunkDelta(
+        final ChunkDelta<BlockState, CompoundTag> rebuilt = ChunkSnapshotBuilder.buildChunkDelta(
                 world,
-                PalettesFactory.fromRegistryManager(world.getRegistryManager()),
+                PalettedContainerFactory.create(world.registryAccess()),
                 mcaRoot,
                 pos);
         final java.nio.file.Path backup = storage.backupEntry(FabricCisStorageHelper.toStoragePos(pos), "pre-remigrate");
@@ -593,7 +593,7 @@ public final class ChunkDebugActions {
             return 0;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> stored;
+        final ChunkDelta<BlockState, CompoundTag> stored;
         try {
             stored = storage.loadWithoutClearing(FabricCisStorageHelper.toStoragePos(pos));
         } catch (final IOException e) {
@@ -625,7 +625,7 @@ public final class ChunkDebugActions {
      * @param count  maximum count limit
      * @return number of exported events
      */
-    public static int exportLatest(final ServerCommandSource source, final int count) {
+    public static int exportLatest(final CommandSourceStack source, final int count) {
         return exportEvents(source, ChunkTraceStore.snapshotMatching(event -> true), "latest-" + count, count, false);
     }
 
@@ -636,9 +636,9 @@ public final class ChunkDebugActions {
      * @param count  maximum count limit
      * @return number of exported events
      */
-    public static int exportWatched(final ServerCommandSource source, final int count) {
+    public static int exportWatched(final CommandSourceStack source, final int count) {
         if (ChunkTraceWatchpoints.isEmpty()) {
-            source.sendError(Text.literal("[Chunkis] No watchpoints configured."));
+            source.sendFailure(Component.literal("[Chunkis] No watchpoints configured."));
             return 0;
         }
         return exportEvents(source,
@@ -658,7 +658,7 @@ public final class ChunkDebugActions {
      * @param watched     true if filter applied
      * @return count of exported events
      */
-    private static int exportEvents(final ServerCommandSource source,
+    private static int exportEvents(final CommandSourceStack source,
             final List<ChunkTraceEvent> oldestFirst,
             final String scope,
             final int count,
@@ -676,7 +676,7 @@ public final class ChunkDebugActions {
         try {
             ChunkTraceJsonl.write(exportPath, exportSlice);
         } catch (final IOException e) {
-            source.sendError(Text.literal("[Chunkis] Trace export failed: " + e.getMessage()));
+            source.sendFailure(Component.literal("[Chunkis] Trace export failed: " + e.getMessage()));
             return 0;
         }
         sendFeedback(source, "[Chunkis] Exported " + exportSlice.size() + " trace events to " + exportPath, true);
@@ -712,7 +712,7 @@ public final class ChunkDebugActions {
      * @param message        feedback text
      * @param broadcastToOps true to notify ops
      */
-    private static void sendFeedback(final ServerCommandSource source,
+    private static void sendFeedback(final CommandSourceStack source,
             final String message,
             final boolean broadcastToOps) {
         final ChunkDebugCommand.ChatMessage chatMessage = truncateForChat(message);
@@ -720,7 +720,7 @@ public final class ChunkDebugActions {
             final Path dumpPath = writeOversizedChatDump(source, message);
             Chunkis.LOGGER.warn("Chunkis debug chat output truncated; wrote full output to {}", dumpPath);
         }
-        source.sendFeedback(() -> Text.literal(chatMessage.text()), broadcastToOps);
+        source.sendSuccess(() -> Component.literal(chatMessage.text()), broadcastToOps);
     }
 
     /**
@@ -730,7 +730,7 @@ public final class ChunkDebugActions {
      * @param message complete original message text
      * @return path to the generated dump file
      */
-    private static Path writeOversizedChatDump(final ServerCommandSource source, final String message) {
+    private static Path writeOversizedChatDump(final CommandSourceStack source, final String message) {
         final Path path = resolveExportPath(source, "chat-dump").resolveSibling(
                 "trace-chat-dump-" + FILE_TIME_FORMAT.format(Instant.now()) + ".txt");
         try {
@@ -749,9 +749,9 @@ public final class ChunkDebugActions {
      * @param scope  filename tag label
      * @return target export Path
      */
-    static Path resolveExportPath(final ServerCommandSource source, final String scope) {
+    static Path resolveExportPath(final CommandSourceStack source, final String scope) {
         final Path saveRoot = source.getServer()
-                .getSavePath(WorldSavePath.ROOT);
+                .getWorldPath(LevelResource.ROOT);
         return saveRoot.resolve("chunkis/debug")
                 .resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
     }
@@ -763,7 +763,7 @@ public final class ChunkDebugActions {
      * @param newestFirst list of events sorted with newest at index 0
      * @return events count printed
      */
-    private static int sendEventsOldestFirst(final ServerCommandSource source,
+    private static int sendEventsOldestFirst(final CommandSourceStack source,
             final List<ChunkTraceEvent> newestFirst) {
         for (int i = newestFirst.size() - 1; i >= 0; i--) {
             sendFeedback(source, ChunkDebugCommand.formatEvent(newestFirst.get(i)), false);
@@ -777,10 +777,10 @@ public final class ChunkDebugActions {
      * @param source command execution source
      * @return registry path identifier string
      */
-    private static String worldIdOf(final ServerCommandSource source) {
-        return source.getWorld()
-                .getRegistryKey()
-                .getValue()
+    private static String worldIdOf(final CommandSourceStack source) {
+        return source.getLevel()
+                .dimension()
+                .identifier()
                 .toString();
     }
 
@@ -792,16 +792,16 @@ public final class ChunkDebugActions {
      * @param pos     chunk coordinates
      * @return inspection snapshot
      */
-    private static ChunkDebugCommand.ChunkInspectSnapshot inspectChunk(final net.minecraft.server.world.ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+    private static ChunkDebugCommand.ChunkInspectSnapshot inspectChunk(final net.minecraft.server.level.ServerLevel world,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos pos) {
         final ChunkDeltas deltas = getChunkDeltas(world, pos);
-        final WorldChunk liveChunk = deltas.liveChunk();
-        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> liveDelta = deltas.attachedDelta();
-        final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> trackedDelta = deltas.trackedDelta();
+        final LevelChunk liveChunk = deltas.liveChunk();
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, CompoundTag> liveDelta = deltas.attachedDelta();
+        final io.liparakis.chunkis.core.ChunkDelta<BlockState, CompoundTag> trackedDelta = deltas.trackedDelta();
 
         final boolean persistedPresent = storage.contains(FabricCisStorageHelper.toStoragePos(pos));
-        io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> persistedDelta = null;
+        io.liparakis.chunkis.core.ChunkDelta<BlockState, CompoundTag> persistedDelta = null;
         String persistenceError = null;
         if (persistedPresent) {
             try {
@@ -811,7 +811,7 @@ public final class ChunkDebugActions {
             }
         }
 
-        return new ChunkDebugCommand.ChunkInspectSnapshot(new DebugChunkKey(pos.x, pos.z),
+        return new ChunkDebugCommand.ChunkInspectSnapshot(new DebugChunkKey(pos.x(), pos.z()),
                 liveChunk != null,
                 describeDelta(liveDelta),
                 describeDelta(trackedDelta),
@@ -826,7 +826,7 @@ public final class ChunkDebugActions {
      * @param delta delta to summarize
      * @return compact summary string, or null when absent
      */
-    private static String describeDelta(final io.liparakis.chunkis.core.ChunkDelta<?, NbtCompound> delta) {
+    private static String describeDelta(final io.liparakis.chunkis.core.ChunkDelta<?, CompoundTag> delta) {
         if (delta == null) {
             return null;
         }
@@ -847,17 +847,17 @@ public final class ChunkDebugActions {
      * @param delta delta to summarize
      * @return one-line summary string
      */
-    private static String describeDetailedDelta(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta) {
+    private static String describeDetailedDelta(final io.liparakis.chunkis.core.ChunkDelta<BlockState, CompoundTag> delta) {
         if (delta == null) {
             return "<none>";
         }
 
-        final NbtCompound metadata = delta.getChunkMetadata() instanceof NbtCompound compound ? compound : null;
-        final NbtCompound auxiliary = metadata == null ? null : CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
+        final CompoundTag metadata = delta.getChunkMetadata() instanceof CompoundTag compound ? compound : null;
+        final CompoundTag auxiliary = metadata == null ? null : CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
         return describeDelta(delta) + ", blockEntities=" + delta.getBlockEntities()
                 .size() + ", pendingEntities=" + delta.countPendingEntities() + ", migrated="
                 + CisNbtUtil.isMigratedAuthoritativeChunk(metadata) + ", auxKeys=" + (auxiliary == null ? 0
-                : auxiliary.getKeys()
+                : auxiliary.keySet()
                   .size());
     }
 
@@ -869,12 +869,12 @@ public final class ChunkDebugActions {
      * @return raw chunk NBT, or {@code null} when the source MCA chunk is absent
      * @throws IOException if reading fails
      */
-    private static NbtCompound loadMcaChunkNbt(final ServerCommandSource source, final ChunkPos pos)
+    private static CompoundTag loadMcaChunkNbt(final CommandSourceStack source, final ChunkPos pos)
             throws IOException {
         final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(source.getServer()
-                        .getSavePath(WorldSavePath.ROOT),
-                source.getWorld()
-                        .getRegistryKey());
+                        .getWorldPath(LevelResource.ROOT),
+                source.getLevel()
+                        .dimension());
         final String baseName = "r." + pos.getRegionX() + "." + pos.getRegionZ() + ".mca";
         final Path livePath = regionDir.resolve(baseName);
         final Path backupPath = regionDir.resolve(baseName + ".backup");
@@ -887,16 +887,16 @@ public final class ChunkDebugActions {
             return null;
         }
 
-        final StorageKey storageKey = new StorageKey("chunk",
-                source.getWorld()
-                        .getRegistryKey(),
+        final RegionStorageInfo storageKey = new RegionStorageInfo("chunk",
+                source.getLevel()
+                        .dimension(),
                 "chunk");
         try (RegionFile regionFile = new RegionFile(storageKey, mcaPath, mcaPath.getParent(), true);
-                DataInputStream input = regionFile.getChunkInputStream(pos)) {
+                DataInputStream input = regionFile.getChunkDataInputStream(pos)) {
             if (input == null) {
                 return null;
             }
-            return NbtIo.readCompound(input, NbtSizeTracker.ofUnlimitedBytes());
+            return NbtIo.read(input, NbtAccounter.unlimitedHeap());
         }
     }
 
@@ -904,13 +904,13 @@ public final class ChunkDebugActions {
      * Performs suppress warnings.
      */
     @SuppressWarnings("unchecked")
-    private static ChunkDeltas getChunkDeltas(final ServerWorld world, final ChunkPos pos) {
-        final WorldChunk liveChunk = world.getChunkManager()
-                .getWorldChunk(pos.x, pos.z, false);
-        final ChunkDelta<BlockState, NbtCompound> attachedDelta =
+    private static ChunkDeltas getChunkDeltas(final ServerLevel world, final ChunkPos pos) {
+        final LevelChunk liveChunk = world.getChunkSource()
+                .getChunk(pos.x(), pos.z(), false);
+        final ChunkDelta<BlockState, CompoundTag> attachedDelta =
                 liveChunk instanceof ChunkisDeltaDuck duck && duck.chunkis$getDelta() instanceof ChunkDelta<?, ?> delta
-                        ? (ChunkDelta<BlockState, NbtCompound>) delta : null;
-        final ChunkDelta<BlockState, NbtCompound> trackedDelta = (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(
+                        ? (ChunkDelta<BlockState, CompoundTag>) delta : null;
+        final ChunkDelta<BlockState, CompoundTag> trackedDelta = (ChunkDelta<BlockState, CompoundTag>) GlobalChunkTracker.getDelta(
                 world,
                 pos);
         return new ChunkDeltas(liveChunk, attachedDelta, trackedDelta);
@@ -923,8 +923,8 @@ public final class ChunkDebugActions {
      * @param attachedDelta delta attached to the live chunk, may be null
      * @param trackedDelta  delta currently tracked in the global tracker, may be null
      */
-    private record ChunkDeltas(WorldChunk liveChunk, ChunkDelta<BlockState, NbtCompound> attachedDelta,
-                               ChunkDelta<BlockState, NbtCompound> trackedDelta) {
+    private record ChunkDeltas(LevelChunk liveChunk, ChunkDelta<BlockState, CompoundTag> attachedDelta,
+                               ChunkDelta<BlockState, CompoundTag> trackedDelta) {
 
     }
 }

@@ -5,10 +5,10 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 
 /**
  * Fabric implementation of {@link BlockRegistryAdapter}.
@@ -48,7 +48,7 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
     /**
      * Parsed AIR identifier used as a fallback for malformed IDs.
      */
-    private static final Identifier AIR_IDENTIFIER = Identifier.of("minecraft", "air");
+    private static final Identifier AIR_IDENTIFIER = Identifier.fromNamespaceAndPath("minecraft", "air");
 
     /**
      * Block instance to registry ID cache.
@@ -74,7 +74,7 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
      * @return interned registry ID string
      */
     private static String resolveBlockId(final Block block) {
-        return Registries.BLOCK.getId(block)
+        return BuiltInRegistries.BLOCK.getKey(block)
                 .toString()
                 .intern();
     }
@@ -87,7 +87,7 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
      */
     private static Block resolveBlock(final String id) {
         final Identifier identifier = parseIdentifierOrAir(id);
-        return Registries.BLOCK.get(identifier);
+        return BuiltInRegistries.BLOCK.getValue(identifier);
     }
 
     /**
@@ -202,7 +202,7 @@ public final class FabricBlockRegistryAdapter implements BlockRegistryAdapter<Bl
      */
     @Override
     public Collection<Block> getRegisteredBlocks() {
-        return Registries.BLOCK.stream()
+        return BuiltInRegistries.BLOCK.stream()
                 .toList();
     }
 

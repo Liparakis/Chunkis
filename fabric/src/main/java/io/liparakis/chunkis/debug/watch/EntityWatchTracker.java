@@ -10,8 +10,8 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -99,8 +99,8 @@ public final class EntityWatchTracker {
                 new EntityWatchKey(target.worldId(), target.entityUuid()),
                 ignored -> new EntityWatchState()
         );
-        state.lastKnownChunkX = chunkPos.x;
-        state.lastKnownChunkZ = chunkPos.z;
+        state.lastKnownChunkX = chunkPos.x();
+        state.lastKnownChunkZ = chunkPos.z();
         state.hasKnownChunk = true;
         if ("entity-manager-unload".equals(stage)) {
             state.unloadedWithoutReload = true;
@@ -139,8 +139,8 @@ public final class EntityWatchTracker {
                 new EntityWatchKey(target.worldId(), target.entityUuid()),
                 ignored -> new EntityWatchState()
         );
-        state.lastKnownChunkX = chunkPos.x;
-        state.lastKnownChunkZ = chunkPos.z;
+        state.lastKnownChunkX = chunkPos.x();
+        state.lastKnownChunkZ = chunkPos.z();
         state.hasKnownChunk = true;
     }
 
@@ -162,7 +162,7 @@ public final class EntityWatchTracker {
         );
         return state == null
                 || !state.hasKnownChunk
-                || (state.lastKnownChunkX == chunkPos.x && state.lastKnownChunkZ == chunkPos.z);
+                || (state.lastKnownChunkX == chunkPos.x() && state.lastKnownChunkZ == chunkPos.z());
     }
 
     /**
@@ -197,7 +197,7 @@ public final class EntityWatchTracker {
                 "watched entity was unloaded from the live server manager and chunk became sendable again without "
                         + "entity-manager-load or entity-tracking-start",
                 worldId,
-                new DebugChunkKey(chunkPos.x, chunkPos.z),
+                new DebugChunkKey(chunkPos.x(), chunkPos.z()),
                 null,
                 operationId,
                 null,

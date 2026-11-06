@@ -9,17 +9,17 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.registry.DynamicRegistryManager;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.SaveLoader;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.world.World;
-import net.minecraft.world.dimension.DimensionOptions;
-import net.minecraft.world.dimension.DimensionType;
-import net.minecraft.world.level.storage.LevelStorage;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.WorldStem;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.storage.LevelStorageSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,29 +60,29 @@ public final class PreLaunchMigrationCoordinator {
      * @param newWorld   whether Minecraft is booting a freshly created world
      */
     public static void runBeforeIntegratedServerStart(
-            final LevelStorage.Session session,
-            final SaveLoader saveLoader,
+            final LevelStorageSource.LevelStorageAccess session,
+            final WorldStem saveLoader,
             final boolean newWorld
     ) {
-        final Path saveRoot = session.getDirectory(WorldSavePath.ROOT);
+        final Path saveRoot = session.getLevelPath(LevelResource.ROOT);
 
         try {
             MigrationStateServiceHolder.clear();
-            final DynamicRegistryManager registryManager =
-                    saveLoader.combinedDynamicRegistries()
-                            .getCombinedRegistryManager();
-            final Registry<DimensionOptions> dimensionRegistry =
-                    registryManager.getOrThrow(RegistryKeys.DIMENSION);
+            final RegistryAccess registryManager =
+                    saveLoader.registries()
+                            .compositeAccess();
+            final Registry<LevelStem> dimensionRegistry =
+                    registryManager.lookupOrThrow(Registries.LEVEL_STEM);
 
-            for (final var entry : dimensionRegistry.getEntrySet()) {
-                final RegistryKey<World> worldKey = RegistryKeys.toWorldKey(entry.getKey());
+            for (final var entry : dimensionRegistry.entrySet()) {
+                final ResourceKey<Level> worldKey = Registries.levelStemToLevel(entry.getKey());
                 if (shouldTreatDimensionAsAuthoritative(newWorld, false)) {
                     MigrationStateServiceHolder.markAuthoritative(worldKey);
-                    LOGGER.info("Chunkis storage is authoritative from first boot for {}", worldKey.getValue());
+                    LOGGER.info("Chunkis storage is authoritative from first boot for {}", worldKey.identifier());
                     continue;
                 }
-                final RegistryEntry<DimensionType> dimensionType = entry.getValue()
-                        .dimensionTypeEntry();
+                final Holder<DimensionType> dimensionType = entry.getValue()
+                        .type();
                 final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, worldKey);
                 final Path entityDir = ChunkisStoragePaths.computeVanillaEntitiesDirectory(saveRoot, worldKey);
                 final List<Path> liveMca = collectFiles(regionDir, "r.*.*.mca");
@@ -96,7 +96,7 @@ public final class PreLaunchMigrationCoordinator {
                     case AUTHORITATIVE -> {
                         writeCompletionMarker(completionMarker);
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
-                        LOGGER.info("Chunkis storage is authoritative for {}", worldKey.getValue());
+                        LOGGER.info("Chunkis storage is authoritative for {}", worldKey.identifier());
                     }
                     case SET_ASIDE_STALE_SOURCES -> {
                         setAside(liveMca);
@@ -104,12 +104,12 @@ public final class PreLaunchMigrationCoordinator {
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
                         LOGGER.warn("Chunkis: {} vanilla region file(s) and {} entity region file(s) appeared in {} "
                                         + "after migration completed; renamed to *{} (not deleted, not imported)",
-                                liveMca.size(), liveEntityMca.size(), worldKey.getValue(), STALE_SUFFIX);
+                                liveMca.size(), liveEntityMca.size(), worldKey.identifier(), STALE_SUFFIX);
                     }
                     case MIGRATE -> {
                         if (hasCisData) {
                             LOGGER.warn("Chunkis: Resuming interrupted migration for {} ({} region file(s) left)",
-                                    worldKey.getValue(), liveMca.size());
+                                    worldKey.identifier(), liveMca.size());
                         }
                         final OfflineWorldMigrationReport report = OfflineMcaCisTranslator.translateWorld(
                                 saveRoot,
@@ -120,7 +120,7 @@ public final class PreLaunchMigrationCoordinator {
                         verifyMigrationSucceeded(report, saveRoot.resolve("chunkis"));
                         writeCompletionMarker(completionMarker);
                         MigrationStateServiceHolder.markAuthoritative(worldKey);
-                        LOGGER.info("Chunkis migration completed; CIS is authoritative for {}", worldKey.getValue());
+                        LOGGER.info("Chunkis migration completed; CIS is authoritative for {}", worldKey.identifier());
                     }
                 }
             }
@@ -144,7 +144,7 @@ public final class PreLaunchMigrationCoordinator {
             throw new IllegalStateException(
                     "Chunkis pre-launch migration failed for "
                             + report.worldKey()
-                            .getValue()
+                            .identifier()
                             + " under "
                             + saveRoot
                             + ": " + report.failedChunks() + " chunk(s) failed, " + report.handledChunks()

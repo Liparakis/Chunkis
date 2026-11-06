@@ -5,12 +5,12 @@ import io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHol
 import io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.storage.ChunkCompressionFormat;
-import net.minecraft.world.storage.RegionFile;
-import net.minecraft.world.storage.StorageKey;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.storage.RegionFile;
+import net.minecraft.world.level.chunk.storage.RegionFileVersion;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -32,7 +32,7 @@ public abstract class RegionFileMixin {
      * Dimension whose vanilla chunk or entity regions this file belongs to, or {@code null} for any other file.
      */
     @Unique
-    private RegistryKey<World> chunkis$guardedDimension;
+    private ResourceKey<Level> chunkis$guardedDimension;
 
     /**
      * Not instantiated.
@@ -50,10 +50,9 @@ public abstract class RegionFileMixin {
      * @param dsync       whether writes are synced
      * @param ci          callback
      */
-    @Inject(method = "<init>(Lnet/minecraft/world/storage/StorageKey;Ljava/nio/file/Path;Ljava/nio/file/Path;"
-            + "Lnet/minecraft/world/storage/ChunkCompressionFormat;Z)V", at = @At("TAIL"))
-    private void chunkis$classify(final StorageKey storageKey, final Path path, final Path directory,
-            final ChunkCompressionFormat compressionFormat, final boolean dsync, final CallbackInfo ci) {
+    @Inject(method = "<init>(Lnet/minecraft/world/level/chunk/storage/RegionStorageInfo;Ljava/nio/file/Path;Ljava/nio/file/Path;Lnet/minecraft/world/level/chunk/storage/RegionFileVersion;Z)V", at = @At("TAIL"))
+    private void chunkis$classify(final RegionStorageInfo storageKey, final Path path, final Path directory,
+            final RegionFileVersion compressionFormat, final boolean dsync, final CallbackInfo ci) {
         final VanillaRegionPathResolver.Classification type = VanillaRegionPathResolver.classify(directory);
         if (type == VanillaRegionPathResolver.Classification.VANILLA_CHUNK_REGION
                 || type == VanillaRegionPathResolver.Classification.VANILLA_ENTITY_REGION) {
@@ -68,7 +67,7 @@ public abstract class RegionFileMixin {
      * @param buffer chunk bytes
      * @param ci     callback
      */
-    @Inject(method = "writeChunk", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "write", at = @At("HEAD"), cancellable = true)
     private void chunkis$blockWrite(final ChunkPos pos, final ByteBuffer buffer, final CallbackInfo ci) {
         if (chunkis$blocked()) {
             ci.cancel();
@@ -81,7 +80,7 @@ public abstract class RegionFileMixin {
      * @param pos chunk position
      * @param ci  callback
      */
-    @Inject(method = "delete", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "clear", at = @At("HEAD"), cancellable = true)
     private void chunkis$blockDelete(final ChunkPos pos, final CallbackInfo ci) {
         if (chunkis$blocked()) {
             ci.cancel();

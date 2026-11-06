@@ -7,16 +7,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtDouble;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.Uuids;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
 
 /**
  * Covers the order {@link ScheduledEntityReplayQueue} replays in. Entities tick in the order they were added, so
@@ -42,27 +42,27 @@ public final class ScheduledEntityReplayGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 400)
-    public void replayKeepsEachChunksEntitiesTogether(final TestContext context) {
-        final ServerWorld world = context.getWorld();
-        final ChunkPos origin = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
+    public void replayKeepsEachChunksEntitiesTogether(final GameTestHelper context) {
+        final ServerLevel world = context.getLevel();
+        final ChunkPos origin = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
         final List<ChunkPos> chunks = new ArrayList<>();
         for (int x = 0; x < CHUNKS_PER_SIDE; x++) {
             for (int z = 0; z < CHUNKS_PER_SIDE; z++) {
-                final ChunkPos chunk = new ChunkPos(origin.x + 5300 + x, origin.z + z);
+                final ChunkPos chunk = new ChunkPos(origin.x() + 5300 + x, origin.z() + z);
                 chunks.add(chunk);
-                world.setChunkForced(chunk.x, chunk.z, true);
+                world.setChunkForced(chunk.x(), chunk.z(), true);
             }
         }
         final Map<UUID, ChunkPos> queued = new HashMap<>();
         final List<ChunkPos> replayOrder = new ArrayList<>();
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
+        context.startSequence()
+                .thenWaitUntil(() -> {
                     for (final ChunkPos chunk : chunks) {
-                        context.assertTrue(world.canSpawnEntitiesAt(chunk),
-                                Text.literal("Waiting for chunk " + chunk + " to tick entities."));
+                        context.assertTrue(world.canSpawnEntitiesInChunk(chunk),
+                                Component.literal("Waiting for chunk " + chunk + " to tick entities."));
                     }
                 })
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     for (final ChunkPos chunk : chunks) {
                         for (int i = 0; i < ENTITIES_PER_CHUNK; i++) {
                             final UUID uuid = UUID.randomUUID();
@@ -71,19 +71,19 @@ public final class ScheduledEntityReplayGameTest {
                         }
                     }
                 })
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     final List<ChunkPos> order = new ArrayList<>();
-                    for (final Entity entity : world.iterateEntities()) {
-                        final ChunkPos chunk = queued.get(entity.getUuid());
+                    for (final Entity entity : world.getAllEntities()) {
+                        final ChunkPos chunk = queued.get(entity.getUUID());
                         if (chunk != null) {
                             order.add(chunk);
                         }
                     }
                     context.assertTrue(order.size() == queued.size(),
-                            Text.literal("Waiting for replay: " + order.size() + " of " + queued.size() + "."));
+                            Component.literal("Waiting for replay: " + order.size() + " of " + queued.size() + "."));
                     replayOrder.addAll(order);
                 })
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     int chunkChanges = 0;
                     for (int i = 1; i < replayOrder.size(); i++) {
                         if (!replayOrder.get(i).equals(replayOrder.get(i - 1))) {
@@ -91,21 +91,21 @@ public final class ScheduledEntityReplayGameTest {
                         }
                     }
                     context.assertTrue(chunkChanges == chunks.size() - 1,
-                            Text.literal("Replay mixed its chunks: " + chunkChanges + " changes of chunk in "
+                            Component.literal("Replay mixed its chunks: " + chunkChanges + " changes of chunk in "
                                     + replayOrder.size() + " entities, expected " + (chunks.size() - 1) + "."));
                 })
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     // Collected first: discarding changes the list being walked.
                     final List<Entity> replayed = new ArrayList<>();
-                    for (final Entity entity : world.iterateEntities()) {
-                        if (queued.containsKey(entity.getUuid())) {
+                    for (final Entity entity : world.getAllEntities()) {
+                        if (queued.containsKey(entity.getUUID())) {
                             replayed.add(entity);
                         }
                     }
                     replayed.forEach(Entity::discard);
-                    chunks.forEach(chunk -> world.setChunkForced(chunk.x, chunk.z, false));
+                    chunks.forEach(chunk -> world.setChunkForced(chunk.x(), chunk.z(), false));
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -116,14 +116,14 @@ public final class ScheduledEntityReplayGameTest {
      * @param uuid  the pig's UUID
      * @return its entity NBT
      */
-    private static NbtCompound pig(final ServerWorld world, final ChunkPos chunk, final UUID uuid) {
-        final NbtList pos = new NbtList();
-        pos.add(NbtDouble.of(chunk.getCenterX() + 0.5));
-        pos.add(NbtDouble.of(world.getSeaLevel() + 40.0));
-        pos.add(NbtDouble.of(chunk.getCenterZ() + 0.5));
-        final NbtCompound nbt = new NbtCompound();
+    private static CompoundTag pig(final ServerLevel world, final ChunkPos chunk, final UUID uuid) {
+        final ListTag pos = new ListTag();
+        pos.add(DoubleTag.valueOf(chunk.getMiddleBlockX() + 0.5));
+        pos.add(DoubleTag.valueOf(world.getSeaLevel() + 40.0));
+        pos.add(DoubleTag.valueOf(chunk.getMiddleBlockZ() + 0.5));
+        final CompoundTag nbt = new CompoundTag();
         nbt.putString("id", "minecraft:pig");
-        nbt.putIntArray("UUID", Uuids.toIntArray(uuid));
+        nbt.putIntArray("UUID", UUIDUtil.uuidToIntArray(uuid));
         nbt.put("Pos", pos);
         return nbt;
     }

@@ -2,10 +2,10 @@ package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.world.entity.capture.VanillaEntitySaveCapture;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import net.minecraft.entity.Entity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.storage.ChunkDataList;
-import net.minecraft.world.storage.EntityChunkDataAccess;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.chunk.storage.EntityStorage;
+import net.minecraft.world.level.entity.ChunkEntities;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * does not serialize the entities a second time just to have them dropped; an
  * empty list goes on to vanilla, which only records that the chunk has none.</p>
  */
-@Mixin(EntityChunkDataAccess.class)
+@Mixin(EntityStorage.class)
 public abstract class EntityChunkDataAccessMixin {
 
     /**
@@ -29,7 +29,7 @@ public abstract class EntityChunkDataAccessMixin {
      */
     @Shadow
     @Final
-    private ServerWorld world;
+    private ServerLevel level;
 
     /**
      * Chunks vanilla knows to hold no entities.
@@ -44,12 +44,12 @@ public abstract class EntityChunkDataAccessMixin {
      * @param dataList chunk position and the entities vanilla is saving
      * @param ci       mixin callback
      */
-    @Inject(method = "writeChunkData", at = @At("HEAD"), cancellable = true)
-    private void chunkis$captureSavedEntities(final ChunkDataList<Entity> dataList, final CallbackInfo ci) {
-        VanillaEntitySaveCapture.capture(world, dataList.getChunkPos(), dataList.stream()
+    @Inject(method = "storeEntities", at = @At("HEAD"), cancellable = true)
+    private void chunkis$captureSavedEntities(final ChunkEntities<Entity> dataList, final CallbackInfo ci) {
+        VanillaEntitySaveCapture.capture(level, dataList.getPos(), dataList.getEntities()
                 .toList());
-        if (!dataList.isEmpty() && VanillaEntitySaveCapture.isVanillaWriteBlocked(world)) {
-            emptyChunks.remove(dataList.getChunkPos().toLong());
+        if (!dataList.isEmpty() && VanillaEntitySaveCapture.isVanillaWriteBlocked(level)) {
+            emptyChunks.remove(dataList.getPos().pack());
             ci.cancel();
         }
     }

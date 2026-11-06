@@ -28,14 +28,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeSet;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.WorldSavePath;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.helpers.NOPLogger;
 
 /**
@@ -196,14 +196,14 @@ public final class CisFixtureMigrationGameTest {
      * @return deterministic snapshot map keyed by chunk position
      */
     private static Map<CisChunkPos, ChunkSnapshot> snapshotChunks(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final List<CisChunkPos> positions,
             final int expectedVersion) {
         final Map<CisChunkPos, ChunkSnapshot> snapshots = new LinkedHashMap<>();
-        final NbtCompound deltaMarker = buildRootWithDeltaMarker();
+        final CompoundTag deltaMarker = buildRootWithDeltaMarker();
 
         for (final CisChunkPos pos : positions) {
-            final ChunkDelta<BlockState, NbtCompound> delta = storage.load(pos);
+            final ChunkDelta<BlockState, CompoundTag> delta = storage.load(pos);
 
             if (delta.isEmpty()) {
                 throw new IllegalStateException(
@@ -245,9 +245,9 @@ public final class CisFixtureMigrationGameTest {
      *
      * @return root compound with the delta marker set to {@code true}
      */
-    private static NbtCompound buildRootWithDeltaMarker() {
-        final NbtCompound root = new NbtCompound();
-        final NbtCompound chunkisData = new NbtCompound();
+    private static CompoundTag buildRootWithDeltaMarker() {
+        final CompoundTag root = new CompoundTag();
+        final CompoundTag chunkisData = new CompoundTag();
         chunkisData.putBoolean(CisNbtUtil.HAS_DELTA_KEY, true);
         root.put(CisNbtUtil.CHUNKIS_DATA_KEY, chunkisData);
         return root;
@@ -262,7 +262,7 @@ public final class CisFixtureMigrationGameTest {
      * @return the initialized CisStorage instance
      * @throws IOException if the global mapping file cannot be read or initialized
      */
-    private static CisStorage<Block, BlockState, Property<?>, NbtCompound> createStorage(final Path storageRoot,
+    private static CisStorage<Block, BlockState, Property<?>, CompoundTag> createStorage(final Path storageRoot,
             final Path regionsDir) throws IOException {
         final FabricBlockStateAdapter blockStateAdapter = new FabricBlockStateAdapter();
         final PropertyPacker<Block, BlockState, Property<?>> packer = new PropertyPacker<>(blockStateAdapter);
@@ -276,7 +276,7 @@ public final class CisFixtureMigrationGameTest {
                 regionsDir,
                 mapping,
                 new FabricNbtAdapter(),
-                net.minecraft.block.Blocks.AIR.getDefaultState()
+                net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()
         );
     }
 
@@ -331,11 +331,11 @@ public final class CisFixtureMigrationGameTest {
      * @throws IOException if fixture setup fails
      */
     @GameTest(maxTicks = 400)
-    public void migratesV8FixturesWithoutChangingLogicalChunkContents(final TestContext context) throws IOException {
+    public void migratesV8FixturesWithoutChangingLogicalChunkContents(final GameTestHelper context) throws IOException {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
-        final ServerWorld world = context.getWorld();
+        final ServerLevel world = context.getLevel();
         final Path storageRoot = Objects.requireNonNull(world.getServer())
-                .getSavePath(WorldSavePath.ROOT)
+                .getWorldPath(LevelResource.ROOT)
                 .resolve("chunkis_migration_test");
         final Path regionsDir = storageRoot.resolve("regions");
 
@@ -344,9 +344,9 @@ public final class CisFixtureMigrationGameTest {
 
         final List<CisChunkPos> populatedChunks = collectPopulatedChunks(regionsDir);
         context.assertTrue(!populatedChunks.isEmpty(),
-                Text.literal("Expected at least one populated V8 fixture chunk."));
+                Component.literal("Expected at least one populated V8 fixture chunk."));
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = createStorage(storageRoot, regionsDir);
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = createStorage(storageRoot, regionsDir);
 
         try {
             final Map<CisChunkPos, ChunkSnapshot> before = snapshotChunks(storage, populatedChunks, 8);
@@ -356,14 +356,14 @@ public final class CisFixtureMigrationGameTest {
 
             context.assertTrue(
                     report.failedChunks() == 0,
-                    Text.literal("Expected no failed chunk migrations, got " + report.failedChunks()));
+                    Component.literal("Expected no failed chunk migrations, got " + report.failedChunks()));
             context.assertTrue(
                     report.migratedChunks() == populatedChunks.size(),
-                    Text.literal(
+                    Component.literal(
                             "Expected " + populatedChunks.size() + " migrated chunks, got " + report.migratedChunks()));
             context.assertTrue(
                     report.scannedChunks() == EXPECTED_SCANNED_CHUNKS,
-                    Text.literal("Expected to scan " + EXPECTED_SCANNED_CHUNKS + " chunk slots, got "
+                    Component.literal("Expected to scan " + EXPECTED_SCANNED_CHUNKS + " chunk slots, got "
                             + report.scannedChunks()));
 
             final Map<CisChunkPos, ChunkSnapshot> after = snapshotChunks(storage,
@@ -371,9 +371,9 @@ public final class CisFixtureMigrationGameTest {
                     CisConstants.VERSION);
             context.assertTrue(
                     before.equals(after),
-                    Text.literal("Migrated chunk contents did not match the original fixture snapshot. "
+                    Component.literal("Migrated chunk contents did not match the original fixture snapshot. "
                             + describeFirstDifference(before, after)));
-            context.complete();
+            context.succeed();
         } finally {
             // The debug level is global and gametests run concurrently: resetting it to OFF here
             // disabled tracing mid-run for tests that assert on the trace store.
@@ -410,7 +410,7 @@ public final class CisFixtureMigrationGameTest {
          * @param delta decoded chunk delta
          * @return snapshot suitable for equality comparison
          */
-        private static ChunkSnapshot from(final ChunkDelta<BlockState, NbtCompound> delta) {
+        private static ChunkSnapshot from(final ChunkDelta<BlockState, CompoundTag> delta) {
             final List<String> blocks = new ArrayList<>();
             for (final BlockInstruction instruction : delta.getBlockInstructions()) {
                 final BlockState state = delta.getBlockPalette()

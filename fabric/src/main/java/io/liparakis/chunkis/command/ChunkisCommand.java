@@ -1,10 +1,10 @@
 package io.liparakis.chunkis.command;
 
 import com.mojang.brigadier.CommandDispatcher;
-import net.minecraft.command.permission.Permission;
-import net.minecraft.command.permission.PermissionLevel;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 
 /**
  * Registers the single top-level {@code /chunkis} command tree.
@@ -23,10 +23,10 @@ public final class ChunkisCommand {
      *
      * @param dispatcher command dispatcher registry
      */
-    public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(CommandManager.literal("chunkis")
-                .requires(source -> source.getPermissions()
-                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+    public static void register(final CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("chunkis")
+                .requires(source -> source.permissions()
+                        .hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
                 .then(ChunkDebugCommand.createNode())
                 .then(StorageReportCommand.createNode())
                 .then(DurabilityTestCommand.createNode()));

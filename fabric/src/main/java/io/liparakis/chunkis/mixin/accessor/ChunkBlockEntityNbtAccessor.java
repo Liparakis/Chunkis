@@ -1,18 +1,18 @@
 package io.liparakis.chunkis.mixin.accessor;
 
 import java.util.Map;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(Chunk.class)
+@Mixin(ChunkAccess.class)
 public interface ChunkBlockEntityNbtAccessor {
 
     /**
      * Performs accessor.
      */
-    @Accessor("blockEntityNbts")
-    Map<BlockPos, NbtCompound> chunkis$getBlockEntityNbts();
+    @Accessor("pendingBlockEntities")
+    Map<BlockPos, CompoundTag> chunkis$getBlockEntityNbts();
 }

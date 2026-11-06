@@ -1,7 +1,5 @@
 package io.liparakis.chunkis.command;
 
-import net.minecraft.command.permission.Permission;
-import net.minecraft.command.permission.PermissionLevel;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -12,9 +10,11 @@ import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
 import io.liparakis.chunkis.world.tracking.save.AsyncCisSaveManager;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import net.minecraft.command.argument.UuidArgumentType;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.UuidArgument;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 
 /**
  * Builds and handles the {@code /chunkis debug} command tree.
@@ -52,135 +52,135 @@ public final class ChunkDebugCommand {
      *
      * @return the debug command subtree
      */
-    static LiteralArgumentBuilder<ServerCommandSource> createNode() {
+    static LiteralArgumentBuilder<CommandSourceStack> createNode() {
 
-        final var watchChunkNode = CommandManager.literal("chunk")
-                .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                        .then(CommandManager.argument("z", IntegerArgumentType.integer())
+        final var watchChunkNode = Commands.literal("chunk")
+                .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
                                 .executes(ctx -> ChunkDebugActions.watchChunk(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "x"),
                                         IntegerArgumentType.getInteger(ctx, "z")))));
 
-        final var watchRegionNode = CommandManager.literal("region")
-                .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                        .then(CommandManager.argument("z", IntegerArgumentType.integer())
+        final var watchRegionNode = Commands.literal("region")
+                .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
                                 .executes(ctx -> ChunkDebugActions.watchRegion(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "x"),
                                         IntegerArgumentType.getInteger(ctx, "z")))));
 
-        final var watchBlockNode = CommandManager.literal("block")
-                .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                        .then(CommandManager.argument("y", IntegerArgumentType.integer())
-                                .then(CommandManager.argument("z", IntegerArgumentType.integer())
+        final var watchBlockNode = Commands.literal("block")
+                .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("y", IntegerArgumentType.integer())
+                                .then(Commands.argument("z", IntegerArgumentType.integer())
                                         .executes(ctx -> ChunkDebugActions.watchBlock(ctx.getSource(),
                                                 IntegerArgumentType.getInteger(ctx, "x"),
                                                 IntegerArgumentType.getInteger(ctx, "y"),
                                                 IntegerArgumentType.getInteger(ctx, "z"))))));
 
-        final var watchBlockEntityNode = CommandManager.literal("blockentity")
-                .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                        .then(CommandManager.argument("y", IntegerArgumentType.integer())
-                                .then(CommandManager.argument("z", IntegerArgumentType.integer())
+        final var watchBlockEntityNode = Commands.literal("blockentity")
+                .then(Commands.argument("x", IntegerArgumentType.integer())
+                        .then(Commands.argument("y", IntegerArgumentType.integer())
+                                .then(Commands.argument("z", IntegerArgumentType.integer())
                                         .executes(ctx -> ChunkDebugActions.watchBlockEntity(ctx.getSource(),
                                                 IntegerArgumentType.getInteger(ctx, "x"),
                                                 IntegerArgumentType.getInteger(ctx, "y"),
                                                 IntegerArgumentType.getInteger(ctx, "z"))))));
 
-        final var watchEntityNode = CommandManager.literal("entity")
-                .then(CommandManager.argument("uuid", UuidArgumentType.uuid())
+        final var watchEntityNode = Commands.literal("entity")
+                .then(Commands.argument("uuid", UuidArgument.uuid())
                         .executes(ctx -> ChunkDebugActions.watchEntity(ctx.getSource(),
-                                UuidArgumentType.getUuid(ctx, "uuid")
+                                UuidArgument.getUuid(ctx, "uuid")
                                         .toString())));
 
-        final var watchCommand = CommandManager.literal("watch")
+        final var watchCommand = Commands.literal("watch")
                 .then(watchChunkNode)
                 .then(watchRegionNode)
                 .then(watchBlockNode)
                 .then(watchBlockEntityNode)
                 .then(watchEntityNode)
-                .then(CommandManager.literal("clear")
+                .then(Commands.literal("clear")
                         .executes(ctx -> ChunkDebugActions.clearWatchpoints(ctx.getSource())))
-                .then(CommandManager.literal("list")
+                .then(Commands.literal("list")
                         .executes(ctx -> ChunkDebugActions.listWatchpoints(ctx.getSource())))
-                .then(CommandManager.literal("pending")
+                .then(Commands.literal("pending")
                         .executes(ctx -> ChunkDebugActions.pendingWatched(ctx.getSource())))
-                .then(CommandManager.literal("latest")
-                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
+                .then(Commands.literal("latest")
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
                                 .executes(ctx -> ChunkDebugActions.latestWatched(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "count")))));
 
-        final var suspectNode = CommandManager.literal("suspect")
-                .then(CommandManager.argument("suspectId", LongArgumentType.longArg(1L))
+        final var suspectNode = Commands.literal("suspect")
+                .then(Commands.argument("suspectId", LongArgumentType.longArg(1L))
                         .executes(ctx -> ChunkDebugActions.showSuspect(ctx.getSource(),
                                 LongArgumentType.getLong(ctx, "suspectId"))))
-                .then(CommandManager.literal("timeline")
-                        .then(CommandManager.argument("suspectId", LongArgumentType.longArg(1L))
+                .then(Commands.literal("timeline")
+                        .then(Commands.argument("suspectId", LongArgumentType.longArg(1L))
                                 .executes(ctx -> ChunkDebugActions.showSuspectTimeline(ctx.getSource(),
                                         LongArgumentType.getLong(ctx, "suspectId")))))
-                .then(CommandManager.literal("chunk")
-                        .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                                .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                .then(Commands.literal("chunk")
+                        .then(Commands.argument("x", IntegerArgumentType.integer())
+                                .then(Commands.argument("z", IntegerArgumentType.integer())
                                         .executes(ctx -> ChunkDebugActions.showSuspectChunk(ctx.getSource(),
                                                 IntegerArgumentType.getInteger(ctx, "x"),
                                                 IntegerArgumentType.getInteger(ctx, "z"))))));
 
-        final var exportNode = CommandManager.literal("export")
-                .then(CommandManager.literal("latest")
-                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
+        final var exportNode = Commands.literal("export")
+                .then(Commands.literal("latest")
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
                                 .executes(ctx -> ChunkDebugActions.exportLatest(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "count")))))
-                .then(CommandManager.literal("watched")
-                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
+                .then(Commands.literal("watched")
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
                                 .executes(ctx -> ChunkDebugActions.exportWatched(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "count")))));
 
-        return CommandManager.literal("debug")
-                .then(CommandManager.literal("on")
+        return Commands.literal("debug")
+                .then(Commands.literal("on")
                         .executes(ctx -> ChunkDebugActions.setLevel(ctx.getSource(),
                                 ChunkisDebugLevel.LIFECYCLE,
                                 "Chunkis debug set to LIFECYCLE")))
-                .then(CommandManager.literal("off")
+                .then(Commands.literal("off")
                         .executes(ctx -> ChunkDebugActions.setLevel(ctx.getSource(),
                                 ChunkisDebugLevel.OFF,
                                 "Chunkis debug disabled")))
-                .then(CommandManager.literal("clear")
+                .then(Commands.literal("clear")
                         .executes(ctx -> ChunkDebugActions.clear(ctx.getSource())))
-                .then(CommandManager.literal("latest")
-                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
+                .then(Commands.literal("latest")
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
                                 .executes(ctx -> ChunkDebugActions.latest(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "count")))))
                 .then(exportNode)
-                .then(CommandManager.literal("suspects")
+                .then(Commands.literal("suspects")
                         .executes(ctx -> ChunkDebugActions.listSuspects(ctx.getSource()))
-                        .then(CommandManager.literal("clear")
+                        .then(Commands.literal("clear")
                                 .executes(ctx -> ChunkDebugActions.clearSuspects(ctx.getSource()))))
                 .then(suspectNode)
-                .then(CommandManager.literal("failures")
+                .then(Commands.literal("failures")
                         .executes(ctx -> ChunkDebugActions.listFailures(ctx.getSource(), DEFAULT_FAILURE_COUNT))
-                        .then(CommandManager.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
+                        .then(Commands.argument("count", IntegerArgumentType.integer(1, MAX_LATEST_COUNT))
                                 .executes(ctx -> ChunkDebugActions.listFailures(ctx.getSource(),
                                         IntegerArgumentType.getInteger(ctx, "count")))))
-                .then(CommandManager.literal("failure")
-                        .then(CommandManager.argument("eventId", LongArgumentType.longArg(1L))
+                .then(Commands.literal("failure")
+                        .then(Commands.argument("eventId", LongArgumentType.longArg(1L))
                                 .executes(ctx -> ChunkDebugActions.showFailure(ctx.getSource(),
                                         LongArgumentType.getLong(ctx, "eventId")))))
-                .then(CommandManager.literal("inspect")
-                        .then(CommandManager.literal("neighbors")
+                .then(Commands.literal("inspect")
+                        .then(Commands.literal("neighbors")
                                 .executes(ctx -> ChunkDebugActions.inspectNeighborChunks(ctx.getSource())))
-                        .then(CommandManager.literal("compare")
+                        .then(Commands.literal("compare")
                                 .executes(ctx -> ChunkDebugActions.inspectCurrentChunkAgainstMca(ctx.getSource()))
-                                .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                                        .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                                .then(Commands.argument("x", IntegerArgumentType.integer())
+                                        .then(Commands.argument("z", IntegerArgumentType.integer())
                                                 .executes(ctx -> ChunkDebugActions.inspectChunkAgainstMca(ctx.getSource(),
                                                         IntegerArgumentType.getInteger(ctx, "x"),
                                                         IntegerArgumentType.getInteger(ctx, "z"))))))
-                        .then(CommandManager.literal("remigrate")
+                        .then(Commands.literal("remigrate")
                                 // Destructive: replaces the stored chunk with pre-migration data. Owners only.
-                                .requires(source -> source.getPermissions()
-                                        .hasPermission(new Permission.Level(PermissionLevel.OWNERS)))
+                                .requires(source -> source.permissions()
+                                        .hasPermission(new Permission.HasCommandLevel(PermissionLevel.OWNERS)))
                                 .executes(ctx -> ChunkDebugActions.remigrateCurrentChunkFromMca(ctx.getSource()))
-                                .then(CommandManager.argument("x", IntegerArgumentType.integer())
-                                        .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                                .then(Commands.argument("x", IntegerArgumentType.integer())
+                                        .then(Commands.argument("z", IntegerArgumentType.integer())
                                                 .executes(ctx -> ChunkDebugActions.remigrateChunkFromMca(ctx.getSource(),
                                                         IntegerArgumentType.getInteger(ctx, "x"),
                                                         IntegerArgumentType.getInteger(ctx, "z")))))))

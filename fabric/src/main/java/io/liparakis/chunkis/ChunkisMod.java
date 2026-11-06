@@ -25,14 +25,14 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 
 /**
  * Main Fabric entrypoint for Chunkis.
@@ -69,13 +69,13 @@ public final class ChunkisMod implements ModInitializer {
      * are still available. Server stopped clears static managers.</p>
      */
     private static void registerEvents() {
-        ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> BaseChunkCaptureUtil.scheduleBaseCapture(chunk));
+        ServerChunkEvents.CHUNK_LOAD.register((world, chunk, generated) -> BaseChunkCaptureUtil.scheduleBaseCapture(chunk));
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> {
             BaseChunkCaptureUtil.clearPendingBaseCapture(chunk);
             GlobalChunkTracker.noteChunkUnloaded(chunk);
         });
-        ServerWorldEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.retire(world));
-        ServerTickEvents.END_WORLD_TICK.register(ScheduledEntityReplayQueue::tick);
+        ServerLevelEvents.UNLOAD.register((server, world) -> VanillaEntityRegionCleanup.retire(world));
+        ServerTickEvents.END_LEVEL_TICK.register(ScheduledEntityReplayQueue::tick);
         ServerTickEvents.START_SERVER_TICK.register(server1 -> BaseChunkCaptureUtil.tick());
         ServerTickEvents.END_SERVER_TICK.register(server -> PayloadWatchTracer.tickEntityReloadAssertions());
         ServerTickEvents.END_SERVER_TICK.register(server -> {
@@ -100,7 +100,7 @@ public final class ChunkisMod implements ModInitializer {
      * @param server stopping Minecraft server
      */
     private static void flushBeforeServerStop(final MinecraftServer server) {
-        for (final ServerWorld world : server.getWorlds()) {
+        for (final ServerLevel world : server.getAllLevels()) {
             flushWorldBeforeStop(world);
         }
 
@@ -113,7 +113,7 @@ public final class ChunkisMod implements ModInitializer {
      *
      * @param world world being stopped
      */
-    private static void flushWorldBeforeStop(final ServerWorld world) {
+    private static void flushWorldBeforeStop(final ServerLevel world) {
         // Drain async saves first: a synchronous save racing an in-flight async write of an
         // older snapshot could otherwise be overwritten by it.
         AsyncCisSaveManager.flushAndClose(world);
@@ -133,22 +133,22 @@ public final class ChunkisMod implements ModInitializer {
      *
      * @param world world whose pending deltas should be flushed
      */
-    private static void flushPendingDeltas(final ServerWorld world) {
-        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending = GlobalChunkTracker.getPendingDeltas(world);
+    private static void flushPendingDeltas(final ServerLevel world) {
+        final Map<ChunkPos, ChunkDelta<BlockState, CompoundTag>> pending = GlobalChunkTracker.getPendingDeltas(world);
 
         if (pending.isEmpty()) {
             return;
         }
 
         Chunkis.LOGGER.warn("Chunkis [STOPPING]: Force-saving {} dirty delta(s) for {}", pending.size(),
-                world.getRegistryKey()
-                        .getValue());
+                world.dimension()
+                        .identifier());
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage =
                 FabricCisStorageHelper.getStorage(world);
 
-        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> toSave = new LinkedHashMap<>();
-        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
+        final Map<ChunkPos, ChunkDelta<BlockState, CompoundTag>> toSave = new LinkedHashMap<>();
+        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, CompoundTag>> entry : pending.entrySet()) {
             if (shouldSavePendingDelta(world, entry.getKey(), entry.getValue())) {
                 toSave.put(entry.getKey(), entry.getValue());
             }
@@ -166,8 +166,8 @@ public final class ChunkisMod implements ModInitializer {
      * @return true when the delta should be saved
      */
     @SuppressWarnings("All")
-    private static boolean shouldSavePendingDelta(final ServerWorld world, final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static boolean shouldSavePendingDelta(final ServerLevel world, final ChunkPos pos,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         if (delta == null || !delta.isDirty()) {
             return false;
         }

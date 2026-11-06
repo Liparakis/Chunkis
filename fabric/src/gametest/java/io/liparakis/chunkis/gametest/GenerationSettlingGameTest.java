@@ -4,15 +4,15 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.settle.GenerationSettling;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.fluid.Fluids;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.material.Fluids;
 
 /**
  * Covers {@link GenerationSettling}: block changes that replay when a chunk is regenerated from the seed must
@@ -29,19 +29,19 @@ public final class GenerationSettlingGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 200)
-    public void generationFlowDoesNotClaimChunks(final TestContext context) {
+    public void generationFlowDoesNotClaimChunks(final GameTestHelper context) {
         final Border border = Border.create(context, 3300);
         GenerationSettling.run(true, border::placeSource);
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
+        context.startSequence()
+                .thenWaitUntil(() -> {
                     border.assertFlowedAcross();
                     context.assertFalse(border.isOwned(border.source),
-                            Text.literal("Generation settling claimed source chunk " + border.source + "."));
+                            Component.literal("Generation settling claimed source chunk " + border.source + "."));
                     context.assertFalse(border.isOwned(border.neighbour),
-                            Text.literal("Generation flow claimed neighbour chunk " + border.neighbour + "."));
+                            Component.literal("Generation flow claimed neighbour chunk " + border.neighbour + "."));
                 })
-                .createAndAdd(border::unforce)
-                .completeIfSuccessful();
+                .thenWaitUntil(border::unforce)
+                .thenSucceed();
     }
 
     /**
@@ -51,18 +51,18 @@ public final class GenerationSettlingGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 200)
-    public void playerFlowClaimsNeighbourChunk(final TestContext context) {
+    public void playerFlowClaimsNeighbourChunk(final GameTestHelper context) {
         final Border border = Border.create(context, 3500);
         border.placeSource();
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
+        context.startSequence()
+                .thenWaitUntil(() -> {
                     border.assertFlowedAcross();
                     context.assertTrue(border.isOwned(border.neighbour),
-                            Text.literal("Water a player released did not claim neighbour chunk "
+                            Component.literal("Water a player released did not claim neighbour chunk "
                                     + border.neighbour + "."));
                 })
-                .createAndAdd(border::unforce)
-                .completeIfSuccessful();
+                .thenWaitUntil(border::unforce)
+                .thenSucceed();
     }
 
     /**
@@ -73,12 +73,12 @@ public final class GenerationSettlingGameTest {
         /**
          * Test context.
          */
-        private final TestContext context;
+        private final GameTestHelper context;
 
         /**
          * World of the test.
          */
-        private final ServerWorld world;
+        private final ServerLevel world;
 
         /**
          * Chunk the water is placed in.
@@ -101,12 +101,12 @@ public final class GenerationSettlingGameTest {
          * @param context test context
          * @param offset  chunk offset from the test structure, distinct per test
          */
-        private Border(final TestContext context, final int offset) {
+        private Border(final GameTestHelper context, final int offset) {
             this.context = context;
-            this.world = context.getWorld();
-            final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-            this.source = new ChunkPos(anchor.x - offset, anchor.z + offset);
-            this.neighbour = new ChunkPos(source.x + 1, source.z);
+            this.world = context.getLevel();
+            final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+            this.source = new ChunkPos(anchor.x() - offset, anchor.z() + offset);
+            this.neighbour = new ChunkPos(source.x() + 1, source.z());
         }
 
         /**
@@ -116,17 +116,17 @@ public final class GenerationSettlingGameTest {
          * @param offset  chunk offset from the test structure, distinct per test
          * @return the chunks
          */
-        static Border create(final TestContext context, final int offset) {
+        static Border create(final GameTestHelper context, final int offset) {
             final Border border = new Border(context, offset);
             for (final ChunkPos pos : new ChunkPos[]{border.source, border.neighbour}) {
-                border.world.setChunkForced(pos.x, pos.z, true);
-                border.world.getChunk(pos.x, pos.z);
+                border.world.setChunkForced(pos.x(), pos.z(), true);
+                border.world.getChunk(pos.x(), pos.z());
                 context.assertFalse(border.isOwned(pos),
-                        Text.literal("Chunk " + pos + " is already owned before the test."));
+                        Component.literal("Chunk " + pos + " is already owned before the test."));
             }
-            final int surfaceY = border.world.getChunk(border.source.x, border.source.z)
-                    .sampleHeightmap(Heightmap.Type.MOTION_BLOCKING, 15, 8) + 1;
-            border.water = border.source.getBlockPos(15, surfaceY, 8);
+            final int surfaceY = border.world.getChunk(border.source.x(), border.source.z())
+                    .getHeight(Heightmap.Types.MOTION_BLOCKING, 15, 8) + 1;
+            border.water = border.source.getBlockAt(15, surfaceY, 8);
             return border;
         }
 
@@ -134,15 +134,15 @@ public final class GenerationSettlingGameTest {
          * Places the water source; vanilla schedules its flow.
          */
         void placeSource() {
-            world.setBlockState(water, Blocks.WATER.getDefaultState(), Block.NOTIFY_ALL);
+            world.setBlock(water, Blocks.WATER.defaultBlockState(), Block.UPDATE_ALL);
         }
 
         /**
          * Asserts the water reached the neighbour chunk.
          */
         void assertFlowedAcross() {
-            context.assertTrue(world.getFluidState(water.east()).isOf(Fluids.FLOWING_WATER),
-                    Text.literal("Waiting for water to flow from " + water + " into chunk " + neighbour + "."));
+            context.assertTrue(world.getFluidState(water.east()).is(Fluids.FLOWING_WATER),
+                    Component.literal("Waiting for water to flow from " + water + " into chunk " + neighbour + "."));
         }
 
         /**
@@ -153,15 +153,15 @@ public final class GenerationSettlingGameTest {
          */
         boolean isOwned(final ChunkPos pos) {
             return ChunkDeltaOwnership.hasChunkisOwnedState(
-                    ((ChunkisDeltaDuck) world.getChunk(pos.x, pos.z)).chunkis$getDelta());
+                    ((ChunkisDeltaDuck) world.getChunk(pos.x(), pos.z())).chunkis$getDelta());
         }
 
         /**
          * Releases both forced tickets.
          */
         void unforce() {
-            world.setChunkForced(source.x, source.z, false);
-            world.setChunkForced(neighbour.x, neighbour.z, false);
+            world.setChunkForced(source.x(), source.z(), false);
+            world.setChunkForced(neighbour.x(), neighbour.z(), false);
         }
     }
 }

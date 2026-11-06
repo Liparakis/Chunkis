@@ -3,13 +3,13 @@ package io.liparakis.chunkis.mixin.world;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.ServerWorldAccess;
-import net.minecraft.world.SpawnHelper;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.core.Holder;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.NaturalSpawner;
+import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Mixin for {@link SpawnHelper} to prevent duplicate entity spawning
+ * Mixin for {@link NaturalSpawner} to prevent duplicate entity spawning
  * during chunk restoration.
  * <p>
  * When Chunkis restores a chunk from delta storage, it resets the chunk status
@@ -34,7 +34,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Natural hostile mob spawning is unaffected.
  * </p>
  */
-@Mixin(SpawnHelper.class)
+@Mixin(NaturalSpawner.class)
 public class SpawnHelperMixin {
 
     /**
@@ -44,7 +44,7 @@ public class SpawnHelperMixin {
      * restored entities. Fresh chunks without deltas proceed with normal spawning.
      * </p>
      * <p>
-     * <b>Important:</b> The {@code world} parameter is {@link ServerWorldAccess},
+     * <b>Important:</b> The {@code world} parameter is {@link ServerLevelAccessor},
      * not {@code ServerWorld}. During generation, this is often a {@code ChunkRegion},
      * so casting to {@code ServerWorld} would fail.
      * </p>
@@ -55,15 +55,15 @@ public class SpawnHelperMixin {
      * @param random     the random generator for spawning
      * @param ci         callback info to cancel population
      */
-    @Inject(method = "populateEntities", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "spawnMobsForChunkGeneration", at = @At("HEAD"), cancellable = true)
     private static void chunkis$onPopulateEntities(
-            final ServerWorldAccess world,
-            final RegistryEntry<Biome> biomeEntry,
+            final ServerLevelAccessor world,
+            final Holder<Biome> biomeEntry,
             final ChunkPos chunkPos,
-            final Random random,
+            final RandomSource random,
             final CallbackInfo ci) {
 
-        final Chunk chunk = getChunkAt(world, chunkPos);
+        final ChunkAccess chunk = getChunkAt(world, chunkPos);
         if (chunk == null) {
             return;
         }
@@ -80,8 +80,8 @@ public class SpawnHelperMixin {
      * @return the chunk, or {@code null} if not loaded
      */
     @Unique
-    private static Chunk getChunkAt(final ServerWorldAccess world, final ChunkPos pos) {
-        return world.getChunk(pos.x, pos.z);
+    private static ChunkAccess getChunkAt(final ServerLevelAccessor world, final ChunkPos pos) {
+        return world.getChunk(pos.x(), pos.z());
     }
 
     /**
@@ -96,7 +96,7 @@ public class SpawnHelperMixin {
      * @return {@code true} if spawning was cancelled
      */
     @Unique
-    private static boolean shouldCancelSpawning(final Chunk chunk, final CallbackInfo ci) {
+    private static boolean shouldCancelSpawning(final ChunkAccess chunk, final CallbackInfo ci) {
         if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)) {
             return false;
         }

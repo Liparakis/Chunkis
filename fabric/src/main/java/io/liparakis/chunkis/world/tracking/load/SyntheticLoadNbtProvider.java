@@ -22,19 +22,19 @@ import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScop
 import java.util.List;
 import java.util.Locale;
 import net.minecraft.SharedConstants;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 
 /**
  * Builds the synthetic chunk NBT that carries a Chunkis delta through vanilla's
  * chunk deserialization.
  *
  * <p>Plain logic extracted from the chunk-loading-manager mixin. One instance per
- * {@link ServerWorld}.</p>
+ * {@link ServerLevel}.</p>
  */
 public final class SyntheticLoadNbtProvider {
 
@@ -46,14 +46,14 @@ public final class SyntheticLoadNbtProvider {
     /**
      * World whose chunks this provider loads.
      */
-    private final ServerWorld world;
+    private final ServerLevel world;
 
     /**
      * Creates a provider for {@code world}.
      *
      * @param world owning world
      */
-    public SyntheticLoadNbtProvider(final ServerWorld world) {
+    public SyntheticLoadNbtProvider(final ServerLevel world) {
         this.world = world;
     }
 
@@ -81,9 +81,9 @@ public final class SyntheticLoadNbtProvider {
      * @param chunkPos chunk being loaded
      * @return synthetic load root, or {@code null} to let vanilla load
      */
-    public NbtCompound provide(final ChunkPos chunkPos) {
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = FabricCisStorageHelper.getStorage(world);
-        final ChunkDelta<BlockState, NbtCompound> delta = resolveDeltaForLoad(storage, chunkPos);
+    public CompoundTag provide(final ChunkPos chunkPos) {
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = FabricCisStorageHelper.getStorage(world);
+        final ChunkDelta<BlockState, CompoundTag> delta = resolveDeltaForLoad(storage, chunkPos);
         if (delta == null) {
             finishBypassedLoad(
                     chunkPos,
@@ -113,7 +113,7 @@ public final class SyntheticLoadNbtProvider {
                 LOAD_SOURCE
         );
         ChunkOwnershipTraceHelper.traceDecision(
-                world.getRegistryKey(),
+                world.dimension(),
                 chunkPos,
                 "CLAIMED",
                 ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
@@ -140,8 +140,8 @@ public final class SyntheticLoadNbtProvider {
                 CisNbtUtil.buildLoadChunkNbt(chunkPos, getGameDataVersion(), delta);
         PreloadedBlockSections.embed(world, loadNbt.root(), delta);
         PayloadWatchTracer.traceBlockEntityPresenceInChunkNbt(
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 chunkPos,
                 null,
@@ -165,18 +165,18 @@ public final class SyntheticLoadNbtProvider {
      * @return resolved load delta, or {@code null} when both tracker and storage
      *         have no useful state
      */
-    private ChunkDelta<BlockState, NbtCompound> resolveDeltaForLoad(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+    private ChunkDelta<BlockState, CompoundTag> resolveDeltaForLoad(
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos chunkPos
     ) {
         ColdLoadDeltaHandoff.offer(world, chunkPos, null);
         StoredEntityFingerprints.forget(world, chunkPos);
-        final ChunkDelta<BlockState, NbtCompound> trackedDelta = getTrackedDelta(chunkPos);
+        final ChunkDelta<BlockState, CompoundTag> trackedDelta = getTrackedDelta(chunkPos);
         if (trackedDelta != null && trackedDelta.isBlockPayloadReleased() && trackedDelta.isDirty()) {
             // An unloaded chunk saved from a copy keeps only its recorded edits in its delta: its blocks are the
             // stored entry's with them on top. The delta's other state is newer than the entry (a save may still
             // be on its way, or have failed).
-            final ChunkDelta<BlockState, NbtCompound> rebuilt = rebuildFromStoredBlocks(storage, chunkPos,
+            final ChunkDelta<BlockState, CompoundTag> rebuilt = rebuildFromStoredBlocks(storage, chunkPos,
                     trackedDelta);
             if (rebuilt != null) {
                 ColdLoadDeltaHandoff.offer(world, chunkPos, rebuilt);
@@ -186,7 +186,7 @@ public final class SyntheticLoadNbtProvider {
         if (trackedDelta != null && trackedDelta.isBlockPayloadReleased() && trackedDelta.isDirty()) {
             Chunkis.LOGGER.error("Chunkis: Reloading chunk {} in {} from its stored entry; changes made since its "
                     + "last save could not be captured before it unloaded and are lost", chunkPos,
-                    world.getRegistryKey().getValue());
+                    world.dimension().identifier());
         }
         if (!shouldBypassTrackedDelta(trackedDelta)) {
             // Not saved here: like vanilla's pending writes, unsaved changes stay in memory. The restore keeps the
@@ -203,7 +203,7 @@ public final class SyntheticLoadNbtProvider {
         }
         // Read here, on this worker: a prefetch of the same chunk would only queue the read behind the
         // single prefetch thread and wait for it.
-        final ChunkDelta<BlockState, NbtCompound> storedDelta = storage.loadForChunkLoad(cisPos);
+        final ChunkDelta<BlockState, CompoundTag> storedDelta = storage.loadForChunkLoad(cisPos);
         storedDelta.setSuppressInitialRepopulation(CisNbtUtil.shouldSuppressInitialRepopulation(storedDelta));
         ColdLoadDeltaHandoff.offer(world, chunkPos, storedDelta);
         return storedDelta;
@@ -221,7 +221,7 @@ public final class SyntheticLoadNbtProvider {
      */
     private void finishBypassedLoad(
             final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final ChunkTraceReason resolvedReason,
             final String resolvedMessage,
             final String transactionEndMessage
@@ -241,7 +241,7 @@ public final class SyntheticLoadNbtProvider {
                 null
         );
         ChunkOwnershipTraceHelper.traceDecision(
-                world.getRegistryKey(),
+                world.dimension(),
                 chunkPos,
                 "BYPASSED",
                 ChunkTraceReason.PASSIVE_VANILLA_LOAD,
@@ -274,10 +274,10 @@ public final class SyntheticLoadNbtProvider {
      */
     private void traceLoadNbtSelection(
             final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final CisNbtUtil.LoadChunkNbtResult loadNbt
     ) {
-        final NbtCompound metadata = delta != null ? delta.getChunkMetadata() : null;
+        final CompoundTag metadata = delta != null ? delta.getChunkMetadata() : null;
         final boolean hasPersistedBaseChunk = delta != null
                 && CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
         final boolean authoritativeFullBaseline = delta != null
@@ -290,7 +290,7 @@ public final class SyntheticLoadNbtProvider {
                 : new byte[0];
 
         if (hasPersistedBaseChunk) {
-            final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
+            final CompoundTag baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
             ChunkTraceStore.trace(
                     ChunkisDebugDomain.CHUNK_LIFECYCLE,
                     ChunkTraceEventType.BASE_NBT_DECODE_STARTED,
@@ -303,13 +303,13 @@ public final class SyntheticLoadNbtProvider {
                             + !delta.isEmpty()
                             + ", metadataKeys="
                             + metadata
-                            .getKeys()
+                            .keySet()
                             + ", hasPersistedBaseChunk=" + true
                             + ", shouldUsePersistedBaseChunk=" + shouldUsePersistedBaseChunk
                             + ", authoritativeFullBaseline=" + authoritativeFullBaseline
                             + ", baseChunkPayloadBytes=" + baseChunkPayload.length
                             + ", baseNbtKeys="
-                            + (baseChunkNbt != null ? baseChunkNbt.getKeys() : List.of())
+                            + (baseChunkNbt != null ? baseChunkNbt.keySet() : List.of())
                             + ", baseNbtApproxBytes="
                             + (baseChunkNbt != null ? baseChunkNbt.toString()
                                                       .length() : 0),
@@ -333,7 +333,7 @@ public final class SyntheticLoadNbtProvider {
                 "base metadata decision: hasPersistedBaseChunk=" + hasPersistedBaseChunk
                         + ", shouldUsePersistedBaseChunk=" + shouldUsePersistedBaseChunk
                         + ", authoritativeFullBaseline=" + authoritativeFullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : List.of())
+                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : List.of())
                         + ", baseChunkPayloadBytes=" + baseChunkPayload.length,
                 worldId(),
                 debugChunkKey(chunkPos),
@@ -351,7 +351,7 @@ public final class SyntheticLoadNbtProvider {
                 "base metadata decision: hasPersistedBaseChunk=" + hasPersistedBaseChunk
                         + ", shouldUsePersistedBaseChunk=" + shouldUsePersistedBaseChunk
                         + ", authoritativeFullBaseline=" + authoritativeFullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : List.of())
+                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : List.of())
                         + ", baseChunkPayloadBytes=" + baseChunkPayload.length
         );
 
@@ -432,9 +432,9 @@ public final class SyntheticLoadNbtProvider {
      * Returns the current Minecraft data version id.
      */
     private static int getGameDataVersion() {
-        return SharedConstants.getGameVersion()
+        return SharedConstants.getCurrentVersion()
                 .dataVersion()
-                .id();
+                .version();
     }
 
     /**
@@ -447,25 +447,25 @@ public final class SyntheticLoadNbtProvider {
      * @param trackedDelta tracked delta holding the stored blocks
      * @return the rebuilt delta, or {@code null} when the entry is missing or unreadable
      */
-    private ChunkDelta<BlockState, NbtCompound> rebuildFromStoredBlocks(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+    private ChunkDelta<BlockState, CompoundTag> rebuildFromStoredBlocks(
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> trackedDelta
+            final ChunkDelta<BlockState, CompoundTag> trackedDelta
     ) {
         // The edits first: the server thread drops them once a save of the entry wrote them, so read after the
         // copy, the entry holds every edit the copy may lack.
-        final ChunkDeltaView<BlockState, NbtCompound> edits = trackedDelta.snapshotView(NbtCompound::copy);
+        final ChunkDeltaView<BlockState, CompoundTag> edits = trackedDelta.snapshotView(CompoundTag::copy);
         final boolean heightmapsCurrent = trackedDelta.hasCurrentHeightmaps();
-        final CisStorage.LoadResult<BlockState, NbtCompound> stored = storage.loadWithPresence(
+        final CisStorage.LoadResult<BlockState, CompoundTag> stored = storage.loadWithPresence(
                 FabricCisStorageHelper.toStoragePos(chunkPos), ChunkTraceStore.nextOperationId("load"));
         if (!stored.storageEntryPresent() || stored.failed()) {
             Chunkis.LOGGER.error("Chunkis: Stored entry of chunk {} in {} is {}; its blocks were only kept there",
-                    chunkPos, world.getRegistryKey().getValue(), stored.failed() ? "unreadable" : "missing");
+                    chunkPos, world.dimension().identifier(), stored.failed() ? "unreadable" : "missing");
             return null;
         }
-        final ChunkDelta<BlockState, NbtCompound> rebuilt = stored.delta();
+        final ChunkDelta<BlockState, CompoundTag> rebuilt = stored.delta();
         edits.forEachBlock((x, y, z, state) -> rebuilt.addBlockChange(x, y, z, state, false));
-        rebuilt.adoptNonBlockStateFrom(trackedDelta, NbtCompound::copy);
+        rebuilt.adoptNonBlockStateFrom(trackedDelta, CompoundTag::copy);
         rebuilt.markRebuiltFromStoredEntry(edits);
         if (heightmapsCurrent) {
             // Same blocks the tracked delta's heightmaps were captured from: no edit came after that capture.
@@ -478,7 +478,7 @@ public final class SyntheticLoadNbtProvider {
      * Returns {@code true} when a tracked delta is too weak to rebuild the chunk and
      * storage should be consulted instead (empty, clean, no anchors).
      */
-    private static boolean shouldBypassTrackedDelta(final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static boolean shouldBypassTrackedDelta(final ChunkDelta<BlockState, CompoundTag> delta) {
         // A released block payload holds no blocks; the stored entry does.
         return delta == null || (!delta.isDirty() && delta.isEmpty()) || delta.isBlockPayloadReleased();
     }
@@ -487,16 +487,16 @@ public final class SyntheticLoadNbtProvider {
      * Returns the delta currently tracked for {@code pos} (memory and unload cache).
      */
     @SuppressWarnings("unchecked")
-    private ChunkDelta<BlockState, NbtCompound> getTrackedDelta(final ChunkPos pos) {
-        return (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(world, pos);
+    private ChunkDelta<BlockState, CompoundTag> getTrackedDelta(final ChunkPos pos) {
+        return (ChunkDelta<BlockState, CompoundTag>) GlobalChunkTracker.getDelta(world, pos);
     }
 
     /**
      * Returns the world registry id string used in traces.
      */
     private String worldId() {
-        return world.getRegistryKey()
-                .getValue()
+        return world.dimension()
+                .identifier()
                 .toString();
     }
 
@@ -504,6 +504,6 @@ public final class SyntheticLoadNbtProvider {
      * Returns the trace key for {@code pos}.
      */
     private static DebugChunkKey debugChunkKey(final ChunkPos pos) {
-        return new DebugChunkKey(pos.x, pos.z);
+        return new DebugChunkKey(pos.x(), pos.z());
     }
 }

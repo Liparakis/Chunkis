@@ -5,11 +5,11 @@ import io.liparakis.chunkis.world.restoration.core.PalettedContainerFields;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.collection.PaletteStorage;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.Palette;
-import net.minecraft.world.chunk.PalettedContainer;
+import net.minecraft.util.BitStorage;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.Palette;
+import net.minecraft.world.level.chunk.PalettedContainer;
 
 /**
  * Lets a full-baseline snapshot re-read only the sections whose block data changed since the
@@ -98,7 +98,7 @@ final class SectionCaptureCache {
      * @param sections chunk sections
      * @return per-section fingerprints, or {@code null}
      */
-    static long[] fingerprints(final ChunkSection[] sections) {
+    static long[] fingerprints(final LevelChunkSection[] sections) {
         if (!PalettedContainerFields.AVAILABLE) {
             return null;
         }
@@ -133,21 +133,21 @@ final class SectionCaptureCache {
      * @param section section, possibly {@code null}
      * @return 64-bit fingerprint
      */
-    private static long fingerprint(final ChunkSection section) {
-        if (section == null || section.isEmpty()) {
+    private static long fingerprint(final LevelChunkSection section) {
+        if (section == null || section.hasOnlyAir()) {
             return EMPTY_SECTION;
         }
-        final PalettedContainer<BlockState> container = section.getBlockStateContainer();
+        final PalettedContainer<BlockState> container = section.getStates();
         final Object data = PalettedContainerFields.data(container);
-        final PaletteStorage storage = PalettedContainerFields.storage(data);
+        final BitStorage storage = PalettedContainerFields.storage(data);
         final Palette<BlockState> palette = PalettedContainerFields.palette(data);
 
         long hash = mix(0x9E37_79B9_7F4A_7C15L, palette.getSize());
         for (int i = 0; i < palette.getSize(); i++) {
-            hash = mix(hash, System.identityHashCode(palette.get(i)));
+            hash = mix(hash, System.identityHashCode(palette.valueFor(i)));
         }
-        hash = mix(hash, storage.getElementBits());
-        for (final long word : storage.getData()) {
+        hash = mix(hash, storage.getBits());
+        for (final long word : storage.getRaw()) {
             hash = mix(hash, word);
         }
         return hash;

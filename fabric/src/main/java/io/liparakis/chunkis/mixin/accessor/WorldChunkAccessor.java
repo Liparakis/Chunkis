@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.mixin.accessor;
 
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * Exposes whether a world chunk is still part of the world; vanilla clears it just before a chunk's unload
  * save.
  */
-@Mixin(WorldChunk.class)
+@Mixin(LevelChunk.class)
 public interface WorldChunkAccessor {
 
     /**
@@ -16,6 +16,6 @@ public interface WorldChunkAccessor {
      *
      * @return false once vanilla began unloading the chunk
      */
-    @Accessor("loadedToWorld")
+    @Accessor("loaded")
     boolean chunkis$isLoadedToWorld();
 }

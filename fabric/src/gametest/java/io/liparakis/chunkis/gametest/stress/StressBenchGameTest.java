@@ -3,7 +3,7 @@ package io.liparakis.chunkis.gametest.stress;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.test.TestContext;
+import net.minecraft.gametest.framework.GameTestHelper;
 
 /**
  * Stress benchmark entry point. Skipped unless the JVM runs with {@code -Dchunkis.stress=true}, so the
@@ -42,9 +42,9 @@ public final class StressBenchGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 72_000)
-    public void roundTripReloadAndEdits(final TestContext context) {
+    public void roundTripReloadAndEdits(final GameTestHelper context) {
         if (!Boolean.getBoolean("chunkis.stress")) {
-            context.complete();
+            context.succeed();
             return;
         }
         registerHooks();
@@ -59,9 +59,9 @@ public final class StressBenchGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 72_000)
-    public void flightOutAndBack(final TestContext context) {
+    public void flightOutAndBack(final GameTestHelper context) {
         if (!Boolean.getBoolean("chunkis.stress")) {
-            context.complete();
+            context.succeed();
             return;
         }
         registerHooks();
@@ -123,7 +123,7 @@ public final class StressBenchGameTest {
                 active.metrics().onTickEnd();
             }
         });
-        ServerChunkEvents.CHUNK_LOAD.register((world, chunk) -> {
+        ServerChunkEvents.CHUNK_LOAD.register((world, chunk, generated) -> {
             if (active != null) {
                 active.onChunkLoad(chunk);
             }

@@ -14,11 +14,11 @@ import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.List;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -45,9 +45,9 @@ class GlobalChunkTrackerTest {
      */
     @Test
     void keepsExistingAuthoritativeDeltaWhenIncomingReplacementIsWeaker() {
-        final NbtCompound baseChunkNbt = new NbtCompound();
+        final CompoundTag baseChunkNbt = new CompoundTag();
         baseChunkNbt.putString("status", "full");
-        final ChunkDelta<String, NbtCompound> existing = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> existing = new ChunkDelta<>();
         existing.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
                         null,
@@ -57,7 +57,7 @@ class GlobalChunkTrackerTest {
                 ),
                 false
         );
-        final ChunkDelta<String, NbtCompound> weakerIncoming = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> weakerIncoming = new ChunkDelta<>();
 
         assertTrue(GlobalChunkTracker.shouldKeepExistingAuthoritativeDelta(existing, weakerIncoming));
     }
@@ -68,9 +68,9 @@ class GlobalChunkTrackerTest {
      */
     @Test
     void allowsReplacementWhenIncomingDeltaIsAlsoAuthoritative() {
-        final ChunkDelta<String, NbtCompound> existing = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> existing = new ChunkDelta<>();
         existing.markDirty();
-        final ChunkDelta<String, NbtCompound> incoming = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> incoming = new ChunkDelta<>();
         incoming.markDirty();
 
         assertFalse(GlobalChunkTracker.shouldKeepExistingAuthoritativeDelta(existing, incoming));
@@ -82,9 +82,9 @@ class GlobalChunkTrackerTest {
     @Test
     void tracesChunkUnloadWhenActiveDirtyDeltaWasPresent() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
-        final RegistryKey<World> overworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("minecraft", "overworld")
+        final ResourceKey<Level> overworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("minecraft", "overworld")
         );
 
         GlobalChunkTracker.noteChunkUnloaded(overworld, 4, -3, true);
@@ -117,11 +117,11 @@ class GlobalChunkTrackerTest {
     @Test
     void carriesMutationOriginIntoDirtyTrackerEvent() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
-        final RegistryKey<World> overworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("minecraft", "overworld")
+        final ResourceKey<Level> overworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("minecraft", "overworld")
         );
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
         GlobalChunkTracker.addDelta(overworld, 7, 9, delta, "WorldChunkMixin#setBlockState");
@@ -145,11 +145,11 @@ class GlobalChunkTrackerTest {
      */
     @Test
     void addDeltaDoesNotTraceWhenDebugIsOff() {
-        final RegistryKey<World> overworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("minecraft", "overworld")
+        final ResourceKey<Level> overworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("minecraft", "overworld")
         );
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
         GlobalChunkTracker.addDelta(overworld, 7, 9, delta, "WorldChunkMixin#setBlockState");
@@ -165,11 +165,11 @@ class GlobalChunkTrackerTest {
     @Test
     void asyncSaveCompletionInvalidatesUnloadCacheForCleanDelta() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
-        final RegistryKey<World> overworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("minecraft", "overworld")
+        final ResourceKey<Level> overworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("minecraft", "overworld")
         );
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
         GlobalChunkTracker.addDelta(overworld, 7, 9, delta, "test");
@@ -196,8 +196,8 @@ class GlobalChunkTrackerTest {
      */
     @Test
     void cleanDeltaReportedByChunkIsNotTracked() {
-        final RegistryKey<World> overworld = overworld();
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ResourceKey<Level> overworld = overworld();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
         assertFalse(delta.isDirty());
 
@@ -211,8 +211,8 @@ class GlobalChunkTrackerTest {
      */
     @Test
     void cleanReportReleasesTrackedDeltaThatWasSaved() {
-        final RegistryKey<World> overworld = overworld();
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ResourceKey<Level> overworld = overworld();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
         GlobalChunkTracker.addDelta(overworld, 5, 6, delta, "test");
         delta.markSaved();
@@ -227,11 +227,11 @@ class GlobalChunkTrackerTest {
      */
     @Test
     void cleanReportKeepsDifferentDirtyDelta() {
-        final RegistryKey<World> overworld = overworld();
-        final ChunkDelta<String, NbtCompound> unsaved = new ChunkDelta<>();
+        final ResourceKey<Level> overworld = overworld();
+        final ChunkDelta<String, CompoundTag> unsaved = new ChunkDelta<>();
         unsaved.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
         GlobalChunkTracker.addDelta(overworld, 5, 6, unsaved, "test");
-        final ChunkDelta<String, NbtCompound> clean = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> clean = new ChunkDelta<>();
         clean.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
         GlobalChunkTracker.trackLiveDelta(DimensionChunkKey.of(overworld, 5, 6), clean, "test", null);
@@ -245,8 +245,8 @@ class GlobalChunkTrackerTest {
      */
     @Test
     void dirtyDeltaReportedByChunkIsTrackedUntilSaved() {
-        final RegistryKey<World> overworld = overworld();
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ResourceKey<Level> overworld = overworld();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
         delta.markDirty("test");
 
@@ -262,8 +262,8 @@ class GlobalChunkTrackerTest {
      *
      * @return key
      */
-    private static RegistryKey<World> overworld() {
-        return RegistryKey.of(RegistryKeys.WORLD, Identifier.of("minecraft", "overworld"));
+    private static ResourceKey<Level> overworld() {
+        return ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "overworld"));
     }
 
     /**
@@ -272,11 +272,11 @@ class GlobalChunkTrackerTest {
      */
     @Test
     void currentDirtyDeltaRequiresSameInstanceAndGeneration() {
-        final RegistryKey<World> overworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("minecraft", "overworld")
+        final ResourceKey<Level> overworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("minecraft", "overworld")
         );
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
         GlobalChunkTracker.addDelta(overworld, 3, 4, delta, "test");
 
@@ -288,7 +288,7 @@ class GlobalChunkTrackerTest {
                 delta.getMutationGeneration()
         ));
 
-        final ChunkDelta<String, NbtCompound> replacement = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> replacement = new ChunkDelta<>();
         replacement.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
         GlobalChunkTracker.addDelta(overworld, 3, 4, replacement, "test");
 
@@ -308,12 +308,12 @@ class GlobalChunkTrackerTest {
     @Test
     void assertsImmediatelyWhenCachingBlockEntityOnlyPayloadWithoutBase() {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
-        final RegistryKey<World> overworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of("minecraft", "overworld")
+        final ResourceKey<Level> overworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("minecraft", "overworld")
         );
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
-        delta.addBlockEntityData(1, 64, 1, new NbtCompound());
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
+        delta.addBlockEntityData(1, 64, 1, new CompoundTag());
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
         GlobalChunkTracker.addDelta(overworld, 6, 85, delta, "WorldChunkMixin#setBlockEntity");

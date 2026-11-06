@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -20,9 +20,9 @@ class DeltaPersistenceGuardTest {
      */
     @Test
     void rejectsCurrentVersionBlockEntityOnlyPayloadWithoutBase() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.setSourceVersion(io.liparakis.chunkis.core.model.CisConstants.VERSION);
-        delta.addBlockEntityData(1, 64, 1, new NbtCompound());
+        delta.addBlockEntityData(1, 64, 1, new CompoundTag());
 
         assertTrue(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
         assertTrue(DeltaPersistenceGuard.hasInvalidBlockEntityOnlyPayloadWithoutBase(delta));
@@ -34,8 +34,8 @@ class DeltaPersistenceGuardTest {
      */
     @Test
     void allowsBlockEntityOnlyPayloadWhenPersistedBaseExists() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
-        delta.addBlockEntityData(1, 64, 1, new NbtCompound());
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
+        delta.addBlockEntityData(1, 64, 1, new CompoundTag());
         delta.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
                         null,
@@ -56,7 +56,7 @@ class DeltaPersistenceGuardTest {
      */
     @Test
     void allowsFullSnapshotPayloadWhenFullBaselineMetadataExists() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.addBlockChange(1, 64, 1, "stone");
         delta.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
@@ -77,7 +77,7 @@ class DeltaPersistenceGuardTest {
      */
     @Test
     void allowsV11AuthoritativeSnapshotPayloadWithoutBaseMetadata() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.setSourceVersion(io.liparakis.chunkis.core.model.CisConstants.VERSION);
         delta.addBlockChange(1, 64, 1, "stone");
 
@@ -91,8 +91,8 @@ class DeltaPersistenceGuardTest {
      */
     @Test
     void rejectsEntityOnlyPayloadWithoutBase() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
-        delta.addPendingEntity(new NbtCompound());
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
+        delta.addPendingEntity(new CompoundTag());
 
         assertTrue(DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta));
     }
@@ -103,8 +103,8 @@ class DeltaPersistenceGuardTest {
      */
     @Test
     void allowsEntityOnlyPayloadWhenPersistedBaseExists() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
-        delta.addPendingEntity(new NbtCompound());
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
+        delta.addPendingEntity(new CompoundTag());
         delta.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
                         null,

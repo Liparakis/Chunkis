@@ -7,10 +7,10 @@ import io.liparakis.chunkis.storage.io.CisStorage;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import java.io.IOException;
 import java.util.function.Consumer;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.state.property.Property;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 
 /**
  * Save snapshot of a delta whose block payload is released, saved without its chunk (it unloaded): the blocks are
@@ -20,18 +20,18 @@ import net.minecraft.state.property.Property;
  * <p>{@link #loadStoredBlocks()} must succeed before the view is encoded. It fails instead of yielding no blocks
  * when the entry is missing or unreadable, since an encoded empty view would clear the stored chunk.</p>
  */
-public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState, NbtCompound> {
+public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState, CompoundTag> {
 
     /**
      * Snapshot of the delta: its block instructions are the edits applied over the entry, the rest is taken as
      * it is.
      */
-    private final ChunkDeltaView<BlockState, NbtCompound> rest;
+    private final ChunkDeltaView<BlockState, CompoundTag> rest;
 
     /**
      * Storage holding the entry the blocks come from.
      */
-    private final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage;
+    private final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage;
 
     /**
      * Position of the entry.
@@ -41,7 +41,7 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
     /**
      * Stored entry, once loaded.
      */
-    private ChunkDelta<BlockState, NbtCompound> stored;
+    private ChunkDelta<BlockState, CompoundTag> stored;
 
     /**
      * Creates the view; nothing is read until {@link #loadStoredBlocks()}.
@@ -50,8 +50,8 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      * @param storage storage holding the entry
      * @param pos     position of the entry
      */
-    StoredBlocksSnapshotView(final ChunkDeltaView<BlockState, NbtCompound> rest,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage, final CisChunkPos pos) {
+    StoredBlocksSnapshotView(final ChunkDeltaView<BlockState, CompoundTag> rest,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage, final CisChunkPos pos) {
         this.rest = rest;
         this.storage = storage;
         this.pos = pos;
@@ -64,7 +64,7 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      */
     void loadStoredBlocks() throws IOException {
         if (stored == null) {
-            final ChunkDelta<BlockState, NbtCompound> entry = readStoredBlocks(storage, pos);
+            final ChunkDelta<BlockState, CompoundTag> entry = readStoredBlocks(storage, pos);
             applyEdits(rest, entry);
             stored = entry;
         }
@@ -76,8 +76,8 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      * @param edits view whose block instructions are the edits
      * @param entry decoded stored entry, changed in place
      */
-    static void applyEdits(final ChunkDeltaView<BlockState, NbtCompound> edits,
-            final ChunkDelta<BlockState, NbtCompound> entry) {
+    static void applyEdits(final ChunkDeltaView<BlockState, CompoundTag> edits,
+            final ChunkDelta<BlockState, CompoundTag> entry) {
         edits.forEachBlock((x, y, z, state) -> entry.addBlockChange(x, y, z, state, false));
     }
 
@@ -89,10 +89,10 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      * @return the decoded entry
      * @throws IOException if the entry is missing or could not be decoded
      */
-    static ChunkDelta<BlockState, NbtCompound> readStoredBlocks(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage, final CisChunkPos pos)
+    static ChunkDelta<BlockState, CompoundTag> readStoredBlocks(
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage, final CisChunkPos pos)
             throws IOException {
-        final CisStorage.LoadResult<BlockState, NbtCompound> result = storage.loadWithPresence(pos,
+        final CisStorage.LoadResult<BlockState, CompoundTag> result = storage.loadWithPresence(pos,
                 "stored-blocks");
         if (!result.storageEntryPresent() || result.failed()) {
             throw new IOException("Stored entry of chunk " + pos + " holding its released blocks is "
@@ -117,7 +117,7 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      * @return the stored entry
      * @throws IllegalStateException if {@link #loadStoredBlocks()} has not succeeded
      */
-    private ChunkDelta<BlockState, NbtCompound> stored() {
+    private ChunkDelta<BlockState, CompoundTag> stored() {
         if (stored == null) {
             throw new IllegalStateException("Stored blocks of chunk " + pos + " read before loadStoredBlocks");
         }
@@ -129,7 +129,7 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      *
      * @return the wrapped snapshot
      */
-    ChunkDeltaView<BlockState, NbtCompound> rest() {
+    ChunkDeltaView<BlockState, CompoundTag> rest() {
         return rest;
     }
 
@@ -145,7 +145,7 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      * {@inheritDoc}
      */
     @Override
-    public Long2ObjectMap<NbtCompound> getBlockEntities() {
+    public Long2ObjectMap<CompoundTag> getBlockEntities() {
         return rest.getBlockEntities();
     }
 
@@ -153,7 +153,7 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      * {@inheritDoc}
      */
     @Override
-    public void forEachEntity(final Consumer<? super NbtCompound> consumer) {
+    public void forEachEntity(final Consumer<? super CompoundTag> consumer) {
         rest.forEachEntity(consumer);
     }
 
@@ -185,7 +185,7 @@ public final class StoredBlocksSnapshotView implements ChunkDeltaView<BlockState
      * {@inheritDoc}
      */
     @Override
-    public NbtCompound getChunkMetadata() {
+    public CompoundTag getChunkMetadata() {
         return rest.getChunkMetadata();
     }
 

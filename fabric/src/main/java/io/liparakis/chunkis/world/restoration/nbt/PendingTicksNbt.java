@@ -1,13 +1,13 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
 import java.util.List;
-import net.minecraft.block.Block;
-import net.minecraft.fluid.Fluid;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registries;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.tick.Tick;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.ticks.SavedTick;
 import com.mojang.serialization.Codec;
 
 /**
@@ -33,14 +33,14 @@ public final class PendingTicksNbt {
     /**
      * Vanilla's codec for pending block ticks.
      */
-    private static final Codec<List<Tick<Block>>> BLOCK_TICKS_CODEC =
-            Tick.createCodec(Registries.BLOCK.getCodec()).listOf();
+    private static final Codec<List<SavedTick<Block>>> BLOCK_TICKS_CODEC =
+            SavedTick.codec(BuiltInRegistries.BLOCK.byNameCodec()).listOf();
 
     /**
      * Vanilla's codec for pending fluid ticks.
      */
-    private static final Codec<List<Tick<Fluid>>> FLUID_TICKS_CODEC =
-            Tick.createCodec(Registries.FLUID.getCodec()).listOf();
+    private static final Codec<List<SavedTick<Fluid>>> FLUID_TICKS_CODEC =
+            SavedTick.codec(BuiltInRegistries.FLUID.byNameCodec()).listOf();
 
     /**
      * Not instantiable.
@@ -55,17 +55,17 @@ public final class PendingTicksNbt {
      * @param chunk live chunk
      * @return the ticks, or {@code null} when none is pending
      */
-    public static NbtCompound capture(final WorldChunk chunk) {
-        final Chunk.TickSchedulers ticks = chunk.getTickSchedulers(chunk.getWorld().getTime());
+    public static CompoundTag capture(final LevelChunk chunk) {
+        final ChunkAccess.PackedTicks ticks = chunk.getTicksForSerialization(chunk.getLevel().getGameTime());
         if (ticks.blocks().isEmpty() && ticks.fluids().isEmpty()) {
             return null;
         }
-        final NbtCompound nbt = new NbtCompound();
+        final CompoundTag nbt = new CompoundTag();
         if (!ticks.blocks().isEmpty()) {
-            nbt.put(BLOCK_TICKS, BLOCK_TICKS_CODEC, ticks.blocks());
+            nbt.store(BLOCK_TICKS, BLOCK_TICKS_CODEC, ticks.blocks());
         }
         if (!ticks.fluids().isEmpty()) {
-            nbt.put(FLUID_TICKS, FLUID_TICKS_CODEC, ticks.fluids());
+            nbt.store(FLUID_TICKS, FLUID_TICKS_CODEC, ticks.fluids());
         }
         return nbt;
     }
@@ -76,8 +76,8 @@ public final class PendingTicksNbt {
      * @param metadata chunk metadata, possibly {@code null}
      * @param root     chunk NBT vanilla will read
      */
-    public static void putInto(final NbtCompound metadata, final NbtCompound root) {
-        final NbtCompound pending = metadata == null ? null : metadata.getCompound(CisNbtUtil.PENDING_TICKS_KEY)
+    public static void putInto(final CompoundTag metadata, final CompoundTag root) {
+        final CompoundTag pending = metadata == null ? null : metadata.getCompound(CisNbtUtil.PENDING_TICKS_KEY)
                 .orElse(null);
         if (pending == null) {
             return;

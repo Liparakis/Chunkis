@@ -15,14 +15,14 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtHelper;
-import net.minecraft.registry.Registries;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import org.slf4j.Logger;
 
 /**
@@ -49,18 +49,18 @@ public final class MigrationChunkValidator {
      * Validates that the stored migrated chunk still matches the translated
      * authoritative snapshot shape, not just its marker flags.
      */
-    static MigrationValidationResult validateMigratedChunk(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+    static MigrationValidationResult validateMigratedChunk(final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos chunkPos,
-            final ChunkDelta<BlockState, NbtCompound> expected) {
-        final ChunkDelta<BlockState, NbtCompound> stored = storage.load(new CisChunkPos(chunkPos.x, chunkPos.z));
+            final ChunkDelta<BlockState, CompoundTag> expected) {
+        final ChunkDelta<BlockState, CompoundTag> stored = storage.load(new CisChunkPos(chunkPos.x(), chunkPos.z()));
         return matchesMigratedChunkShape(expected, stored);
     }
 
     /**
      * Performs matches migrated chunk shape.
      */
-    static MigrationValidationResult matchesMigratedChunkShape(final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual) {
+    static MigrationValidationResult matchesMigratedChunkShape(final ChunkDelta<BlockState, CompoundTag> expected,
+            final ChunkDelta<BlockState, CompoundTag> actual) {
         if (expected == null || actual == null || actual.isEmpty()) {
             return MigrationValidationResult.failure("NULL_OR_EMPTY", "expected or actual is null/empty");
         }
@@ -90,12 +90,12 @@ public final class MigrationChunkValidator {
                     "expected=" + expected.countPendingEntities() + ", actual=" + actual.countPendingEntities());
         }
 
-        if (!NbtHelper.matches(CisNbtUtil.extractPersistedStructureMetadata(expected.getChunkMetadata()),
+        if (!NbtUtils.compareNbt(CisNbtUtil.extractPersistedStructureMetadata(expected.getChunkMetadata()),
                 CisNbtUtil.extractPersistedStructureMetadata(actual.getChunkMetadata()),
                 true)) {
             return MigrationValidationResult.failure("STRUCTURE_META_MISMATCH", "structure metadata differs");
         }
-        if (!NbtHelper.matches(CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected.getChunkMetadata()),
+        if (!NbtUtils.compareNbt(CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected.getChunkMetadata()),
                 CisNbtUtil.extractPreservedAuxiliaryChunkNbt(actual.getChunkMetadata()),
                 true)) {
             return MigrationValidationResult.failure("AUX_META_MISMATCH", "auxiliary metadata differs");
@@ -123,8 +123,8 @@ public final class MigrationChunkValidator {
      * @param actual   stored CIS payload loaded back from disk
      * @return validation result describing the first block-level mismatch class
      */
-    private static MigrationValidationResult validateBlocks(final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual) {
+    private static MigrationValidationResult validateBlocks(final ChunkDelta<BlockState, CompoundTag> expected,
+            final ChunkDelta<BlockState, CompoundTag> actual) {
         final Map<Long, String> expectedNonAir = canonicalNonAirBlockMap(expected);
         final Map<Long, String> actualNonAir = canonicalNonAirBlockMap(actual);
 
@@ -142,7 +142,7 @@ public final class MigrationChunkValidator {
             if (!expKey.equals(actKey)) {
                 mismatchCount++;
                 if (mismatchCount <= 10) {
-                    LOGGER.warn("Block mismatch at {}: expected={} actual={}", BlockPos.fromLong(pos), expKey, actKey);
+                    LOGGER.warn("Block mismatch at {}: expected={} actual={}", BlockPos.of(pos), expKey, actKey);
                 }
             }
         }
@@ -166,10 +166,10 @@ public final class MigrationChunkValidator {
         if (state == null) {
             return "null";
         }
-        final StringBuilder sb = new StringBuilder(Registries.BLOCK.getId(state.getBlock())
+        final StringBuilder sb = new StringBuilder(BuiltInRegistries.BLOCK.getKey(state.getBlock())
                 .toString());
         final Map<Property<?>, Comparable<?>> props = new TreeMap<>(Comparator.comparing(Property::getName));
-        props.putAll(state.getEntries());
+        state.getValues().forEach(value -> props.put(value.property(), value.value()));
         if (!props.isEmpty()) {
             sb.append('[');
             sb.append(props.entrySet()
@@ -187,7 +187,7 @@ public final class MigrationChunkValidator {
      * AIR and null states are excluded because they are not authoritative
      * semantic changes for migration validation.
      */
-    private static Map<Long, String> canonicalNonAirBlockMap(final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static Map<Long, String> canonicalNonAirBlockMap(final ChunkDelta<BlockState, CompoundTag> delta) {
         final Map<Long, String> result = new HashMap<>();
         delta.forEachBlockInstruction((x, y, z, paletteId, state) -> {
             if (state != null && !state.isAir()) {
@@ -204,8 +204,8 @@ public final class MigrationChunkValidator {
      * @param actual   stored CIS payload loaded back from disk
      * @return validation result describing any block-entity mismatch
      */
-    private static MigrationValidationResult validateBlockEntities(final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual) {
+    private static MigrationValidationResult validateBlockEntities(final ChunkDelta<BlockState, CompoundTag> expected,
+            final ChunkDelta<BlockState, CompoundTag> actual) {
         final Set<Long> keys = new HashSet<>();
         keys.addAll(expected.getBlockEntities()
                 .keySet());
@@ -213,18 +213,18 @@ public final class MigrationChunkValidator {
                 .keySet());
         int mismatchCount = 0;
         for (final long key : keys) {
-            final NbtCompound exp = expected.getBlockEntities()
+            final CompoundTag exp = expected.getBlockEntities()
                     .get(key);
-            final NbtCompound act = actual.getBlockEntities()
+            final CompoundTag act = actual.getBlockEntities()
                     .get(key);
-            if (!NbtHelper.matches(exp, act, true)) {
+            if (!NbtUtils.compareNbt(exp, act, true)) {
                 mismatchCount++;
-                final BlockPos pos = BlockPos.fromLong(key);
+                final BlockPos pos = BlockPos.of(key);
                 if (mismatchCount <= 10) {
                     LOGGER.warn("Block entity mismatch at {}: expected keys={} actual keys={}",
                             pos,
-                            exp.getKeys(),
-                            act != null ? act.getKeys() : "null");
+                            exp.keySet(),
+                            act != null ? act.keySet() : "null");
                 }
             }
         }
@@ -241,8 +241,8 @@ public final class MigrationChunkValidator {
     /**
      * Compares pending-entity lists after normalizing them to sorted string representations.
      */
-    private static MigrationValidationResult validateEntities(final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual) {
+    private static MigrationValidationResult validateEntities(final ChunkDelta<BlockState, CompoundTag> expected,
+            final ChunkDelta<BlockState, CompoundTag> actual) {
         final List<String> expectedEntities = new ArrayList<>();
         final List<String> actualEntities = new ArrayList<>();
         expected.forEachEntity(entity -> expectedEntities.add(entity == null ? "<null>" : entity.toString()));

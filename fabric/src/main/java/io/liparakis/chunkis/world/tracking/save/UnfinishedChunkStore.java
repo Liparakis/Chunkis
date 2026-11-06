@@ -20,19 +20,19 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.structure.StructureStart;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Util;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.chunk.SerializedChunk;
-import net.minecraft.world.storage.StorageIoWorker;
-import net.minecraft.world.storage.StorageKey;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.chunk.storage.IOWorker;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
+import net.minecraft.world.level.chunk.storage.SerializableChunkData;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Keeps the chunks of an authoritative world that are not stored as Chunkis entries (still generating, or
@@ -48,7 +48,7 @@ import net.minecraft.world.storage.StorageKey;
  * are small, about 1 KiB compressed, and vanilla's region format gave each a 4 KiB sector. Worlds written before
  * kept them in vanilla {@code .mca} files in the same directory: those are still read, and an entry read from them
  * moves to the CIS files. Writes run in order on one thread, an entry superseded before its turn skipped, as in
- * vanilla's {@link StorageIoWorker}; reads do not wait behind them.</p>
+ * vanilla's {@link IOWorker}; reads do not wait behind them.</p>
  */
 public final class UnfinishedChunkStore {
 
@@ -65,7 +65,7 @@ public final class UnfinishedChunkStore {
     /**
      * Vanilla region I/O over {@code .mca} files an earlier version wrote, or {@code null} when there are none.
      */
-    private final StorageIoWorker legacy;
+    private final IOWorker legacy;
 
     /**
      * Region coordinates ({@link ChunkPos#toLong} of the region) that have a legacy {@code .mca} file.
@@ -75,12 +75,12 @@ public final class UnfinishedChunkStore {
     /**
      * Identifies this store in save failure reports.
      */
-    private final StorageKey storageKey;
+    private final RegionStorageInfo storageKey;
 
     /**
      * World whose chunks this store keeps.
      */
-    private final ServerWorld world;
+    private final ServerLevel world;
 
     /**
      * Runs every write in submission order.
@@ -94,7 +94,7 @@ public final class UnfinishedChunkStore {
     /**
      * Latest submitted, not yet written entry by position: its NBT, or {@code null} for a removal.
      */
-    private final Map<Long, CompletableFuture<NbtCompound>> pending = new ConcurrentHashMap<>();
+    private final Map<Long, CompletableFuture<CompoundTag>> pending = new ConcurrentHashMap<>();
 
     /**
      * Positions known to hold an entry: written or read back in this session.
@@ -106,12 +106,12 @@ public final class UnfinishedChunkStore {
      *
      * @param world world whose unfinished chunks to keep
      */
-    public UnfinishedChunkStore(final ServerWorld world) {
+    public UnfinishedChunkStore(final ServerLevel world) {
         this.world = world;
-        this.storageKey = new StorageKey(world.getServer().getSaveProperties().getLevelName(),
-                world.getRegistryKey(), "chunkis_unfinished");
+        this.storageKey = new RegionStorageInfo(world.getServer().getWorldData().getLevelName(),
+                world.dimension(), "chunkis_unfinished");
         final Path directory = ChunkisStoragePaths.computeUnfinishedChunksDirectory(
-                world.getServer().getSavePath(WorldSavePath.ROOT), world.getRegistryKey());
+                world.getServer().getWorldPath(LevelResource.ROOT), world.dimension());
         try {
             this.store = new CompressedRegionStore(directory);
         } catch (final IOException e) {
@@ -119,7 +119,7 @@ public final class UnfinishedChunkStore {
         }
         this.legacyRegions = legacyRegions(directory);
         // Reads through vanilla's storage create missing region files, so it opens only over existing ones.
-        this.legacy = legacyRegions.isEmpty() ? null : new StorageIoWorker(storageKey, directory, false) {
+        this.legacy = legacyRegions.isEmpty() ? null : new IOWorker(storageKey, directory, false) {
         };
     }
 
@@ -130,15 +130,15 @@ public final class UnfinishedChunkStore {
      * @param chunk chunk to keep, still generating or not yet post-processed
      * @return {@code true} when an entry is written
      */
-    public boolean save(final Chunk chunk) {
-        if (chunk.getStatus() == ChunkStatus.EMPTY
-                && chunk.getStructureStarts().values().stream().noneMatch(StructureStart::hasChildren)) {
+    public boolean save(final ChunkAccess chunk) {
+        if (chunk.getPersistedStatus() == ChunkStatus.EMPTY
+                && chunk.getAllStarts().values().stream().noneMatch(StructureStart::isValid)) {
             return false;
         }
         final ChunkPos pos = chunk.getPos();
-        final SerializedChunk serialized = SerializedChunk.fromChunk(world, chunk);
-        entries.add(pos.toLong());
-        submit(pos, CompletableFuture.supplyAsync(serialized::serialize, Util.getMainWorkerExecutor()));
+        final SerializableChunkData serialized = SerializableChunkData.copyOf(world, chunk);
+        entries.add(pos.pack());
+        submit(pos, CompletableFuture.supplyAsync(serialized::write, Util.backgroundExecutor()));
         return true;
     }
 
@@ -148,22 +148,22 @@ public final class UnfinishedChunkStore {
      * @param pos chunk position
      * @return the chunk's NBT, if this store holds it
      */
-    public CompletableFuture<Optional<NbtCompound>> read(final ChunkPos pos) {
-        final CompletableFuture<NbtCompound> unwritten = pending.get(pos.toLong());
+    public CompletableFuture<Optional<CompoundTag>> read(final ChunkPos pos) {
+        final CompletableFuture<CompoundTag> unwritten = pending.get(pos.pack());
         if (unwritten != null) {
-            return unwritten.thenApply(nbt -> Optional.ofNullable(nbt).map(NbtCompound::copy));
+            return unwritten.thenApply(nbt -> Optional.ofNullable(nbt).map(CompoundTag::copy));
         }
         // Not queued behind writes: an unwritten entry is in pending, and a write leaves pending only once done.
-        return CompletableFuture.supplyAsync(() -> readStored(pos), Util.getIoWorkerExecutor())
+        return CompletableFuture.supplyAsync(() -> readStored(pos), Util.ioPool())
                 .thenCompose(stored -> stored.isPresent() || !hasLegacyRegion(pos)
                         ? CompletableFuture.completedFuture(stored)
-                        : legacy.readChunkData(pos).thenApply(found -> {
+                        : legacy.loadAsync(pos).thenApply(found -> {
                             found.ifPresent(nbt -> moveFromLegacy(pos, nbt.copy()));
                             return found;
                         }))
                 .thenApply(nbt -> {
                     if (nbt.isPresent()) {
-                        entries.add(pos.toLong());
+                        entries.add(pos.pack());
                     }
                     return nbt;
                 });
@@ -177,8 +177,8 @@ public final class UnfinishedChunkStore {
      * @param nbt chunk NBT read from this store, upgraded
      * @return {@code nbt}
      */
-    public static NbtCompound markIfGenerating(final NbtCompound nbt) {
-        if (!"minecraft:full".equals(nbt.getString("Status", ""))) {
+    public static CompoundTag markIfGenerating(final CompoundTag nbt) {
+        if (!"minecraft:full".equals(nbt.getStringOr("Status", ""))) {
             nbt.putBoolean(GENERATING_MARKER_KEY, true);
         }
         return nbt;
@@ -190,7 +190,7 @@ public final class UnfinishedChunkStore {
      * @param pos chunk position
      */
     public void discard(final ChunkPos pos) {
-        if (entries.remove(pos.toLong())) {
+        if (entries.remove(pos.pack())) {
             submit(pos, CompletableFuture.completedFuture(null));
         }
     }
@@ -203,7 +203,7 @@ public final class UnfinishedChunkStore {
         try {
             if (!io.awaitTermination(5, TimeUnit.MINUTES)) {
                 Chunkis.LOGGER.error("Chunkis: Unfinished-chunk writes of {} did not finish in 5 minutes; "
-                        + "chunks still queued are regenerated on their next load", world.getRegistryKey().getValue());
+                        + "chunks still queued are regenerated on their next load", world.dimension().identifier());
             }
         } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -211,11 +211,11 @@ public final class UnfinishedChunkStore {
         store.close();
         if (legacy != null) {
             try {
-                legacy.completeAll(true).join();
+                legacy.synchronize(true).join();
                 legacy.close();
             } catch (final IOException e) {
                 Chunkis.LOGGER.error("Chunkis: Failed to close legacy unfinished-chunk storage of {}",
-                        world.getRegistryKey().getValue(), e);
+                        world.dimension().identifier(), e);
             }
         }
     }
@@ -226,27 +226,27 @@ public final class UnfinishedChunkStore {
      * @param pos chunk position
      * @param nbt the entry's NBT once serialized
      */
-    private void submit(final ChunkPos pos, final CompletableFuture<NbtCompound> nbt) {
-        pending.put(pos.toLong(), nbt);
+    private void submit(final ChunkPos pos, final CompletableFuture<CompoundTag> nbt) {
+        pending.put(pos.pack(), nbt);
         io.execute(() -> {
-            if (pending.get(pos.toLong()) != nbt) {
+            if (pending.get(pos.pack()) != nbt) {
                 // A newer entry for this position is queued; only its write matters.
                 return;
             }
             try {
-                final NbtCompound entry = nbt.join();
+                final CompoundTag entry = nbt.join();
                 if (entry != null) {
                     store.write(FabricCisStorageHelper.toStoragePos(pos), toBytes(entry));
                 } else {
                     store.delete(FabricCisStorageHelper.toStoragePos(pos));
                     if (hasLegacyRegion(pos)) {
-                        legacy.setResult(pos, (NbtCompound) null);
+                        legacy.store(pos, (CompoundTag) null);
                     }
                 }
             } catch (final RuntimeException | IOException failure) {
-                world.getServer().onChunkSaveFailure(failure, storageKey, pos);
+                world.getServer().reportChunkSaveFailure(failure, storageKey, pos);
             } finally {
-                pending.remove(pos.toLong(), nbt);
+                pending.remove(pos.pack(), nbt);
             }
         });
     }
@@ -258,19 +258,19 @@ public final class UnfinishedChunkStore {
      * @param pos chunk position
      * @param nbt the entry
      */
-    private void moveFromLegacy(final ChunkPos pos, final NbtCompound nbt) {
+    private void moveFromLegacy(final ChunkPos pos, final CompoundTag nbt) {
         io.execute(() -> {
-            if (pending.containsKey(pos.toLong())) {
+            if (pending.containsKey(pos.pack())) {
                 return;
             }
             try {
                 final CisChunkPos storagePos = FabricCisStorageHelper.toStoragePos(pos);
                 store.write(storagePos, toBytes(nbt));
-                legacy.setResult(pos, (NbtCompound) null);
+                legacy.store(pos, (CompoundTag) null);
             } catch (final IOException failure) {
                 // The legacy entry stays and is read again next time.
                 Chunkis.LOGGER.warn("Chunkis: Failed to move unfinished chunk {} of {} out of its .mca file", pos,
-                        world.getRegistryKey().getValue(), failure);
+                        world.dimension().identifier(), failure);
             }
         });
     }
@@ -281,18 +281,18 @@ public final class UnfinishedChunkStore {
      * @param pos chunk position
      * @return the entry, if stored
      */
-    private Optional<NbtCompound> readStored(final ChunkPos pos) {
+    private Optional<CompoundTag> readStored(final ChunkPos pos) {
         try {
             final byte[] bytes = store.read(FabricCisStorageHelper.toStoragePos(pos));
             if (bytes == null) {
                 return Optional.empty();
             }
             try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(bytes))) {
-                return Optional.of(NbtIo.readCompound(input, NbtSizeTracker.ofUnlimitedBytes()));
+                return Optional.of(NbtIo.read(input, NbtAccounter.unlimitedHeap()));
             }
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed to read unfinished chunk " + pos + " of "
-                    + world.getRegistryKey().getValue(), e);
+                    + world.dimension().identifier(), e);
         }
     }
 
@@ -303,7 +303,7 @@ public final class UnfinishedChunkStore {
      * @return {@code true} when one does
      */
     private boolean hasLegacyRegion(final ChunkPos pos) {
-        return legacyRegions.contains(ChunkPos.toLong(pos.getRegionX(), pos.getRegionZ()));
+        return legacyRegions.contains(ChunkPos.pack(pos.getRegionX(), pos.getRegionZ()));
     }
 
     /**
@@ -313,10 +313,10 @@ public final class UnfinishedChunkStore {
      * @return its uncompressed bytes
      * @throws IOException when it cannot be written
      */
-    private static byte[] toBytes(final NbtCompound nbt) throws IOException {
+    private static byte[] toBytes(final CompoundTag nbt) throws IOException {
         final ByteArrayOutputStream bytes = new ByteArrayOutputStream(4096);
         try (DataOutputStream output = new DataOutputStream(bytes)) {
-            NbtIo.writeCompound(nbt, output);
+            NbtIo.write(nbt, output);
         }
         return bytes.toByteArray();
     }
@@ -333,7 +333,7 @@ public final class UnfinishedChunkStore {
             for (final Path file : files) {
                 final String[] parts = file.getFileName().toString().split("\\.");
                 if (parts.length == 4 && Files.size(file) > 0) {
-                    regions.add(ChunkPos.toLong(Integer.parseInt(parts[1]), Integer.parseInt(parts[2])));
+                    regions.add(ChunkPos.pack(Integer.parseInt(parts[1]), Integer.parseInt(parts[2])));
                 }
             }
         } catch (final IOException | NumberFormatException e) {

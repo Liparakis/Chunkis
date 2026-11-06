@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.world.restoration.nbt;
 
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 
 /**
  * Reads boolean flags from the nested persisted Chunkis metadata envelope.
@@ -25,7 +25,7 @@ final class ChunkisMetadataFlags {
      * @param chunkMetadata chunk metadata NBT compound
      * @return Boolean value or null if not found
      */
-    static Boolean readSuppressInitialRepopulationFlag(final NbtCompound chunkMetadata) {
+    static Boolean readSuppressInitialRepopulationFlag(final CompoundTag chunkMetadata) {
         return readChunkisBooleanFlag(
                 chunkMetadata,
                 CisNbtUtil.SUPPRESS_INITIAL_REPOPULATION_KEY
@@ -38,7 +38,7 @@ final class ChunkisMetadataFlags {
      * @param chunkMetadata chunk metadata NBT compound
      * @return Boolean value or null if not found
      */
-    static Boolean readFullBlockBaselineFlag(final NbtCompound chunkMetadata) {
+    static Boolean readFullBlockBaselineFlag(final CompoundTag chunkMetadata) {
         return readChunkisBooleanFlag(
                 chunkMetadata,
                 CisNbtUtil.FULL_BLOCK_BASELINE_KEY
@@ -51,7 +51,7 @@ final class ChunkisMetadataFlags {
      * @param chunkMetadata chunk metadata NBT compound
      * @return Boolean value or null if not found
      */
-    static Boolean readPortalChunkFlag(final NbtCompound chunkMetadata) {
+    static Boolean readPortalChunkFlag(final CompoundTag chunkMetadata) {
         return readChunkisBooleanFlag(
                 chunkMetadata,
                 CisNbtUtil.PORTAL_CHUNK_KEY
@@ -66,10 +66,10 @@ final class ChunkisMetadataFlags {
      * @return Boolean value or null if not found
      */
     private static Boolean readChunkisBooleanFlag(
-            final NbtCompound chunkMetadata,
+            final CompoundTag chunkMetadata,
             final String key
     ) {
-        final NbtCompound chunkisMetadata =
+        final CompoundTag chunkisMetadata =
                 CisNbtUtil.getCompoundOrNull(chunkMetadata, CisNbtUtil.CHUNKIS_METADATA_KEY);
 
         if (chunkisMetadata == null || !chunkisMetadata.contains(key)) {

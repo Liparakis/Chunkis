@@ -17,12 +17,12 @@ import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
 import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
 import java.util.List;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * Decides whether a delta may be persisted, recovering or rejecting sparse deltas
@@ -43,14 +43,14 @@ final class SaveDeltaGuard {
     /**
      * World whose deltas this guard checks.
      */
-    private final ServerWorld world;
+    private final ServerLevel world;
 
     /**
      * Creates a guard for {@code world}.
      *
      * @param world owning world
      */
-    SaveDeltaGuard(final ServerWorld world) {
+    SaveDeltaGuard(final ServerLevel world) {
         this.world = world;
     }
 
@@ -67,16 +67,16 @@ final class SaveDeltaGuard {
      * @return delta ready for persistence preparation, or {@code null} if queueing
      *         should stop
      */
-    ChunkDelta<BlockState, NbtCompound> prepareDeltaForQueueing(
+    ChunkDelta<BlockState, CompoundTag> prepareDeltaForQueueing(
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId
     ) {
         if (delta == null || !delta.isDirty()) {
             if (delta != null) {
                 PayloadWatchTracer.traceDeltaStage(
-                        world.getRegistryKey()
-                                .getValue()
+                        world.dimension()
+                                .identifier()
                                 .toString(),
                         pos,
                         delta,
@@ -92,8 +92,8 @@ final class SaveDeltaGuard {
         }
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     pos,
                     delta,
@@ -119,7 +119,7 @@ final class SaveDeltaGuard {
                     null
             );
             ChunkOwnershipTraceHelper.traceDecision(
-                    world.getRegistryKey(),
+                    world.dimension(),
                     pos,
                     "BYPASSED",
                     ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
@@ -131,7 +131,7 @@ final class SaveDeltaGuard {
         }
 
         ChunkOwnershipTraceHelper.traceDecision(
-                world.getRegistryKey(),
+                world.dimension(),
                 pos,
                 "CLAIMED",
                 ChunkTraceReason.valueOf(delta.getOwnershipReason()),
@@ -171,17 +171,17 @@ final class SaveDeltaGuard {
      * @param operationId trace correlation ID
      * @return prepared delta, or {@code null} if persistence should stop
      */
-    ChunkDelta<BlockState, NbtCompound> prepareDeltaForPersistence(
+    ChunkDelta<BlockState, CompoundTag> prepareDeltaForPersistence(
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String path,
             final String caller,
             final String operationId,
-            final Chunk chunk
+            final ChunkAccess chunk
     ) {
         // A released block payload is written with its blocks from copied containers or from the stored entry
         // (DeferredBlocksSnapshotView, StoredBlocksSnapshotView), never from the delta's instructions alone.
-        final ChunkDelta<BlockState, NbtCompound> recoveredDelta = recoverSparseDeltaOnSaveGuard(
+        final ChunkDelta<BlockState, CompoundTag> recoveredDelta = recoverSparseDeltaOnSaveGuard(
                 pos,
                 delta,
                 caller,
@@ -202,21 +202,21 @@ final class SaveDeltaGuard {
      * @param operationId active load/save operation ID
      * @return recovered block delta
      */
-    private ChunkDelta<BlockState, NbtCompound> recoverSparseDeltaOnSaveGuard(
+    private ChunkDelta<BlockState, CompoundTag> recoverSparseDeltaOnSaveGuard(
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String caller,
             final String operationId,
-            final Chunk chunk
+            final ChunkAccess chunk
     ) {
         traceBaseMetadataBeforeSaveGuard(pos, delta, caller, operationId);
         if (!DeltaPersistenceGuard.shouldRejectSparseDeltaWithoutBase(delta, true)) {
             return delta;
         }
 
-        final WorldChunk lookedUpChunk = LoadedChunks.getIfAccessible(world, pos.x, pos.z);
-        final WorldChunk liveChunk = chooseLiveChunkForBaseRecovery(chunk, lookedUpChunk);
-        final ChunkDelta<BlockState, NbtCompound> liveDelta = liveChunk != null
+        final LevelChunk lookedUpChunk = LoadedChunks.getIfAccessible(world, pos.x(), pos.z());
+        final LevelChunk liveChunk = chooseLiveChunkForBaseRecovery(chunk, lookedUpChunk);
+        final ChunkDelta<BlockState, CompoundTag> liveDelta = liveChunk != null
                 ? getChunkDelta(liveChunk)
                 : null;
 
@@ -243,7 +243,7 @@ final class SaveDeltaGuard {
             return delta;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> recoveredDelta = liveDelta != null ? liveDelta : delta;
+        final ChunkDelta<BlockState, CompoundTag> recoveredDelta = liveDelta != null ? liveDelta : delta;
         BaseChunkCaptureUtil.captureBaseChunk(world, liveChunk, recoveredDelta);
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -272,11 +272,11 @@ final class SaveDeltaGuard {
      */
     private void traceBaseMetadataBeforeSaveGuard(
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String caller,
             final String operationId
     ) {
-        final NbtCompound metadata = delta.getChunkMetadata();
+        final CompoundTag metadata = delta.getChunkMetadata();
         final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
         final boolean shouldUseBase = CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
         final boolean fullBaseline = CisNbtUtil.hasFullBlockBaseline(metadata);
@@ -296,7 +296,7 @@ final class SaveDeltaGuard {
                         + ", hasPersistedBaseChunk=" + hasBase
                         + ", shouldUsePersistedBaseChunk=" + shouldUseBase
                         + ", fullBlockBaseline=" + fullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : List.of())
+                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : List.of())
                         + ", baseChunkPayloadBytes=" + baseChunkPayload.length,
                 worldId(),
                 debugChunkKey(pos),
@@ -315,7 +315,7 @@ final class SaveDeltaGuard {
                         + ", hasPersistedBaseChunk=" + hasBase
                         + ", shouldUsePersistedBaseChunk=" + shouldUseBase
                         + ", fullBlockBaseline=" + fullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : List.of())
+                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : List.of())
                         + ", baseChunkPayloadBytes=" + baseChunkPayload.length
         );
     }
@@ -390,33 +390,33 @@ final class SaveDeltaGuard {
      * Returns the delta attached to {@code chunk}, or {@code null}.
      */
     @SuppressWarnings("unchecked")
-    private static ChunkDelta<BlockState, NbtCompound> getChunkDelta(final Chunk chunk) {
+    private static ChunkDelta<BlockState, CompoundTag> getChunkDelta(final ChunkAccess chunk) {
         return chunk instanceof ChunkisDeltaDuck duck
-                ? (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta()
+                ? (ChunkDelta<BlockState, CompoundTag>) duck.chunkis$getDelta()
                 : null;
     }
 
     /**
      * Returns the live chunk to use for base recovery: {@code chunk} when it is a
-     * {@link WorldChunk}, otherwise the looked-up fallback.
+     * {@link LevelChunk}, otherwise the looked-up fallback.
      */
-    private static WorldChunk chooseLiveChunkForBaseRecovery(final Chunk chunk, final WorldChunk lookedUpChunk) {
-        return chunk instanceof WorldChunk ? (WorldChunk) chunk : lookedUpChunk;
+    private static LevelChunk chooseLiveChunkForBaseRecovery(final ChunkAccess chunk, final LevelChunk lookedUpChunk) {
+        return chunk instanceof LevelChunk ? (LevelChunk) chunk : lookedUpChunk;
     }
 
     /**
      * Returns the trace key for {@code pos}.
      */
     private static DebugChunkKey debugChunkKey(final ChunkPos pos) {
-        return new DebugChunkKey(pos.x, pos.z);
+        return new DebugChunkKey(pos.x(), pos.z());
     }
 
     /**
      * Returns the world registry id string used in traces.
      */
     private String worldId() {
-        return world.getRegistryKey()
-                .getValue()
+        return world.dimension()
+                .identifier()
                 .toString();
     }
 }

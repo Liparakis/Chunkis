@@ -1,6 +1,6 @@
 package io.liparakis.chunkis.gametest.stress;
 
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * A running stress scenario, as the shared tick and chunk hooks of {@link StressBenchGameTest} see it.
@@ -19,14 +19,14 @@ interface StressRun {
      *
      * @param loaded the chunk
      */
-    void onChunkLoad(WorldChunk loaded);
+    void onChunkLoad(LevelChunk loaded);
 
     /**
      * Called when a chunk unloads.
      *
      * @param unloaded the chunk
      */
-    void onChunkUnload(WorldChunk unloaded);
+    void onChunkUnload(LevelChunk unloaded);
 
     /**
      * Advances the scenario by one server tick.

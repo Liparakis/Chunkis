@@ -10,11 +10,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtHelper;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Compares two chunk deltas block by block, block entity by block entity, and by
@@ -40,8 +40,8 @@ final class ChunkDeltaComparison {
      * @param actual   persisted CIS snapshot
      * @return comparison summary
      */
-    static ComparisonSummary compareDeltas(final ChunkDelta<BlockState, NbtCompound> expected,
-            final ChunkDelta<BlockState, NbtCompound> actual) {
+    static ComparisonSummary compareDeltas(final ChunkDelta<BlockState, CompoundTag> expected,
+            final ChunkDelta<BlockState, CompoundTag> actual) {
         final List<String> realBlockSamples = new ArrayList<>();
         final List<String> explicitAirOnlySamples = new ArrayList<>();
         final List<String> blockEntitySamples = new ArrayList<>();
@@ -78,7 +78,7 @@ final class ChunkDeltaComparison {
      * @param delta source delta
      * @return local position to state map
      */
-    private static Map<Long, BlockState> materializeBlocks(final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static Map<Long, BlockState> materializeBlocks(final ChunkDelta<BlockState, CompoundTag> delta) {
         final Map<Long, BlockState> blocks = new java.util.HashMap<>();
         delta.forEachBlockInstruction((x, y, z, paletteId, state) -> blocks.put(BlockPos.asLong(x, y, z), state));
         return blocks;
@@ -163,8 +163,8 @@ final class ChunkDeltaComparison {
      * @param samples  sample output collector
      * @return total mismatch count
      */
-    private static int countBlockEntityMismatches(final java.util.Map<Long, NbtCompound> expected,
-            final java.util.Map<Long, NbtCompound> actual,
+    private static int countBlockEntityMismatches(final java.util.Map<Long, CompoundTag> expected,
+            final java.util.Map<Long, CompoundTag> actual,
             final List<String> samples) {
         final java.util.Set<Long> keys = new java.util.HashSet<>();
         keys.addAll(expected.keySet());
@@ -172,9 +172,9 @@ final class ChunkDeltaComparison {
 
         int mismatches = 0;
         for (final long key : keys) {
-            final NbtCompound expectedNbt = expected.get(key);
-            final NbtCompound actualNbt = actual.get(key);
-            if (NbtHelper.matches(expectedNbt, actualNbt, true)) {
+            final CompoundTag expectedNbt = expected.get(key);
+            final CompoundTag actualNbt = actual.get(key);
+            if (NbtUtils.compareNbt(expectedNbt, actualNbt, true)) {
                 continue;
             }
 
@@ -194,14 +194,14 @@ final class ChunkDeltaComparison {
      * vanilla base NBT rather than in the sparse delta map. For inspection we need the
      * effective persisted view, not just the sparse overlay.</p>
      */
-    private static java.util.Map<Long, NbtCompound> materializeBlockEntities(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta) {
-        final java.util.Map<Long, NbtCompound> blockEntities = new java.util.HashMap<>();
+    private static java.util.Map<Long, CompoundTag> materializeBlockEntities(final io.liparakis.chunkis.core.ChunkDelta<BlockState, CompoundTag> delta) {
+        final java.util.Map<Long, CompoundTag> blockEntities = new java.util.HashMap<>();
         if (delta == null) {
             return blockEntities;
         }
 
-        final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(delta.getChunkMetadata());
-        for (final NbtCompound blockEntityNbt : extractBlockEntityPayloads(baseChunkNbt)) {
+        final CompoundTag baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(delta.getChunkMetadata());
+        for (final CompoundTag blockEntityNbt : extractBlockEntityPayloads(baseChunkNbt)) {
             final Integer x = readIntOrNull(blockEntityNbt, "x");
             final Integer y = readIntOrNull(blockEntityNbt, "y");
             final Integer z = readIntOrNull(blockEntityNbt, "z");
@@ -217,15 +217,15 @@ final class ChunkDeltaComparison {
     /**
      * Extracts block-entity payload compounds from modern or legacy chunk roots.
      */
-    private static List<NbtCompound> extractBlockEntityPayloads(final NbtCompound root) {
-        final List<NbtCompound> payloads = CisNbtUtil.extractCompoundList(chunkPayloadRoot(root), "block_entities");
+    private static List<CompoundTag> extractBlockEntityPayloads(final CompoundTag root) {
+        final List<CompoundTag> payloads = CisNbtUtil.extractCompoundList(chunkPayloadRoot(root), "block_entities");
         return payloads.isEmpty() ? CisNbtUtil.extractCompoundList(chunkPayloadRoot(root), "TileEntities") : payloads;
     }
 
     /**
      * Returns the nested legacy {@code Level} payload root when present.
      */
-    private static NbtCompound chunkPayloadRoot(final NbtCompound root) {
+    private static CompoundTag chunkPayloadRoot(final CompoundTag root) {
         if (root == null) {
             return null;
         }
@@ -241,8 +241,8 @@ final class ChunkDeltaComparison {
      * @param samples  mismatch sample collector
      * @return {@code true} when entity payloads match
      */
-    private static boolean compareEntityPayloads(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> expected,
-            final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> actual,
+    private static boolean compareEntityPayloads(final io.liparakis.chunkis.core.ChunkDelta<BlockState, CompoundTag> expected,
+            final io.liparakis.chunkis.core.ChunkDelta<BlockState, CompoundTag> actual,
             final List<String> samples) {
         final List<String> expectedEntities = materializeEntities(expected);
         final List<String> actualEntities = materializeEntities(actual);
@@ -259,7 +259,7 @@ final class ChunkDeltaComparison {
     /**
      * Performs read int or null.
      */
-    private static Integer readIntOrNull(final NbtCompound root, final String key) {
+    private static Integer readIntOrNull(final CompoundTag root, final String key) {
         return root == null ? null : root.getInt(key)
                 .orElse(null);
     }
@@ -279,7 +279,7 @@ final class ChunkDeltaComparison {
      * @param delta source delta
      * @return sorted entity payload list
      */
-    private static List<String> materializeEntities(final io.liparakis.chunkis.core.ChunkDelta<BlockState, NbtCompound> delta) {
+    private static List<String> materializeEntities(final io.liparakis.chunkis.core.ChunkDelta<BlockState, CompoundTag> delta) {
         final List<String> entities = new ArrayList<>();
         delta.forEachEntity(entity -> entities.add(entity == null ? "<null>" : entity.toString()));
         Collections.sort(entities);
@@ -294,7 +294,7 @@ final class ChunkDeltaComparison {
      * @param actual   actual metadata
      * @return {@code true} when the relevant metadata matches
      */
-    private static boolean compareMetadata(final NbtCompound expected, final NbtCompound actual) {
+    private static boolean compareMetadata(final CompoundTag expected, final CompoundTag actual) {
         if (expected == null || actual == null) {
             return expected == actual;
         }
@@ -304,9 +304,9 @@ final class ChunkDeltaComparison {
                 && CisNbtUtil.hasPersistedBaseChunkNbt(expected) == CisNbtUtil.hasPersistedBaseChunkNbt(actual)
                 && CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(expected)
                 == CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(actual)
-                && NbtHelper.matches(CisNbtUtil.extractStructureData(expected),
+                && NbtUtils.compareNbt(CisNbtUtil.extractStructureData(expected),
                 CisNbtUtil.extractStructureData(actual),
-                true) && NbtHelper.matches(CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected),
+                true) && NbtUtils.compareNbt(CisNbtUtil.extractPreservedAuxiliaryChunkNbt(expected),
                 CisNbtUtil.extractPreservedAuxiliaryChunkNbt(actual),
                 true);
     }
@@ -332,7 +332,7 @@ final class ChunkDeltaComparison {
         if (state == null) {
             return "<air>";
         }
-        return Registries.BLOCK.getId(state.getBlock()) + state.getEntries()
+        return BuiltInRegistries.BLOCK.getKey(state.getBlock()) + state.getValues()
                 .toString();
     }
 
@@ -342,11 +342,11 @@ final class ChunkDeltaComparison {
      * @param nbt block-entity payload, may be null
      * @return compact payload summary
      */
-    private static String describeBlockEntity(final NbtCompound nbt) {
+    private static String describeBlockEntity(final CompoundTag nbt) {
         if (nbt == null) {
             return "<none>";
         }
-        return nbt.getString("id", "<missing>") + nbt.getKeys();
+        return nbt.getStringOr("id", "<missing>") + nbt.keySet();
     }
 
 

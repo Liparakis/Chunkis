@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -22,9 +22,9 @@ class ChunkMutationTrackingScopeTest {
      */
     @Test
     void prefersBaseApplyDuringAnchoredLoad() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.setChunkMetadata(CisNbtUtil.createChunkMetadataTakingOwnership(
-                new NbtCompound(),
+                new CompoundTag(),
                 false,
                 true,
                 null,

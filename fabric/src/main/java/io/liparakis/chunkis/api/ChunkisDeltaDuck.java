@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.api;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 
 /**
  * Duck-typed attachment point for Chunkis per-chunk runtime state.
@@ -62,7 +62,7 @@ public interface ChunkisDeltaDuck {
      *
      * @return pending base NBT, or {@code null}
      */
-    default NbtCompound chunkis$getPendingBaseChunkNbt() {
+    default CompoundTag chunkis$getPendingBaseChunkNbt() {
         return null;
     }
 
@@ -71,7 +71,7 @@ public interface ChunkisDeltaDuck {
      *
      * @param nbt pending base NBT, or {@code null}
      */
-    default void chunkis$setPendingBaseChunkNbt(final NbtCompound nbt) {
+    default void chunkis$setPendingBaseChunkNbt(final CompoundTag nbt) {
     }
 
 }

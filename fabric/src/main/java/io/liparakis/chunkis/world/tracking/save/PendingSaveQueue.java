@@ -115,7 +115,7 @@ final class PendingSaveQueue {
             final Map<DebugChunkKey, AsyncCisSaveManager.PendingSaveSnapshot> snapshots =
                     new LinkedHashMap<>(pending.size());
             for (final AsyncCisSaveWorker.PendingSave save : pending.values()) {
-                final DebugChunkKey chunkKey = new DebugChunkKey(save.pos().x, save.pos().z);
+                final DebugChunkKey chunkKey = new DebugChunkKey(save.pos().x(), save.pos().z());
                 snapshots.put(chunkKey, new AsyncCisSaveManager.PendingSaveSnapshot(
                         chunkKey,
                         save.operationId(),

@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -24,9 +24,9 @@ class CisNbtUtilTest {
      *
      * @return root compound with {@link CisNbtUtil#HAS_DELTA_KEY} set to {@code true}
      */
-    private static NbtCompound buildRootWithDeltaMarker() {
-        final NbtCompound root = new NbtCompound();
-        final NbtCompound chunkisData = new NbtCompound();
+    private static CompoundTag buildRootWithDeltaMarker() {
+        final CompoundTag root = new CompoundTag();
+        final CompoundTag chunkisData = new CompoundTag();
         chunkisData.putBoolean(CisNbtUtil.HAS_DELTA_KEY, true);
         root.put(CisNbtUtil.CHUNKIS_DATA_KEY, chunkisData);
         return root;
@@ -38,13 +38,13 @@ class CisNbtUtilTest {
      */
     @Test
     void extractsLegacyStructureOnlyMetadata() {
-        final NbtCompound structures = new NbtCompound();
-        structures.put(CisNbtUtil.STRUCTURE_REFERENCES_KEY, new NbtCompound());
+        final CompoundTag structures = new CompoundTag();
+        structures.put(CisNbtUtil.STRUCTURE_REFERENCES_KEY, new CompoundTag());
         structures.getCompound(CisNbtUtil.STRUCTURE_REFERENCES_KEY)
                 .orElseThrow()
                 .putLongArray("minecraft:village", new long[]{1L});
 
-        final NbtCompound extracted = CisNbtUtil.extractPersistedStructureMetadata(structures);
+        final CompoundTag extracted = CisNbtUtil.extractPersistedStructureMetadata(structures);
 
         assertNotNull(extracted);
         assertEquals(structures, extracted);
@@ -64,14 +64,14 @@ class CisNbtUtilTest {
      */
     @Test
     void roundTripsEnvelopeMetadataWithSuppressionFlag() {
-        final NbtCompound structures = new NbtCompound();
-        structures.put(CisNbtUtil.STRUCTURE_STARTS_KEY, new NbtCompound());
+        final CompoundTag structures = new CompoundTag();
+        structures.put(CisNbtUtil.STRUCTURE_STARTS_KEY, new CompoundTag());
         structures.getCompound(CisNbtUtil.STRUCTURE_STARTS_KEY)
                 .orElseThrow()
                 .putString("minecraft:village", "start");
 
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadata(structures, true);
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
+        final CompoundTag metadata = CisNbtUtil.createChunkMetadata(structures, true);
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>("air"::equals);
         delta.setChunkMetadata(metadata, false);
 
         assertEquals(structures, CisNbtUtil.extractPersistedStructureMetadata(metadata));
@@ -84,9 +84,9 @@ class CisNbtUtilTest {
      */
     @Test
     void defaultsLegacyChunksWithDeltaMarkerToSuppression() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>("air"::equals);
         delta.addBlockChange(0, 64, 0, "stone", false);
-        delta.setChunkMetadata(new NbtCompound(), false);
+        delta.setChunkMetadata(new CompoundTag(), false);
 
         assertTrue(CisNbtUtil.shouldSuppressInitialRepopulation(buildRootWithDeltaMarker(), delta));
     }
@@ -97,7 +97,7 @@ class CisNbtUtilTest {
      */
     @Test
     void explicitFalseFlagIsHonored() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>("air"::equals);
         delta.addBlockChange(0, 64, 0, "stone", false);
         delta.setChunkMetadata(CisNbtUtil.createChunkMetadata(null, false), false);
 
@@ -109,7 +109,7 @@ class CisNbtUtilTest {
      */
     @Test
     void returnsFalseWhenNoDeltaExists() {
-        assertFalse(CisNbtUtil.shouldSuppressInitialRepopulation(new NbtCompound(), null));
+        assertFalse(CisNbtUtil.shouldSuppressInitialRepopulation(new CompoundTag(), null));
     }
 
     /**
@@ -120,15 +120,15 @@ class CisNbtUtilTest {
      */
     @Test
     void buildLoadChunkNbtUsesPersistedBaseChunkBaselineWhenPresent() throws Exception {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
-        final NbtCompound baseChunk = new NbtCompound();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>("air"::equals);
+        final CompoundTag baseChunk = new CompoundTag();
         baseChunk.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
         baseChunk.putInt(CisNbtUtil.X_POS_KEY, 3);
         baseChunk.putInt(CisNbtUtil.Z_POS_KEY, 7);
 
-        final NbtCompound entity = new NbtCompound();
+        final CompoundTag entity = new CompoundTag();
         entity.putString("id", "minecraft:pig");
-        final NbtList baseEntities = new NbtList();
+        final ListTag baseEntities = new ListTag();
         baseEntities.add(entity.copy());
         baseChunk.put("entities", baseEntities);
         delta.setEntities(java.util.List.of(entity), false);
@@ -147,7 +147,7 @@ class CisNbtUtilTest {
         assertFalse(delta.getChunkMetadata()
                 .contains(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY));
 
-        final NbtCompound packedMetadata = CisMetadataCodec.packPersistedBaseChunkPayload(delta.getChunkMetadata());
+        final CompoundTag packedMetadata = CisMetadataCodec.packPersistedBaseChunkPayload(delta.getChunkMetadata());
         assertTrue(packedMetadata.getByteArray(CisNbtUtil.BASE_CHUNK_PAYLOAD_KEY)
                 .orElseThrow().length > 0);
         assertFalse(packedMetadata.contains(CisNbtUtil.BASE_CHUNK_NBT_KEY));
@@ -180,8 +180,8 @@ class CisNbtUtilTest {
      */
     @Test
     void buildLoadChunkNbtSkipsPersistedBaseForAuthoritativeFullBaseline() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
-        final NbtCompound baseChunk = new NbtCompound();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>("air"::equals);
+        final CompoundTag baseChunk = new CompoundTag();
         baseChunk.putString("sentinel_block_from_stale_base", "minecraft:spruce_log");
 
         delta.addBlockChange(0, 64, 0, "oak_planks", false);
@@ -215,17 +215,17 @@ class CisNbtUtilTest {
      */
     @Test
     void extractPreservedAuxiliaryChunkNbtRemovesRuntimeOwnedFields() {
-        final NbtCompound source = new NbtCompound();
+        final CompoundTag source = new CompoundTag();
         source.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
-        source.put(CisNbtUtil.STRUCTURES_KEY, new NbtCompound());
-        source.put(CisNbtUtil.HEIGHTMAPS_KEY, new NbtCompound());
+        source.put(CisNbtUtil.STRUCTURES_KEY, new CompoundTag());
+        source.put(CisNbtUtil.HEIGHTMAPS_KEY, new CompoundTag());
         source.putBoolean(CisNbtUtil.IS_LIGHT_ON_KEY, true);
-        source.put("sections", new NbtList());
-        source.put("entities", new NbtList());
-        source.put("block_entities", new NbtList());
+        source.put("sections", new ListTag());
+        source.put("entities", new ListTag());
+        source.put("block_entities", new ListTag());
         source.putString("PostProcessing", "keep-me");
 
-        final NbtCompound preserved = CisNbtUtil.extractPreservedAuxiliaryChunkNbtFromChunkRoot(source);
+        final CompoundTag preserved = CisNbtUtil.extractPreservedAuxiliaryChunkNbtFromChunkRoot(source);
 
         assertNotNull(preserved);
         assertEquals("minecraft:full",
@@ -248,14 +248,14 @@ class CisNbtUtilTest {
      */
     @Test
     void buildLoadChunkNbtMergesPreservedAuxiliaryMetadataForMigratedChunks() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>("air"::equals);
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>("air"::equals);
         delta.addBlockChange(0, 64, 0, "stone", false);
 
-        final NbtCompound auxiliary = new NbtCompound();
+        final CompoundTag auxiliary = new CompoundTag();
         auxiliary.putString(CisNbtUtil.STATUS_KEY, "minecraft:full");
         auxiliary.putString("PostProcessing", "kept");
 
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+        final CompoundTag metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 null,
                 true,
                 true,
@@ -293,17 +293,17 @@ class CisNbtUtilTest {
      */
     @Test
     void preserveCarriedMetadataKeepsUnknownKeysAndRebuiltValues() {
-        final NbtCompound previous = CisNbtUtil.createChunkMetadata(null, true);
+        final CompoundTag previous = CisNbtUtil.createChunkMetadata(null, true);
         CisNbtUtil.markMigratedAuthoritativeChunk(previous);
         previous.putString("future_root_key", "kept");
         previous.getCompound(CisNbtUtil.CHUNKIS_METADATA_KEY)
                 .orElseThrow()
                 .putInt("future_flag", 7);
-        final NbtCompound oldBase = new NbtCompound();
+        final CompoundTag oldBase = new CompoundTag();
         oldBase.putString("marker", "old-base");
         previous.put(CisNbtUtil.BASE_CHUNK_NBT_KEY, oldBase);
 
-        final NbtCompound rebuilt = CisNbtUtil.createChunkMetadata(null, false);
+        final CompoundTag rebuilt = CisNbtUtil.createChunkMetadata(null, false);
         CisNbtUtil.preserveCarriedMetadata(previous, rebuilt);
 
         assertEquals("kept", rebuilt.getString("future_root_key")
@@ -328,15 +328,15 @@ class CisNbtUtilTest {
      */
     @Test
     void snapshotCopySharesOnlyEntriesReplacedWhole() {
-        final NbtCompound metadata = new NbtCompound();
-        metadata.put(CisNbtUtil.STORED_SECTIONS_KEY, new NbtList());
-        metadata.put(CisNbtUtil.STORED_HEIGHTMAPS_KEY, new NbtCompound());
-        metadata.put(CisNbtUtil.PENDING_TICKS_KEY, new NbtCompound());
-        final NbtCompound flags = new NbtCompound();
+        final CompoundTag metadata = new CompoundTag();
+        metadata.put(CisNbtUtil.STORED_SECTIONS_KEY, new ListTag());
+        metadata.put(CisNbtUtil.STORED_HEIGHTMAPS_KEY, new CompoundTag());
+        metadata.put(CisNbtUtil.PENDING_TICKS_KEY, new CompoundTag());
+        final CompoundTag flags = new CompoundTag();
         flags.putBoolean(CisNbtUtil.FULL_BLOCK_BASELINE_KEY, true);
         metadata.put(CisNbtUtil.CHUNKIS_METADATA_KEY, flags);
 
-        final NbtCompound copy = CisNbtUtil.copySharingCapturedState(metadata);
+        final CompoundTag copy = CisNbtUtil.copySharingCapturedState(metadata);
 
         assertTrue(copy != metadata);
         assertTrue(copy.get(CisNbtUtil.STORED_SECTIONS_KEY) == metadata.get(CisNbtUtil.STORED_SECTIONS_KEY));

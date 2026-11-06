@@ -12,14 +12,14 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import java.util.List;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.s2c.play.ChunkDataS2CPacket;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ChunkHolder;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -33,7 +33,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>
  * Injected at {@code HEAD} of {@code ChunkHolder#sendPacketToPlayers}. When a
- * {@link ChunkDataS2CPacket} is detected, pending restored entities are replayed
+ * {@link ClientboundLevelChunkWithLightPacket} is detected, pending restored entities are replayed
  * before the packet is sent.
  *
  * @see ChunkHolder
@@ -42,23 +42,23 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ChunkHolderMixin {
 
     /**
-     * Returns true if the given packet is a {@link ChunkDataS2CPacket}.
+     * Returns true if the given packet is a {@link ClientboundLevelChunkWithLightPacket}.
      *
      * @param packet the packet to test
      * @return true if this is a full chunk data packet
      */
     @Unique
     private static boolean isChunkDataPacket(final Packet<?> packet) {
-        return packet instanceof ChunkDataS2CPacket;
+        return packet instanceof ClientboundLevelChunkWithLightPacket;
     }
 
     /**
-     * Shadow of {@link ChunkHolder#getWorldChunk()}.
+     * Shadow of {@link ChunkHolder#getTickingChunk()}.
      *
      * @return the loaded world chunk, or null if not yet fully loaded
      */
     @Shadow
-    public abstract WorldChunk getWorldChunk();
+    public abstract LevelChunk getTickingChunk();
 
     /**
      * Intercepts full-chunk packet sends to replay pending restored entities.
@@ -74,9 +74,9 @@ public abstract class ChunkHolderMixin {
      * @param packet  the packet being dispatched
      * @param ci      mixin callback (not cancelled)
      */
-    @Inject(method = "sendPacketToPlayers", at = @At("HEAD"))
+    @Inject(method = "broadcast", at = @At("HEAD"))
     private void chunkis$onSendPacketToPlayers(
-            final List<ServerPlayerEntity> players,
+            final List<ServerPlayer> players,
             final Packet<?> packet,
             final CallbackInfo ci) {
 
@@ -84,15 +84,15 @@ public abstract class ChunkHolderMixin {
             return;
         }
 
-        final WorldChunk chunk = this.getWorldChunk();
+        final LevelChunk chunk = this.getTickingChunk();
         if (chunk == null) {
             return;
         }
         if (chunk instanceof ChunkisDeltaDuck deltaDuck
-                && chunk.getWorld() instanceof ServerWorld serverWorld
+                && chunk.getLevel() instanceof ServerLevel serverWorld
                 && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
-            @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> delta =
-                    (ChunkDelta<BlockState, NbtCompound>) rawDelta;
+            @SuppressWarnings("unchecked") final ChunkDelta<BlockState, CompoundTag> delta =
+                    (ChunkDelta<BlockState, CompoundTag>) rawDelta;
             ChunkRestorer.replayPendingEntitiesIfNeeded(
                     serverWorld,
                     chunk,
@@ -108,11 +108,11 @@ public abstract class ChunkHolderMixin {
                 "ChunkHolderMixin#chunkis$onSendPacketToPlayers",
                 "sending vanilla chunk packet summary: players=" + players.size()
                         + ", " + ChunkSectionDebugUtil.summarize(chunk),
-                chunk.getWorld()
-                        .getRegistryKey()
-                        .getValue()
+                chunk.getLevel()
+                        .dimension()
+                        .identifier()
                         .toString(),
-                new DebugChunkKey(chunk.getPos().x, chunk.getPos().z),
+                new DebugChunkKey(chunk.getPos().x(), chunk.getPos().z()),
                 null,
                 null,
                 null,
@@ -126,11 +126,11 @@ public abstract class ChunkHolderMixin {
                 null,
                 null
         );
-        if (chunk.getWorld() instanceof ServerWorld serverWorld
+        if (chunk.getLevel() instanceof ServerLevel serverWorld
                 && chunk instanceof ChunkisDeltaDuck deltaDuck
                 && deltaDuck.chunkis$getDelta() instanceof ChunkDelta<?, ?> rawDelta) {
-            @SuppressWarnings("unchecked") final ChunkDelta<BlockState, NbtCompound> delta =
-                    (ChunkDelta<BlockState, NbtCompound>) rawDelta;
+            @SuppressWarnings("unchecked") final ChunkDelta<BlockState, CompoundTag> delta =
+                    (ChunkDelta<BlockState, CompoundTag>) rawDelta;
             PayloadWatchTracer.traceEntityPresenceAfterChunkFull(
                     serverWorld,
                     chunk,

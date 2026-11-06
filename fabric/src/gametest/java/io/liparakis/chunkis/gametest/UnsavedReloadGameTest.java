@@ -7,15 +7,15 @@ import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * Verifies that an edit survives a reload that happens before the chunk's unload save reaches disk: the
@@ -30,13 +30,13 @@ public final class UnsavedReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 300)
-    public void editSurvivesReloadBeforeUnloadSaveLands(final TestContext context) {
-        final ServerWorld world = context.getWorld();
-        final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-        final ChunkPos target = new ChunkPos(anchor.x + 1400, anchor.z + 1400);
-        world.setChunkForced(target.x, target.z, true);
-        final int y = world.getChunk(target.x, target.z).sampleHeightmap(Heightmap.Type.WORLD_SURFACE, 5, 5) + 2;
-        final BlockPos marker = target.getBlockPos(5, y, 5);
+    public void editSurvivesReloadBeforeUnloadSaveLands(final GameTestHelper context) {
+        final ServerLevel world = context.getLevel();
+        final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+        final ChunkPos target = new ChunkPos(anchor.x() + 1400, anchor.z() + 1400);
+        world.setChunkForced(target.x(), target.z(), true);
+        final int y = world.getChunk(target.x(), target.z()).getHeight(Heightmap.Types.WORLD_SURFACE, 5, 5) + 2;
+        final BlockPos marker = target.getBlockAt(5, y, 5);
         final AtomicBoolean unloaded = new AtomicBoolean();
         ServerChunkEvents.CHUNK_UNLOAD.register((unloadWorld, unloadChunk) -> {
             if (unloadWorld == world && unloadChunk.getPos().equals(target)) {
@@ -44,27 +44,27 @@ public final class UnsavedReloadGameTest {
             }
         });
 
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
-                    world.setBlockState(marker, Blocks.EMERALD_BLOCK.getDefaultState());
-                    world.setChunkForced(target.x, target.z, false);
+        context.startSequence()
+                .thenWaitUntil(() -> {
+                    world.setBlockAndUpdate(marker, Blocks.EMERALD_BLOCK.defaultBlockState());
+                    world.setChunkForced(target.x(), target.z(), false);
                 })
-                .createAndAdd(() -> context.assertTrue(unloaded.get(),
-                        Text.literal("Waiting for chunk " + target + " to unload.")))
-                .createAndAdd(() -> {
-                    world.setChunkForced(target.x, target.z, true);
-                    world.getChunk(target.x, target.z);
+                .thenWaitUntil(() -> context.assertTrue(unloaded.get(),
+                        Component.literal("Waiting for chunk " + target + " to unload.")))
+                .thenWaitUntil(() -> {
+                    world.setChunkForced(target.x(), target.z(), true);
+                    world.getChunk(target.x(), target.z());
                 })
-                .createAndAdd(() -> {
-                    context.assertTrue(world.getBlockState(marker).isOf(Blocks.EMERALD_BLOCK),
-                            Text.literal("Reloaded chunk lost the edit at " + marker + "."));
-                    world.getChunkManager().save(false);
+                .thenWaitUntil(() -> {
+                    context.assertTrue(world.getBlockState(marker).is(Blocks.EMERALD_BLOCK),
+                            Component.literal("Reloaded chunk lost the edit at " + marker + "."));
+                    world.getChunkSource().save(false);
                     AsyncCisSaveManager.flushAndClose(world);
-                    context.assertTrue(storedBlockIs(world, target, marker, Blocks.EMERALD_BLOCK.getDefaultState()),
-                            Text.literal("Storage does not hold the edit at " + marker + " after a normal save."));
+                    context.assertTrue(storedBlockIs(world, target, marker, Blocks.EMERALD_BLOCK.defaultBlockState()),
+                            Component.literal("Storage does not hold the edit at " + marker + " after a normal save."));
                 })
-                .createAndAdd(() -> world.setChunkForced(target.x, target.z, false))
-                .completeIfSuccessful();
+                .thenWaitUntil(() -> world.setChunkForced(target.x(), target.z(), false))
+                .thenSucceed();
     }
 
     /**
@@ -76,9 +76,9 @@ public final class UnsavedReloadGameTest {
      * @param expected expected state
      * @return true when the stored delta has that state at that position
      */
-    private static boolean storedBlockIs(final ServerWorld world, final ChunkPos target, final BlockPos pos,
+    private static boolean storedBlockIs(final ServerLevel world, final ChunkPos target, final BlockPos pos,
             final BlockState expected) {
-        final ChunkDelta<BlockState, NbtCompound> stored = FabricCisStorageHelper.getStorage(world)
+        final ChunkDelta<BlockState, CompoundTag> stored = FabricCisStorageHelper.getStorage(world)
                 .load(FabricCisStorageHelper.toStoragePos(target));
         final long wanted = BlockInstruction.packPos(pos.getX() & 15, pos.getY(), pos.getZ() & 15);
         final boolean[] found = {false};

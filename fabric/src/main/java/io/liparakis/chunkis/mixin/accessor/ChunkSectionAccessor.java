@@ -1,10 +1,10 @@
 package io.liparakis.chunkis.mixin.accessor;
 
-import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(ChunkSection.class)
+@Mixin(LevelChunkSection.class)
 public interface ChunkSectionAccessor {
 
     /**
@@ -22,24 +22,24 @@ public interface ChunkSectionAccessor {
     /**
      * Performs accessor.
      */
-    @Accessor("randomTickableBlockCount")
+    @Accessor("tickingBlockCount")
     short chunkis$getRandomTickableBlockCount();
 
     /**
      * Performs accessor.
      */
-    @Accessor("nonEmptyFluidCount")
+    @Accessor("tickingFluidCount")
     short chunkis$getNonEmptyFluidCount();
 
     /**
      * Performs accessor.
      */
-    @Accessor("randomTickableBlockCount")
+    @Accessor("tickingBlockCount")
     void chunkis$setRandomTickableBlockCount(short count);
 
     /**
      * Performs accessor.
      */
-    @Accessor("nonEmptyFluidCount")
+    @Accessor("tickingFluidCount")
     void chunkis$setNonEmptyFluidCount(short count);
 }

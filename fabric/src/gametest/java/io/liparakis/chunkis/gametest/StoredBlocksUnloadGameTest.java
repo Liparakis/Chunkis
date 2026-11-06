@@ -17,25 +17,25 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.entity.ChestBlockEntity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.passive.PigEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.pig.Pig;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainer;
 
 /**
  * Covers chunks that unload while their block payload is released ({@link ChunkDelta#isBlockPayloadReleased()}):
@@ -54,25 +54,25 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void unloadOfReleasedChunkCopiesBlocksAndKeepsChange(final TestContext context) {
+    public void unloadOfReleasedChunkCopiesBlocksAndKeepsChange(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 2700);
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     fixture.fillChest();
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> {
                     final ChunkDelta<?, ?> unloadedDelta = fixture.liveDelta();
                     context.assertTrue(unloadedDelta != null && unloadedDelta.isBlockPayloadReleased(),
-                            Text.literal("The unload save captured the blocks of chunk " + fixture.target
+                            Component.literal("The unload save captured the blocks of chunk " + fixture.target
                                     + " instead of copying them."));
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     fixture.load();
                 })
-                .createAndAdd(fixture::assertReloadedWithChange)
-                .createAndAdd(fixture::unforce)
-                .completeIfSuccessful();
+                .thenWaitUntil(fixture::assertReloadedWithChange)
+                .thenWaitUntil(fixture::unforce)
+                .thenSucceed();
     }
 
     /**
@@ -82,36 +82,36 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void entitySaveAfterUnloadKeepsStoredBlocks(final TestContext context) {
+    public void entitySaveAfterUnloadKeepsStoredBlocks(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 2900);
         final UUID[] pig = new UUID[1];
         fixture.storeAndReloadReleased()
-                .createAndAdd(fixture::unload)
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::unload)
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> {
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     // The state an unload leaves while its save is still on its way: a released tracked delta that
                     // holds only the edits recorded on top of the stored blocks.
-                    final ChunkDelta<BlockState, NbtCompound> tracked = fixture.storage()
+                    final ChunkDelta<BlockState, CompoundTag> tracked = fixture.storage()
                             .load(fixture.cisPos());
                     tracked.claimOwnership(ChunkTraceReason.EXPLICIT_CHUNKIS_MUTATION.name(), "gametest");
                     tracked.releaseBlockPayload();
                     fixture.recordEdit(tracked);
                     GlobalChunkTracker.addDelta(fixture.world, fixture.target, tracked, "gametest");
 
-                    final PigEntity entity = EntityType.PIG.create(fixture.world, SpawnReason.LOAD);
-                    final BlockPos at = fixture.target.getBlockPos(8, fixture.baseY + 20, 8);
-                    entity.refreshPositionAndAngles(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
-                    pig[0] = entity.getUuid();
+                    final Pig entity = EntityType.PIG.create(fixture.world, EntitySpawnReason.LOAD);
+                    final BlockPos at = fixture.target.getBlockAt(8, fixture.baseY + 20, 8);
+                    entity.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+                    pig[0] = entity.getUUID();
                     VanillaEntitySaveCapture.capture(fixture.world, fixture.target, List.of(entity));
                     context.assertTrue(tracked.isDirty() && tracked.isBlockPayloadReleased(),
-                            Text.literal("Vanilla's entity save did not land in the tracked delta."));
+                            Component.literal("Vanilla's entity save did not land in the tracked delta."));
                     context.assertTrue(FabricCisStorageHelper.saveTrackedDelta(fixture.world, fixture.storage(),
                                     fixture.target, tracked),
-                            Text.literal("The tracked delta holding stored blocks could not be saved."));
+                            Component.literal("The tracked delta holding stored blocks could not be saved."));
                     fixture.assertStoredEntry(pig[0]);
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -121,18 +121,18 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void fastReloadAfterUnloadKeepsChange(final TestContext context) {
+    public void fastReloadAfterUnloadKeepsChange(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 3100);
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     fixture.fillChest();
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(fixture::load)
-                .createAndAdd(fixture::assertReloadedWithChange)
-                .createAndAdd(fixture::unforce)
-                .completeIfSuccessful();
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(fixture::load)
+                .thenWaitUntil(fixture::assertReloadedWithChange)
+                .thenWaitUntil(fixture::unforce)
+                .thenSucceed();
     }
 
     /**
@@ -142,27 +142,27 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void failedUnloadSaveKeepsChangeForReload(final TestContext context) {
+    public void failedUnloadSaveKeepsChangeForReload(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 4700);
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     fixture.fillChest();
                     // Every later write of this test-only chunk fails, like a disk error would.
                     fixture.storage()
                             .protectFromOverwrite(fixture.cisPos());
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> {
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     final ChunkDelta<?, ?> tracked = GlobalChunkTracker.getDelta(fixture.world, fixture.target);
                     context.assertTrue(tracked != null && tracked.isDirty() && tracked.isBlockPayloadReleased(),
-                            Text.literal("The refused save did not leave the change tracked."));
+                            Component.literal("The refused save did not leave the change tracked."));
                     fixture.load();
                 })
-                .createAndAdd(fixture::assertReloadedWithChange)
-                .createAndAdd(fixture::unforce)
-                .completeIfSuccessful();
+                .thenWaitUntil(fixture::assertReloadedWithChange)
+                .thenWaitUntil(fixture::unforce)
+                .thenSucceed();
     }
 
     /**
@@ -172,26 +172,26 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void untouchedReloadedChunkStaysCleanAndUntracked(final TestContext context) {
+    public void untouchedReloadedChunkStaysCleanAndUntracked(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 4300);
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     final ChunkDelta<?, ?> delta = fixture.liveDelta();
                     context.assertTrue(delta != null && !delta.isDirty(),
-                            Text.literal("Loading chunk " + fixture.target + " marked its delta dirty."));
+                            Component.literal("Loading chunk " + fixture.target + " marked its delta dirty."));
                     context.assertTrue(GlobalChunkTracker.getActiveDelta(fixture.world, fixture.target) == null,
-                            Text.literal("The dirty tracker holds the clean delta of reloaded chunk "
+                            Component.literal("The dirty tracker holds the clean delta of reloaded chunk "
                                     + fixture.target + "."));
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> {
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     context.assertTrue(GlobalChunkTracker.getActiveDelta(fixture.world, fixture.target) == null,
-                            Text.literal("Unloading untouched chunk " + fixture.target
+                            Component.literal("Unloading untouched chunk " + fixture.target
                                     + " left its delta in the dirty tracker."));
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -201,37 +201,37 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void staleWriteToAnUnloadedChunkNeverReachesItsReload(final TestContext context) {
+    public void staleWriteToAnUnloadedChunkNeverReachesItsReload(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 4900);
-        final WorldChunk[] unloaded = new WorldChunk[1];
+        final LevelChunk[] unloaded = new LevelChunk[1];
         final BlockState[] stored = new BlockState[1];
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     final ChunkDelta<?, ?> delta = fixture.liveDelta();
                     context.assertTrue(delta != null && !delta.isDirty() && delta.getWrittenBlocksPrint() != null,
-                            Text.literal("Chunk " + fixture.target + " would not reach the recent-chunk cache."));
+                            Component.literal("Chunk " + fixture.target + " would not reach the recent-chunk cache."));
                     unloaded[0] = fixture.chunk;
                     stored[0] = fixture.chunk.getBlockState(fixture.editedPos());
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> {
                     final BlockPos at = fixture.editedPos();
-                    unloaded[0].getSection(unloaded[0].getSectionIndex(at.getY())).getBlockStateContainer()
-                            .swap(at.getX() & 15, at.getY() & 15, at.getZ() & 15,
-                                    Blocks.DIAMOND_BLOCK.getDefaultState());
+                    unloaded[0].getSection(unloaded[0].getSectionIndex(at.getY())).getStates()
+                            .getAndSet(at.getX() & 15, at.getY() & 15, at.getZ() & 15,
+                                    Blocks.DIAMOND_BLOCK.defaultBlockState());
                     fixture.load();
                 })
-                .createAndAdd(() -> {
-                    final WorldChunk reloaded = fixture.world.getChunk(fixture.target.x, fixture.target.z);
+                .thenWaitUntil(() -> {
+                    final LevelChunk reloaded = fixture.world.getChunk(fixture.target.x(), fixture.target.z());
                     context.assertTrue(reloaded != unloaded[0],
-                            Text.literal("Chunk " + fixture.target + " was not reloaded."));
+                            Component.literal("Chunk " + fixture.target + " was not reloaded."));
                     context.assertTrue(reloaded.getBlockState(fixture.editedPos()) == stored[0],
-                            Text.literal("A write to the unloaded chunk reached reloaded chunk " + fixture.target
+                            Component.literal("A write to the unloaded chunk reached reloaded chunk " + fixture.target
                                     + ": " + reloaded.getBlockState(fixture.editedPos()) + "."));
                     fixture.unforce();
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -242,22 +242,22 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void chunkLoadWithoutInstructionsBuildsThemFromItsContainers(final TestContext context) {
+    public void chunkLoadWithoutInstructionsBuildsThemFromItsContainers(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 5300);
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     final ChunkDelta<?, ?> delta = fixture.liveDelta();
                     context.assertTrue(delta != null && !delta.isDirty() && delta.getWrittenBlocksPrint() != null,
-                            Text.literal("Chunk " + fixture.target + " would not reach the recent-chunk cache."));
+                            Component.literal("Chunk " + fixture.target + " would not reach the recent-chunk cache."));
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> {
                     final var storage = FabricCisStorageHelper.getStorage(fixture.world);
                     final CisChunkPos pos = FabricCisStorageHelper.toStoragePos(fixture.target);
-                    final ChunkDelta<BlockState, NbtCompound> attached = storage.loadForChunkLoad(pos);
+                    final ChunkDelta<BlockState, CompoundTag> attached = storage.loadForChunkLoad(pos);
                     context.assertTrue(attached.hasBlocksOnlyAttached() && attached.getBlockChangesCount() == 0,
-                            Text.literal("Chunk " + fixture.target + " did not load its blocks without instructions:"
+                            Component.literal("Chunk " + fixture.target + " did not load its blocks without instructions:"
                                     + " attached=" + attached.hasBlocksOnlyAttached() + " blocks="
                                     + attached.getBlockChangesCount() + "."));
                     PreloadedBlockSections.buildAttachedInstructions(fixture.world, attached);
@@ -265,17 +265,17 @@ public final class StoredBlocksUnloadGameTest {
                     final java.util.Map<Long, BlockState> stored = blockMap(storage.load(pos));
                     context.assertTrue(!attached.hasBlocksOnlyAttached() && !stored.isEmpty()
                                     && rebuilt.equals(stored),
-                            Text.literal("Rebuilt blocks of " + fixture.target + " differ from the stored entry: "
+                            Component.literal("Rebuilt blocks of " + fixture.target + " differ from the stored entry: "
                                     + rebuilt.size() + " against " + stored.size() + "."));
                     fixture.load();
                 })
-                .createAndAdd(() -> {
-                    fixture.chunk = fixture.world.getChunk(fixture.target.x, fixture.target.z);
-                    context.assertTrue(fixture.chunk.getBlockState(fixture.chest).isOf(Blocks.CHEST),
-                            Text.literal("Reloaded chunk " + fixture.target + " lost its chest."));
+                .thenWaitUntil(() -> {
+                    fixture.chunk = fixture.world.getChunk(fixture.target.x(), fixture.target.z());
+                    context.assertTrue(fixture.chunk.getBlockState(fixture.chest).is(Blocks.CHEST),
+                            Component.literal("Reloaded chunk " + fixture.target + " lost its chest."));
                     fixture.unforce();
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -284,7 +284,7 @@ public final class StoredBlocksUnloadGameTest {
      * @param delta delta to read
      * @return blocks by position
      */
-    private static java.util.Map<Long, BlockState> blockMap(final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static java.util.Map<Long, BlockState> blockMap(final ChunkDelta<BlockState, CompoundTag> delta) {
         final java.util.Map<Long, BlockState> blocks = new java.util.HashMap<>();
         delta.forEachBlock((x, y, z, state) -> blocks.put(io.liparakis.chunkis.core.BlockInstruction.packPos(x, y, z),
                 state));
@@ -299,24 +299,24 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void entityOnlyUnloadSaveKeepsTheRestOfTheChunk(final TestContext context) {
+    public void entityOnlyUnloadSaveKeepsTheRestOfTheChunk(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 3700);
         final UUID[] pig = new UUID[1];
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     // Clears vanilla's own flag, which the reload set: from here vanilla sees no change but the pig.
-                    fixture.world.getChunkManager().save(false);
+                    fixture.world.getChunkSource().save(false);
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     pig[0] = fixture.spawnPig();
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> {
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     fixture.assertStoredEntry(pig[0]);
                     fixture.assertStoredNonBlockState();
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -326,14 +326,14 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void saveSkippedAsUnsafeKeepsVanillasSaveFlag(final TestContext context) {
+    public void saveSkippedAsUnsafeKeepsVanillasSaveFlag(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 5900);
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
+        context.startSequence()
+                .thenWaitUntil(() -> {
                     final var coordinator = ((io.liparakis.chunkis.world.tracking.save.ChunkSaveCoordinatorHolder)
-                            fixture.world.getChunkManager().chunkLoadingManager).chunkis$saveCoordinator();
+                            fixture.world.getChunkSource().chunkMap).chunkis$saveCoordinator();
                     final ChunkisDeltaDuck duck = (ChunkisDeltaDuck) fixture.chunk;
-                    fixture.chunk.markNeedsSaving();
+                    fixture.chunk.markUnsaved();
                     duck.chunkis$setRestoreOperationId("gametest-unsafe");
                     try {
                         coordinator.save(fixture.chunk);
@@ -342,14 +342,14 @@ public final class StoredBlocksUnloadGameTest {
                     }
                     // Vanilla's own flag: Chunkis's needsSaving() also reports a dirty delta, such as one being written.
                     final var flag = (io.liparakis.chunkis.mixin.accessor.ChunkSaveFlagAccessor) fixture.chunk;
-                    context.assertTrue(flag.chunkis$vanillaNeedsSaving(), Text.literal("A save skipped as unsafe cleared "
+                    context.assertTrue(flag.chunkis$vanillaNeedsSaving(), Component.literal("A save skipped as unsafe cleared "
                             + "the save flag of " + fixture.target + ", so its change would never be captured."));
                     final var outcome = coordinator.save(fixture.chunk);
-                    context.assertFalse(flag.chunkis$vanillaNeedsSaving(), Text.literal("The next save of "
+                    context.assertFalse(flag.chunkis$vanillaNeedsSaving(), Component.literal("The next save of "
                             + fixture.target + " did not clear the save flag: outcome " + outcome + "."));
                     fixture.unforce();
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -359,52 +359,52 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 800)
-    public void movedEntitySurvivesUnloadAndReloadOnce(final TestContext context) {
+    public void movedEntitySurvivesUnloadAndReloadOnce(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 5700);
         final UUID[] pig = new UUID[1];
-        final net.minecraft.util.math.Vec3d[] moved = new net.minecraft.util.math.Vec3d[1];
+        final net.minecraft.world.phys.Vec3[] moved = new net.minecraft.world.phys.Vec3[1];
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     pig[0] = fixture.spawnPig();
-                    fixture.chunk.markNeedsSaving();
-                    fixture.world.getChunkManager().save(false);
+                    fixture.chunk.markUnsaved();
+                    fixture.world.getChunkSource().save(false);
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                 })
-                .createAndAdd(() -> {
-                    final net.minecraft.entity.Entity entity = fixture.world.getEntity(pig[0]);
-                    context.assertTrue(entity != null, Text.literal("Pig " + pig[0] + " is not in the world."));
-                    final BlockPos to = fixture.target.getBlockPos(3, fixture.baseY + 20, 12);
-                    entity.refreshPositionAndAngles(to.getX() + 0.5, to.getY(), to.getZ() + 0.5, 90, 0);
-                    if (entity instanceof net.minecraft.entity.mob.MobEntity mob) {
-                        mob.setAiDisabled(true);
+                .thenWaitUntil(() -> {
+                    final net.minecraft.world.entity.Entity entity = fixture.world.getEntity(pig[0]);
+                    context.assertTrue(entity != null, Component.literal("Pig " + pig[0] + " is not in the world."));
+                    final BlockPos to = fixture.target.getBlockAt(3, fixture.baseY + 20, 12);
+                    entity.snapTo(to.getX() + 0.5, to.getY(), to.getZ() + 0.5, 90, 0);
+                    if (entity instanceof net.minecraft.world.entity.Mob mob) {
+                        mob.setNoAi(true);
                     }
-                    moved[0] = entity.getEntityPos();
+                    moved[0] = entity.position();
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> context.assertTrue(fixture.world.getEntity(pig[0]) == null,
-                        Text.literal("Waiting for vanilla to unload the entities of " + fixture.target + ".")))
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> context.assertTrue(fixture.world.getEntity(pig[0]) == null,
+                        Component.literal("Waiting for vanilla to unload the entities of " + fixture.target + ".")))
+                .thenWaitUntil(() -> {
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     fixture.load();
                 })
-                .createAndAdd(() -> {
-                    final net.minecraft.entity.Entity entity = fixture.world.getEntity(pig[0]);
+                .thenWaitUntil(() -> {
+                    final net.minecraft.world.entity.Entity entity = fixture.world.getEntity(pig[0]);
                     context.assertTrue(entity != null,
-                            Text.literal("Waiting for pig " + pig[0] + " to come back with " + fixture.target + "."));
-                    context.assertTrue(entity.getEntityPos().squaredDistanceTo(moved[0]) < 0.01,
-                            Text.literal("Pig " + pig[0] + " came back at " + entity.getEntityPos() + ", moved to "
+                            Component.literal("Waiting for pig " + pig[0] + " to come back with " + fixture.target + "."));
+                    context.assertTrue(entity.position().distanceToSqr(moved[0]) < 0.01,
+                            Component.literal("Pig " + pig[0] + " came back at " + entity.position() + ", moved to "
                                     + moved[0] + "."));
-                    final int pigs = fixture.world.getEntitiesByType(EntityType.PIG,
-                            new net.minecraft.util.math.Box(fixture.target.getStartX(), fixture.world.getBottomY(),
-                                    fixture.target.getStartZ(), fixture.target.getEndX() + 1,
-                                    fixture.world.getTopYInclusive() + 1, fixture.target.getEndZ() + 1),
-                            candidate -> candidate.getUuid().equals(pig[0])).size();
-                    context.assertTrue(pigs == 1, Text.literal("Pig " + pig[0] + " exists " + pigs
+                    final int pigs = fixture.world.getEntities(EntityType.PIG,
+                            new net.minecraft.world.phys.AABB(fixture.target.getMinBlockX(), fixture.world.getMinY(),
+                                    fixture.target.getMinBlockZ(), fixture.target.getMaxBlockX() + 1,
+                                    fixture.world.getMaxY() + 1, fixture.target.getMaxBlockZ() + 1),
+                            candidate -> candidate.getUUID().equals(pig[0])).size();
+                    context.assertTrue(pigs == 1, Component.literal("Pig " + pig[0] + " exists " + pigs
                             + " times after the reload."));
                     fixture.unforce();
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -414,27 +414,27 @@ public final class StoredBlocksUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void trackedChangeWithEntityChangeIsSavedWhole(final TestContext context) {
+    public void trackedChangeWithEntityChangeIsSavedWhole(final GameTestHelper context) {
         final Fixture fixture = Fixture.create(context, 4500);
         final UUID[] pig = new UUID[1];
         fixture.storeAndReloadReleased()
-                .createAndAdd(() -> {
-                    fixture.world.getChunkManager().save(false);
+                .thenWaitUntil(() -> {
+                    fixture.world.getChunkSource().save(false);
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     fixture.fillChest();
                     pig[0] = fixture.spawnPig();
                     fixture.unload();
                 })
-                .createAndAdd(fixture::awaitUnloaded)
-                .createAndAdd(() -> {
+                .thenWaitUntil(fixture::awaitUnloaded)
+                .thenWaitUntil(() -> {
                     AsyncCisSaveManager.flushAndClose(fixture.world);
                     fixture.assertStoredEntry(pig[0]);
                     fixture.assertStoredNonBlockState();
                     fixture.load();
                 })
-                .createAndAdd(fixture::assertReloadedWithChange)
-                .createAndAdd(fixture::unforce)
-                .completeIfSuccessful();
+                .thenWaitUntil(fixture::assertReloadedWithChange)
+                .thenWaitUntil(fixture::unforce)
+                .thenSucceed();
     }
 
     /**
@@ -446,12 +446,12 @@ public final class StoredBlocksUnloadGameTest {
         /**
          * Test context.
          */
-        private final TestContext context;
+        private final GameTestHelper context;
 
         /**
          * Test world.
          */
-        private final ServerWorld world;
+        private final ServerLevel world;
 
         /**
          * Chunk under test, far from every other test's.
@@ -476,7 +476,7 @@ public final class StoredBlocksUnloadGameTest {
         /**
          * Currently loaded chunk object.
          */
-        private WorldChunk chunk;
+        private LevelChunk chunk;
 
         /**
          * Unload count seen for the target chunk.
@@ -494,11 +494,11 @@ public final class StoredBlocksUnloadGameTest {
          * @param context test context
          * @param offset  chunk offset from the test structure, distinct per test
          */
-        private Fixture(final TestContext context, final int offset) {
+        private Fixture(final GameTestHelper context, final int offset) {
             this.context = context;
-            this.world = context.getWorld();
-            final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-            this.target = new ChunkPos(anchor.x - offset, anchor.z + offset);
+            this.world = context.getLevel();
+            final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+            this.target = new ChunkPos(anchor.x() - offset, anchor.z() + offset);
             ServerChunkEvents.CHUNK_UNLOAD.register((unloadWorld, unloadChunk) -> {
                 if (unloadWorld == world && unloadChunk.getPos().equals(target)) {
                     unloads.incrementAndGet();
@@ -513,7 +513,7 @@ public final class StoredBlocksUnloadGameTest {
          * @param offset  chunk offset from the test structure, distinct per test
          * @return the fixture
          */
-        static Fixture create(final TestContext context, final int offset) {
+        static Fixture create(final GameTestHelper context, final int offset) {
             final Fixture fixture = new Fixture(context, offset);
             fixture.place();
             return fixture;
@@ -523,18 +523,18 @@ public final class StoredBlocksUnloadGameTest {
          * Places a section of varied blocks and an empty chest in the target chunk.
          */
         private void place() {
-            world.setChunkForced(target.x, target.z, true);
-            chunk = world.getChunk(target.x, target.z);
+            world.setChunkForced(target.x(), target.z(), true);
+            chunk = world.getChunk(target.x(), target.z());
             // Deep underground, under the chunk's highest block: no snow settles on it and nothing near it ticks,
             // so the chunk sees no block edit of its own.
-            baseY = (world.getBottomY() + 32) & ~15;
+            baseY = (world.getMinY() + 32) & ~15;
             final List<BlockState> states = simpleStates();
             for (int i = 0; i < 16 * 16 * 16; i++) {
-                final BlockPos pos = target.getBlockPos(i & 15, baseY + (i >> 8), (i >> 4) & 15);
-                world.setBlockState(pos, states.get(i % states.size()), Block.NOTIFY_LISTENERS);
+                final BlockPos pos = target.getBlockAt(i & 15, baseY + (i >> 8), (i >> 4) & 15);
+                world.setBlock(pos, states.get(i % states.size()), Block.UPDATE_CLIENTS);
             }
-            chest = target.getBlockPos(4, baseY + 16, 4);
-            world.setBlockState(chest, Blocks.CHEST.getDefaultState(), Block.NOTIFY_LISTENERS);
+            chest = target.getBlockAt(4, baseY + 16, 4);
+            world.setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_CLIENTS);
             blocks = copySections(chunk);
         }
 
@@ -543,26 +543,26 @@ public final class StoredBlocksUnloadGameTest {
          *
          * @return the task runner, for the test's own steps
          */
-        net.minecraft.test.TimedTaskRunner storeAndReloadReleased() {
-            return context.createTimedTaskRunner()
-                    .createAndAdd(() -> {
-                        chunk.markNeedsSaving();
-                        world.getChunkManager().save(false);
+        net.minecraft.gametest.framework.GameTestSequence storeAndReloadReleased() {
+            return context.startSequence()
+                    .thenWaitUntil(() -> {
+                        chunk.markUnsaved();
+                        world.getChunkSource().save(false);
                         AsyncCisSaveManager.flushAndClose(world);
                     })
                     // The save's completion marks the delta clean on a later tick; unloading before it would
                     // capture the chunk again and hand the dirty delta to the reload.
-                    .createAndAdd(() -> context.assertTrue(liveDelta() != null && !liveDelta().isDirty(),
-                            Text.literal("Waiting for the first save of chunk " + target + " to complete.")))
-                    .createAndAdd(this::unload)
-                    .createAndAdd(this::awaitUnloaded)
-                    .createAndAdd(this::load)
-                    .createAndAdd(() -> {
-                        chunk = world.getChunk(target.x, target.z);
+                    .thenWaitUntil(() -> context.assertTrue(liveDelta() != null && !liveDelta().isDirty(),
+                            Component.literal("Waiting for the first save of chunk " + target + " to complete.")))
+                    .thenWaitUntil(this::unload)
+                    .thenWaitUntil(this::awaitUnloaded)
+                    .thenWaitUntil(this::load)
+                    .thenWaitUntil(() -> {
+                        chunk = world.getChunk(target.x(), target.z());
                         final ChunkDelta<?, ?> delta = liveDelta();
                         context.assertTrue(delta != null && delta.isBlockPayloadReleased()
                                         && delta.getBlockChangesCount() == 0,
-                                Text.literal("Reloaded chunk " + target + " did not release its blocks: "
+                                Component.literal("Reloaded chunk " + target + " did not release its blocks: "
                                         + (delta == null ? "no delta" : "released=" + delta.isBlockPayloadReleased()
                                         + " blocks=" + delta.getBlockChangesCount() + " dirty=" + delta.isDirty())
                                         + "."));
@@ -574,12 +574,12 @@ public final class StoredBlocksUnloadGameTest {
          *
          * @param delta delta receiving the edit
          */
-        void recordEdit(final ChunkDelta<BlockState, NbtCompound> delta) {
+        void recordEdit(final ChunkDelta<BlockState, CompoundTag> delta) {
             final BlockPos at = editedPos();
-            final BlockState gold = Blocks.GOLD_BLOCK.getDefaultState();
+            final BlockState gold = Blocks.GOLD_BLOCK.defaultBlockState();
             delta.addBlockChange(at.getX() & 15, at.getY(), at.getZ() & 15, gold);
-            blocks.get((at.getY() - world.getBottomY()) >> 4)
-                    .swap(at.getX() & 15, at.getY() & 15, at.getZ() & 15, gold);
+            blocks.get((at.getY() - world.getMinY()) >> 4)
+                    .getAndSet(at.getX() & 15, at.getY() & 15, at.getZ() & 15, gold);
         }
 
         /**
@@ -588,27 +588,27 @@ public final class StoredBlocksUnloadGameTest {
          * @return edited position
          */
         BlockPos editedPos() {
-            return target.getBlockPos(3, baseY + 5, 7);
+            return target.getBlockAt(3, baseY + 5, 7);
         }
 
         /**
          * Edits a block to gold and puts a diamond in the chest.
          */
         void fillChest() {
-            world.setBlockState(editedPos(), Blocks.GOLD_BLOCK.getDefaultState(), Block.NOTIFY_LISTENERS);
+            world.setBlock(editedPos(), Blocks.GOLD_BLOCK.defaultBlockState(), Block.UPDATE_CLIENTS);
             blocks = copySections(chunk);
             if (!(world.getBlockEntity(chest) instanceof ChestBlockEntity chestEntity)) {
-                throw context.createError(Text.literal("No chest at " + chest + "."));
+                throw context.assertionException(Component.literal("No chest at " + chest + "."));
             }
-            chestEntity.setStack(0, new ItemStack(Items.DIAMOND));
-            chestEntity.markDirty();
+            chestEntity.setItem(0, new ItemStack(Items.DIAMOND));
+            chestEntity.setChanged();
         }
 
         /**
          * Releases the forced ticket so the chunk unloads.
          */
         void unload() {
-            world.setChunkForced(target.x, target.z, false);
+            world.setChunkForced(target.x(), target.z(), false);
         }
 
         /**
@@ -616,7 +616,7 @@ public final class StoredBlocksUnloadGameTest {
          */
         void awaitUnloaded() {
             context.assertTrue(unloads.get() > awaitedUnloads,
-                    Text.literal("Waiting for chunk " + target + " to unload."));
+                    Component.literal("Waiting for chunk " + target + " to unload."));
             awaitedUnloads = unloads.get();
         }
 
@@ -624,15 +624,15 @@ public final class StoredBlocksUnloadGameTest {
          * Forces and loads the chunk.
          */
         void load() {
-            world.setChunkForced(target.x, target.z, true);
-            world.getChunk(target.x, target.z);
+            world.setChunkForced(target.x(), target.z(), true);
+            world.getChunk(target.x(), target.z());
         }
 
         /**
          * Releases the forced ticket at the end of a test.
          */
         void unforce() {
-            world.setChunkForced(target.x, target.z, false);
+            world.setChunkForced(target.x(), target.z(), false);
         }
 
         /**
@@ -648,22 +648,22 @@ public final class StoredBlocksUnloadGameTest {
          * Asserts the reloaded chunk has every placed block and the diamond.
          */
         void assertReloadedWithChange() {
-            final WorldChunk reloaded = world.getChunk(target.x, target.z);
-            context.assertTrue(reloaded != chunk, Text.literal("Chunk " + target + " was not reloaded."));
+            final LevelChunk reloaded = world.getChunk(target.x(), target.z());
+            context.assertTrue(reloaded != chunk, Component.literal("Chunk " + target + " was not reloaded."));
             final List<PalettedContainer<BlockState>> restored = copySections(reloaded);
             for (int section = 0; section < blocks.size(); section++) {
                 for (int i = 0; i < 16 * 16 * 16; i++) {
                     final BlockState want = blocks.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
                     final BlockState got = restored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
                     if (want != got) {
-                        throw context.createError(Text.literal("Section " + section + " position " + i
+                        throw context.assertionException(Component.literal("Section " + section + " position " + i
                                 + " reloaded as " + got + ", placed as " + want + "."));
                     }
                 }
             }
             context.assertTrue(world.getBlockEntity(chest) instanceof ChestBlockEntity chestEntity
-                            && chestEntity.getStack(0).isOf(Items.DIAMOND),
-                    Text.literal("The chest at " + chest + " lost its diamond."));
+                            && chestEntity.getItem(0).is(Items.DIAMOND),
+                    Component.literal("The chest at " + chest + " lost its diamond."));
             chunk = reloaded;
         }
 
@@ -673,14 +673,14 @@ public final class StoredBlocksUnloadGameTest {
          * @param entity UUID of the entity the entry must hold
          */
         void assertStoredEntry(final UUID entity) {
-            final ChunkDelta<BlockState, NbtCompound> stored = storage().load(cisPos());
-            final int bottomY = world.getBottomY();
+            final ChunkDelta<BlockState, CompoundTag> stored = storage().load(cisPos());
+            final int bottomY = world.getMinY();
             final int[] nonAir = {0};
             stored.forEachBlock((x, y, z, state) -> {
                 final int section = (y - bottomY) >> 4;
                 final BlockState want = blocks.get(section).get(x, y & 15, z);
                 if (want != state) {
-                    throw context.createError(Text.literal("Stored block at " + x + "," + y + "," + z + " is "
+                    throw context.assertionException(Component.literal("Stored block at " + x + "," + y + "," + z + " is "
                             + state + ", placed as " + want + "."));
                 }
                 nonAir[0]++;
@@ -691,12 +691,12 @@ public final class StoredBlocksUnloadGameTest {
                     expected += section.get(i & 15, i >> 8, (i >> 4) & 15).isAir() ? 0 : 1;
                 }
             }
-            context.assertTrue(nonAir[0] == expected, Text.literal("Stored entry holds " + nonAir[0]
+            context.assertTrue(nonAir[0] == expected, Component.literal("Stored entry holds " + nonAir[0]
                     + " blocks, expected " + expected + "."));
             final List<UUID> uuids = new ArrayList<>();
             stored.forEachEntity(nbt -> EntityPayloadNbt.findUuid(nbt).ifPresent(uuids::add));
             stored.forEachPendingEntity(nbt -> EntityPayloadNbt.findUuid(nbt).ifPresent(uuids::add));
-            context.assertTrue(uuids.contains(entity), Text.literal("Stored entry lacks entity " + entity + "."));
+            context.assertTrue(uuids.contains(entity), Component.literal("Stored entry lacks entity " + entity + "."));
         }
 
         /**
@@ -704,8 +704,8 @@ public final class StoredBlocksUnloadGameTest {
          *
          * @return storage
          */
-        io.liparakis.chunkis.storage.io.CisStorage<Block, BlockState, net.minecraft.state.property.Property<?>,
-                NbtCompound> storage() {
+        io.liparakis.chunkis.storage.io.CisStorage<Block, BlockState, net.minecraft.world.level.block.state.properties.Property<?>,
+                CompoundTag> storage() {
             return FabricCisStorageHelper.getStorage(world);
         }
 
@@ -724,24 +724,24 @@ public final class StoredBlocksUnloadGameTest {
          * @return its UUID
          */
         UUID spawnPig() {
-            final PigEntity entity = EntityType.PIG.create(world, SpawnReason.COMMAND);
-            final BlockPos at = target.getBlockPos(8, baseY + 20, 8);
-            entity.refreshPositionAndAngles(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
-            world.spawnEntity(entity);
-            return entity.getUuid();
+            final Pig entity = EntityType.PIG.create(world, EntitySpawnReason.COMMAND);
+            final BlockPos at = target.getBlockAt(8, baseY + 20, 8);
+            entity.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+            world.addFreshEntity(entity);
+            return entity.getUUID();
         }
 
         /**
          * Expects the stored entry to hold the chest and the light and heightmaps a full capture writes.
          */
         void assertStoredNonBlockState() {
-            final ChunkDelta<BlockState, NbtCompound> stored = storage().load(cisPos());
-            final NbtCompound metadata = stored.getChunkMetadata();
+            final ChunkDelta<BlockState, CompoundTag> stored = storage().load(cisPos());
+            final CompoundTag metadata = stored.getChunkMetadata();
             context.assertTrue(metadata != null && metadata.contains(CisNbtUtil.STORED_SECTIONS_KEY)
                             && metadata.contains(CisNbtUtil.STORED_HEIGHTMAPS_KEY),
-                    Text.literal("Stored entry of " + target + " lost its light or heightmaps."));
+                    Component.literal("Stored entry of " + target + " lost its light or heightmaps."));
             context.assertTrue(!stored.getBlockEntities().isEmpty(),
-                    Text.literal("Stored entry of " + target + " lost the chest."));
+                    Component.literal("Stored entry of " + target + " lost the chest."));
         }
     }
 
@@ -752,11 +752,11 @@ public final class StoredBlocksUnloadGameTest {
      */
     private static List<BlockState> simpleStates() {
         final List<BlockState> states = new ArrayList<>();
-        for (final Block block : Registries.BLOCK) {
-            final String path = Registries.BLOCK.getId(block).getPath();
+        for (final Block block : BuiltInRegistries.BLOCK) {
+            final String path = BuiltInRegistries.BLOCK.getKey(block).getPath();
             if (path.endsWith("_wool") || path.endsWith("_concrete") || path.endsWith("_terracotta")
                     && !path.endsWith("glazed_terracotta") || path.endsWith("_stained_glass")) {
-                states.add(block.getDefaultState());
+                states.add(block.defaultBlockState());
             }
         }
         return states;
@@ -768,10 +768,10 @@ public final class StoredBlocksUnloadGameTest {
      * @param chunk chunk
      * @return per-section copies
      */
-    private static List<PalettedContainer<BlockState>> copySections(final WorldChunk chunk) {
+    private static List<PalettedContainer<BlockState>> copySections(final LevelChunk chunk) {
         final List<PalettedContainer<BlockState>> copies = new ArrayList<>();
-        for (final ChunkSection section : chunk.getSectionArray()) {
-            copies.add(section.getBlockStateContainer().copy());
+        for (final LevelChunkSection section : chunk.getSections()) {
+            copies.add(section.getStates().copy());
         }
         return copies;
     }

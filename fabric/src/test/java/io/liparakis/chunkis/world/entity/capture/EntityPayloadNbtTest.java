@@ -5,11 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.UUID;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtDouble;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.util.Uuids;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
+import net.minecraft.nbt.ListTag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -23,8 +23,8 @@ class EntityPayloadNbtTest {
     @Test
     void readsUuidAndMatchingStateFromEntityPayload() {
         final UUID uuid = UUID.randomUUID();
-        final NbtCompound nbt = new NbtCompound();
-        nbt.putIntArray("UUID", Uuids.toIntArray(uuid));
+        final CompoundTag nbt = new CompoundTag();
+        nbt.putIntArray("UUID", UUIDUtil.uuidToIntArray(uuid));
 
         assertEquals(uuid,
                 EntityPayloadNbt.findUuid(nbt)
@@ -41,11 +41,11 @@ class EntityPayloadNbtTest {
      */
     @Test
     void readsFlooredBlockPositionFromPosList() {
-        final NbtCompound nbt = new NbtCompound();
-        final NbtList pos = new NbtList();
-        pos.add(NbtDouble.of(1.0D));
-        pos.add(NbtDouble.of(64.9D));
-        pos.add(NbtDouble.of(-3.2D));
+        final CompoundTag nbt = new CompoundTag();
+        final ListTag pos = new ListTag();
+        pos.add(DoubleTag.valueOf(1.0D));
+        pos.add(DoubleTag.valueOf(64.9D));
+        pos.add(DoubleTag.valueOf(-3.2D));
         nbt.put("Pos", pos);
 
         assertEquals(new BlockPos(1, 64, -4),

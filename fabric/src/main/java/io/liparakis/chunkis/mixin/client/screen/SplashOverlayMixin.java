@@ -1,11 +1,11 @@
 package io.liparakis.chunkis.mixin.client.screen;
 
 import java.lang.reflect.Method;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.SplashOverlay;
-import net.minecraft.text.Text;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.LoadingOverlay;
+import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Draws live MCA-to-CIS migration progress on the resource-reload splash overlay.
  */
-@Mixin(SplashOverlay.class)
+@Mixin(LoadingOverlay.class)
 public abstract class SplashOverlayMixin {
 
     /**
@@ -32,7 +32,7 @@ public abstract class SplashOverlayMixin {
      */
     @Shadow
     @Final
-    private MinecraftClient client;
+    private Minecraft minecraft;
 
     /**
      * Reads the latest startup migration status via reflection.
@@ -64,27 +64,27 @@ public abstract class SplashOverlayMixin {
      * @param delta   frame delta passed by vanilla
      * @param ci      mixin callback context
      */
-    @Inject(method = "render", at = @At("TAIL"))
+    @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void chunkis$renderMigrationStatus(
-            final DrawContext context,
+            final GuiGraphicsExtractor context,
             final int mouseX,
             final int mouseY,
             final float delta,
             final CallbackInfo ci
     ) {
         final String status = chunkis$getMigrationStatus();
-        if (status == null || client == null) {
+        if (status == null || minecraft == null) {
             return;
         }
 
-        final TextRenderer textRenderer = client.textRenderer;
+        final Font textRenderer = minecraft.font;
         if (textRenderer == null) {
             return;
         }
 
-        final int width = context.getScaledWindowWidth();
-        final int height = context.getScaledWindowHeight();
-        final int textWidth = textRenderer.getWidth(status);
+        final int width = context.guiWidth();
+        final int height = context.guiHeight();
+        final int textWidth = textRenderer.width(status);
         final int textX = (width - textWidth) / 2;
         final int textY = (height / 2) - 8;
         final int padding = 6;
@@ -96,12 +96,12 @@ public abstract class SplashOverlayMixin {
                 textY + 9 + padding,
                 0xA0000000
         );
-        context.drawTextWithShadow(
+        context.text(
                 textRenderer,
-                Text.literal(status),
+                Component.literal(status),
                 textX,
                 textY,
-                0xFFFFFF
+                0xFFFFFFFF
         );
     }
 }

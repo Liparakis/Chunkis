@@ -1,11 +1,11 @@
 package io.liparakis.chunkis.mixin.world.block;
 
 import io.liparakis.chunkis.world.tracking.state.LeafTickContext;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.LeavesBlock;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.random.Random;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -37,12 +37,12 @@ public class LeavesBlockMixin {
     /**
      * Performs inject.
      */
-    @Inject(method = "scheduledTick", at = @At("HEAD"))
+    @Inject(method = "tick", at = @At("HEAD"))
     private void chunkis$beforeLeafTick(
             final BlockState state,
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos pos,
-            final Random random,
+            final RandomSource random,
             final CallbackInfo ci) {
         LeafTickContext.enterDirect();
     }
@@ -58,12 +58,12 @@ public class LeavesBlockMixin {
      * @param ci     the Mixin {@link CallbackInfo}; unused but required by the
      *               injection contract
      */
-    @Inject(method = "scheduledTick", at = @At("TAIL"))
+    @Inject(method = "tick", at = @At("TAIL"))
     private void chunkis$afterLeafTick(
             final BlockState state,
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos pos,
-            final Random random,
+            final RandomSource random,
             final CallbackInfo ci) {
         LeafTickContext.exitDirect();
     }
@@ -81,9 +81,9 @@ public class LeavesBlockMixin {
     @Inject(method = "randomTick", at = @At("HEAD"))
     private void chunkis$beforeLeafRandomTick(
             final BlockState state,
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos pos,
-            final Random random,
+            final RandomSource random,
             final CallbackInfo ci) {
         LeafTickContext.enterDirect();
     }
@@ -102,9 +102,9 @@ public class LeavesBlockMixin {
     @Inject(method = "randomTick", at = @At("TAIL"))
     private void chunkis$afterLeafRandomTick(
             final BlockState state,
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos pos,
-            final Random random,
+            final RandomSource random,
             final CallbackInfo ci) {
         LeafTickContext.exitDirect();
     }

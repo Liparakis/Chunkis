@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -121,10 +121,10 @@ class DurabilityTestCommandTest {
     @Test
     void mapsTeleportTargetToChunkCoordinates() {
         assertEquals(-1,
-                DurabilityTestCommand.toChunkKey(new Vec3d(-0.5, 64.0, 31.9))
+                DurabilityTestCommand.toChunkKey(new Vec3(-0.5, 64.0, 31.9))
                         .x());
         assertEquals(1,
-                DurabilityTestCommand.toChunkKey(new Vec3d(-0.5, 64.0, 31.9))
+                DurabilityTestCommand.toChunkKey(new Vec3(-0.5, 64.0, 31.9))
                         .z());
     }
 

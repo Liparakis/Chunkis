@@ -17,16 +17,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import net.minecraft.command.argument.Vec3ArgumentType;
-import net.minecraft.command.permission.Permission;
-import net.minecraft.command.permission.PermissionLevel;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.coordinates.Vec3Argument;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Builds and handles the durability test command tree.
@@ -91,8 +91,8 @@ public final class DurabilityTestCommand {
      *
      * @return the durability command subtree
      */
-    static LiteralArgumentBuilder<ServerCommandSource> createNode() {
-        return CommandManager.literal("durability")
+    static LiteralArgumentBuilder<CommandSourceStack> createNode() {
+        return Commands.literal("durability")
                 .then(testNode("test"))
                 .then(stopNode("stop"));
     }
@@ -102,7 +102,7 @@ public final class DurabilityTestCommand {
      *
      * @param dispatcher the Brigadier command dispatcher to register into
      */
-    static void registerLegacy(final CommandDispatcher<ServerCommandSource> dispatcher) {
+    static void registerLegacy(final CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(testNode("durability_test"));
         dispatcher.register(stopNode("durability_test_stop"));
     }
@@ -113,16 +113,16 @@ public final class DurabilityTestCommand {
      * @param literal command literal to use
      * @return durability-test command node
      */
-    private static LiteralArgumentBuilder<ServerCommandSource> testNode(final String literal) {
-        return CommandManager.literal(literal)
-                .requires(source -> source.getPermissions()
-                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
-                .then(CommandManager.argument("pos1", Vec3ArgumentType.vec3())
-                        .then(CommandManager.argument("pos2", Vec3ArgumentType.vec3())
-                                .then(CommandManager.argument("count", IntegerArgumentType.integer(1))
+    private static LiteralArgumentBuilder<CommandSourceStack> testNode(final String literal) {
+        return Commands.literal(literal)
+                .requires(source -> source.permissions()
+                        .hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
+                .then(Commands.argument("pos1", Vec3Argument.vec3())
+                        .then(Commands.argument("pos2", Vec3Argument.vec3())
+                                .then(Commands.argument("count", IntegerArgumentType.integer(1))
                                         // Note: integer(1) accepts values < MIN_DELAY_MS; the floor
                                         // is enforced by Math.max in runTest instead.
-                                        .then(CommandManager.argument("delayMs", IntegerArgumentType.integer(1))
+                                        .then(Commands.argument("delayMs", IntegerArgumentType.integer(1))
                                                 .executes(DurabilityTestCommand::runTest)))));
     }
 
@@ -132,10 +132,10 @@ public final class DurabilityTestCommand {
      * @param literal command literal to use
      * @return durability-stop command node
      */
-    private static LiteralArgumentBuilder<ServerCommandSource> stopNode(final String literal) {
-        return CommandManager.literal(literal)
-                .requires(source -> source.getPermissions()
-                        .hasPermission(new Permission.Level(PermissionLevel.GAMEMASTERS)))
+    private static LiteralArgumentBuilder<CommandSourceStack> stopNode(final String literal) {
+        return Commands.literal(literal)
+                .requires(source -> source.permissions()
+                        .hasPermission(new Permission.HasCommandLevel(PermissionLevel.GAMEMASTERS)))
                 .executes(DurabilityTestCommand::stopTest);
     }
 
@@ -149,16 +149,16 @@ public final class DurabilityTestCommand {
      *
      * @return 1 on success, 0 if the source is not a player
      */
-    private static int runTest(final CommandContext<ServerCommandSource> context) {
-        final ServerCommandSource source = context.getSource();
-        final ServerPlayerEntity player = source.getPlayer();
+    private static int runTest(final CommandContext<CommandSourceStack> context) {
+        final CommandSourceStack source = context.getSource();
+        final ServerPlayer player = source.getPlayer();
         if (player == null) {
-            source.sendError(Text.literal("This command must be run by a player."));
+            source.sendFailure(Component.literal("This command must be run by a player."));
             return 0;
         }
 
-        final Vec3d pos1 = Vec3ArgumentType.getVec3(context, "pos1");
-        final Vec3d pos2 = Vec3ArgumentType.getVec3(context, "pos2");
+        final Vec3 pos1 = Vec3Argument.getVec3(context, "pos1");
+        final Vec3 pos2 = Vec3Argument.getVec3(context, "pos2");
         final int count = IntegerArgumentType.getInteger(context, "count");
         // Clamp to MIN_DELAY_MS: values below this cause the executor to fire faster than
         // the server can drain its task queue, which defeats the purpose of the test.
@@ -187,8 +187,8 @@ public final class DurabilityTestCommand {
         final AtomicBoolean teleportQueued = new AtomicBoolean(false);
 
         traceStarted(count, delayMs, worldId(source), runId);
-        source.sendFeedback(
-                () -> Text.literal(
+        source.sendSuccess(
+                () -> Component.literal(
                         "[Chunkis] Starting durability test: " + count + " cycles at " + delayMs + "ms delay"),
                 true
         );
@@ -217,8 +217,8 @@ public final class DurabilityTestCommand {
                                                     runId
                                             );
                                         }
-                                        source.sendFeedback(
-                                                () -> Text.literal("[Chunkis] Durability test complete."),
+                                        source.sendSuccess(
+                                                () -> Component.literal("[Chunkis] Durability test complete."),
                                                 true
                                         );
                                         return;
@@ -230,41 +230,41 @@ public final class DurabilityTestCommand {
                                                     worldId(source),
                                                     runId);
                                         }
-                                        source.sendError(Text.literal(
+                                        source.sendFailure(Component.literal(
                                                 "[Chunkis] Durability test failed: player was removed."));
                                         return;
                                     }
 
-                                    final ServerWorld world = player.getEntityWorld();
+                                    final ServerLevel world = player.level();
                                     // Alternate between pos1 (even remaining) and pos2 (odd remaining).
-                                    final Vec3d target = (left % 2 == 0) ? pos1 : pos2;
+                                    final Vec3 target = (left % 2 == 0) ? pos1 : pos2;
                                     trace(
                                             ChunkTraceEventType.DURABILITY_TELEPORT_EXECUTED,
                                             ChunkTraceSeverity.INFO,
                                             ChunkTraceReason.NONE,
                                             "queued durability teleport remaining=" + left,
-                                            world.getRegistryKey()
-                                                    .getValue()
+                                            world.dimension()
+                                                    .identifier()
                                                     .toString(),
                                             toChunkKey(target),
                                             runId
                                     );
-                                    player.teleport(
+                                    player.teleportTo(
                                             world,
                                             target.x,
                                             target.y,
                                             target.z,
                                             Set.of(),   // no relative movement flags absolute teleport
-                                            player.getYaw(),
-                                            player.getPitch(),
+                                            player.getYRot(),
+                                            player.getXRot(),
                                             false
                                     );
                                 } catch (final Exception exception) {
                                     if (shutdownAndClear(executor, runId)) {
                                         traceFailed(exception.getMessage(), worldId(source), runId);
                                     }
-                                    source.sendError(
-                                            Text.literal("[Chunkis] Durability test failed: " + exception.getMessage())
+                                    source.sendFailure(
+                                            Component.literal("[Chunkis] Durability test failed: " + exception.getMessage())
                                     );
                                 } finally {
                                     // Reset the guard so the next executor tick can dispatch again.
@@ -286,13 +286,13 @@ public final class DurabilityTestCommand {
      *
      * @return always 1 (Brigadier convention)
      */
-    private static int stopTest(final CommandContext<ServerCommandSource> context) {
+    private static int stopTest(final CommandContext<CommandSourceStack> context) {
         if (stopInternal("stopped manually")) {
             context.getSource()
-                    .sendFeedback(() -> Text.literal("[Chunkis] Durability test stopped."), true);
+                    .sendSuccess(() -> Component.literal("[Chunkis] Durability test stopped."), true);
         } else {
             context.getSource()
-                    .sendError(Text.literal("No durability test is currently running."));
+                    .sendFailure(Component.literal("No durability test is currently running."));
         }
         return 1;
     }
@@ -375,8 +375,8 @@ public final class DurabilityTestCommand {
      * @param target the world-space position; only X and Z are used
      * @return the {@link DebugChunkKey} for the chunk containing {@code target}
      */
-    static DebugChunkKey toChunkKey(final Vec3d target) {
-        return new DebugChunkKey(MathHelper.floor(target.x) >> 4, MathHelper.floor(target.z) >> 4);
+    static DebugChunkKey toChunkKey(final Vec3 target) {
+        return new DebugChunkKey(Mth.floor(target.x) >> 4, Mth.floor(target.z) >> 4);
     }
 
     /**
@@ -386,10 +386,10 @@ public final class DurabilityTestCommand {
      * @param source a command source with an associated world
      * @return e.g. {@code "minecraft:overworld"}
      */
-    private static String worldId(final ServerCommandSource source) {
-        return source.getWorld()
-                .getRegistryKey()
-                .getValue()
+    private static String worldId(final CommandSourceStack source) {
+        return source.getLevel()
+                .dimension()
+                .identifier()
                 .toString();
     }
 

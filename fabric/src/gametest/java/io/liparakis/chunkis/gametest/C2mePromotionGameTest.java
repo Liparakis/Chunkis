@@ -6,14 +6,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.ProtoChunk;
-import net.minecraft.world.chunk.UpgradeData;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.ProtoChunk;
+import net.minecraft.world.level.chunk.UpgradeData;
 
 /**
  * Checks the actual optional C2ME hook, including worker-thread scope cleanup.
@@ -28,20 +28,20 @@ public final class C2mePromotionGameTest {
      * @throws ReflectiveOperationException if the installed C2ME conversion method changed
      */
     @GameTest(maxTicks = 200)
-    public void c2meConstructionMarksOnlyItsUnpublishedChunk(final TestContext context)
+    public void c2meConstructionMarksOnlyItsUnpublishedChunk(final GameTestHelper context)
             throws ReflectiveOperationException {
         if (!FabricLoader.getInstance().isModLoaded("c2me")) {
-            context.complete();
+            context.succeed();
             return;
         }
-        final ServerWorld world = context.getWorld();
-        final ChunkPos pos = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
+        final ServerLevel world = context.getLevel();
+        final ChunkPos pos = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
         final AtomicBoolean observed = new AtomicBoolean();
-        final ProtoChunk proto = new ProtoChunk(pos, UpgradeData.NO_UPGRADE_DATA, world,
-                world.getPalettesFactory(), null) {
+        final ProtoChunk proto = new ProtoChunk(pos, UpgradeData.EMPTY, world,
+                world.palettedContainerFactory(), null) {
             @Override
             public ChunkPos getPos() {
-                if (C2meChunkPromotion.isConstructing(world, pos.x, pos.z)) {
+                if (C2meChunkPromotion.isConstructing(world, chunkPos.x(), chunkPos.z())) {
                     observed.set(true);
                 }
                 return super.getPos();
@@ -49,12 +49,12 @@ public final class C2mePromotionGameTest {
         };
         final Class<?> owner = Class.forName(
                 "com.ishland.c2me.rewrites.chunksystem.common.statuses.ServerAccessible");
-        final Method conversion = owner.getDeclaredMethod("toFullChunk", ProtoChunk.class, ServerWorld.class);
+        final Method conversion = owner.getDeclaredMethod("toFullChunk", ProtoChunk.class, ServerLevel.class);
         conversion.setAccessible(true);
-        final CompletableFuture<WorldChunk> worker = CompletableFuture.supplyAsync(() -> {
+        final CompletableFuture<LevelChunk> worker = CompletableFuture.supplyAsync(() -> {
             try {
-                final WorldChunk result = (WorldChunk) conversion.invoke(null, proto, world);
-                if (C2meChunkPromotion.isConstructing(world, pos.x, pos.z)) {
+                final LevelChunk result = (LevelChunk) conversion.invoke(null, proto, world);
+                if (C2meChunkPromotion.isConstructing(world, pos.x(), pos.z())) {
                     throw new IllegalStateException("C2ME construction scope leaked onto its worker");
                 }
                 return result;
@@ -62,15 +62,15 @@ public final class C2mePromotionGameTest {
                 throw new IllegalStateException("C2ME full-chunk construction failed at " + pos, e);
             }
         });
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
-                    context.assertTrue(worker.isDone(), Text.literal("C2ME constructor worker has not returned"));
+        context.startSequence()
+                .thenWaitUntil(() -> {
+                    context.assertTrue(worker.isDone(), Component.literal("C2ME constructor worker has not returned"));
                     context.assertTrue(worker.join().getPos().equals(pos),
-                            Text.literal("C2ME conversion changed the chunk position"));
-                    context.assertTrue(observed.get(), Text.literal("C2ME promotion hook did not wrap construction"));
-                    context.assertTrue(!C2meChunkPromotion.isConstructing(world, pos.x, pos.z),
-                            Text.literal("Worker construction scope leaked onto the server"));
+                            Component.literal("C2ME conversion changed the chunk position"));
+                    context.assertTrue(observed.get(), Component.literal("C2ME promotion hook did not wrap construction"));
+                    context.assertTrue(!C2meChunkPromotion.isConstructing(world, pos.x(), pos.z()),
+                            Component.literal("Worker construction scope leaked onto the server"));
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 }

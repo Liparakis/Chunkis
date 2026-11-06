@@ -9,20 +9,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.structure.StructurePiecesList;
-import net.minecraft.structure.StructureStart;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.SerializedChunk;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.gen.structure.Structure;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.storage.SerializableChunkData;
+import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
 
 /**
  * Verifies that direct structure metadata extraction matches vanilla's
@@ -39,9 +39,9 @@ public final class StructureMetadataExtractorGameTest {
      * @return the resolved structure, or null if the registry is empty
      */
     private static Structure getTestStructure(final Registry<Structure> registry) {
-        Structure structure = registry.get(Identifier.ofVanilla("village"));
+        Structure structure = registry.getValue(Identifier.withDefaultNamespace("village"));
         if (structure == null) {
-            structure = registry.get(Identifier.ofVanilla("village_plains"));
+            structure = registry.getValue(Identifier.withDefaultNamespace("village_plains"));
         }
         if (structure == null) {
             structure = registry.stream()
@@ -53,55 +53,55 @@ public final class StructureMetadataExtractorGameTest {
 
     /**
      * Game test that verifies the output of {@link StructureMetadataExtractor#extract} matches
-     * vanilla's {@link SerializedChunk#structureData} for the same live chunk.
+     * vanilla's {@link SerializableChunkData#structureData} for the same live chunk.
      *
      * @param context the game test context
      */
     @GameTest(maxTicks = 100)
-    public void directStructureExtractionMatchesVanillaSerializedChunk(final TestContext context) {
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(new BlockPos(1, 2, 1));
-        final WorldChunk chunk = world.getWorldChunk(anchor);
+    public void directStructureExtractionMatchesVanillaSerializedChunk(final GameTestHelper context) {
+        final ServerLevel world = context.getLevel();
+        final BlockPos anchor = context.absolutePos(new BlockPos(1, 2, 1));
+        final LevelChunk chunk = world.getChunkAt(anchor);
         final ChunkPos chunkPos = chunk.getPos();
 
-        final Registry<Structure> structureRegistry = world.getRegistryManager()
-                .getOrThrow(RegistryKeys.STRUCTURE);
+        final Registry<Structure> structureRegistry = world.registryAccess()
+                .lookupOrThrow(Registries.STRUCTURE);
         final Structure structure = getTestStructure(structureRegistry);
-        context.assertTrue(structure != null, Text.literal("Expected a structure to exist in the registry."));
+        context.assertTrue(structure != null, Component.literal("Expected a structure to exist in the registry."));
 
         final StructureStart start = new StructureStart(
                 structure,
                 chunkPos,
                 1,
-                new StructurePiecesList(List.of()));
+                new PiecesContainer(List.of()));
 
         final Map<Structure, StructureStart> starts = new HashMap<>();
         starts.put(structure, start);
-        chunk.setStructureStarts(starts);
+        chunk.setAllStarts(starts);
 
         final LongSet references = new LongOpenHashSet(new long[]{
-                chunkPos.toLong(),
-                new ChunkPos(chunkPos.x + 1, chunkPos.z).toLong()
+                chunkPos.pack(),
+                new ChunkPos(chunkPos.x() + 1, chunkPos.z()).pack()
         });
         final Map<Structure, LongSet> referenceMap = new HashMap<>();
         referenceMap.put(structure, references);
-        chunk.setStructureReferences(referenceMap);
+        chunk.setAllReferences(referenceMap);
 
-        final NbtCompound direct = StructureMetadataExtractor.extract(world, chunk);
-        final NbtCompound vanilla = SerializedChunk.fromChunk(world, chunk)
+        final CompoundTag direct = StructureMetadataExtractor.extract(world, chunk);
+        final CompoundTag vanilla = SerializableChunkData.copyOf(world, chunk)
                 .structureData();
 
         context.assertTrue(
                 CisNbtUtil.hasStructureData(direct),
-                Text.literal("Expected direct extractor to emit structure data."));
+                Component.literal("Expected direct extractor to emit structure data."));
         context.assertTrue(
                 CisNbtUtil.hasStructureData(vanilla),
-                Text.literal("Expected vanilla SerializedChunk to emit structure data."));
+                Component.literal("Expected vanilla SerializedChunk to emit structure data."));
         context.assertTrue(
                 Objects.equals(direct, vanilla),
-                Text.literal("Direct structure extractor output did not match SerializedChunk structureData()."));
+                Component.literal("Direct structure extractor output did not match SerializedChunk structureData()."));
 
-        context.complete();
+        context.succeed();
     }
 }
 

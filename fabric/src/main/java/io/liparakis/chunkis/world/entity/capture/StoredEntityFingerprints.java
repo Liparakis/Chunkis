@@ -6,11 +6,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 
 /**
  * Remembers which entity payloads each chunk's CIS entry holds on disk, so a vanilla entity save
@@ -44,12 +44,12 @@ public final class StoredEntityFingerprints {
      * @param forEach visits every entity payload
      * @return sorted per-entity hashes
      */
-    public static long[] of(final Consumer<Consumer<NbtCompound>> forEach) {
-        final List<NbtCompound> payloads = new ArrayList<>();
+    public static long[] of(final Consumer<Consumer<CompoundTag>> forEach) {
+        final List<CompoundTag> payloads = new ArrayList<>();
         forEach.accept(payloads::add);
         final long[] hashes = new long[payloads.size()];
         for (int i = 0; i < hashes.length; i++) {
-            final NbtCompound nbt = payloads.get(i);
+            final CompoundTag nbt = payloads.get(i);
             hashes[i] = nbt == null ? 0L : ((long) nbt.hashCode() << 32) | (nbt.toString().hashCode() & 0xFFFF_FFFFL);
         }
         Arrays.sort(hashes);
@@ -63,7 +63,7 @@ public final class StoredEntityFingerprints {
      * @param pos         chunk position
      * @param fingerprint fingerprint of the written entity payloads
      */
-    public static void record(final ServerWorld world, final ChunkPos pos, final long[] fingerprint) {
+    public static void record(final ServerLevel world, final ChunkPos pos, final long[] fingerprint) {
         STORED.put(key(world, pos), fingerprint);
     }
 
@@ -74,7 +74,7 @@ public final class StoredEntityFingerprints {
      * @param world target world
      * @param pos   chunk position
      */
-    public static void forget(final ServerWorld world, final ChunkPos pos) {
+    public static void forget(final ServerLevel world, final ChunkPos pos) {
         STORED.remove(key(world, pos));
     }
 
@@ -86,7 +86,7 @@ public final class StoredEntityFingerprints {
      * @param fingerprint fingerprint of the entities about to be saved
      * @return true when the stored entry already holds exactly these entity payloads
      */
-    public static boolean consumeIfMatches(final ServerWorld world, final ChunkPos pos, final long[] fingerprint) {
+    public static boolean consumeIfMatches(final ServerLevel world, final ChunkPos pos, final long[] fingerprint) {
         final long[] stored = STORED.remove(key(world, pos));
         return stored != null && Arrays.equals(stored, fingerprint);
     }
@@ -105,10 +105,10 @@ public final class StoredEntityFingerprints {
      * @param pos   chunk position
      * @return map key
      */
-    private static Key key(final ServerWorld world, final ChunkPos pos) {
-        return new Key(world.getRegistryKey(), pos.toLong());
+    private static Key key(final ServerLevel world, final ChunkPos pos) {
+        return new Key(world.dimension(), pos.pack());
     }
 
-    private record Key(RegistryKey<World> world, long pos) {
+    private record Key(ResourceKey<Level> world, long pos) {
     }
 }

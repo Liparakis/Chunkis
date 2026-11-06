@@ -1,18 +1,18 @@
 package io.liparakis.chunkis.world.tracking.save;
 
 import java.nio.file.Path;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 /**
  * Pure path-resolution helpers for Chunkis and vanilla world storage paths.
  *
  * <p>Chunkis keeps its own dimension-local data under a normalized
  * {@code dimensions/<namespace>/<path>} layout for every non-overworld dimension.
- * Vanilla storage is different: the Nether and End still use legacy save roots
- * ({@code DIM-1} and {@code DIM1}) while custom dimensions use
- * {@code dimensions/<namespace>/<path>}.
+ * Vanilla 26.1 stores every dimension, including the Overworld, under
+ * {@code dimensions/<namespace>/<path>}. CIS keeps its established Overworld root
+ * so upgrading Minecraft does not orphan existing Chunkis data.
  *
  * <p>Kept separate from {@link FabricCisStorageHelper} so the layout contract can
  * be unit-tested without triggering block-registry bootstrap.
@@ -74,26 +74,6 @@ public final class ChunkisStoragePaths {
     private static final String OVERWORLD_PATH = "overworld";
 
     /**
-     * Legacy vanilla save directory used by the Nether.
-     */
-    private static final String NETHER_DIR = "DIM-1";
-
-    /**
-     * Legacy vanilla save directory used by the End.
-     */
-    private static final String END_DIR = "DIM1";
-
-    /**
-     * Vanilla dimension path for the Nether.
-     */
-    private static final String NETHER_PATH = "the_nether";
-
-    /**
-     * Vanilla dimension path for the End.
-     */
-    private static final String END_PATH = "the_end";
-
-    /**
      * Private constructor to prevent utility class instantiation.
      *
      * @throws AssertionError always
@@ -111,7 +91,7 @@ public final class ChunkisStoragePaths {
      * @param worldKey the registry key identifying the target dimension
      * @return the resolved regions directory path
      */
-    public static Path computeRegionsDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
+    public static Path computeRegionsDirectory(final Path saveRoot, final ResourceKey<Level> worldKey) {
         return computeChunkisDirectory(saveRoot, worldKey).resolve(REGIONS_DIR);
     }
 
@@ -124,7 +104,7 @@ public final class ChunkisStoragePaths {
      * @param worldKey the registry key identifying the target dimension
      * @return the resolved directory path
      */
-    public static Path computeUnfinishedChunksDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
+    public static Path computeUnfinishedChunksDirectory(final Path saveRoot, final ResourceKey<Level> worldKey) {
         return computeChunkisDirectory(saveRoot, worldKey).resolve(UNFINISHED_DIR);
     }
 
@@ -135,7 +115,7 @@ public final class ChunkisStoragePaths {
      * @param worldKey the registry key identifying the target dimension
      * @return the resolved mapping file path
      */
-    public static Path computeMappingFile(final Path saveRoot, final RegistryKey<World> worldKey) {
+    public static Path computeMappingFile(final Path saveRoot, final ResourceKey<Level> worldKey) {
         return computeChunkisDirectory(saveRoot, worldKey).resolve(MAPPING_FILE);
     }
 
@@ -147,7 +127,7 @@ public final class ChunkisStoragePaths {
      * @param worldKey the registry key identifying the target dimension
      * @return the resolved portal index file path
      */
-    public static Path computePortalIndexFile(final Path saveRoot, final RegistryKey<World> worldKey) {
+    public static Path computePortalIndexFile(final Path saveRoot, final ResourceKey<Level> worldKey) {
         return computeChunkisDirectory(saveRoot, worldKey).resolve(PORTAL_INDEX_FILE);
     }
 
@@ -167,8 +147,8 @@ public final class ChunkisStoragePaths {
     }
 
     /**
-     * Resolves the vanilla MCA region directory for a given dimension, using the
-     * same base layout as Chunkis.
+     * Resolves the vanilla MCA region directory for a given dimension using
+     * Minecraft's 26.1 dimension layout.
      *
      * <p>Useful for reading vanilla chunk data alongside Chunkis data without
      * duplicating the dimension-path logic.
@@ -177,7 +157,7 @@ public final class ChunkisStoragePaths {
      * @param worldKey the registry key identifying the target dimension
      * @return the resolved vanilla region directory path
      */
-    public static Path computeVanillaRegionDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
+    public static Path computeVanillaRegionDirectory(final Path saveRoot, final ResourceKey<Level> worldKey) {
         return computeVanillaDimensionBaseDirectory(saveRoot, worldKey).resolve(VANILLA_REGION_DIR);
     }
 
@@ -192,7 +172,7 @@ public final class ChunkisStoragePaths {
      * @param worldKey the registry key identifying the target dimension
      * @return the resolved vanilla external entity directory path
      */
-    public static Path computeVanillaEntitiesDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
+    public static Path computeVanillaEntitiesDirectory(final Path saveRoot, final ResourceKey<Level> worldKey) {
         return computeVanillaDimensionBaseDirectory(saveRoot, worldKey).resolve(VANILLA_ENTITIES_DIR);
     }
 
@@ -205,7 +185,7 @@ public final class ChunkisStoragePaths {
      * @param worldKey the registry key identifying the target dimension
      * @return {@code <dimensionBase>/chunkis/}
      */
-    private static Path computeChunkisDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
+    private static Path computeChunkisDirectory(final Path saveRoot, final ResourceKey<Level> worldKey) {
         return computeDimensionBaseDirectory(saveRoot, worldKey).resolve(CHUNKIS_DIR);
     }
 
@@ -221,8 +201,8 @@ public final class ChunkisStoragePaths {
      * @param worldKey the registry key identifying the target dimension
      * @return the dimension base directory
      */
-    private static Path computeDimensionBaseDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
-        final Identifier dimId = worldKey.getValue();
+    private static Path computeDimensionBaseDirectory(final Path saveRoot, final ResourceKey<Level> worldKey) {
+        final Identifier dimId = worldKey.identifier();
         if (!requiresDimensionSubdirectory(dimId)) {
             return saveRoot;
         }
@@ -237,27 +217,15 @@ public final class ChunkisStoragePaths {
      * Mirrors vanilla's actual dimension save roots for MCA-backed data.
      *
      * <ul>
-     *   <li>{@code minecraft:overworld} -> {@code <saveRoot>/}</li>
-     *   <li>{@code minecraft:the_nether} -> {@code <saveRoot>/DIM-1/}</li>
-     *   <li>{@code minecraft:the_end} -> {@code <saveRoot>/DIM1/}</li>
-     *   <li>Custom dimensions -> {@code <saveRoot>/dimensions/<namespace>/<path>/}</li>
+     *   <li>All dimensions -> {@code <saveRoot>/dimensions/<namespace>/<path>/}</li>
      * </ul>
      *
      * @param saveRoot the world save root
      * @param worldKey the registry key identifying the target dimension
      * @return the vanilla dimension base directory
      */
-    private static Path computeVanillaDimensionBaseDirectory(final Path saveRoot, final RegistryKey<World> worldKey) {
-        final Identifier dimId = worldKey.getValue();
-        if (!requiresDimensionSubdirectory(dimId)) {
-            return saveRoot;
-        }
-        if (isVanillaDimension(dimId, NETHER_PATH)) {
-            return saveRoot.resolve(NETHER_DIR);
-        }
-        if (isVanillaDimension(dimId, END_PATH)) {
-            return saveRoot.resolve(END_DIR);
-        }
+    private static Path computeVanillaDimensionBaseDirectory(final Path saveRoot, final ResourceKey<Level> worldKey) {
+        final Identifier dimId = worldKey.identifier();
         return saveRoot
                 .resolve(DIMENSIONS_DIR)
                 .resolve(dimId.getNamespace())
@@ -281,14 +249,4 @@ public final class ChunkisStoragePaths {
                 || !OVERWORLD_PATH.equals(dimId.getPath());
     }
 
-    /**
-     * Returns whether the identifier refers to a vanilla dimension with the given path.
-     *
-     * @param dimId dimension identifier to inspect
-     * @param path  expected vanilla path
-     * @return {@code true} when the identifier matches the requested vanilla dimension
-     */
-    private static boolean isVanillaDimension(final Identifier dimId, final String path) {
-        return MINECRAFT_NAMESPACE.equals(dimId.getNamespace()) && path.equals(dimId.getPath());
-    }
 }

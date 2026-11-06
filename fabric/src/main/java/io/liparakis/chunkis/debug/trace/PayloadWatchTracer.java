@@ -16,16 +16,16 @@ import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import io.liparakis.chunkis.world.tracking.suppression.ChunkMutationTrackingScope;
 import java.util.List;
 import java.util.Objects;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -73,7 +73,7 @@ public final class PayloadWatchTracer {
      * @param mutationGeneration internal modification tracking sequence generation number
      * @param message            optional diagnostic detail override message, may be null
      */
-    public static void traceBlockSetStateEntered(final WorldChunk chunk, final BlockPos pos,
+    public static void traceBlockSetStateEntered(final LevelChunk chunk, final BlockPos pos,
             final BlockState previous, final BlockState next, final int flags,
             final String caller,
             final ChunkMutationTrackingScope.Cause passiveCause,
@@ -95,7 +95,7 @@ public final class PayloadWatchTracer {
      *
      * @param chunk target world chunk
      */
-    public static void traceCapturedBlocks(final WorldChunk chunk) {
+    public static void traceCapturedBlocks(final LevelChunk chunk) {
         BlockPayloadTracer.traceCapturedBlocks(chunk);
     }
 
@@ -110,7 +110,7 @@ public final class PayloadWatchTracer {
      */
     public static void traceCapturedBlockEntity(final String worldId, final ChunkPos chunkPos, final BlockPos pos,
             @Nullable final BlockEntity blockEntity,
-            @Nullable final NbtCompound nbt) {
+            @Nullable final CompoundTag nbt) {
         BlockEntityPayloadTracer.traceCapturedBlockEntity(worldId, chunkPos, pos, blockEntity, nbt);
     }
 
@@ -122,7 +122,7 @@ public final class PayloadWatchTracer {
      * @param pos      coordinates of the block entity
      * @param message  reason why capture was skipped
      */
-    public static void traceSkippedBlockEntityCapture(final ServerWorld world, final ChunkPos chunkPos,
+    public static void traceSkippedBlockEntityCapture(final ServerLevel world, final ChunkPos chunkPos,
             final BlockPos pos, final String message) {
         BlockEntityPayloadTracer.traceSkippedBlockEntityCapture(world, chunkPos, pos, message);
     }
@@ -134,8 +134,8 @@ public final class PayloadWatchTracer {
      * @param chunkPos coordinates of the enclosing chunk
      * @param entities list of captured entity compounds
      */
-    public static void traceCapturedEntities(final ServerWorld world, final ChunkPos chunkPos,
-            final List<NbtCompound> entities) {
+    public static void traceCapturedEntities(final ServerLevel world, final ChunkPos chunkPos,
+            final List<CompoundTag> entities) {
         EntityPayloadTracer.traceCapturedEntities(world, chunkPos, entities);
     }
 
@@ -153,9 +153,9 @@ public final class PayloadWatchTracer {
      * @param byteSize    estimated size of payload in bytes, may be null
      */
     public static void traceDeltaStage(final String worldId, final ChunkPos chunkPos, final ChunkDeltaView<BlockState,
-                    NbtCompound> delta, final String operationId, final ChunkTraceEventType eventType, final String stage,
+                    CompoundTag> delta, final String operationId, final ChunkTraceEventType eventType, final String stage,
             final String source, final String message, final Integer byteSize) {
-        traceDeltaStageInternal(worldId, DebugChunkKeys.of(chunkPos), chunkPos.getStartX(), chunkPos.getStartZ(),
+        traceDeltaStageInternal(worldId, DebugChunkKeys.of(chunkPos), chunkPos.getMinBlockX(), chunkPos.getMinBlockZ(),
                 delta, operationId, eventType, stage, source, message, byteSize);
     }
 
@@ -175,7 +175,7 @@ public final class PayloadWatchTracer {
      * @param byteSize    estimated size of payload in bytes, may be null
      */
     public static void traceDeltaStage(final String worldId, final DebugChunkKey chunkKey, final int chunkStartX,
-            final int chunkStartZ, final ChunkDeltaView<BlockState, NbtCompound> delta,
+            final int chunkStartZ, final ChunkDeltaView<BlockState, CompoundTag> delta,
             final String operationId, final ChunkTraceEventType eventType,
             final String stage, final String source, final String message,
             final Integer byteSize) {
@@ -200,7 +200,7 @@ public final class PayloadWatchTracer {
      */
     private static void traceDeltaStageInternal(final String worldId, final DebugChunkKey chunkKey,
             final int chunkStartX, final int chunkStartZ,
-            final ChunkDeltaView<BlockState, NbtCompound> delta,
+            final ChunkDeltaView<BlockState, CompoundTag> delta,
             final String operationId, final ChunkTraceEventType eventType,
             final String stage, final String source, final String message,
             final Integer byteSize) {
@@ -277,8 +277,8 @@ public final class PayloadWatchTracer {
      * @param delta       tracked delta selected for the load
      * @param operationId active load operation ID
      */
-    public static void traceTrackedLoadSelected(final ServerWorld world, final ChunkPos chunkPos,
-            final ChunkDeltaView<BlockState, NbtCompound> delta, final String operationId) {
+    public static void traceTrackedLoadSelected(final ServerLevel world, final ChunkPos chunkPos,
+            final ChunkDeltaView<BlockState, CompoundTag> delta, final String operationId) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
@@ -293,14 +293,14 @@ public final class PayloadWatchTracer {
      * @param delta decoded delta
      * @return a delta to match watched blocks against
      */
-    public static ChunkDeltaView<BlockState, NbtCompound> withAttachedBlocks(final ServerWorld world,
-            final ChunkDeltaView<BlockState, NbtCompound> delta) {
-        if (!(delta instanceof ChunkDelta<BlockState, NbtCompound> attached)
+    public static ChunkDeltaView<BlockState, CompoundTag> withAttachedBlocks(final ServerLevel world,
+            final ChunkDeltaView<BlockState, CompoundTag> delta) {
+        if (!(delta instanceof ChunkDelta<BlockState, CompoundTag> attached)
                 || !(attached.blocksOnlySource() instanceof RecentChunkBlocks.LoadedSections loaded)) {
             return delta;
         }
-        final ChunkDelta<BlockState, NbtCompound> blocks = new ChunkDelta<>(BlockState::isAir);
-        RecentChunkBlocks.appendBlocks(blocks, loaded.sections(), world.getBottomY(), 0);
+        final ChunkDelta<BlockState, CompoundTag> blocks = new ChunkDelta<>(BlockState::isAir);
+        RecentChunkBlocks.appendBlocks(blocks, loaded.sections(), world.getMinY(), 0);
         attached.getBlockEntities().forEach((packedPos, nbt) -> blocks.addBlockEntityData(
                 io.liparakis.chunkis.core.BlockInstruction.unpackX(packedPos),
                 io.liparakis.chunkis.core.BlockInstruction.unpackY(packedPos),
@@ -317,13 +317,13 @@ public final class PayloadWatchTracer {
      * @param operationId         active trace session operation ID
      * @param storageEntryPresent true if storage bytes were successfully loaded
      */
-    public static void traceDecodeOutcome(final ServerWorld world, final ChunkPos chunkPos,
-            final ChunkDeltaView<BlockState, NbtCompound> decoded, final String operationId,
+    public static void traceDecodeOutcome(final ServerLevel world, final ChunkPos chunkPos,
+            final ChunkDeltaView<BlockState, CompoundTag> decoded, final String operationId,
             final boolean storageEntryPresent) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
         }
-        final ChunkDeltaView<BlockState, NbtCompound> delta = withAttachedBlocks(world, decoded);
+        final ChunkDeltaView<BlockState, CompoundTag> delta = withAttachedBlocks(world, decoded);
         final String worldId = PayloadWatchSummaries.worldId(world);
 
         if (storageEntryPresent) {
@@ -346,7 +346,7 @@ public final class PayloadWatchTracer {
             if (target.type() == PayloadWatchType.ENTITY || !target.hasBlockCoordinates()) {
                 continue;
             }
-            if (!WatchPayloadMatcher.contains(delta, target, chunkPos.getStartX(), chunkPos.getStartZ(), worldId)) {
+            if (!WatchPayloadMatcher.contains(delta, target, chunkPos.getMinBlockX(), chunkPos.getMinBlockZ(), worldId)) {
                 WatchTraceEmitter.traceWatch(ChunkTraceEventType.WATCH_FAILED, "decode", "PayloadWatchTracer#traceDecodeOutcome",
                         "missing after decode", worldId, chunkPos, operationId, target, target.describe(), null);
             }
@@ -362,8 +362,8 @@ public final class PayloadWatchTracer {
      * @param delta       the restoring chunk delta state
      * @param operationId active restore session operation ID
      */
-    public static void traceRestoreStarted(final ServerWorld world, final ChunkPos chunkPos, final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta, final String operationId) {
+    public static void traceRestoreStarted(final ServerLevel world, final ChunkPos chunkPos, final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta, final String operationId) {
         RestorePayloadTracer.traceRestoreStarted(world, chunkPos, chunk, delta, operationId);
     }
 
@@ -376,8 +376,8 @@ public final class PayloadWatchTracer {
      * @param operationId active trace session operation ID
      * @param source      class/method trace source trigger label
      */
-    public static void traceProtoDeltaAttached(final String worldId, final Chunk chunk, final ChunkDelta<BlockState,
-            NbtCompound> delta, final String operationId, final String source) {
+    public static void traceProtoDeltaAttached(final String worldId, final ChunkAccess chunk, final ChunkDelta<BlockState,
+            CompoundTag> delta, final String operationId, final String source) {
         ChunkLifecyclePayloadTracer.traceProtoDeltaAttached(worldId, chunk, delta, operationId, source);
     }
 
@@ -390,8 +390,8 @@ public final class PayloadWatchTracer {
      * @param operationId active trace session operation ID
      * @param source      class/method trace source trigger label
      */
-    public static void traceProtoDeltaPresentBeforeConversion(final String worldId, final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+    public static void traceProtoDeltaPresentBeforeConversion(final String worldId, final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId, final String source) {
         ChunkLifecyclePayloadTracer.traceProtoDeltaPresentBeforeConversion(worldId, chunk, delta, operationId, source);
     }
@@ -405,8 +405,8 @@ public final class PayloadWatchTracer {
      * @param operationId active trace session operation ID
      * @param source      class/method trace source trigger label
      */
-    public static void traceProtoDeltaPresentAfterConversion(final String worldId, final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+    public static void traceProtoDeltaPresentAfterConversion(final String worldId, final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId, final String source) {
         ChunkLifecyclePayloadTracer.traceProtoDeltaPresentAfterConversion(worldId, chunk, delta, operationId, source);
     }
@@ -419,8 +419,8 @@ public final class PayloadWatchTracer {
      * @param operationId active trace session operation ID
      * @param source      class/method trace source trigger label
      */
-    public static void traceWorldChunkDeltaAttached(final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+    public static void traceWorldChunkDeltaAttached(final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId, final String source) {
         ChunkLifecyclePayloadTracer.traceWorldChunkDeltaAttached(chunk, delta, operationId, source);
     }
@@ -432,7 +432,7 @@ public final class PayloadWatchTracer {
      * @param operationId active trace session operation ID
      * @param source      class/method trace source trigger label
      */
-    public static void traceWorldChunkDeltaMissing(final WorldChunk chunk, final String operationId,
+    public static void traceWorldChunkDeltaMissing(final LevelChunk chunk, final String operationId,
             final String source) {
         ChunkLifecyclePayloadTracer.traceWorldChunkDeltaMissing(chunk, operationId, source);
     }
@@ -459,8 +459,8 @@ public final class PayloadWatchTracer {
      * @param operationId   active trace session operation ID, if any, may be null
      * @param source        class/method trace source trigger label
      */
-    public static void traceWorldChunkConstructorConsumed(final WorldChunk chunk,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+    public static void traceWorldChunkConstructorConsumed(final LevelChunk chunk,
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             @Nullable final String operationId,
             final String source) {
         ChunkLifecyclePayloadTracer.traceWorldChunkConstructorConsumed(chunk, expectedDelta, operationId, source);
@@ -476,7 +476,7 @@ public final class PayloadWatchTracer {
      * @param operationId   active restore session operation ID
      * @param source        class/method trace source label
      */
-    public static void traceRestoreInstructionVisited(final WorldChunk chunk, final BlockPos pos,
+    public static void traceRestoreInstructionVisited(final LevelChunk chunk, final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
             final String operationId, final String source) {
@@ -497,7 +497,7 @@ public final class PayloadWatchTracer {
      * @param operationId   active restore session operation ID
      * @param source        class/method trace source label
      */
-    public static void traceRestoreApplyAttempt(final WorldChunk chunk, final BlockPos pos,
+    public static void traceRestoreApplyAttempt(final LevelChunk chunk, final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState, final String operationId,
             final String source) {
@@ -517,7 +517,7 @@ public final class PayloadWatchTracer {
      * @param operationId   active restore session operation ID
      * @param source        class/method trace source label
      */
-    public static void traceRestoreSetBlockReturned(final WorldChunk chunk, final BlockPos pos,
+    public static void traceRestoreSetBlockReturned(final LevelChunk chunk, final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
             final String operationId, final String source) {
@@ -538,7 +538,7 @@ public final class PayloadWatchTracer {
      * @param operationId   active restore session operation ID
      * @param source        class/method trace source label
      */
-    public static void traceRestoreStateAfterSetBlock(final WorldChunk chunk, final BlockPos pos,
+    public static void traceRestoreStateAfterSetBlock(final LevelChunk chunk, final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
             final String operationId, final String source) {
@@ -560,7 +560,7 @@ public final class PayloadWatchTracer {
      * @param source        class/method trace source label
      * @param reason        detailed failure classification text
      */
-    public static void traceRestoreApplyFailed(final WorldChunk chunk, final BlockPos pos,
+    public static void traceRestoreApplyFailed(final LevelChunk chunk, final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState, final String operationId,
             final String source, final String reason) {
@@ -576,8 +576,8 @@ public final class PayloadWatchTracer {
      * @param operationId   active restore session operation ID
      * @param source        class/method trace source label
      */
-    public static void traceRestoreSkipped(final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+    public static void traceRestoreSkipped(final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             final String operationId, final String source) {
         RestorePayloadTracer.traceRestoreSkipped(chunk, expectedDelta, operationId, source);
     }
@@ -590,7 +590,7 @@ public final class PayloadWatchTracer {
      * @param state       applied block state
      * @param operationId active restore session operation ID
      */
-    public static void traceRestoredBlock(final WorldChunk chunk, final BlockPos pos, final BlockState state,
+    public static void traceRestoredBlock(final LevelChunk chunk, final BlockPos pos, final BlockState state,
             final String operationId) {
         if (!hasPayloadWatches()) {
             return;
@@ -607,7 +607,7 @@ public final class PayloadWatchTracer {
      * @param operationId active restore operation ID
      * @param message     description detail text
      */
-    public static void traceRestoreBlockFailure(final ServerWorld world, final ChunkPos chunkPos, final BlockPos pos,
+    public static void traceRestoreBlockFailure(final ServerLevel world, final ChunkPos chunkPos, final BlockPos pos,
             final String operationId, final String message) {
         RestorePayloadTracer.traceRestoreBlockFailure(world, chunkPos, pos, operationId, message);
     }
@@ -622,8 +622,8 @@ public final class PayloadWatchTracer {
      * @param nbt         source compound NBT
      * @param operationId active restore operation ID
      */
-    public static void traceRestoredBlockEntity(final ServerWorld world, final ChunkPos chunkPos, final BlockPos pos,
-            final BlockEntity blockEntity, final NbtCompound nbt,
+    public static void traceRestoredBlockEntity(final ServerLevel world, final ChunkPos chunkPos, final BlockPos pos,
+            final BlockEntity blockEntity, final CompoundTag nbt,
             final String operationId) {
         BlockEntityPayloadTracer.traceRestoredBlockEntity(world, chunkPos, pos, blockEntity, nbt, operationId);
     }
@@ -637,7 +637,7 @@ public final class PayloadWatchTracer {
      * @param operationId active restore operation ID
      * @param message     reason why restore was skipped
      */
-    public static void traceRestoreBlockEntitySkipped(final ServerWorld world, final ChunkPos chunkPos,
+    public static void traceRestoreBlockEntitySkipped(final ServerLevel world, final ChunkPos chunkPos,
             final BlockPos pos, final String operationId,
             final String message) {
         BlockEntityPayloadTracer.traceRestoreBlockEntitySkipped(world, chunkPos, pos, operationId, message);
@@ -651,7 +651,7 @@ public final class PayloadWatchTracer {
             final String worldId,
             final ChunkPos chunkPos,
             @Nullable final String operationId,
-            @Nullable final NbtCompound chunkNbt,
+            @Nullable final CompoundTag chunkNbt,
             final String stage,
             final String source
     ) {
@@ -704,8 +704,8 @@ public final class PayloadWatchTracer {
      * @param nbt         source compound NBT
      * @param operationId active restore operation ID
      */
-    public static void traceRestoredEntity(final ServerWorld world, final ChunkPos chunkPos, final Entity entity,
-            final NbtCompound nbt, final String operationId) {
+    public static void traceRestoredEntity(final ServerLevel world, final ChunkPos chunkPos, final Entity entity,
+            final CompoundTag nbt, final String operationId) {
         EntityPayloadTracer.traceRestoredEntity(world, chunkPos, entity, nbt, operationId);
     }
 
@@ -718,8 +718,8 @@ public final class PayloadWatchTracer {
      * @param operationId active restore operation ID
      * @param source      class/method trace source label
      */
-    public static void traceRestoreEntityInstructionVisited(final ServerWorld world, final ChunkPos chunkPos,
-            final NbtCompound nbt, final String operationId,
+    public static void traceRestoreEntityInstructionVisited(final ServerLevel world, final ChunkPos chunkPos,
+            final CompoundTag nbt, final String operationId,
             final String source) {
         EntityPayloadTracer.traceRestoreEntityInstructionVisited(world, chunkPos, nbt, operationId, source);
     }
@@ -733,8 +733,8 @@ public final class PayloadWatchTracer {
      * @param operationId active restore operation ID
      * @param source      class/method trace source label
      */
-    public static void traceRestoreEntityApplyAttempt(final ServerWorld world, final ChunkPos chunkPos,
-            final NbtCompound nbt, final String operationId,
+    public static void traceRestoreEntityApplyAttempt(final ServerLevel world, final ChunkPos chunkPos,
+            final CompoundTag nbt, final String operationId,
             final String source) {
         EntityPayloadTracer.traceRestoreEntityApplyAttempt(world, chunkPos, nbt, operationId, source);
     }
@@ -748,7 +748,7 @@ public final class PayloadWatchTracer {
      * @param operationId active restore operation ID
      * @param message     reason why restore was skipped
      */
-    public static void traceRestoreEntitySkipped(final ServerWorld world, final ChunkPos chunkPos,
+    public static void traceRestoreEntitySkipped(final ServerLevel world, final ChunkPos chunkPos,
             final String entityUuid, final String operationId,
             final String message) {
         EntityPayloadTracer.traceRestoreEntitySkipped(world, chunkPos, entityUuid, operationId, message);
@@ -763,9 +763,9 @@ public final class PayloadWatchTracer {
      * @param operationId   active restore operation ID, may be null
      * @param source        class/method trace source label
      */
-    public static void traceEntityPresenceAfterChunkFull(final ServerWorld world,
-            final WorldChunk chunk,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+    public static void traceEntityPresenceAfterChunkFull(final ServerLevel world,
+            final LevelChunk chunk,
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             @Nullable final String operationId,
             final String source) {
         EntityPayloadTracer.traceEntityPresenceAfterChunkFull(world, chunk, expectedDelta, operationId, source);
@@ -783,8 +783,8 @@ public final class PayloadWatchTracer {
      * @param source        class/method trace source label
      * @param message       custom detail description message text
      */
-    public static void traceEntityReplayState(final ServerWorld world, final WorldChunk chunk,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+    public static void traceEntityReplayState(final ServerLevel world, final LevelChunk chunk,
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             @Nullable final String operationId, final ChunkTraceEventType eventType
             , final String stage, final String source, final String message) {
         EntityPayloadTracer.traceEntityReplayState(world, chunk, expectedDelta, operationId, eventType, stage, source
@@ -800,7 +800,7 @@ public final class PayloadWatchTracer {
      * @param operationId active restore operation ID, may be null
      * @param source      class/method trace source label
      */
-    public static void traceLiveEntityRemoved(final ServerWorld world, final Entity entity,
+    public static void traceLiveEntityRemoved(final ServerLevel world, final Entity entity,
             final Entity.RemovalReason reason, @Nullable final String operationId,
             final String source) {
         EntityPayloadTracer.traceLiveEntityRemoved(world, entity, reason, operationId, source);
@@ -816,7 +816,7 @@ public final class PayloadWatchTracer {
      * @param source      class/method trace source label
      * @param message     description detail text
      */
-    public static void traceEntityChunkTransfer(final ServerWorld world, final Entity entity,
+    public static void traceEntityChunkTransfer(final ServerLevel world, final Entity entity,
             @Nullable final String operationId, final String stage,
             final String source, final String message) {
         EntityPayloadTracer.traceEntityChunkTransfer(world, entity, operationId, stage, source, message);
@@ -832,8 +832,8 @@ public final class PayloadWatchTracer {
      * @param source  class/method trace source label
      * @param message description detail text
      */
-    public static void traceEntityTrackingEvent(final ServerWorld world, final Entity entity,
-            final ServerPlayerEntity player, final String stage,
+    public static void traceEntityTrackingEvent(final ServerLevel world, final Entity entity,
+            final ServerPlayer player, final String stage,
             final String source, final String message) {
         EntityPayloadTracer.traceEntityTrackingEvent(world, entity, player, stage, source, message);
     }
@@ -847,7 +847,7 @@ public final class PayloadWatchTracer {
      * @param source  class/method trace source label
      * @param message description detail text
      */
-    public static void traceEntityChunkReentry(final ServerWorld world, final WorldChunk chunk, final String stage,
+    public static void traceEntityChunkReentry(final ServerLevel world, final LevelChunk chunk, final String stage,
             final String source, final String message) {
         EntityPayloadTracer.traceEntityChunkReentry(world, chunk, stage, source, message);
     }
@@ -862,10 +862,10 @@ public final class PayloadWatchTracer {
      * @param operationId      active trace session operation ID, may be null
      * @param expectedDelta    the expected delta, may be null
      */
-    public static void traceLiveChunkState(final WorldChunk chunk, final ChunkTraceEventType presentEventType,
+    public static void traceLiveChunkState(final LevelChunk chunk, final ChunkTraceEventType presentEventType,
             final String stage, final String source,
             @Nullable final String operationId, @Nullable final ChunkDelta<BlockState,
-                    NbtCompound> expectedDelta) {
+                    CompoundTag> expectedDelta) {
         ChunkLifecyclePayloadTracer.traceLiveChunkState(chunk, presentEventType, stage, source, operationId,
                 expectedDelta);
     }

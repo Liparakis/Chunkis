@@ -12,11 +12,11 @@ import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkDeltaOwnership;
 import io.liparakis.chunkis.world.tracking.ownership.ChunkOwnershipTraceHelper;
 import io.liparakis.chunkis.world.tracking.ownership.DeltaPersistenceGuard;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * Emits debug traces summarizing chunk tracking lifecycle events.
@@ -68,7 +68,7 @@ final class GlobalChunkTrackerTrace {
      * @param dirtyState true if the delta is dirty
      */
     static void traceTracker(
-            final RegistryKey<World> dimension,
+            final ResourceKey<Level> dimension,
             final DebugChunkKey chunkKey,
             final ChunkTraceReason reason,
             final String message,
@@ -85,7 +85,7 @@ final class GlobalChunkTrackerTrace {
                 reason,
                 source,
                 message,
-                dimension.getValue()
+                dimension.identifier()
                         .toString(),
                 chunkKey,
                 null,
@@ -137,7 +137,7 @@ final class GlobalChunkTrackerTrace {
                 source,
                 "first dirty mutation observed: " + DeltaPersistenceGuard.describeLifecycleState(delta),
                 key.dimension()
-                        .getValue()
+                        .identifier()
                         .toString(),
                 key.debugChunkKey(),
                 null,
@@ -176,7 +176,7 @@ final class GlobalChunkTrackerTrace {
                 "cached sparse block-entity payload without persisted base chunk NBT: "
                         + DeltaPersistenceGuard.describeDeltaShape(delta),
                 key.dimension()
-                        .getValue()
+                        .identifier()
                         .toString(),
                 key.debugChunkKey(),
                 null,
@@ -235,7 +235,7 @@ final class GlobalChunkTrackerTrace {
     ) {
         PayloadWatchTracer.traceDeltaStage(
                 key.dimension()
-                        .getValue()
+                        .identifier()
                         .toString(),
                 key.debugChunkKey(),
                 key.chunkStartX(),
@@ -259,7 +259,7 @@ final class GlobalChunkTrackerTrace {
      * @param source caller identifier tag
      */
     static void traceTrackedLiveChunk(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final ChunkDelta<?, ?> delta,
             final String stage,
             final String source
@@ -281,7 +281,7 @@ final class GlobalChunkTrackerTrace {
      * @return casted delta
      */
     @SuppressWarnings("unchecked")
-    private static ChunkDelta<BlockState, NbtCompound> castBlockDelta(final ChunkDelta<?, ?> delta) {
-        return (ChunkDelta<BlockState, NbtCompound>) delta;
+    private static ChunkDelta<BlockState, CompoundTag> castBlockDelta(final ChunkDelta<?, ?> delta) {
+        return (ChunkDelta<BlockState, CompoundTag>) delta;
     }
 }

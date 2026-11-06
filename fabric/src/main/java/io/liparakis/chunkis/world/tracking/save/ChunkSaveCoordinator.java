@@ -1,7 +1,5 @@
 package io.liparakis.chunkis.world.tracking.save;
 
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.PalettedContainer;
 import io.liparakis.chunkis.world.restoration.core.PalettedContainerFields;
 import io.liparakis.chunkis.mixin.accessor.ChunkSaveFlagAccessor;
 import io.liparakis.chunkis.mixin.accessor.WorldChunkAccessor;
@@ -35,24 +33,26 @@ import io.liparakis.chunkis.world.tracking.state.GlobalChunkTracker;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import net.minecraft.SharedConstants;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.chunk.SerializedChunk;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.chunk.WrapperProtoChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.ImposterProtoChunk;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.chunk.storage.SerializableChunkData;
 
 /**
  * Chunkis' chunk save path for one world: captures the live chunk into its delta
  * and persists it through CIS storage.
  *
  * <p>Plain logic extracted from the chunk-loading-manager mixin, which only
- * delegates here. One instance per {@link ServerWorld}; server thread only.</p>
+ * delegates here. One instance per {@link ServerLevel}; server thread only.</p>
  */
 public final class ChunkSaveCoordinator {
 
@@ -69,7 +69,7 @@ public final class ChunkSaveCoordinator {
     /**
      * World whose chunks this coordinator saves.
      */
-    private final ServerWorld world;
+    private final ServerLevel world;
 
     /**
      * Persistence guard for sparse deltas in {@link #world}.
@@ -86,7 +86,7 @@ public final class ChunkSaveCoordinator {
      *
      * @param world owning world
      */
-    public ChunkSaveCoordinator(final ServerWorld world) {
+    public ChunkSaveCoordinator(final ServerLevel world) {
         this.world = world;
         this.unfinishedChunks = new UnfinishedChunkStore(world);
         this.saveDeltaGuard = new SaveDeltaGuard(world);
@@ -111,7 +111,7 @@ public final class ChunkSaveCoordinator {
     public void close() {
         unfinishedChunks.close();
         AsyncCisSaveManager.flushAndClose(world);
-        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending = GlobalChunkTracker.getPendingDeltas(world);
+        final Map<ChunkPos, ChunkDelta<BlockState, CompoundTag>> pending = GlobalChunkTracker.getPendingDeltas(world);
         forceSaveRemainingDeltas(getStorage(), pending);
         FabricCisStorageHelper.closeStorage(world);
     }
@@ -137,7 +137,7 @@ public final class ChunkSaveCoordinator {
      * @param chunkToSave the chunk vanilla is saving
      * @return whether vanilla should continue, or whether the chunk was vanilla-dirty
      */
-    public SaveOutcome save(final Chunk chunkToSave) {
+    public SaveOutcome save(final ChunkAccess chunkToSave) {
         final ChunkPos pos = chunkToSave.getPos();
         final String operationId = ChunkTraceStore.nextOperationId("save");
         ChunkTraceStore.trace(
@@ -147,32 +147,32 @@ public final class ChunkSaveCoordinator {
                 ChunkTraceReason.NONE,
                 SAVE_SOURCE,
                 "save hook requested",
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
-                new DebugChunkKey(pos.x, pos.z),
+                new DebugChunkKey(pos.x(), pos.z()),
                 null,
                 operationId,
                 null,
                 null
         );
-        final Chunk chunk = chunkToSave instanceof WrapperProtoChunk wrapper
-                ? wrapper.getWrappedChunk()
+        final ChunkAccess chunk = chunkToSave instanceof ImposterProtoChunk wrapper
+                ? wrapper.getWrapped()
                 : chunkToSave;
         // Read first: vanilla's flag is the wrapped chunk's, and says whether anything but entities changed.
         final boolean vanillaUnsaved = !(chunk instanceof ChunkSaveFlagAccessor flag) || flag.chunkis$vanillaNeedsSaving();
-        ChunkDelta<BlockState, NbtCompound> delta = resolveDeltaForSave(chunk, pos);
+        ChunkDelta<BlockState, CompoundTag> delta = resolveDeltaForSave(chunk, pos);
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             traceBypassedSave(pos, delta, chunk, operationId);
-            if (!MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey())) {
+            if (!MigrationStateServiceHolder.isAuthoritative(world.dimension())) {
                 return SaveOutcome.VANILLA;
             }
-            if (!(chunk instanceof WorldChunk worldChunk) || !isSettled(worldChunk)
+            if (!(chunk instanceof LevelChunk worldChunk) || !isSettled(worldChunk)
                     || SnapshotSafetyChecker.isSnapshotUnsafe(worldChunk)) {
                 // Still generating, post-processing has not run, or its blocks cannot be snapshotted right now:
                 // kept as vanilla keeps it, so the next load continues instead of starting over.
-                world.getPointOfInterestStorage()
-                        .saveChunk(pos);
+                world.getPoiManager()
+                        .flush(pos);
                 return chunkToSave.tryMarkSaved() && unfinishedChunks.save(chunk)
                         ? SaveOutcome.HANDLED_DIRTY
                         : SaveOutcome.HANDLED_CLEAN;
@@ -185,10 +185,10 @@ public final class ChunkSaveCoordinator {
         }
         // From now on the chunk's Chunkis entry is what loads; an unfinished copy would only take up space.
         unfinishedChunks.discard(pos);
-        world.getPointOfInterestStorage()
-                .saveChunk(pos);
+        world.getPoiManager()
+                .flush(pos);
         ChunkOwnershipTraceHelper.traceDecision(
-                world.getRegistryKey(),
+                world.dimension(),
                 pos,
                 "CLAIMED",
                 ChunkTraceReason.valueOf(delta.getOwnershipReason()),
@@ -197,8 +197,8 @@ public final class ChunkSaveCoordinator {
                 null
         );
         PayloadWatchTracer.traceDeltaStage(
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 pos,
                 delta,
@@ -237,21 +237,21 @@ public final class ChunkSaveCoordinator {
             }
         }
 
-        if (delta != null && !delta.isDirty() && !loadedToWorld && deferBlocks && chunk instanceof WorldChunk unloading
+        if (delta != null && !delta.isDirty() && !loadedToWorld && deferBlocks && chunk instanceof LevelChunk unloading
                 && delta.getWrittenBlocksPrint() != null) {
             // Unloading clean: nothing to save, but keep its blocks for a quick reload. Vanilla has already let go
             // of this chunk, so its containers are taken, not copied. They are checked against the content the
             // stored entry was written from before any load uses them.
             final long[] print = delta.getWrittenBlocksPrint();
             final int blockCount = ChunkSectionDebugUtil.countNonAirBlocks(unloading);
-            RecentChunkBlocks.of(world.getRegistryKey()).putToVerify(FabricCisStorageHelper.toStoragePos(pos),
+            RecentChunkBlocks.of(world.dimension()).putToVerify(FabricCisStorageHelper.toStoragePos(pos),
                     new long[]{print[2], print[3]}, new long[]{print[0], print[1]}, takeSections(unloading),
-                    world.getBottomY(), blockCount);
+                    world.getMinY(), blockCount);
         }
         if (delta != null && !delta.isDirty()) {
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     pos,
                     delta,
@@ -271,7 +271,7 @@ public final class ChunkSaveCoordinator {
             queueDirtyDelta(getStorage(), pos, delta, operationId, chunk, deferredBlocks);
         }
 
-        if (vanillaUnsaved && chunk instanceof WorldChunk live && SnapshotSafetyChecker.isSnapshotUnsafe(live)) {
+        if (vanillaUnsaved && chunk instanceof LevelChunk live && SnapshotSafetyChecker.isSnapshotUnsafe(live)) {
             // The capture above was skipped, so what vanilla saw change is not in the delta: keep vanilla's flag for
             // the next save to capture it, which a cleared flag would leave to the entity-only path, keeping the old
             // block entities, light and ticks.
@@ -291,12 +291,12 @@ public final class ChunkSaveCoordinator {
      * @param chunk chunk being saved
      * @return {@code true} when its blocks can be stored as they are
      */
-    private static boolean isSettled(final WorldChunk chunk) {
-        if (!ChunkStatus.FULL.equals(chunk.getStatus())
+    private static boolean isSettled(final LevelChunk chunk) {
+        if (!ChunkStatus.FULL.equals(chunk.getPersistedStatus())
                 || !((ChunkBlockEntityNbtAccessor) chunk).chunkis$getBlockEntityNbts().isEmpty()) {
             return false;
         }
-        for (final ShortList positions : chunk.getPostProcessingLists()) {
+        for (final ShortList positions : chunk.getPostProcessing()) {
             if (positions != null && !positions.isEmpty()) {
                 return false;
             }
@@ -311,7 +311,7 @@ public final class ChunkSaveCoordinator {
      * @return a mapped DebugChunkKey
      */
     private static DebugChunkKey debugChunkKey(final ChunkPos pos) {
-        return new DebugChunkKey(pos.x, pos.z);
+        return new DebugChunkKey(pos.x(), pos.z());
     }
 
     /**
@@ -323,9 +323,9 @@ public final class ChunkSaveCoordinator {
      * @return the attached delta, or {@code null}
      */
     @SuppressWarnings("unchecked")
-    private static ChunkDelta<BlockState, NbtCompound> getChunkDelta(final Chunk chunk) {
+    private static ChunkDelta<BlockState, CompoundTag> getChunkDelta(final ChunkAccess chunk) {
         return chunk instanceof ChunkisDeltaDuck duck
-                ? (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta()
+                ? (ChunkDelta<BlockState, CompoundTag>) duck.chunkis$getDelta()
                 : null;
     }
 
@@ -336,9 +336,9 @@ public final class ChunkSaveCoordinator {
      * @return the data version identifier int
      */
     private static int getGameDataVersion() {
-        return SharedConstants.getGameVersion()
+        return SharedConstants.getCurrentVersion()
                 .dataVersion()
-                .id();
+                .version();
     }
 
     /**
@@ -351,8 +351,8 @@ public final class ChunkSaveCoordinator {
      * @param pos      the chunk position used for the fallback warning log
      */
     private static void updateDeltaMetadata(
-            final ChunkDelta<BlockState, NbtCompound> delta,
-            final NbtCompound metadata,
+            final ChunkDelta<BlockState, CompoundTag> delta,
+            final CompoundTag metadata,
             final ChunkPos pos) {
         try {
             delta.updateChunkMetadataWithEncodedPayload(
@@ -379,7 +379,7 @@ public final class ChunkSaveCoordinator {
      * @return {@code true} when storage should be consulted instead
      */
     private static boolean shouldBypassTrackedDelta(
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         return delta == null || (!delta.isDirty() && delta.isEmpty());
     }
 
@@ -396,8 +396,8 @@ public final class ChunkSaveCoordinator {
      * @return the same delta instance, or {@code null} when no delta exists
      */
     @SuppressWarnings("SameParameterValue")
-    private static ChunkDelta<BlockState, NbtCompound> claimEntityCapturedDelta(
-            final ChunkDelta<BlockState, NbtCompound> delta,
+    private static ChunkDelta<BlockState, CompoundTag> claimEntityCapturedDelta(
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String reason,
             final String source
     ) {
@@ -409,20 +409,20 @@ public final class ChunkSaveCoordinator {
     }
 
     /**
-     * Returns the live {@link WorldChunk} instance to use for base recovery.
+     * Returns the live {@link LevelChunk} instance to use for base recovery.
      *
-     * <p>If the supplied {@link Chunk} is already a {@link WorldChunk}, it is preferred.
+     * <p>If the supplied {@link ChunkAccess} is already a {@link LevelChunk}, it is preferred.
      * Otherwise, the previously looked-up chunk is used as the fallback.</p>
      *
      * @param chunk         the chunk instance being recovered
      * @param lookedUpChunk the fallback live world chunk
      * @return the live world chunk to use for recovery
      */
-    private static WorldChunk chooseLiveChunkForBaseRecovery(
-            final Chunk chunk,
-            final WorldChunk lookedUpChunk
+    private static LevelChunk chooseLiveChunkForBaseRecovery(
+            final ChunkAccess chunk,
+            final LevelChunk lookedUpChunk
     ) {
-        return chunk instanceof WorldChunk ? (WorldChunk) chunk : lookedUpChunk;
+        return chunk instanceof LevelChunk ? (LevelChunk) chunk : lookedUpChunk;
     }
 
     /**
@@ -431,8 +431,8 @@ public final class ChunkSaveCoordinator {
      * @return registry path string
      */
     private String worldId() {
-        return world.getRegistryKey()
-                .getValue()
+        return world.dimension()
+                .identifier()
                 .toString();
     }
 
@@ -449,12 +449,12 @@ public final class ChunkSaveCoordinator {
      * @param pos   chunk position for tracker lookup
      * @return delta to use for save processing, or {@code null}
      */
-    private ChunkDelta<BlockState, NbtCompound> resolveDeltaForSave(
-            final Chunk chunk,
+    private ChunkDelta<BlockState, CompoundTag> resolveDeltaForSave(
+            final ChunkAccess chunk,
             final ChunkPos pos
     ) {
-        ChunkDelta<BlockState, NbtCompound> delta = getActiveDelta(pos);
-        final ChunkDelta<BlockState, NbtCompound> attachedDelta = getChunkDelta(chunk);
+        ChunkDelta<BlockState, CompoundTag> delta = getActiveDelta(pos);
+        final ChunkDelta<BlockState, CompoundTag> attachedDelta = getChunkDelta(chunk);
         delta = preserveMigratedAuthoritativeBlockEntities(pos, chunk, delta, attachedDelta);
         if (delta == null) {
             delta = attachedDelta;
@@ -462,7 +462,7 @@ public final class ChunkSaveCoordinator {
         if (ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             return delta;
         }
-        if (!(chunk instanceof WorldChunk worldChunk)) {
+        if (!(chunk instanceof LevelChunk worldChunk)) {
             return delta;
         }
         if (LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk) == 0) {
@@ -481,17 +481,17 @@ public final class ChunkSaveCoordinator {
      * Prevents migrated authoritative block-entity payloads from being overwritten
      * by an empty save candidate before vanilla has materialized live block entities.
      */
-    private ChunkDelta<BlockState, NbtCompound> preserveMigratedAuthoritativeBlockEntities(
+    private ChunkDelta<BlockState, CompoundTag> preserveMigratedAuthoritativeBlockEntities(
             final ChunkPos pos,
-            final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> saveDelta,
-            final ChunkDelta<BlockState, NbtCompound> attachedDelta
+            final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> saveDelta,
+            final ChunkDelta<BlockState, CompoundTag> attachedDelta
     ) {
-        if (!(chunk instanceof WorldChunk worldChunk)) {
+        if (!(chunk instanceof LevelChunk worldChunk)) {
             return saveDelta;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> delta = saveDelta != null ? saveDelta : attachedDelta;
+        final ChunkDelta<BlockState, CompoundTag> delta = saveDelta != null ? saveDelta : attachedDelta;
         if (delta == null
                 || !CisNbtUtil.isMigratedAuthoritativeChunk(delta.getChunkMetadata())
                 || !worldChunk.getBlockEntities()
@@ -501,7 +501,7 @@ public final class ChunkSaveCoordinator {
             return saveDelta;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> sourceDelta =
+        final ChunkDelta<BlockState, CompoundTag> sourceDelta =
                 resolveAuthoritativeBlockEntitySource(pos, attachedDelta, delta);
         if (sourceDelta == null || sourceDelta.getBlockEntities()
                 .isEmpty()) {
@@ -515,10 +515,10 @@ public final class ChunkSaveCoordinator {
     /**
      * Resolves a stronger migrated authoritative source for block-entity payloads.
      */
-    private ChunkDelta<BlockState, NbtCompound> resolveAuthoritativeBlockEntitySource(
+    private ChunkDelta<BlockState, CompoundTag> resolveAuthoritativeBlockEntitySource(
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> attachedDelta,
-            final ChunkDelta<BlockState, NbtCompound> currentDelta
+            final ChunkDelta<BlockState, CompoundTag> attachedDelta,
+            final ChunkDelta<BlockState, CompoundTag> currentDelta
     ) {
         if (attachedDelta != null
                 && attachedDelta != currentDelta
@@ -528,7 +528,7 @@ public final class ChunkSaveCoordinator {
         }
 
         try {
-            final ChunkDelta<BlockState, NbtCompound> persisted =
+            final ChunkDelta<BlockState, CompoundTag> persisted =
                     getStorage().loadWithoutClearing(FabricCisStorageHelper.toStoragePos(pos));
             return persisted != null && !persisted.getBlockEntities()
                     .isEmpty() ? persisted : null;
@@ -553,15 +553,15 @@ public final class ChunkSaveCoordinator {
      */
     private void traceBypassedSave(
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
-            final Chunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
+            final ChunkAccess chunk,
             final String operationId
     ) {
         if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.ASSERTIONS, ChunkTraceSeverity.ERROR)) {
             return;
         }
         // The entity-column scan only feeds the assertion trace, so it is skipped when tracing is off.
-        final int liveSavableEntities = chunk instanceof WorldChunk worldChunk
+        final int liveSavableEntities = chunk instanceof LevelChunk worldChunk
                 ? LiveEntitySnapshotCapture.countSavableLiveEntities(world, worldChunk)
                 : 0;
         if (delta != null && delta.isDirty()) {
@@ -572,10 +572,10 @@ public final class ChunkSaveCoordinator {
                     ChunkTraceReason.SAVE_WITHOUT_OWNERSHIP,
                     SAVE_SOURCE,
                     "save hook saw dirty delta without ownership",
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
-                    new DebugChunkKey(pos.x, pos.z),
+                    new DebugChunkKey(pos.x(), pos.z()),
                     null,
                     operationId,
                     true,
@@ -591,10 +591,10 @@ public final class ChunkSaveCoordinator {
                     SAVE_SOURCE,
                     "save hook bypassed chunk with " + liveSavableEntities
                             + " savable live entity/entities before Chunkis entity capture",
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
-                    new DebugChunkKey(pos.x, pos.z),
+                    new DebugChunkKey(pos.x(), pos.z()),
                     null,
                     operationId,
                     delta != null && delta.isDirty(),
@@ -602,7 +602,7 @@ public final class ChunkSaveCoordinator {
             );
         }
         ChunkOwnershipTraceHelper.traceDecision(
-                world.getRegistryKey(),
+                world.dimension(),
                 pos,
                 "BYPASSED",
                 ChunkTraceReason.VANILLA_AUTOSAVE_UNTOUCHED,
@@ -621,8 +621,8 @@ public final class ChunkSaveCoordinator {
      * @return the tracked delta, or {@code null}
      */
     @SuppressWarnings("unchecked")
-    private ChunkDelta<BlockState, NbtCompound> getTrackedDelta(final ChunkPos pos) {
-        return (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getDelta(world, pos);
+    private ChunkDelta<BlockState, CompoundTag> getTrackedDelta(final ChunkPos pos) {
+        return (ChunkDelta<BlockState, CompoundTag>) GlobalChunkTracker.getDelta(world, pos);
     }
 
     /**
@@ -633,8 +633,8 @@ public final class ChunkSaveCoordinator {
      * @return the active dirty delta, or {@code null}
      */
     @SuppressWarnings("unchecked")
-    private ChunkDelta<BlockState, NbtCompound> getActiveDelta(final ChunkPos pos) {
-        return (ChunkDelta<BlockState, NbtCompound>) GlobalChunkTracker.getActiveDelta(world, pos);
+    private ChunkDelta<BlockState, CompoundTag> getActiveDelta(final ChunkPos pos) {
+        return (ChunkDelta<BlockState, CompoundTag>) GlobalChunkTracker.getActiveDelta(world, pos);
     }
 
     /**
@@ -652,23 +652,23 @@ public final class ChunkSaveCoordinator {
      * @param existingDelta the existing delta; may be {@code null}
      * @return the updated delta, the original delta, or {@code null}
      */
-    private ChunkDelta<BlockState, NbtCompound> captureStructureMetadata(
-            final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> existingDelta) {
+    private ChunkDelta<BlockState, CompoundTag> captureStructureMetadata(
+            final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> existingDelta) {
         if (chunk == null) {
             return existingDelta;
         }
 
-        final NbtCompound structureData = extractStructureMetadata(chunk);
+        final CompoundTag structureData = extractStructureMetadata(chunk);
         final boolean hasStructures = CisNbtUtil.hasStructureData(structureData);
 
         if (existingDelta == null && !hasStructures) {
             return null;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> delta =
+        final ChunkDelta<BlockState, CompoundTag> delta =
                 existingDelta != null ? existingDelta : new ChunkDelta<>();
-        final NbtCompound existingMetadata = delta.getChunkMetadata();
+        final CompoundTag existingMetadata = delta.getChunkMetadata();
 
         delta.setSuppressInitialRepopulation(true);
 
@@ -676,14 +676,14 @@ public final class ChunkSaveCoordinator {
             return delta;
         }
 
-        final boolean portalChunk = chunk instanceof WorldChunk worldChunk
+        final boolean portalChunk = chunk instanceof LevelChunk worldChunk
                 ? io.liparakis.chunkis.world.restoration.capture.BaseChunkCaptureUtil.hasPortalBlocks(worldChunk)
                 : CisNbtUtil.hasPersistedPortalChunk(existingMetadata);
         // Structures rarely change after generation; skip deserializing the base chunk to rebuild identical metadata.
         if (CisNbtUtil.isStructureMetadataCurrent(existingMetadata, structureData, portalChunk)) {
             return delta;
         }
-        final NbtCompound metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
+        final CompoundTag metadata = CisNbtUtil.createChunkMetadataTakingOwnership(
                 structureData,
                 true,
                 CisNbtUtil.hasFullBlockBaseline(existingMetadata),
@@ -707,12 +707,12 @@ public final class ChunkSaveCoordinator {
      * @return its containers by section index
      */
     @SuppressWarnings("unchecked")
-    private static PalettedContainer<BlockState>[] takeSections(final WorldChunk chunk) {
-        final ChunkSection[] sections = chunk.getSectionArray();
+    private static PalettedContainer<BlockState>[] takeSections(final LevelChunk chunk) {
+        final LevelChunkSection[] sections = chunk.getSections();
         final PalettedContainer<BlockState>[] taken = new PalettedContainer[sections.length];
         for (int i = 0; i < sections.length; i++) {
-            if (sections[i] != null && !sections[i].isEmpty()) {
-                taken[i] = sections[i].getBlockStateContainer();
+            if (sections[i] != null && !sections[i].hasOnlyAir()) {
+                taken[i] = sections[i].getStates();
             }
         }
         return taken;
@@ -724,7 +724,7 @@ public final class ChunkSaveCoordinator {
      * @param chunk chunk being saved
      * @return true for a loaded world chunk that is not being unloaded
      */
-    private static boolean isLoadedToWorld(final Chunk chunk) {
+    private static boolean isLoadedToWorld(final ChunkAccess chunk) {
         return chunk instanceof WorldChunkAccessor accessor && accessor.chunkis$isLoadedToWorld();
     }
 
@@ -738,11 +738,11 @@ public final class ChunkSaveCoordinator {
      * @param operationId          active save operation ID
      * @return copied block containers by section index, or {@code null} when no snapshot could be taken
      */
-    private static PalettedContainer<BlockState>[] captureDeferredBlocks(final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta, final boolean nonBlockStateCurrent,
+    private static PalettedContainer<BlockState>[] captureDeferredBlocks(final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta, final boolean nonBlockStateCurrent,
             final String operationId) {
-        if (!(chunk instanceof WorldChunk worldChunk)
-                || !ChunkStatus.FULL.equals(chunk.getStatus())
+        if (!(chunk instanceof LevelChunk worldChunk)
+                || !ChunkStatus.FULL.equals(chunk.getPersistedStatus())
                 || SnapshotSafetyChecker.isSnapshotUnsafe(worldChunk)) {
             return null;
         }
@@ -756,8 +756,8 @@ public final class ChunkSaveCoordinator {
      * @param delta the delta
      * @return true when its metadata has the stored sections and heightmaps a full capture writes
      */
-    private static boolean holdsNonBlockState(final ChunkDelta<BlockState, NbtCompound> delta) {
-        final NbtCompound metadata = delta.getChunkMetadata();
+    private static boolean holdsNonBlockState(final ChunkDelta<BlockState, CompoundTag> delta) {
+        final CompoundTag metadata = delta.getChunkMetadata();
         return metadata != null && metadata.contains(CisNbtUtil.STORED_SECTIONS_KEY)
                 && metadata.contains(CisNbtUtil.STORED_HEIGHTMAPS_KEY);
     }
@@ -770,18 +770,18 @@ public final class ChunkSaveCoordinator {
      * @param operationId   active load/save operation ID
      * @return updated block delta
      */
-    private ChunkDelta<BlockState, NbtCompound> captureSnapshot(
-            final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> existingDelta,
+    private ChunkDelta<BlockState, CompoundTag> captureSnapshot(
+            final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> existingDelta,
             final String operationId) {
-        if (!(chunk instanceof WorldChunk worldChunk)
-                || !ChunkStatus.FULL.equals(chunk.getStatus())) {
+        if (!(chunk instanceof LevelChunk worldChunk)
+                || !ChunkStatus.FULL.equals(chunk.getPersistedStatus())) {
             return existingDelta;
         }
         if (SnapshotSafetyChecker.isSnapshotUnsafe(worldChunk)) {
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     worldChunk.getPos(),
                     existingDelta,
@@ -795,7 +795,7 @@ public final class ChunkSaveCoordinator {
             return existingDelta;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> delta = existingDelta != null
+        final ChunkDelta<BlockState, CompoundTag> delta = existingDelta != null
                 ? existingDelta
                 : new ChunkDelta<>(BlockState::isAir);
         return CisSnapshotCapture.capture(worldChunk, delta, operationId);
@@ -813,11 +813,11 @@ public final class ChunkSaveCoordinator {
      * @param operationId   active load/save operation ID
      * @return the updated delta, the original delta, or {@code null}
      */
-    private ChunkDelta<BlockState, NbtCompound> captureLiveEntities(
-            final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> existingDelta,
+    private ChunkDelta<BlockState, CompoundTag> captureLiveEntities(
+            final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> existingDelta,
             final String operationId) {
-        if (!(chunk instanceof WorldChunk worldChunk)) {
+        if (!(chunk instanceof LevelChunk worldChunk)) {
             return existingDelta;
         }
         return LiveEntitySnapshotCapture.capture(
@@ -842,13 +842,13 @@ public final class ChunkSaveCoordinator {
      * @param operationId active load/save operation ID
      */
     private void queueDirtyDelta(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId,
-            final Chunk chunk,
+            final ChunkAccess chunk,
             final PalettedContainer<BlockState>[] deferredBlocks) {
-        ChunkDelta<BlockState, NbtCompound> deltaToQueue = saveDeltaGuard.prepareDeltaForQueueing(pos, delta, operationId);
+        ChunkDelta<BlockState, CompoundTag> deltaToQueue = saveDeltaGuard.prepareDeltaForQueueing(pos, delta, operationId);
         if (deltaToQueue == null) {
             return;
         }
@@ -862,8 +862,8 @@ public final class ChunkSaveCoordinator {
         );
         if (deltaToQueue == null) {
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     pos,
                     delta,
@@ -892,18 +892,18 @@ public final class ChunkSaveCoordinator {
      * @param pending the pending dirty delta map
      */
     private void forceSaveRemainingDeltas(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
-            final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> pending) {
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
+            final Map<ChunkPos, ChunkDelta<BlockState, CompoundTag>> pending) {
         if (pending.isEmpty()) {
             return;
         }
-        final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> toSave = new LinkedHashMap<>();
-        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>> entry : pending.entrySet()) {
-            final ChunkDelta<BlockState, NbtCompound> delta = entry.getValue();
+        final Map<ChunkPos, ChunkDelta<BlockState, CompoundTag>> toSave = new LinkedHashMap<>();
+        for (final Map.Entry<ChunkPos, ChunkDelta<BlockState, CompoundTag>> entry : pending.entrySet()) {
+            final ChunkDelta<BlockState, CompoundTag> delta = entry.getValue();
             if (delta == null || !delta.isDirty()) {
                 continue;
             }
-            final ChunkDelta<BlockState, NbtCompound> deltaToSave = saveDeltaGuard.prepareDeltaForPersistence(
+            final ChunkDelta<BlockState, CompoundTag> deltaToSave = saveDeltaGuard.prepareDeltaForPersistence(
                     entry.getKey(),
                     delta,
                     "close-sweep",
@@ -920,7 +920,7 @@ public final class ChunkSaveCoordinator {
         }
         // Counted after filtering: the tracker also holds clean deltas, which have nothing to save.
         Chunkis.LOGGER.warn("Chunkis [CLOSE]: Force-saving {} remaining dirty delta(s) for {}", toSave.size(),
-                world.getRegistryKey().getValue());
+                world.dimension().identifier());
         FabricCisStorageHelper.saveTrackedDeltas(world, storage, toSave);
     }
 
@@ -928,12 +928,12 @@ public final class ChunkSaveCoordinator {
      * Extracts structure metadata from a live chunk.
      *
      * <p>The direct extractor is preferred to avoid full vanilla serialization. If
-     * it fails, {@link SerializedChunk} is used as a safe fallback.</p>
+     * it fails, {@link SerializableChunkData} is used as a safe fallback.</p>
      *
      * @param chunk the chunk to inspect
      * @return the structure metadata compound
      */
-    private NbtCompound extractStructureMetadata(final Chunk chunk) {
+    private CompoundTag extractStructureMetadata(final ChunkAccess chunk) {
         try {
             return StructureMetadataExtractor.extract(world, chunk);
         } catch (final Exception e) {
@@ -942,7 +942,7 @@ public final class ChunkSaveCoordinator {
                             "falling back to SerializedChunk",
                     chunk.getPos(), e
             );
-            return SerializedChunk.fromChunk(world, chunk)
+            return SerializableChunkData.copyOf(world, chunk)
                     .structureData();
         }
     }
@@ -952,7 +952,7 @@ public final class ChunkSaveCoordinator {
      *
      * @return the CIS storage for the owning world
      */
-    private CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage() {
+    private CisStorage<Block, BlockState, Property<?>, CompoundTag> getStorage() {
         return FabricCisStorageHelper.getStorage(world);
     }
 }

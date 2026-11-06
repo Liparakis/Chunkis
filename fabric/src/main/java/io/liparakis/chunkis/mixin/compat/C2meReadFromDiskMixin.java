@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.mixin.compat;
 
 import io.liparakis.chunkis.integration.c2me.C2meSaveBridge;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -31,7 +31,7 @@ public abstract class C2meReadFromDiskMixin {
      * @param cir            C2ME's save result
      */
     @Inject(method = "asyncSave", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void chunkis$saveThroughChunkis(@Coerce final Object loadingContext, final Chunk chunk,
+    private void chunkis$saveThroughChunkis(@Coerce final Object loadingContext, final ChunkAccess chunk,
             final CallbackInfoReturnable<Object> cir) {
         final Object handled = C2meSaveBridge.saveThroughChunkis(loadingContext, chunk);
         if (handled != null) {

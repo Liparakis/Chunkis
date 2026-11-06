@@ -318,7 +318,7 @@ public final class StageProfiler {
             return;
         }
         final long now = System.nanoTime();
-        final long key = net.minecraft.util.math.ChunkPos.toLong(x, z);
+        final long key = net.minecraft.world.level.ChunkPos.pack(x, z);
         final int requested = Event.REQUESTED.ordinal();
         final int ticket = Event.TICKET.ordinal();
         final int accessible = Event.ACCESSIBLE.ordinal();
@@ -383,7 +383,7 @@ public final class StageProfiler {
             return;
         }
         synchronized (TIMELINES) {
-            final long[] times = TIMELINES.remove(net.minecraft.util.math.ChunkPos.toLong(x, z));
+            final long[] times = TIMELINES.remove(net.minecraft.world.level.ChunkPos.pack(x, z));
             if (times != null && times[Event.REQUESTED.ordinal()] != 0L
                     && times[Event.LOAD_DONE.ordinal()] == 0L) {
                 IN_FLIGHT.decrementAndGet();
@@ -411,7 +411,7 @@ public final class StageProfiler {
         if (!ENABLED) {
             return false;
         }
-        final long[] times = TIMELINES.get(net.minecraft.util.math.ChunkPos.toLong(x, z));
+        final long[] times = TIMELINES.get(net.minecraft.world.level.ChunkPos.pack(x, z));
         return times != null && times[Event.ACCESSIBLE.ordinal()] == 0L;
     }
 

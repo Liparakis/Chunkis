@@ -19,14 +19,14 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import net.minecraft.block.Blocks;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * A simulated player flying in a straight line and back, as players explore: chunks stream in ahead and unload
@@ -92,12 +92,12 @@ final class FlightScenario implements StressRun {
     /**
      * Game test context.
      */
-    private final TestContext context;
+    private final GameTestHelper context;
 
     /**
      * World flown over.
      */
-    private final ServerWorld world;
+    private final ServerLevel world;
 
     /**
      * Shared metrics.
@@ -214,15 +214,15 @@ final class FlightScenario implements StressRun {
      *
      * @param context game test context
      */
-    FlightScenario(final TestContext context) {
+    FlightScenario(final GameTestHelper context) {
         this.context = context;
-        this.world = context.getWorld();
+        this.world = context.getLevel();
         final ChunkPos anchor = new ChunkPos(Integer.getInteger("chunkis.stress.anchorX", 40_000),
                 Integer.getInteger("chunkis.stress.anchorZ", 40_000));
-        this.startX = anchor.getStartX() + 8.0;
-        this.pathZ = anchor.getStartZ() + 8.0;
+        this.startX = anchor.getMinBlockX() + 8.0;
+        this.pathZ = anchor.getMinBlockZ() + 8.0;
         this.chunkisDir = ChunkisStoragePaths.computeRegionsDirectory(
-                world.getServer().getSavePath(WorldSavePath.ROOT), world.getRegistryKey()).getParent();
+                world.getServer().getWorldPath(LevelResource.ROOT), world.dimension()).getParent();
     }
 
     @Override
@@ -231,12 +231,12 @@ final class FlightScenario implements StressRun {
     }
 
     @Override
-    public void onChunkLoad(final WorldChunk loaded) {
-        StageProfiler.event(StageProfiler.Event.LOADED_EVENT, loaded.getPos().x, loaded.getPos().z);
+    public void onChunkLoad(final LevelChunk loaded) {
+        StageProfiler.event(StageProfiler.Event.LOADED_EVENT, loaded.getPos().x(), loaded.getPos().z());
     }
 
     @Override
-    public void onChunkUnload(final WorldChunk unloaded) {
+    public void onChunkUnload(final LevelChunk unloaded) {
     }
 
     /**
@@ -246,10 +246,10 @@ final class FlightScenario implements StressRun {
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.OFF);
         if (!Boolean.getBoolean("chunkis.stress.vanilla")) {
             // As in a world created with Chunkis; the game test server skips the pre-launch step that marks it.
-            MigrationStateServiceHolder.markAuthoritative(world.getRegistryKey());
+            MigrationStateServiceHolder.markAuthoritative(world.dimension());
         }
         if (TICKS_PER_SECOND > 0) {
-            world.getServer().getTickManager().setTickRate(TICKS_PER_SECOND);
+            world.getServer().tickRateManager().setTickRate(TICKS_PER_SECOND);
         }
         if (!FAST_GENERATION) {
             startPacing();
@@ -315,31 +315,31 @@ final class FlightScenario implements StressRun {
     private void moveTo(final double along) {
         x = startX + along;
         final ChunkPos center = center();
-        if (forced.contains(ChunkPos.toLong(center.x - LOAD_RADIUS, center.z - LOAD_RADIUS))
-                && forced.contains(ChunkPos.toLong(center.x + LOAD_RADIUS, center.z + LOAD_RADIUS))) {
+        if (forced.contains(ChunkPos.pack(center.x() - LOAD_RADIUS, center.z() - LOAD_RADIUS))
+                && forced.contains(ChunkPos.pack(center.x() + LOAD_RADIUS, center.z() + LOAD_RADIUS))) {
             return;
         }
         final LongOpenHashSet window = new LongOpenHashSet((2 * LOAD_RADIUS + 1) * (2 * LOAD_RADIUS + 1));
         for (int dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
             for (int dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
-                window.add(ChunkPos.toLong(center.x + dx, center.z + dz));
+                window.add(ChunkPos.pack(center.x() + dx, center.z() + dz));
             }
         }
         // Ticket changes only, so chunks load and unload asynchronously as they do for a moving player.
         forced.forEach(key -> {
             if (!window.contains(key)) {
-                final ChunkPos pos = new ChunkPos(key);
-                if (StageProfiler.pending(pos.x, pos.z)) {
+                final ChunkPos pos = ChunkPos.unpack(key);
+                if (StageProfiler.pending(pos.x(), pos.z())) {
                     ticketsAbandoned++;
                 }
-                world.getChunkManager().setChunkForced(pos, false);
+                world.getChunkSource().updateChunkForced(pos, false);
             }
         });
         window.forEach(key -> {
             if (!forced.contains(key)) {
-                final ChunkPos pos = new ChunkPos(key);
-                StageProfiler.event(StageProfiler.Event.TICKET, pos.x, pos.z);
-                world.getChunkManager().setChunkForced(pos, true);
+                final ChunkPos pos = ChunkPos.unpack(key);
+                StageProfiler.event(StageProfiler.Event.TICKET, pos.x(), pos.z());
+                world.getChunkSource().updateChunkForced(pos, true);
             }
         });
         forced = window;
@@ -363,9 +363,9 @@ final class FlightScenario implements StressRun {
         final LongOpenHashSet nowInView = new LongOpenHashSet((2 * VIEW_RADIUS + 1) * (2 * VIEW_RADIUS + 1));
         for (int dx = -VIEW_RADIUS; dx <= VIEW_RADIUS; dx++) {
             for (int dz = -VIEW_RADIUS; dz <= VIEW_RADIUS; dz++) {
-                final int x = center.x + dx;
-                final int z = center.z + dz;
-                final long key = ChunkPos.toLong(x, z);
+                final int x = center.x() + dx;
+                final int z = center.z() + dz;
+                final long key = ChunkPos.pack(x, z);
                 nowInView.add(key);
                 final boolean usable = LoadedChunks.getIfAccessible(world, x, z) != null;
                 if (!inView.contains(key)) {
@@ -395,7 +395,7 @@ final class FlightScenario implements StressRun {
     private void startPacing() {
         if (TICKS_PER_SECOND > 0) {
             ((io.liparakis.chunkis.gametest.mixin.MinecraftServerAccessor) world.getServer())
-                    .chunkis$setTickStartTimeNanos(net.minecraft.util.Util.getMeasuringTimeNano());
+                    .chunkis$setTickStartTimeNanos(net.minecraft.util.Util.getNanos());
             StressBenchGameTest.setPacingTicks(true);
         }
     }
@@ -409,8 +409,8 @@ final class FlightScenario implements StressRun {
     private long trackBacklog() {
         long waiting = 0;
         for (final long key : forced) {
-            final int chunkX = ChunkPos.getPackedX(key);
-            final int chunkZ = ChunkPos.getPackedZ(key);
+            final int chunkX = ChunkPos.getX(key);
+            final int chunkZ = ChunkPos.getZ(key);
             if (LoadedChunks.getIfAccessible(world, chunkX, chunkZ) == null) {
                 waiting++;
             } else {
@@ -460,14 +460,14 @@ final class FlightScenario implements StressRun {
     private JsonObject heapOwnership() {
         final JsonObject owners = new JsonObject();
         try {
-            final RecentChunkBlocks recent = RecentChunkBlocks.of(world.getRegistryKey());
+            final RecentChunkBlocks recent = RecentChunkBlocks.of(world.dimension());
             owners.addProperty("recentCacheEntries", ((Map<?, ?>) field(recent, "entries")).size());
             owners.addProperty("recentCacheEstimateMb", (long) field(recent, "bytes") / 1048576.0);
             final Object unloadCache = staticField(GlobalChunkTracker.class, "unloadCache");
             owners.addProperty("unloadCacheEntries", ((Map<?, ?>) field(unloadCache, "entries")).size());
             owners.addProperty("dirtyDeltas",
                     ((Map<?, ?>) staticField(GlobalChunkTracker.class, "dirtyDeltas")).size());
-            owners.addProperty("loadedChunks", world.getChunkManager().getLoadedChunkCount());
+            owners.addProperty("loadedChunks", world.getChunkSource().getLoadedChunksCount());
             owners.add("dirtyDeltaProbe", probeDirtyDeltas());
             final long before = usedHeapAfterGc();
             recent.clear();
@@ -521,8 +521,8 @@ final class FlightScenario implements StressRun {
             }
             generationGaps.merge(Math.min(mutation - saved, 10L), 1L, Long::sum);
             final long chunkKey = (long) field(entry.getKey(), "chunkKey");
-            if (storage.contains(new io.liparakis.chunkis.core.CisChunkPos(ChunkPos.getPackedX(chunkKey),
-                    ChunkPos.getPackedZ(chunkKey)))) {
+            if (storage.contains(new io.liparakis.chunkis.core.CisChunkPos(ChunkPos.getX(chunkKey),
+                    ChunkPos.getZ(chunkKey)))) {
                 stored++;
             }
             sites.merge(StageProfiler.dirtySite(delta), 1L, Long::sum);
@@ -604,13 +604,13 @@ final class FlightScenario implements StressRun {
      */
     private void editNearPlayer() {
         final ChunkPos center = center();
-        final int blockX = center.getStartX() + random.nextInt(80) - 32;
-        final int blockZ = center.getStartZ() + random.nextInt(80) - 32;
+        final int blockX = center.getMinBlockX() + random.nextInt(80) - 32;
+        final int blockZ = center.getMinBlockZ() + random.nextInt(80) - 32;
         if (LoadedChunks.getIfAccessible(world, blockX >> 4, blockZ >> 4) == null) {
             return;
         }
-        final int y = world.getTopY(Heightmap.Type.MOTION_BLOCKING, blockX, blockZ);
-        world.setBlockState(new BlockPos(blockX, y, blockZ), Blocks.COBBLESTONE.getDefaultState());
+        final int y = world.getHeight(Heightmap.Types.MOTION_BLOCKING, blockX, blockZ);
+        world.setBlockAndUpdate(new BlockPos(blockX, y, blockZ), Blocks.COBBLESTONE.defaultBlockState());
     }
 
     /**
@@ -619,8 +619,8 @@ final class FlightScenario implements StressRun {
      * @return directories
      */
     private List<Path> vanillaDirs() {
-        final Path dimensionRoot = net.minecraft.world.dimension.DimensionType.getSaveDirectory(
-                world.getRegistryKey(), world.getServer().getSavePath(WorldSavePath.ROOT));
+        final Path dimensionRoot = net.minecraft.world.level.dimension.DimensionType.getStorageFolder(
+                world.dimension(), world.getServer().getWorldPath(LevelResource.ROOT));
         return List.of(dimensionRoot.resolve("region"), dimensionRoot.resolve("entities"));
     }
 
@@ -629,7 +629,7 @@ final class FlightScenario implements StressRun {
      */
     private void finish() {
         metrics.stop();
-        forced.forEach(key -> world.getChunkManager().setChunkForced(new ChunkPos(key), false));
+        forced.forEach(key -> world.getChunkSource().updateChunkForced(ChunkPos.unpack(key), false));
         forced.clear();
         AsyncCisSaveManager.flushAndClose(world);
         System.gc();
@@ -664,6 +664,6 @@ final class FlightScenario implements StressRun {
         final Path report = metrics.writeReport(Path.of("chunkis-stress"), config, chunkisDir, retainedHeap);
         Chunkis.LOGGER.info("Chunkis stress: report written to {}", report.toAbsolutePath());
         StressBenchGameTest.setPacingTicks(false);
-        context.complete();
+        context.succeed();
     }
 }

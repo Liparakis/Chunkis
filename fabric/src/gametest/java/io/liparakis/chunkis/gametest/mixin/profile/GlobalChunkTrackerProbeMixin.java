@@ -25,7 +25,7 @@ public abstract class GlobalChunkTrackerProbeMixin {
      */
     @Inject(method = "putDeltaIfNeeded", at = @At("HEAD"))
     private static void chunkis$recordCleanPut(final @org.spongepowered.asm.mixin.injection.Coerce Object key,
-            final ChunkDelta<?, ?> delta, final String source, final net.minecraft.world.chunk.WorldChunk chunk,
+            final ChunkDelta<?, ?> delta, final String source, final net.minecraft.world.level.chunk.LevelChunk chunk,
             final CallbackInfo ci) {
         if (StageProfiler.ENABLED && delta != null && !delta.isDirty()) {
             StageProfiler.recordCleanPut(delta, source);

@@ -1,10 +1,5 @@
 package io.liparakis.chunkis.mixin.storage;
 
-import net.minecraft.world.biome.Biome;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.world.chunk.ReadableContainer;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.ChunkSection;
 import java.util.Optional;
 import io.liparakis.chunkis.world.restoration.nbt.PreloadedBlockSections;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -36,17 +31,22 @@ import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppr
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Set;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.chunk.ProtoChunk;
-import net.minecraft.world.chunk.SerializedChunk;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.chunk.WrapperProtoChunk;
-import net.minecraft.world.poi.PointOfInterestStorage;
-import net.minecraft.world.storage.StorageKey;
+import net.minecraft.core.Holder;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ImposterProtoChunk;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.PalettedContainerRO;
+import net.minecraft.world.level.chunk.ProtoChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
+import net.minecraft.world.level.chunk.storage.SerializableChunkData;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -54,7 +54,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Intercepts {@link SerializedChunk#convert} to attach Chunkis delta data to
+ * Intercepts {@link SerializableChunkData#read} to attach Chunkis delta data to
  * freshly converted {@link ProtoChunk} instances.
  *
  * <p>This runs at {@code RETURN}, after vanilla has converted serialized chunk
@@ -70,7 +70,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * {@link ChunkStatus#EMPTY} so vanilla generation runs before Chunkis restores the
  * authoritative saved snapshot into the promoted world chunk.</p>
  */
-@Mixin(SerializedChunk.class)
+@Mixin(SerializableChunkData.class)
 public class ChunkSerializerMixin {
 
     /**
@@ -83,7 +83,7 @@ public class ChunkSerializerMixin {
      * Weak map marking serialized chunk instances derived from synthetic load paths.
      */
     @Unique
-    private static final Set<SerializedChunk> chunkis$syntheticLoadMarker =
+    private static final Set<SerializableChunkData> chunkis$syntheticLoadMarker =
             chunkis$newIdentityMarkerSet();
 
     /**
@@ -91,7 +91,7 @@ public class ChunkSerializerMixin {
      * {@link UnfinishedChunkStore#markIfGenerating}.
      */
     @Unique
-    private static final Set<SerializedChunk> chunkis$generatingLoadMarker = chunkis$newIdentityMarkerSet();
+    private static final Set<SerializableChunkData> chunkis$generatingLoadMarker = chunkis$newIdentityMarkerSet();
 
     /**
      * Default constructor for ChunkSerializerMixin.
@@ -107,10 +107,10 @@ public class ChunkSerializerMixin {
      * @param original vanilla's read
      * @return vanilla's value, or nothing for a section whose container is built
      */
-    @WrapOperation(method = "fromNbt", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/nbt/NbtCompound;getCompound(Ljava/lang/String;)Ljava/util/Optional;"))
-    private static Optional<NbtCompound> chunkis$skipBuiltBlockStates(final NbtCompound section, final String key,
-            final Operation<Optional<NbtCompound>> original) {
+    @WrapOperation(method = "parse", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/nbt/CompoundTag;getCompound(Ljava/lang/String;)Ljava/util/Optional;"))
+    private static Optional<CompoundTag> chunkis$skipBuiltBlockStates(final CompoundTag section, final String key,
+            final Operation<Optional<CompoundTag>> original) {
         return "block_states".equals(key) && PreloadedBlockSections.take(section)
                 ? Optional.empty()
                 : original.call(section, key);
@@ -124,10 +124,9 @@ public class ChunkSerializerMixin {
      * @param original vanilla's section constructor
      * @return the section
      */
-    @WrapOperation(method = "fromNbt", at = @At(value = "NEW", target = "(Lnet/minecraft/world/chunk/PalettedContainer;"
-            + "Lnet/minecraft/world/chunk/ReadableContainer;)Lnet/minecraft/world/chunk/ChunkSection;"))
-    private static ChunkSection chunkis$useBuiltBlocks(final PalettedContainer<BlockState> blocks,
-            final ReadableContainer<RegistryEntry<Biome>> biomes, final Operation<ChunkSection> original) {
+    @WrapOperation(method = "parse", at = @At(value = "NEW", target = "(Lnet/minecraft/world/level/chunk/PalettedContainer;Lnet/minecraft/world/level/chunk/PalettedContainerRO;)Lnet/minecraft/world/level/chunk/LevelChunkSection;"))
+    private static LevelChunkSection chunkis$useBuiltBlocks(final PalettedContainer<BlockState> blocks,
+            final PalettedContainerRO<Holder<Biome>> biomes, final Operation<LevelChunkSection> original) {
         final PalettedContainer<BlockState> built = PreloadedBlockSections.takeBuilt();
         return original.call(built != null ? built : blocks, biomes);
     }
@@ -140,13 +139,13 @@ public class ChunkSerializerMixin {
      * @param nbt              the source NBT compound
      * @param cir              callback info returnable
      */
-    @Inject(method = "fromNbt", at = @At("RETURN"))
+    @Inject(method = "parse", at = @At("RETURN"))
     private static void chunkis$onFromNbt(
-            final net.minecraft.world.HeightLimitView world,
-            final net.minecraft.world.chunk.PalettesFactory containerFactory,
-            final NbtCompound nbt,
-            final CallbackInfoReturnable<SerializedChunk> cir) {
-        final SerializedChunk serializedChunk = cir.getReturnValue();
+            final net.minecraft.world.level.LevelHeightAccessor world,
+            final net.minecraft.world.level.chunk.PalettedContainerFactory containerFactory,
+            final CompoundTag nbt,
+            final CallbackInfoReturnable<SerializableChunkData> cir) {
+        final SerializableChunkData serializedChunk = cir.getReturnValue();
         if (serializedChunk == null) {
             return;
         }
@@ -154,7 +153,7 @@ public class ChunkSerializerMixin {
         if (CisNbtUtil.hasSyntheticChunkisLoadMarker(nbt)) {
             chunkis$syntheticLoadMarker.add(serializedChunk);
         }
-        if (nbt.getBoolean(UnfinishedChunkStore.GENERATING_MARKER_KEY, false)) {
+        if (nbt.getBooleanOr(UnfinishedChunkStore.GENERATING_MARKER_KEY, false)) {
             chunkis$generatingLoadMarker.add(serializedChunk);
         }
     }
@@ -166,7 +165,7 @@ public class ChunkSerializerMixin {
      * @return true if marked synthetic
      */
     @Unique
-    private static boolean chunkis$consumeSyntheticLoadMarker(final SerializedChunk serializedChunk) {
+    private static boolean chunkis$consumeSyntheticLoadMarker(final SerializableChunkData serializedChunk) {
         return chunkis$syntheticLoadMarker.remove(serializedChunk);
     }
 
@@ -207,7 +206,7 @@ public class ChunkSerializerMixin {
      */
     @Unique
     private static void chunkis$restoreChunkDelta(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos pos,
             final ProtoChunk chunk,
             final String operationId) {
@@ -222,8 +221,8 @@ public class ChunkSerializerMixin {
                 resolved.reason(),
                 SOURCE + "#chunkis$loadDelta",
                 "load source resolved",
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 DebugChunkKeys.of(pos),
                 null,
@@ -236,7 +235,7 @@ public class ChunkSerializerMixin {
         if (chunkis$isDeltaAbsent(resolved.delta())
                 || !ChunkDeltaOwnership.hasRestorableChunkisState(resolved.delta())) {
             ChunkOwnershipTraceHelper.traceDecision(
-                    world.getRegistryKey(),
+                    world.dimension(),
                     pos,
                     "BYPASSED",
                     ChunkTraceReason.PASSIVE_VANILLA_LOAD,
@@ -251,8 +250,8 @@ public class ChunkSerializerMixin {
                     resolved.reason(),
                     SOURCE + "#chunkis$restoreChunkDelta",
                     "no meaningful delta to attach",
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     DebugChunkKeys.of(pos),
                     null,
@@ -263,14 +262,14 @@ public class ChunkSerializerMixin {
             return;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> delta = resolved.delta();
+        final ChunkDelta<BlockState, CompoundTag> delta = resolved.delta();
         chunkis$traceBaseMetadataAfterDecode(world, pos, delta, operationId);
         delta.claimOwnership(
                 ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE.name(),
                 SOURCE + "#chunkis$restoreChunkDelta"
         );
         ChunkOwnershipTraceHelper.traceDecision(
-                world.getRegistryKey(),
+                world.dimension(),
                 pos,
                 "CLAIMED",
                 ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
@@ -279,7 +278,7 @@ public class ChunkSerializerMixin {
                 ChunkMutationTrackingScope.Cause.PASSIVE_LOAD
         );
         PendingChunkMutationSuppression.begin(
-                world.getRegistryKey(),
+                world.dimension(),
                 pos,
                 ChunkMutationTrackingScope.Cause.PASSIVE_LOAD,
                 SOURCE + "#chunkis$restoreChunkDelta"
@@ -297,8 +296,8 @@ public class ChunkSerializerMixin {
                     resolved.reason(),
                     SOURCE + "#chunkis$restoreChunkDelta",
                     "proto sections before restore: " + ChunkSectionDebugUtil.summarize(chunk),
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     DebugChunkKeys.of(pos),
                     null,
@@ -323,8 +322,8 @@ public class ChunkSerializerMixin {
                                 + (protoSectionsBeforeRestore > 0 ? "completed" : "failed")
                                 + ": sections=" + protoSectionsBeforeRestore
                                 + ", nonAirBlocks=" + protoNonAirBlocksAfterBase,
-                        world.getRegistryKey()
-                                .getValue()
+                        world.dimension()
+                                .identifier()
                                 .toString(),
                         DebugChunkKeys.of(pos),
                         null,
@@ -339,8 +338,8 @@ public class ChunkSerializerMixin {
                         protoSectionsBeforeRestore > 0 ? ChunkTraceReason.NONE : ChunkTraceReason.DECODE_FAILED,
                         SOURCE + "#chunkis$restoreChunkDelta",
                         "proto summary after base decode: " + ChunkSectionDebugUtil.summarize(chunk),
-                        world.getRegistryKey()
-                                .getValue()
+                        world.dimension()
+                                .identifier()
                                 .toString(),
                         DebugChunkKeys.of(pos),
                         null,
@@ -354,8 +353,8 @@ public class ChunkSerializerMixin {
         chunkis$attachDeltaToChunk(
                 chunk,
                 delta,
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 operationId,
                 resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE
@@ -363,7 +362,7 @@ public class ChunkSerializerMixin {
         if (chunkis$restoreWrappedFullChunk(world, chunk, delta, operationId,
                 resolved.reason() == ChunkTraceReason.CHUNKIS_STORAGE)) {
             PendingChunkMutationSuppression.end(
-                    world.getRegistryKey(),
+                    world.dimension(),
                     pos,
                     SOURCE + "#chunkis$restoreChunkDelta#wrappedFullChunk"
             );
@@ -374,8 +373,8 @@ public class ChunkSerializerMixin {
                     resolved.reason(),
                     SOURCE + "#chunkis$restoreChunkDelta",
                     "attached delta to wrapped live chunk and restored immediately",
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     DebugChunkKeys.of(pos),
                     null,
@@ -395,8 +394,8 @@ public class ChunkSerializerMixin {
                         ChunkTraceReason.RESET_EMPTY_WITHOUT_OWNERSHIP,
                         SOURCE + "#chunkis$restoreChunkDelta",
                         "attempted to reset proto chunk to EMPTY without ownership",
-                        world.getRegistryKey()
-                                .getValue()
+                        world.dimension()
+                                .identifier()
                                 .toString(),
                         DebugChunkKeys.of(pos),
                         null,
@@ -406,7 +405,7 @@ public class ChunkSerializerMixin {
                 );
             }
             ChunkOwnershipTraceHelper.traceDecision(
-                    world.getRegistryKey(),
+                    world.dimension(),
                     pos,
                     "CLAIMED",
                     ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
@@ -414,7 +413,7 @@ public class ChunkSerializerMixin {
                     delta,
                     ChunkMutationTrackingScope.initialCauseForLoad(delta)
             );
-            chunk.setStatus(ChunkStatus.EMPTY);
+            chunk.setPersistedStatus(ChunkStatus.EMPTY);
         }
         ChunkTraceStore.trace(
                 ChunkisDebugDomain.CHUNK_LIFECYCLE,
@@ -427,8 +426,8 @@ public class ChunkSerializerMixin {
                         : usePersistedBaseChunkForBlocks
                           ? "attached delta to proto chunk and kept persisted base baseline"
                                 : "attached authoritative full CIS baseline to proto chunk",
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 DebugChunkKeys.of(pos),
                 null,
@@ -457,15 +456,15 @@ public class ChunkSerializerMixin {
      */
     @Unique
     private static void chunkis$traceBaseMetadataAfterDecode(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId
     ) {
         if (!ChunkisDebugConfig.allows(ChunkisDebugDomain.CHUNK_LIFECYCLE, ChunkTraceSeverity.INFO)) {
             return;
         }
-        final NbtCompound metadata = delta.getChunkMetadata();
+        final CompoundTag metadata = delta.getChunkMetadata();
         final boolean hasBase = CisNbtUtil.hasPersistedBaseChunkNbt(metadata);
         final boolean shouldUseBase = CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
         final boolean fullBaseline = CisNbtUtil.hasFullBlockBaseline(metadata);
@@ -487,10 +486,10 @@ public class ChunkSerializerMixin {
                         + ", hasPersistedBaseChunk=" + hasBase
                         + ", shouldUsePersistedBaseChunk=" + shouldUseBase
                         + ", fullBlockBaseline=" + fullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : java.util.List.of())
+                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : java.util.List.of())
                         + ", baseChunkPayloadBytes=" + baseChunkPayload.length,
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 DebugChunkKeys.of(pos),
                 null,
@@ -499,8 +498,8 @@ public class ChunkSerializerMixin {
                 null
         );
         PayloadWatchTracer.traceChunkWatchContext(
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 pos,
                 operationId,
@@ -512,7 +511,7 @@ public class ChunkSerializerMixin {
                         + ", hasPersistedBaseChunk=" + hasBase
                         + ", shouldUsePersistedBaseChunk=" + shouldUseBase
                         + ", fullBlockBaseline=" + fullBaseline
-                        + ", metadataKeys=" + (metadata != null ? metadata.getKeys() : java.util.List.of())
+                        + ", metadataKeys=" + (metadata != null ? metadata.keySet() : java.util.List.of())
                         + ", baseChunkPayloadBytes=" + baseChunkPayload.length
         );
     }
@@ -531,20 +530,20 @@ public class ChunkSerializerMixin {
      */
     @Unique
     private static ResolvedDelta chunkis$loadDelta(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos pos,
             final String operationId) {
         final ChunkDelta<?, ?> memoryDelta = GlobalChunkTracker.getDelta(world, pos);
         if (!chunkis$isDeltaAbsent(memoryDelta)) {
             ColdLoadDeltaHandoff.take(world, pos);
-            final ChunkDelta<BlockState, NbtCompound> trackedDelta = chunkis$castBlockDelta(memoryDelta);
+            final ChunkDelta<BlockState, CompoundTag> trackedDelta = chunkis$castBlockDelta(memoryDelta);
             PayloadWatchTracer.traceTrackedLoadSelected(world, pos, trackedDelta, operationId);
             return new ResolvedDelta(
                     trackedDelta,
                     ChunkTraceReason.TRACKER_MEMORY
             );
         }
-        final ChunkDelta<BlockState, NbtCompound> diskDelta = chunkis$loadDeltaFromDisk(world, pos, operationId);
+        final ChunkDelta<BlockState, CompoundTag> diskDelta = chunkis$loadDeltaFromDisk(world, pos, operationId);
         return new ResolvedDelta(
                 diskDelta,
                 chunkis$isDeltaAbsent(diskDelta)
@@ -565,12 +564,12 @@ public class ChunkSerializerMixin {
      * @return the loaded disk delta (may be empty)
      */
     @Unique
-    private static ChunkDelta<BlockState, NbtCompound> chunkis$loadDeltaFromDisk(
-            final ServerWorld world,
+    private static ChunkDelta<BlockState, CompoundTag> chunkis$loadDeltaFromDisk(
+            final ServerLevel world,
             final ChunkPos pos,
             final String operationId) {
         final var storage = FabricCisStorageHelper.getStorage(world);
-        final ChunkDelta<BlockState, NbtCompound> handedOff = ColdLoadDeltaHandoff.take(world, pos);
+        final ChunkDelta<BlockState, CompoundTag> handedOff = ColdLoadDeltaHandoff.take(world, pos);
         // A handed-off tracked delta can have released its blocks since the load hook used it.
         if (handedOff != null && !handedOff.isBlockPayloadReleased()) {
             PayloadWatchTracer.traceDecodeOutcome(world, pos, handedOff, operationId, true);
@@ -603,7 +602,7 @@ public class ChunkSerializerMixin {
     @Unique
     private static void chunkis$attachDeltaToChunk(
             final ProtoChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String worldId,
             final String operationId,
             final boolean restoreLoadedFromStorage) {
@@ -634,22 +633,22 @@ public class ChunkSerializerMixin {
     @Unique
     @SuppressWarnings("unchecked")
     private static boolean chunkis$restoreWrappedFullChunk(
-            final ServerWorld world,
+            final ServerLevel world,
             final ProtoChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> protoDelta,
+            final ChunkDelta<BlockState, CompoundTag> protoDelta,
             final String operationId,
             final boolean restoreLoadedFromStorage
     ) {
-        final WorldChunk wrappedChunk = chunkis$resolveWrappedWorldChunk(chunk);
+        final LevelChunk wrappedChunk = chunkis$resolveWrappedWorldChunk(chunk);
         if (wrappedChunk == null) {
             return false;
         }
 
-        final ChunkDelta<BlockState, NbtCompound> runtimeDelta;
+        final ChunkDelta<BlockState, CompoundTag> runtimeDelta;
         final ChunkisDeltaDuck wrappedDuck = (ChunkisDeltaDuck) wrappedChunk;
         final ChunkDelta<?, ?> existingDelta = wrappedDuck.chunkis$getDelta();
         if (existingDelta instanceof ChunkDelta<?, ?> typedExisting) {
-            runtimeDelta = (ChunkDelta<BlockState, NbtCompound>) typedExisting;
+            runtimeDelta = (ChunkDelta<BlockState, CompoundTag>) typedExisting;
         } else {
             runtimeDelta = new ChunkDelta<>(BlockState::isAir);
             wrappedDuck.chunkis$setDelta(runtimeDelta);
@@ -725,8 +724,8 @@ public class ChunkSerializerMixin {
      * @return wrapped WorldChunk if this is a full-chunk wrapper, or null
      */
     @Unique
-    private static WorldChunk chunkis$resolveWrappedWorldChunk(final ProtoChunk chunk) {
-        return chunk instanceof WrapperProtoChunk wrapper ? wrapper.getWrappedChunk() : null;
+    private static LevelChunk chunkis$resolveWrappedWorldChunk(final ProtoChunk chunk) {
+        return chunk instanceof ImposterProtoChunk wrapper ? wrapper.getWrapped() : null;
     }
 
     /**
@@ -758,9 +757,9 @@ public class ChunkSerializerMixin {
      */
     @Unique
     @SuppressWarnings("unchecked")
-    private static ChunkDelta<BlockState, NbtCompound> chunkis$castBlockDelta(
+    private static ChunkDelta<BlockState, CompoundTag> chunkis$castBlockDelta(
             final ChunkDelta<?, ?> delta) {
-        return (ChunkDelta<BlockState, NbtCompound>) delta;
+        return (ChunkDelta<BlockState, CompoundTag>) delta;
     }
 
     /**
@@ -775,23 +774,23 @@ public class ChunkSerializerMixin {
      * @param chunkPos   chunk position being converted
      * @param cir        callback holding the converted proto chunk
      */
-    @Inject(method = "convert", at = @At("RETURN"))
+    @Inject(method = "read", at = @At("RETURN"))
     private void chunkis$onConvert(
-            final ServerWorld world,
-            final PointOfInterestStorage poiStorage,
-            final StorageKey key,
+            final ServerLevel world,
+            final PoiManager poiStorage,
+            final RegionStorageInfo key,
             final ChunkPos chunkPos,
             final CallbackInfoReturnable<ProtoChunk> cir) {
         final ProtoChunk chunk = cir.getReturnValue();
         if (chunk == null) {
             return;
         }
-        if (chunkis$generatingLoadMarker.remove((SerializedChunk) (Object) this)
-                && !(chunk instanceof WrapperProtoChunk)) {
+        if (chunkis$generatingLoadMarker.remove((SerializableChunkData) (Object) this)
+                && !(chunk instanceof ImposterProtoChunk)) {
             ((FreshChunkDuck) chunk).chunkis$markFreshlyGenerated();
         }
         final boolean syntheticChunkisLoad =
-                chunkis$consumeSyntheticLoadMarker((SerializedChunk) (Object) this);
+                chunkis$consumeSyntheticLoadMarker((SerializableChunkData) (Object) this);
         if (!syntheticChunkisLoad) {
             return;
         }
@@ -803,8 +802,8 @@ public class ChunkSerializerMixin {
                 ChunkTraceReason.NONE,
                 SOURCE + "#chunkis$onConvert",
                 "starting proto chunk delta restore",
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 DebugChunkKeys.of(chunkPos),
                 null,
@@ -822,7 +821,7 @@ public class ChunkSerializerMixin {
      * @param reason reason code mapping load source
      */
     private record ResolvedDelta(
-            ChunkDelta<BlockState, NbtCompound> delta,
+            ChunkDelta<BlockState, CompoundTag> delta,
             ChunkTraceReason reason
     ) {
 

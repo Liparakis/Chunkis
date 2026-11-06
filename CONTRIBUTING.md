@@ -57,7 +57,7 @@ AI agents working in this repository follow [AGENTS.md](AGENTS.md).
 
 ## Setting up
 
-You need **JDK 21** and Git. Gradle comes with the wrapper.
+You need **JDK 25** and Git. Gradle comes with the wrapper.
 
 ```bash
 git clone https://github.com/Liparakis/Chunkis.git

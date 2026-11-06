@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -29,7 +29,7 @@ class ChunkDeltaOwnershipTest {
      */
     @Test
     void replayPayloadMakesDeltaChunkisOwned() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.addBlockChange(1, 64, 1, "stone");
 
         assertFalse(ChunkDeltaOwnership.hasChunkisOwnedState(delta));
@@ -42,7 +42,7 @@ class ChunkDeltaOwnershipTest {
      */
     @Test
     void explicitOwnershipClaimMakesDeltaChunkisOwned() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.addBlockChange(1, 64, 1, "stone");
         delta.claimOwnership("PLAYER_OR_COMMAND_EDIT", "test");
 
@@ -56,9 +56,9 @@ class ChunkDeltaOwnershipTest {
      */
     @Test
     void persistedBaseMakesDeltaChunkisOwned() {
-        final NbtCompound baseChunk = new NbtCompound();
+        final CompoundTag baseChunk = new CompoundTag();
         baseChunk.putString("Status", "full");
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
                         null,
@@ -79,9 +79,9 @@ class ChunkDeltaOwnershipTest {
      */
     @Test
     void restorableStateRemainsDetectableWithoutOwnershipClaim() {
-        final NbtCompound baseChunk = new NbtCompound();
+        final CompoundTag baseChunk = new CompoundTag();
         baseChunk.putString("Status", "full");
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
         delta.setChunkMetadata(
                 CisNbtUtil.createChunkMetadataTakingOwnership(
                         null,

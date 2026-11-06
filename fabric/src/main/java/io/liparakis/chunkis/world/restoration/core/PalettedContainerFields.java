@@ -2,13 +2,13 @@ package io.liparakis.chunkis.world.restoration.core;
 
 import io.liparakis.chunkis.Chunkis;
 import java.lang.reflect.Field;
-import net.minecraft.util.collection.PaletteStorage;
-import net.minecraft.world.chunk.Palette;
-import net.minecraft.world.chunk.PalettedContainer;
+import net.minecraft.util.BitStorage;
+import net.minecraft.world.level.chunk.Palette;
+import net.minecraft.world.level.chunk.PalettedContainer;
 
 /**
  * Reflective access to a {@link PalettedContainer}'s current data holder, its raw
- * {@link PaletteStorage} and its {@link Palette}.
+ * {@link BitStorage} and its {@link Palette}.
  *
  * <p>Fields are resolved once, trying the named, intermediary and obfuscated names. When none
  * resolve, {@link #AVAILABLE} is {@code false} and callers must use the public container API.</p>
@@ -77,8 +77,8 @@ public final class PalettedContainerFields {
      * @param data data holder from {@link #data}
      * @return raw palette-index storage
      */
-    public static PaletteStorage storage(final Object data) {
-        return (PaletteStorage) read(STORAGE, data);
+    public static BitStorage storage(final Object data) {
+        return (BitStorage) read(STORAGE, data);
     }
 
     /**

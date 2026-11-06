@@ -1,13 +1,13 @@
 package io.liparakis.chunkis.integration.migration.offline;
 
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.world.World;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 /**
  * Aggregate outcome for one dimension's offline MCA migration pass.
  */
 public record OfflineWorldMigrationReport(
-        RegistryKey<World> worldKey,
+        ResourceKey<Level> worldKey,
         int scannedRegions,
         int handledChunks,
         int failedChunks,
@@ -17,7 +17,7 @@ public record OfflineWorldMigrationReport(
     /**
      * Returns an empty no-op report.
      */
-    public static OfflineWorldMigrationReport empty(final RegistryKey<World> worldKey) {
+    public static OfflineWorldMigrationReport empty(final ResourceKey<Level> worldKey) {
         return new OfflineWorldMigrationReport(worldKey, 0, 0, 0, 0);
     }
 
@@ -34,7 +34,7 @@ public record OfflineWorldMigrationReport(
      */
     public String toJsonLine() {
         return "{"
-                + "\"worldId\":\"" + escape(worldKey.getValue()
+                + "\"worldId\":\"" + escape(worldKey.identifier()
                 .toString()) + "\","
                 + "\"scannedRegions\":" + scannedRegions + ","
                 + "\"handledChunks\":" + handledChunks + ","

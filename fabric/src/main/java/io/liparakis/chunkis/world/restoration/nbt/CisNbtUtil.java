@@ -4,11 +4,11 @@ import io.liparakis.chunkis.core.ChunkDelta;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Utility methods for Chunkis NBT construction, metadata envelopes, and vanilla
@@ -19,7 +19,7 @@ import net.minecraft.util.math.ChunkPos;
  * NBT compounds and want to avoid defensive deep copies.</p>
  *
  * <p>Methods are not designed for concurrent mutation of the same
- * {@link NbtCompound}. Callers must ensure compounds are not shared across threads
+ * {@link CompoundTag}. Callers must ensure compounds are not shared across threads
  * while being modified.</p>
  */
 public final class CisNbtUtil {
@@ -179,19 +179,19 @@ public final class CisNbtUtil {
      * @param key  list key to inspect
      * @return copied view of compound entries, or an empty list
      */
-    public static List<NbtCompound> extractCompoundList(final NbtCompound root, final String key) {
+    public static List<CompoundTag> extractCompoundList(final CompoundTag root, final String key) {
         if (root == null || key == null || key.isBlank()) {
             return List.of();
         }
-        final NbtList entries = root.getList(key)
+        final ListTag entries = root.getList(key)
                 .orElse(null);
         if (entries == null || entries.isEmpty()) {
             return List.of();
         }
 
-        final List<NbtCompound> compounds = new ArrayList<>(entries.size());
+        final List<CompoundTag> compounds = new ArrayList<>(entries.size());
         entries.forEach(element -> {
-            if (element instanceof NbtCompound compound) {
+            if (element instanceof CompoundTag compound) {
                 compounds.add(compound);
             }
         });
@@ -206,12 +206,12 @@ public final class CisNbtUtil {
      * @param dataVersion Minecraft data version
      * @return newly created base chunk NBT
      */
-    public static NbtCompound createBaseNbt(
+    public static CompoundTag createBaseNbt(
             final int chunkX,
             final int chunkZ,
             final int dataVersion
     ) {
-        final NbtCompound nbt = new NbtCompound();
+        final CompoundTag nbt = new CompoundTag();
 
         nbt.putInt(DATA_VERSION_KEY, dataVersion);
         nbt.putString(STATUS_KEY, STATUS_EMPTY);
@@ -235,8 +235,8 @@ public final class CisNbtUtil {
      * @param delta delta to mark, may be {@code null}
      */
     public static void putDelta(
-            final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta
+            final CompoundTag root,
+            final ChunkDelta<BlockState, CompoundTag> delta
     ) {
         Objects.requireNonNull(root, "root");
 
@@ -244,7 +244,7 @@ public final class CisNbtUtil {
             return;
         }
 
-        final NbtCompound chunkisData = new NbtCompound();
+        final CompoundTag chunkisData = new CompoundTag();
         chunkisData.putBoolean(HAS_DELTA_KEY, true);
 
         root.put(CHUNKIS_DATA_KEY, chunkisData);
@@ -267,11 +267,11 @@ public final class CisNbtUtil {
     public static LoadChunkNbtResult buildLoadChunkNbt(
             final ChunkPos pos,
             final int dataVersion,
-            final ChunkDelta<?, NbtCompound> delta
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         Objects.requireNonNull(pos, "pos");
 
-        return buildLoadChunkNbt(pos.x, pos.z, dataVersion, delta);
+        return buildLoadChunkNbt(pos.x(), pos.z(), dataVersion, delta);
     }
 
     /**
@@ -287,7 +287,7 @@ public final class CisNbtUtil {
             final int chunkX,
             final int chunkZ,
             final int dataVersion,
-            final ChunkDelta<?, NbtCompound> delta
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         return ChunkLoadNbtBuilder.buildLoadChunkNbt(chunkX, chunkZ, dataVersion, delta);
     }
@@ -298,7 +298,7 @@ public final class CisNbtUtil {
      * @param root serialized chunk NBT
      * @return copied structures compound, or {@code null}
      */
-    public static NbtCompound extractStructureData(final NbtCompound root) {
+    public static CompoundTag extractStructureData(final CompoundTag root) {
         return StructureMetadataNbt.extractStructureData(root);
     }
 
@@ -306,7 +306,7 @@ public final class CisNbtUtil {
      * Creates a persisted Chunkis chunk metadata envelope.
      *
      * <p>This method defensively copies the supplied structure compound. Use
-     * {@link #createChunkMetadataTakingOwnership(NbtCompound, boolean)} on hot
+     * {@link #createChunkMetadataTakingOwnership(CompoundTag, boolean)} on hot
      * paths that already own an isolated compound.</p>
      *
      * @param structureData               serialized vanilla structure metadata, may be {@code null}
@@ -314,11 +314,11 @@ public final class CisNbtUtil {
      *                                    replay-time repopulation
      * @return metadata envelope
      */
-    public static NbtCompound createChunkMetadata(
-            final NbtCompound structureData,
+    public static CompoundTag createChunkMetadata(
+            final CompoundTag structureData,
             final boolean suppressInitialRepopulation
     ) {
-        final NbtCompound ownedStructures =
+        final CompoundTag ownedStructures =
                 structureData != null && !structureData.isEmpty()
                         ? structureData.copy()
                         : null;
@@ -338,8 +338,8 @@ public final class CisNbtUtil {
      *                                    replay-time repopulation
      * @return metadata envelope
      */
-    public static NbtCompound createChunkMetadataTakingOwnership(
-            final NbtCompound structureData,
+    public static CompoundTag createChunkMetadataTakingOwnership(
+            final CompoundTag structureData,
             final boolean suppressInitialRepopulation
     ) {
         return createChunkMetadataTakingOwnership(
@@ -360,8 +360,8 @@ public final class CisNbtUtil {
      *                                    generated baseline, including air
      * @return metadata envelope
      */
-    public static NbtCompound createChunkMetadataTakingOwnership(
-            final NbtCompound structureData,
+    public static CompoundTag createChunkMetadataTakingOwnership(
+            final CompoundTag structureData,
             final boolean suppressInitialRepopulation,
             final boolean fullBlockBaseline
     ) {
@@ -388,11 +388,11 @@ public final class CisNbtUtil {
      *                                    may be {@code null}
      * @return metadata envelope
      */
-    public static NbtCompound createChunkMetadataTakingOwnership(
-            final NbtCompound structureData,
+    public static CompoundTag createChunkMetadataTakingOwnership(
+            final CompoundTag structureData,
             final boolean suppressInitialRepopulation,
             final boolean fullBlockBaseline,
-            final NbtCompound baseChunkNbt
+            final CompoundTag baseChunkNbt
     ) {
         return createChunkMetadataTakingOwnership(
                 structureData,
@@ -415,11 +415,11 @@ public final class CisNbtUtil {
      * @param portalChunk                 whether the chunk currently contains portal blocks
      * @return metadata envelope
      */
-    public static NbtCompound createChunkMetadataTakingOwnership(
-            final NbtCompound structureData,
+    public static CompoundTag createChunkMetadataTakingOwnership(
+            final CompoundTag structureData,
             final boolean suppressInitialRepopulation,
             final boolean fullBlockBaseline,
-            final NbtCompound baseChunkNbt,
+            final CompoundTag baseChunkNbt,
             final boolean portalChunk
     ) {
         return ChunkMetadataEnvelope.create(
@@ -443,8 +443,8 @@ public final class CisNbtUtil {
      * @param chunkMetadata metadata stored in the delta
      * @return copied structure metadata, or {@code null}
      */
-    public static NbtCompound extractPersistedStructureMetadata(
-            final NbtCompound chunkMetadata
+    public static CompoundTag extractPersistedStructureMetadata(
+            final CompoundTag chunkMetadata
     ) {
         return StructureMetadataNbt.extractPersistedStructureMetadata(chunkMetadata);
     }
@@ -453,11 +453,11 @@ public final class CisNbtUtil {
      * Returns whether metadata says the CIS block payload contains a complete
      * generated block baseline.
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return {@code true} only when the explicit flag exists and is true
      */
     public static boolean hasFullBlockBaseline(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata)) {
+        if (!(chunkMetadata instanceof CompoundTag metadata)) {
             return false;
         }
 
@@ -468,10 +468,10 @@ public final class CisNbtUtil {
     /**
      * Returns a copied vanilla-compatible base chunk NBT payload.
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return copied base chunk NBT, or {@code null}
      */
-    public static NbtCompound extractPersistedBaseChunkNbt(final Object chunkMetadata) {
+    public static CompoundTag extractPersistedBaseChunkNbt(final Object chunkMetadata) {
         return PersistedBaseChunkAccess.extractCopiedBaseChunkNbt(chunkMetadata);
     }
 
@@ -481,7 +481,7 @@ public final class CisNbtUtil {
      * <p>This intentionally does not call {@link #extractPersistedBaseChunkNbt}
      * because that method performs a defensive deep copy.</p>
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return {@code true} if a non-empty base chunk payload exists
      */
     public static boolean hasPersistedBaseChunkNbt(final Object chunkMetadata) {
@@ -497,7 +497,7 @@ public final class CisNbtUtil {
      * metadata/bootstrap compatibility but must not supply blocks that can
      * resurrect stale terrain.</p>
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return {@code true} only when a persisted base exists and no full
      *         authoritative block baseline is present
      */
@@ -516,9 +516,9 @@ public final class CisNbtUtil {
      * @param portalChunk      whether the live chunk contains portal blocks
      * @return true when no rebuild is needed
      */
-    public static boolean isStructureMetadataCurrent(final NbtCompound existingMetadata,
-            final NbtCompound structureData, final boolean portalChunk) {
-        final NbtCompound existingStructures = getCompoundOrNull(existingMetadata, STRUCTURES_KEY);
+    public static boolean isStructureMetadataCurrent(final CompoundTag existingMetadata,
+            final CompoundTag structureData, final boolean portalChunk) {
+        final CompoundTag existingStructures = getCompoundOrNull(existingMetadata, STRUCTURES_KEY);
         final Boolean suppressed = existingMetadata == null ? null : readSuppressInitialRepopulationFlag(existingMetadata);
         final Boolean portal = existingMetadata == null ? null : readPortalChunkFlag(existingMetadata);
         return existingStructures != null
@@ -539,10 +539,10 @@ public final class CisNbtUtil {
      * @param payload block-entity, entity or metadata payload
      * @return a copy that may share those three entries
      */
-    public static NbtCompound copySharingCapturedState(final NbtCompound payload) {
-        final NbtCompound copy = new NbtCompound();
-        for (final String key : payload.getKeys()) {
-            final NbtElement element = payload.get(key);
+    public static CompoundTag copySharingCapturedState(final CompoundTag payload) {
+        final CompoundTag copy = new CompoundTag();
+        for (final String key : payload.keySet()) {
+            final Tag element = payload.get(key);
             copy.put(key, isReplacedWhole(key) ? element : element.copy());
         }
         return copy;
@@ -561,16 +561,16 @@ public final class CisNbtUtil {
     /**
      * Returns the stored per-section biomes and light, if this entry has them.
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return a copy of the vanilla-format section list, or {@code null} when absent
      */
-    public static NbtList getStoredSections(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata)) {
+    public static ListTag getStoredSections(final Object chunkMetadata) {
+        if (!(chunkMetadata instanceof CompoundTag metadata)) {
             return null;
         }
         return metadata.getList(STORED_SECTIONS_KEY)
                 .filter(list -> !list.isEmpty())
-                .map(NbtList::copy)
+                .map(ListTag::copy)
                 .orElse(null);
     }
 
@@ -579,12 +579,12 @@ public final class CisNbtUtil {
      * its biomes from the stored sections, so no terrain is generated for it. A full baseline also means no
      * persisted base chunk supplies blocks ({@link #shouldUsePersistedBaseChunkForBlockBaseline}).
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return true when the entry loads without terrain generation
      */
     public static boolean loadsAsFinishedChunk(final Object chunkMetadata) {
         return hasFullBlockBaseline(chunkMetadata)
-                && chunkMetadata instanceof NbtCompound metadata
+                && chunkMetadata instanceof CompoundTag metadata
                 && !metadata.getListOrEmpty(STORED_SECTIONS_KEY).isEmpty();
     }
 
@@ -592,22 +592,22 @@ public final class CisNbtUtil {
      * Returns whether this entry loads as a finished chunk whose light is stored too, so its light already
      * matches the restored blocks and nothing needs relighting.
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return true when the entry loads lit
      */
     public static boolean loadsWithStoredLight(final Object chunkMetadata) {
         return loadsAsFinishedChunk(chunkMetadata)
-                && ((NbtCompound) chunkMetadata).getBoolean(STORED_LIGHT_KEY, false);
+                && ((CompoundTag) chunkMetadata).getBooleanOr(STORED_LIGHT_KEY, false);
     }
 
     /**
      * Returns whether metadata says the chunk currently contains portal blocks.
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return {@code true} only when the explicit flag exists and is true
      */
     public static boolean hasPersistedPortalChunk(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata)) {
+        if (!(chunkMetadata instanceof CompoundTag metadata)) {
             return false;
         }
 
@@ -620,10 +620,10 @@ public final class CisNbtUtil {
      *
      * @param chunkMetadata metadata envelope to mutate
      */
-    public static void markMigratedAuthoritativeChunk(final NbtCompound chunkMetadata) {
+    public static void markMigratedAuthoritativeChunk(final CompoundTag chunkMetadata) {
         Objects.requireNonNull(chunkMetadata, "chunkMetadata");
 
-        final NbtCompound chunkisMetadata = getOrCreateChunkisMetadata(chunkMetadata);
+        final CompoundTag chunkisMetadata = getOrCreateChunkisMetadata(chunkMetadata);
         chunkisMetadata.putBoolean(MIGRATED_AUTHORITATIVE_CHUNK_KEY, true);
     }
 
@@ -631,15 +631,15 @@ public final class CisNbtUtil {
      * Returns whether metadata is marked as an authoritative offline-translated
      * chunk snapshot.
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return {@code true} only when the explicit marker exists and is true
      */
     public static boolean isMigratedAuthoritativeChunk(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata)) {
+        if (!(chunkMetadata instanceof CompoundTag metadata)) {
             return false;
         }
 
-        final NbtCompound chunkisMetadata = getCompoundOrNull(metadata, CHUNKIS_METADATA_KEY);
+        final CompoundTag chunkisMetadata = getCompoundOrNull(metadata, CHUNKIS_METADATA_KEY);
         return chunkisMetadata != null
                 && chunkisMetadata.getBoolean(MIGRATED_AUTHORITATIVE_CHUNK_KEY)
                 .orElse(false);
@@ -653,8 +653,8 @@ public final class CisNbtUtil {
      * @param auxiliaryNbt  opaque auxiliary payload, may be {@code null}
      */
     public static void putPreservedAuxiliaryChunkNbt(
-            final NbtCompound chunkMetadata,
-            final NbtCompound auxiliaryNbt
+            final CompoundTag chunkMetadata,
+            final CompoundTag auxiliaryNbt
     ) {
         Objects.requireNonNull(chunkMetadata, "chunkMetadata");
 
@@ -681,8 +681,8 @@ public final class CisNbtUtil {
      * @param targetMetadata freshly rebuilt metadata to mutate
      */
     public static void preserveCarriedMetadata(
-            final NbtCompound sourceMetadata,
-            final NbtCompound targetMetadata
+            final CompoundTag sourceMetadata,
+            final CompoundTag targetMetadata
     ) {
         Objects.requireNonNull(targetMetadata, "targetMetadata");
 
@@ -690,7 +690,7 @@ public final class CisNbtUtil {
             return;
         }
 
-        for (final String key : sourceMetadata.getKeys()) {
+        for (final String key : sourceMetadata.keySet()) {
             // The base chunk, in either form, is only ever re-added on purpose; carrying it would keep a full
             // vanilla copy of the chunk inside entries that no longer need it.
             // Pending ticks are re-captured with every snapshot; carrying them would replay ticks that already ran.
@@ -704,13 +704,13 @@ public final class CisNbtUtil {
                     .copy());
         }
 
-        final NbtCompound sourceChunkis = sourceMetadata.getCompound(CHUNKIS_METADATA_KEY)
+        final CompoundTag sourceChunkis = sourceMetadata.getCompound(CHUNKIS_METADATA_KEY)
                 .orElse(null);
         if (sourceChunkis == null) {
             return;
         }
-        final NbtCompound targetChunkis = getOrCreateChunkisMetadata(targetMetadata);
-        for (final String key : sourceChunkis.getKeys()) {
+        final CompoundTag targetChunkis = getOrCreateChunkisMetadata(targetMetadata);
+        for (final String key : sourceChunkis.keySet()) {
             if (!targetChunkis.contains(key)) {
                 targetChunkis.put(key, sourceChunkis.get(key)
                         .copy());
@@ -721,15 +721,15 @@ public final class CisNbtUtil {
     /**
      * Returns a copied preserved auxiliary vanilla chunk payload.
      *
-     * @param chunkMetadata metadata object, usually an {@link NbtCompound}
+     * @param chunkMetadata metadata object, usually an {@link CompoundTag}
      * @return copied auxiliary payload, or {@code null}
      */
-    public static NbtCompound extractPreservedAuxiliaryChunkNbt(final Object chunkMetadata) {
-        if (!(chunkMetadata instanceof NbtCompound metadata)) {
+    public static CompoundTag extractPreservedAuxiliaryChunkNbt(final Object chunkMetadata) {
+        if (!(chunkMetadata instanceof CompoundTag metadata)) {
             return null;
         }
 
-        final NbtCompound auxiliary = getCompoundOrNull(metadata, PRESERVED_AUXILIARY_CHUNK_NBT_KEY);
+        final CompoundTag auxiliary = getCompoundOrNull(metadata, PRESERVED_AUXILIARY_CHUNK_NBT_KEY);
         return auxiliary != null ? auxiliary.copy() : null;
     }
 
@@ -740,10 +740,10 @@ public final class CisNbtUtil {
      * @param sourceRoot raw vanilla chunk root
      * @return copied auxiliary payload, or {@code null} if nothing remains
      */
-    public static NbtCompound extractPreservedAuxiliaryChunkNbtFromChunkRoot(final NbtCompound sourceRoot) {
+    public static CompoundTag extractPreservedAuxiliaryChunkNbtFromChunkRoot(final CompoundTag sourceRoot) {
         Objects.requireNonNull(sourceRoot, "sourceRoot");
 
-        final NbtCompound auxiliary = sourceRoot.copy();
+        final CompoundTag auxiliary = sourceRoot.copy();
         auxiliary.remove(STRUCTURES_KEY);
         auxiliary.remove(HEIGHTMAPS_KEY);
         auxiliary.remove(IS_LIGHT_ON_KEY);
@@ -765,7 +765,7 @@ public final class CisNbtUtil {
      * @return {@code true} if initial repopulation should be suppressed
      */
     public static boolean shouldSuppressInitialRepopulation(
-            final NbtCompound root,
+            final CompoundTag root,
             final ChunkDelta<?, ?> delta
     ) {
         if (delta == null || delta.isEmpty()) {
@@ -807,7 +807,7 @@ public final class CisNbtUtil {
      * @param root serialized chunk NBT root
      * @return {@code true} when the synthetic Chunkis marker is present
      */
-    public static boolean hasSyntheticChunkisLoadMarker(final NbtCompound root) {
+    public static boolean hasSyntheticChunkisLoadMarker(final CompoundTag root) {
         return root != null && SyntheticChunkisLoadMarker.hasDeltaMarker(root);
     }
 
@@ -820,7 +820,7 @@ public final class CisNbtUtil {
     private static Boolean readSuppressInitialRepopulationFlag(final ChunkDelta<?, ?> delta) {
         final Object rawMetadata = delta.getChunkMetadata();
 
-        return rawMetadata instanceof NbtCompound metadata
+        return rawMetadata instanceof CompoundTag metadata
                 ? readSuppressInitialRepopulationFlag(metadata)
                 : null;
     }
@@ -831,7 +831,7 @@ public final class CisNbtUtil {
      * @param structures vanilla structures compound
      * @return {@code true} if structure starts or references exist
      */
-    public static boolean hasStructureData(final NbtCompound structures) {
+    public static boolean hasStructureData(final CompoundTag structures) {
         return StructureMetadataNbt.hasStructureData(structures);
     }
 
@@ -842,7 +842,7 @@ public final class CisNbtUtil {
      * @return explicit flag, or {@code null}
      */
     private static Boolean readSuppressInitialRepopulationFlag(
-            final NbtCompound chunkMetadata
+            final CompoundTag chunkMetadata
     ) {
         return ChunkisMetadataFlags.readSuppressInitialRepopulationFlag(chunkMetadata);
     }
@@ -853,7 +853,7 @@ public final class CisNbtUtil {
      * @param chunkMetadata persisted metadata payload
      * @return explicit flag, or {@code null}
      */
-    private static Boolean readFullBlockBaselineFlag(final NbtCompound chunkMetadata) {
+    private static Boolean readFullBlockBaselineFlag(final CompoundTag chunkMetadata) {
         return ChunkisMetadataFlags.readFullBlockBaselineFlag(chunkMetadata);
     }
 
@@ -863,7 +863,7 @@ public final class CisNbtUtil {
      * @param chunkMetadata persisted metadata payload
      * @return explicit flag, or {@code null}
      */
-    private static Boolean readPortalChunkFlag(final NbtCompound chunkMetadata) {
+    private static Boolean readPortalChunkFlag(final CompoundTag chunkMetadata) {
         return ChunkisMetadataFlags.readPortalChunkFlag(chunkMetadata);
     }
 
@@ -873,13 +873,13 @@ public final class CisNbtUtil {
      * @param chunkMetadata parent persisted metadata envelope
      * @return existing or newly inserted nested Chunkis metadata compound
      */
-    private static NbtCompound getOrCreateChunkisMetadata(final NbtCompound chunkMetadata) {
-        final NbtCompound existing = getCompoundOrNull(chunkMetadata, CHUNKIS_METADATA_KEY);
+    private static CompoundTag getOrCreateChunkisMetadata(final CompoundTag chunkMetadata) {
+        final CompoundTag existing = getCompoundOrNull(chunkMetadata, CHUNKIS_METADATA_KEY);
         if (existing != null) {
             return existing;
         }
 
-        final NbtCompound created = new NbtCompound();
+        final CompoundTag created = new CompoundTag();
         chunkMetadata.put(CHUNKIS_METADATA_KEY, created);
         return created;
     }
@@ -894,8 +894,8 @@ public final class CisNbtUtil {
      * @param key    nested compound key
      * @return nested compound, or {@code null}
      */
-    static NbtCompound getCompoundOrNull(
-            final NbtCompound parent,
+    static CompoundTag getCompoundOrNull(
+            final CompoundTag parent,
             final String key
     ) {
         return StructureMetadataNbt.getCompoundOrNull(parent, key);
@@ -928,7 +928,7 @@ public final class CisNbtUtil {
      * @param baseChunkUsage usage code mapping
      */
     public record LoadChunkNbtResult(
-            NbtCompound root,
+            CompoundTag root,
             PersistedBaseChunkUsage baseChunkUsage
     ) {
 

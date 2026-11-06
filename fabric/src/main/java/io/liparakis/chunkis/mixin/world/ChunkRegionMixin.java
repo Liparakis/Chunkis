@@ -3,11 +3,11 @@ package io.liparakis.chunkis.mixin.world;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.ChunkRegion;
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * chunks that Chunkis is restoring from persisted delta data.
  *
  * <p>Structure generation places mobs and other entities through
- * {@link ChunkRegion#spawnEntity(Entity)}. When Chunkis rewinds a chunk for
+ * {@link WorldGenRegion#addFreshEntity(Entity)}. When Chunkis rewinds a chunk for
  * base terrain regeneration, those one-shot spawns can replay even though the
  * saved entity payload will be restored separately. This mixin blocks only the
  * generation-time entity spawn path for chunks explicitly marked to suppress
@@ -27,7 +27,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p><b>Threading:</b> Invoked on the server main thread during chunk generation.
  * All field accesses in this mixin must remain main-thread-only.</p>
  */
-@Mixin(ChunkRegion.class)
+@Mixin(WorldGenRegion.class)
 public class ChunkRegionMixin {
 
     /**
@@ -43,7 +43,7 @@ public class ChunkRegionMixin {
      * @param entity the entity vanilla is attempting to spawn during generation
      * @param cir    callback used to cancel the spawn and set the return value
      */
-    @Inject(method = "spawnEntity", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "addFreshEntity", at = @At("HEAD"), cancellable = true)
     private void chunkis$onSpawnEntity(
             final Entity entity,
             final CallbackInfoReturnable<Boolean> cir) {
@@ -52,9 +52,9 @@ public class ChunkRegionMixin {
             return;
         }
 
-        final BlockPos pos = entity.getBlockPos();
-        final ChunkPos chunkPos = new ChunkPos(pos);
-        final Chunk chunk = ((ChunkRegion) (Object) this).getChunk(chunkPos.x, chunkPos.z);
+        final BlockPos pos = entity.blockPosition();
+        final ChunkPos chunkPos = ChunkPos.containing(pos);
+        final ChunkAccess chunk = ((WorldGenRegion) (Object) this).getChunk(chunkPos.x(), chunkPos.z());
 
         if (!(chunk instanceof ChunkisDeltaDuck deltaDuck)) {
             return;

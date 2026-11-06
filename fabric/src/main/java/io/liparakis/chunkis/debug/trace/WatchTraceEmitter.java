@@ -15,14 +15,14 @@ import io.liparakis.chunkis.debug.watch.BlockWatchTraceTracker;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import java.util.UUID;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -99,7 +99,7 @@ final class WatchTraceEmitter {
      * @param operationId active trace session operation ID
      */
     static void registerDecodedWatchTargets(final String worldId, final ChunkPos chunkPos,
-            final ChunkDeltaView<BlockState, NbtCompound> delta, final String operationId) {
+            final ChunkDeltaView<BlockState, CompoundTag> delta, final String operationId) {
         if (operationId == null) {
             return;
         }
@@ -229,9 +229,9 @@ final class WatchTraceEmitter {
      */
     static void traceChunkIdentityAndStatus(final String worldId, final ChunkPos chunkPos,
             final PayloadWatchTarget target, @Nullable final String operationId,
-            final String stage, final String source, @Nullable final Chunk chunk) {
+            final String stage, final String source, @Nullable final ChunkAccess chunk) {
         final String chunkInstanceId = PayloadWatchSummaries.chunkInstanceId(chunk);
-        final String chunkStatus = chunk != null ? String.valueOf(chunk.getStatus()) : "UNAVAILABLE";
+        final String chunkStatus = chunk != null ? String.valueOf(chunk.getPersistedStatus()) : "UNAVAILABLE";
         traceWatch(ChunkTraceEventType.WATCH_CHUNK_INSTANCE_ID, stage, source, "chunk instance identity observed",
                 worldId, chunkPos, operationId, target, "chunkInstanceId=" + chunkInstanceId + " source=" + source +
                         " thread=" + Thread.currentThread()
@@ -258,7 +258,7 @@ final class WatchTraceEmitter {
      * @param skipReason    custom descriptive skip reason text, may be null
      */
     static void traceRestoreMutationStage(final ChunkTraceEventType eventType, final String stage,
-            final WorldChunk chunk, final BlockPos pos,
+            final LevelChunk chunk, final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState, final String operationId,
             final String source, @Nullable final String skipReason) {
@@ -281,7 +281,7 @@ final class WatchTraceEmitter {
      */
     @SuppressWarnings("SameParameterValue")
     static void traceRestoreSetBlockReturned(final ChunkTraceEventType eventType, final String stage,
-            final WorldChunk chunk, final BlockPos pos,
+            final LevelChunk chunk, final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState, final String operationId,
             final String source, @Nullable final String skipReason) {
@@ -304,7 +304,7 @@ final class WatchTraceEmitter {
      * @param returnValueLabel label description for output values
      */
     private static void traceRestoreSetBlockStage(final ChunkTraceEventType eventType, final String stage,
-            final WorldChunk chunk, final BlockPos pos,
+            final LevelChunk chunk, final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState, final String operationId,
             final String source, @Nullable final String skipReason,
@@ -324,7 +324,7 @@ final class WatchTraceEmitter {
                 "pos=" + pos.getX() + ',' + pos.getY() + ',' + pos.getZ() + " " + "expectedState=" + expectedState +
                         " previousState=" + previousState + " newState=" + expectedState + ' ' + returnValueLabel +
                         " actualStateImmediatelyAfter=" + chunk.getBlockState(pos) + " chunkInstanceId="
-                        + PayloadWatchSummaries.chunkInstanceId(chunk) + " chunkStatus=" + chunk.getStatus()
+                        + PayloadWatchSummaries.chunkInstanceId(chunk) + " chunkStatus=" + chunk.getPersistedStatus()
                         + " source=" + source + " thread=" + Thread.currentThread()
                         .getName() + (skipReason != null ?
                         " skipReason=" + skipReason : ""), null);
@@ -341,7 +341,7 @@ final class WatchTraceEmitter {
      */
     static void recordAppliedChunkInstance(final String worldId, final ChunkPos chunkPos,
             final PayloadWatchTarget target, @Nullable final String operationId,
-            final WorldChunk chunk) {
+            final LevelChunk chunk) {
         BlockWatchTraceTracker.recordAppliedChunkInstance(worldId, chunkPos, target, operationId,
                 PayloadWatchSummaries.chunkInstanceId(chunk));
     }
@@ -358,7 +358,7 @@ final class WatchTraceEmitter {
      */
     static void assertSameAppliedChunkInstance(final String worldId, final ChunkPos chunkPos,
             final PayloadWatchTarget target, @Nullable final String operationId,
-            final String source, final WorldChunk chunk) {
+            final String source, final LevelChunk chunk) {
         BlockWatchTraceTracker.assertSameAppliedChunkInstance(worldId, chunkPos, target, operationId, source,
                 PayloadWatchSummaries.chunkInstanceId(chunk));
     }
@@ -374,10 +374,10 @@ final class WatchTraceEmitter {
      * @return resolved expected block state, or null
      */
     @Nullable
-    static BlockState resolveExpectedState(final WorldChunk chunk, @Nullable final ChunkDelta<BlockState,
-                    NbtCompound> explicitExpectedDelta, final PayloadWatchTarget target, final ChunkPos chunkPos,
+    static BlockState resolveExpectedState(final LevelChunk chunk, @Nullable final ChunkDelta<BlockState,
+                    CompoundTag> explicitExpectedDelta, final PayloadWatchTarget target, final ChunkPos chunkPos,
             final String worldId) {
-        final ChunkDelta<BlockState, NbtCompound> expectedDelta = explicitExpectedDelta != null ?
+        final ChunkDelta<BlockState, CompoundTag> expectedDelta = explicitExpectedDelta != null ?
                 explicitExpectedDelta : attachedDelta(chunk);
         return expectedDelta != null ? WatchPayloadMatcher.findWatchedBlockState(expectedDelta, target, chunkPos, worldId) : null;
     }
@@ -390,11 +390,11 @@ final class WatchTraceEmitter {
      */
     @SuppressWarnings("unchecked")
     @Nullable
-    static ChunkDelta<BlockState, NbtCompound> attachedDelta(final WorldChunk chunk) {
+    static ChunkDelta<BlockState, CompoundTag> attachedDelta(final LevelChunk chunk) {
         if (!(chunk instanceof ChunkisDeltaDuck duck)) {
             return null;
         }
-        return (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta();
+        return (ChunkDelta<BlockState, CompoundTag>) duck.chunkis$getDelta();
     }
 
     /**
@@ -403,9 +403,9 @@ final class WatchTraceEmitter {
      * @param chunk loaded world chunk instance
      * @return event classification string
      */
-    static String classifySetBlockStateEvent(final WorldChunk chunk) {
-        if (!chunk.getWorld()
-                .isClient()) {
+    static String classifySetBlockStateEvent(final LevelChunk chunk) {
+        if (!chunk.getLevel()
+                .isClientSide()) {
             return "SERVER_AUTHORITATIVE_EVENT";
         }
         return Thread.currentThread()
@@ -428,7 +428,7 @@ final class WatchTraceEmitter {
      * @param suffix      optional custom details text to append, may be null
      */
     @SuppressWarnings("SameParameterValue")
-    static void traceEntityRestoreStage(final ServerWorld world, final ChunkPos chunkPos, final NbtCompound nbt,
+    static void traceEntityRestoreStage(final ServerLevel world, final ChunkPos chunkPos, final CompoundTag nbt,
             final String operationId, final ChunkTraceEventType eventType,
             final String stage, final String source, final String message,
             @Nullable final String suffix) {
@@ -460,7 +460,7 @@ final class WatchTraceEmitter {
      * @return resolved entity instance if found, or null
      */
     @Nullable
-    static Entity resolveWatchedEntity(final ServerWorld world, final String entityUuid) {
+    static Entity resolveWatchedEntity(final ServerLevel world, final String entityUuid) {
         try {
             return world.getEntity(UUID.fromString(entityUuid));
         } catch (final IllegalArgumentException ignored) {

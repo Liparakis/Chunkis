@@ -11,7 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 
 /**
@@ -42,12 +42,12 @@ final class PortalNbtFiles {
      * @param what human-readable description for log messages
      * @return the root compound, or {@code null}
      */
-    static NbtCompound read(final Path path, final String what) {
+    static CompoundTag read(final Path path, final String what) {
         if (!Files.isRegularFile(path)) {
             return null;
         }
         try (DataInputStream input = new DataInputStream(Files.newInputStream(path))) {
-            return NbtIo.readCompound(input);
+            return NbtIo.read(input);
         } catch (final Exception e) {
             final Path aside = path.resolveSibling(path.getFileName() + ".corrupt-" + System.currentTimeMillis());
             try {
@@ -68,14 +68,14 @@ final class PortalNbtFiles {
      * @param root compound to write
      * @throws IOException if writing or replacing fails; the previous file is then intact
      */
-    static void write(final Path path, final NbtCompound root) throws IOException {
+    static void write(final Path path, final CompoundTag root) throws IOException {
         Files.createDirectories(path.toAbsolutePath()
                 .getParent());
         final Path temp = path.resolveSibling(path.getFileName() + ".tmp");
         try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
             final DataOutputStream output = new DataOutputStream(Channels.newOutputStream(channel));
-            NbtIo.writeCompound(root, output);
+            NbtIo.write(root, output);
             output.flush();
             channel.force(true);
         }

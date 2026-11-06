@@ -8,8 +8,8 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.util.Uuids;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -26,22 +26,22 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
      * @return the list of merged entities
      * @throws Exception if reflection or execution fails
      */
-    private static List<NbtCompound> invokeMerge(
-            final ChunkDelta<Object, NbtCompound> existingDelta,
-            final List<NbtCompound> liveEntities
+    private static List<CompoundTag> invokeMerge(
+            final ChunkDelta<Object, CompoundTag> existingDelta,
+            final List<CompoundTag> liveEntities
     ) throws Exception {
-        final ChunkDelta<Object, NbtCompound> targetDelta = new ChunkDelta<>();
+        final ChunkDelta<Object, CompoundTag> targetDelta = new ChunkDelta<>();
         targetDelta.setEntities(liveEntities, false);
         final Set<String> liveEntityUuids = liveEntities.stream()
                 .map(ThreadedAnvilChunkStorageMixinEntityMergeTest::uuidOf)
                 .map(UUID::toString)
                 .collect(java.util.stream.Collectors.toSet());
 
-        final List<NbtCompound> pending = new java.util.ArrayList<>();
+        final List<CompoundTag> pending = new java.util.ArrayList<>();
         existingDelta.forEachPendingEntity(pending::add);
         final Method method = LiveEntitySnapshotCapture.class.getDeclaredMethod(
                 "copyUnresolvedPendingEntities",
-                net.minecraft.server.world.ServerWorld.class,
+                net.minecraft.server.level.ServerLevel.class,
                 List.class,
                 Set.class,
                 ChunkDelta.class
@@ -55,24 +55,24 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
      * Creates a dummy NbtCompound representing an entity with the specified UUID.
      *
      * @param uuid the {@link UUID} of the entity
-     * @return the {@link NbtCompound} containing the entity UUID
+     * @return the {@link CompoundTag} containing the entity UUID
      */
-    private static NbtCompound entityNbt(final UUID uuid) {
-        final NbtCompound nbt = new NbtCompound();
-        nbt.putIntArray("UUID", Uuids.toIntArray(uuid));
+    private static CompoundTag entityNbt(final UUID uuid) {
+        final CompoundTag nbt = new CompoundTag();
+        nbt.putIntArray("UUID", UUIDUtil.uuidToIntArray(uuid));
         return nbt;
     }
 
     /**
      * Extracts the UUID of an entity from its NbtCompound representation.
      *
-     * @param nbt the {@link NbtCompound} of the entity
+     * @param nbt the {@link CompoundTag} of the entity
      * @return the {@link UUID} of the entity
      * @throws java.util.NoSuchElementException if the UUID is missing or invalid
      */
-    private static UUID uuidOf(final NbtCompound nbt) {
+    private static UUID uuidOf(final CompoundTag nbt) {
         return nbt.getIntArray("UUID")
-                .map(Uuids::toUuid)
+                .map(UUIDUtil::uuidFromIntArray)
                 .orElseThrow();
     }
 
@@ -86,7 +86,7 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
         final UUID restoredLiveUuid = UUID.randomUUID();
         final UUID unresolvedPendingUuid = UUID.randomUUID();
 
-        final ChunkDelta<Object, NbtCompound> existingDelta = new ChunkDelta<>();
+        final ChunkDelta<Object, CompoundTag> existingDelta = new ChunkDelta<>();
         existingDelta.setEntities(
                 List.of(
                         entityNbt(restoredLiveUuid),
@@ -94,7 +94,7 @@ final class ThreadedAnvilChunkStorageMixinEntityMergeTest {
                 ), false
         );
 
-        final List<NbtCompound> merged = invokeMerge(existingDelta, List.of(entityNbt(restoredLiveUuid)));
+        final List<CompoundTag> merged = invokeMerge(existingDelta, List.of(entityNbt(restoredLiveUuid)));
 
         assertEquals(2, merged.size());
         assertEquals(restoredLiveUuid, uuidOf(merged.get(0)));

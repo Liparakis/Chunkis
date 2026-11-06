@@ -9,12 +9,12 @@ import io.liparakis.chunkis.debug.watch.BlockWatchTraceTracker;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import java.util.Objects;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -42,8 +42,8 @@ public final class ChunkLifecyclePayloadTracer {
      */
     public static void traceProtoDeltaAttached(
             final String worldId,
-            final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId,
             final String source
     ) {
@@ -74,7 +74,7 @@ public final class ChunkLifecyclePayloadTracer {
                     operationId,
                     target,
                     "expectedState=" + expectedState
-                            + " chunkStatus=" + chunk.getStatus()
+                            + " chunkStatus=" + chunk.getPersistedStatus()
                             + " source=" + source
                             + " thread=" + Thread.currentThread()
                             .getName(),
@@ -94,8 +94,8 @@ public final class ChunkLifecyclePayloadTracer {
      */
     public static void traceProtoDeltaPresentBeforeConversion(
             final String worldId,
-            final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId,
             final String source
     ) {
@@ -125,7 +125,7 @@ public final class ChunkLifecyclePayloadTracer {
                     operationId,
                     target,
                     "expectedState=" + expectedState
-                            + " chunkStatus=" + chunk.getStatus()
+                            + " chunkStatus=" + chunk.getPersistedStatus()
                             + " source=" + source
                             + " thread=" + Thread.currentThread()
                             .getName(),
@@ -145,8 +145,8 @@ public final class ChunkLifecyclePayloadTracer {
      */
     public static void traceProtoDeltaPresentAfterConversion(
             final String worldId,
-            final Chunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkAccess chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId,
             final String source
     ) {
@@ -176,7 +176,7 @@ public final class ChunkLifecyclePayloadTracer {
                     operationId,
                     target,
                     "expectedState=" + expectedState
-                            + " chunkStatus=" + chunk.getStatus()
+                            + " chunkStatus=" + chunk.getPersistedStatus()
                             + " source=" + source
                             + " thread=" + Thread.currentThread()
                             .getName(),
@@ -194,8 +194,8 @@ public final class ChunkLifecyclePayloadTracer {
      * @param source      class/method trace source trigger label
      */
     public static void traceWorldChunkDeltaAttached(
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId,
             final String source
     ) {
@@ -226,7 +226,7 @@ public final class ChunkLifecyclePayloadTracer {
                     operationId,
                     target,
                     "expectedState=" + expectedState
-                            + " chunkStatus=" + chunk.getStatus()
+                            + " chunkStatus=" + chunk.getPersistedStatus()
                             + " source=" + source
                             + " thread=" + Thread.currentThread()
                             .getName(),
@@ -243,7 +243,7 @@ public final class ChunkLifecyclePayloadTracer {
      * @param source      class/method trace source trigger label
      */
     public static void traceWorldChunkDeltaMissing(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final String operationId,
             final String source
     ) {
@@ -277,7 +277,7 @@ public final class ChunkLifecyclePayloadTracer {
                     chunkPos,
                     operationId,
                     target,
-                    "chunkStatus=" + chunk.getStatus()
+                    "chunkStatus=" + chunk.getPersistedStatus()
                             + " source=" + source
                             + " thread=" + Thread.currentThread()
                             .getName(),
@@ -295,8 +295,8 @@ public final class ChunkLifecyclePayloadTracer {
      * @param source        class/method trace source trigger label
      */
     public static void traceWorldChunkConstructorConsumed(
-            final WorldChunk chunk,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+            final LevelChunk chunk,
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             @Nullable final String operationId,
             final String source
     ) {
@@ -334,7 +334,7 @@ public final class ChunkLifecyclePayloadTracer {
                             expectedState,
                             chunk.getBlockState(new BlockPos(target.blockX(), target.blockY(), target.blockZ())),
                             null,
-                            chunk.getStatus(),
+                            chunk.getPersistedStatus(),
                             source,
                             Thread.currentThread()
                                     .getName(),
@@ -356,12 +356,12 @@ public final class ChunkLifecyclePayloadTracer {
      * @param expectedDelta    the expected delta, may be null
      */
     public static void traceLiveChunkState(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final ChunkTraceEventType presentEventType,
             final String stage,
             final String source,
             @Nullable final String operationId,
-            @Nullable final ChunkDelta<BlockState, NbtCompound> expectedDelta
+            @Nullable final ChunkDelta<BlockState, CompoundTag> expectedDelta
     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
             return;
@@ -369,8 +369,8 @@ public final class ChunkLifecyclePayloadTracer {
 
         final String worldId = PayloadWatchSummaries.worldId(chunk);
         final ChunkPos chunkPos = chunk.getPos();
-        final boolean clientChunk = chunk.getWorld()
-                .isClient();
+        final boolean clientChunk = chunk.getLevel()
+                .isClientSide();
 
         for (final PayloadWatchTarget target : ChunkTraceWatchpoints.watchedPayloadsForChunk(
                 worldId,
@@ -431,7 +431,7 @@ public final class ChunkLifecyclePayloadTracer {
                             expectedState,
                             clientChunk ? null : liveState,
                             clientChunk ? liveState : null,
-                            chunk.getStatus(),
+                            chunk.getPersistedStatus(),
                             source,
                             Thread.currentThread()
                                     .getName(),
@@ -455,7 +455,7 @@ public final class ChunkLifecyclePayloadTracer {
                                 expectedState,
                                 clientChunk ? null : liveState,
                                 clientChunk ? liveState : null,
-                                chunk.getStatus(),
+                                chunk.getPersistedStatus(),
                                 source,
                                 Thread.currentThread()
                                         .getName(),
@@ -480,7 +480,7 @@ public final class ChunkLifecyclePayloadTracer {
                                 expectedState,
                                 null,
                                 liveState,
-                                chunk.getStatus(),
+                                chunk.getPersistedStatus(),
                                 source,
                                 Thread.currentThread()
                                         .getName(),

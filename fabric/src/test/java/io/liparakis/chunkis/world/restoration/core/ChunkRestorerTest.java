@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import java.util.List;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -23,10 +23,10 @@ class ChunkRestorerTest {
      */
     @Test
     void seedMigratedAuthoritativeBlockEntitiesCarriesPersistedPayloadsIntoRuntimeDelta() {
-        final ChunkDelta<BlockState, NbtCompound> protoDelta = new ChunkDelta<>();
-        final ChunkDelta<BlockState, NbtCompound> runtimeDelta = new ChunkDelta<>();
-        final NbtCompound metadata = new NbtCompound();
-        final NbtCompound chest = new NbtCompound();
+        final ChunkDelta<BlockState, CompoundTag> protoDelta = new ChunkDelta<>();
+        final ChunkDelta<BlockState, CompoundTag> runtimeDelta = new ChunkDelta<>();
+        final CompoundTag metadata = new CompoundTag();
+        final CompoundTag chest = new CompoundTag();
         chest.putString("id", "minecraft:chest");
         chest.putInt("x", 103);
         chest.putInt("y", 93);
@@ -48,8 +48,8 @@ class ChunkRestorerTest {
      */
     @Test
     void describeReplayPayloadListsSectionsBlockChangesAndBlockEntities() {
-        final ChunkDelta<String, NbtCompound> delta = new ChunkDelta<>();
-        final NbtCompound chest = new NbtCompound();
+        final ChunkDelta<String, CompoundTag> delta = new ChunkDelta<>();
+        final CompoundTag chest = new CompoundTag();
         chest.putString("id", "minecraft:chest");
 
         delta.addBlockChange(1, 5, 3, "stone");

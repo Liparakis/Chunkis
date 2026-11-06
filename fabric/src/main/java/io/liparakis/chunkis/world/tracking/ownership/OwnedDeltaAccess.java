@@ -4,9 +4,9 @@ import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.world.tracking.suppression.PendingChunkMutationSuppression;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * The one place that turns a chunk's attached delta into a Chunkis-owned one.
@@ -37,10 +37,10 @@ public final class OwnedDeltaAccess {
      * @return the owned delta attached to {@code chunk}
      */
     @SuppressWarnings("unchecked")
-    public static ChunkDelta<BlockState, NbtCompound> getOrClaim(final WorldChunk chunk,
+    public static ChunkDelta<BlockState, CompoundTag> getOrClaim(final LevelChunk chunk,
             final ChunkTraceReason reason, final String source) {
         final ChunkisDeltaDuck duck = (ChunkisDeltaDuck) chunk;
-        ChunkDelta<BlockState, NbtCompound> delta = (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta();
+        ChunkDelta<BlockState, CompoundTag> delta = (ChunkDelta<BlockState, CompoundTag>) duck.chunkis$getDelta();
         if (delta == null) {
             delta = new ChunkDelta<>(BlockState::isAir);
             duck.chunkis$setDelta(delta);
@@ -48,8 +48,8 @@ public final class OwnedDeltaAccess {
         if (!ChunkDeltaOwnership.hasChunkisOwnedState(delta)) {
             delta.claimOwnership(reason.name(), source);
             ChunkOwnershipTraceHelper.traceDecision(
-                    chunk.getWorld()
-                            .getRegistryKey(),
+                    chunk.getLevel()
+                            .dimension(),
                     chunk.getPos(),
                     "CLAIMED",
                     reason,

@@ -3,13 +3,13 @@ package io.liparakis.chunkis.world.entity.capture;
 import io.liparakis.chunkis.core.ChunkDelta;
 import java.util.Optional;
 import java.util.UUID;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -47,11 +47,11 @@ public final class ChunkEntityQueries {
      * @return matching pending entity NBT, or {@code null} when absent
      */
     @Nullable
-    public static NbtCompound findPendingEntityNbt(
-            final ChunkDelta<BlockState, NbtCompound> runtimeDelta,
+    public static CompoundTag findPendingEntityNbt(
+            final ChunkDelta<BlockState, CompoundTag> runtimeDelta,
             final String entityUuid
     ) {
-        final NbtCompound[] found = {null};
+        final CompoundTag[] found = {null};
         runtimeDelta.forEachPendingEntity(nbt -> {
             if (found[0] != null || nbt == null) {
                 return;
@@ -103,14 +103,14 @@ public final class ChunkEntityQueries {
                 && !entity.isRemoved()
                 && expectedType != null
                 && entity.getType() == expectedType
-                && expectedChunk.equals(entity.getChunkPos());
+                && expectedChunk.equals(entity.chunkPosition());
     }
 
     /**
      * Returns {@code true} if the alive, non-removed entity registered under {@code uuid} lies within
      * {@code searchBox} and appears in a spatial query.
      *
-     * <p>This is a secondary confirmation on top of {@link ServerWorld#getEntity};
+     * <p>This is a secondary confirmation on top of {@link ServerLevel#getEntity};
      * it verifies the entity is present in the world's spatial index, not just
      * registered by UUID. The spatial query covers only the entity's own bounds: a query over a whole chunk
      * column walks every entity section in it and cost far more than the replay it confirmed.</p>
@@ -121,21 +121,21 @@ public final class ChunkEntityQueries {
      * @return {@code true} when the entity is visible from the world's entity system
      */
     public static boolean isVisibleFromWorldQuery(
-            final ServerWorld world,
+            final ServerLevel world,
             final UUID uuid,
-            final Box searchBox
+            final AABB searchBox
     ) {
         final Entity registered = world.getEntity(uuid);
         if (registered == null || !registered.isAlive() || registered.isRemoved()) {
             return false;
         }
         // Grown a hair so zero-size entities such as markers still intersect their own bounds.
-        final Box bounds = registered.getBoundingBox()
-                .expand(BOUNDS_MARGIN);
+        final AABB bounds = registered.getBoundingBox()
+                .inflate(BOUNDS_MARGIN);
         if (!searchBox.intersects(bounds)) {
             return false;
         }
-        for (final Entity entity : world.getOtherEntities(null, bounds)) {
+        for (final Entity entity : world.getEntities(null, bounds)) {
             if (entity == registered) {
                 return true;
             }
@@ -145,7 +145,7 @@ public final class ChunkEntityQueries {
 
     /**
      * Returns the world-query box covering the full chunk column, from
-     * {@link ServerWorld#getBottomY()} to {@link ServerWorld#getTopYInclusive()} + 1
+     * {@link ServerLevel#getMinY()} to {@link ServerLevel#getMaxY()} + 1
      * (exclusive upper bound).
      *
      * <p>Used as the spatial query boundary for all entity lookups in one chunk.
@@ -156,10 +156,10 @@ public final class ChunkEntityQueries {
      * @param chunkPosition target chunk
      * @return search box covering the full chunk column
      */
-    public static Box chunkColumnBox(final ServerWorld world, final ChunkPos chunkPosition) {
-        return new Box(
-                chunkPosition.getStartX(), world.getBottomY(), chunkPosition.getStartZ(),
-                chunkPosition.getEndX() + 1, world.getTopYInclusive() + 1, chunkPosition.getEndZ() + 1
+    public static AABB chunkColumnBox(final ServerLevel world, final ChunkPos chunkPosition) {
+        return new AABB(
+                chunkPosition.getMinBlockX(), world.getMinY(), chunkPosition.getMinBlockZ(),
+                chunkPosition.getMaxBlockX() + 1, world.getMaxY() + 1, chunkPosition.getMaxBlockZ() + 1
         );
     }
 }

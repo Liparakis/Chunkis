@@ -1,28 +1,28 @@
 package io.liparakis.chunkis.portal;
 
 import java.util.Set;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.NetherPortalBlock;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Properties;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.TeleportTarget;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.world.World;
-import net.minecraft.world.dimension.NetherPortal;
-import net.minecraft.world.poi.PointOfInterestStorage;
-import net.minecraft.world.poi.PointOfInterestType;
-import net.minecraft.world.poi.PointOfInterestTypes;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.NetherPortalBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.portal.PortalShape;
+import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Controlled fallback for Nether portal travel when vanilla cannot link to an existing destination
@@ -77,7 +77,7 @@ public final class PortalArrivalFallback {
     /**
      * Default state for obsidian blocks used in portal frames.
      */
-    private static final BlockState OBSIDIAN_STATE = Blocks.OBSIDIAN.getDefaultState();
+    private static final BlockState OBSIDIAN_STATE = Blocks.OBSIDIAN.defaultBlockState();
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -100,10 +100,10 @@ public final class PortalArrivalFallback {
      * @param scaledDestinationPos vanilla-scaled destination position
      * @return controlled teleport target
      */
-    public static TeleportTarget create(
-            final ServerWorld destinationWorld,
+    public static TeleportTransition create(
+            final ServerLevel destinationWorld,
             final Entity entity,
-            final ServerWorld sourceWorld,
+            final ServerLevel sourceWorld,
             final BlockPos sourcePortalPos,
             final BlockPos scaledDestinationPos
     ) {
@@ -124,7 +124,7 @@ public final class PortalArrivalFallback {
             return createTeleportTarget(destinationWorld, entity, portalSite.arrival(), true);
         }
 
-        final Vec3d safeArrival = findSafeArrival(destinationWorld, scaledDestinationPos);
+        final Vec3 safeArrival = findSafeArrival(destinationWorld, scaledDestinationPos);
 
         if (safeArrival != null) {
             return createTeleportTarget(destinationWorld, entity, safeArrival, false);
@@ -148,21 +148,21 @@ public final class PortalArrivalFallback {
      * @param axis        orientation axis of the destination portal
      * @return teleport target positioned beside the linked portal
      */
-    public static TeleportTarget createLinkedTeleportTarget(
-            final ServerWorld world,
+    public static TeleportTransition createLinkedTeleportTarget(
+            final ServerLevel world,
             final Entity entity,
             final BlockPos lowerCorner,
             final Direction.Axis axis
     ) {
-        final Vec3d arrival = findLinkedPortalArrival(world, entity, lowerCorner, axis);
-        return new TeleportTarget(
+        final Vec3 arrival = findLinkedPortalArrival(world, entity, lowerCorner, axis);
+        return new TeleportTransition(
                 world,
                 arrival,
-                entity.getVelocity(),
-                entity.getYaw(),
-                entity.getPitch(),
+                entity.getDeltaMovement(),
+                entity.getYRot(),
+                entity.getXRot(),
                 Set.of(),
-                TeleportTarget.SEND_TRAVEL_THROUGH_PORTAL_PACKET.then(TeleportTarget.ADD_PORTAL_CHUNK_TICKET)
+                TeleportTransition.PLAY_PORTAL_SOUND.then(TeleportTransition.PLACE_PORTAL_TICKET)
         );
     }
 
@@ -174,7 +174,7 @@ public final class PortalArrivalFallback {
      */
     private static Direction.Axis resolvePortalAxis(final BlockState sourcePortalState) {
         return sourcePortalState
-                .getOrEmpty(Properties.HORIZONTAL_AXIS)
+                .getOptionalValue(BlockStateProperties.HORIZONTAL_AXIS)
                 .orElse(Direction.Axis.X);
     }
 
@@ -189,7 +189,7 @@ public final class PortalArrivalFallback {
      * @param visitor      callback invoked for each column; returns true to abort search
      */
     private static void searchColumns(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos target,
             final int searchRadius,
             final int minY,
@@ -208,11 +208,11 @@ public final class PortalArrivalFallback {
 
                     forceLoadColumn(world, worldX, worldZ);
 
-                    final int surfaceY = MathHelper.clamp(
-                            world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, worldX, worldZ),
+                    final int surfaceY = Mth.clamp(
+                            world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, worldX, worldZ),
                             minY, maxY
                     );
-                    final int startY = MathHelper.clamp(target.getY(), minY, surfaceY);
+                    final int startY = Mth.clamp(target.getY(), minY, surfaceY);
 
                     if (visitor.visit(worldX, worldZ, startY, surfaceY)) {
                         return;
@@ -236,11 +236,11 @@ public final class PortalArrivalFallback {
      * @return the best valid site, or {@code null} if none was found
      */
     private static PortalSite findPortalSite(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos target,
             final Direction.Axis axis
     ) {
-        final int minY = world.getBottomY() + 1;
+        final int minY = world.getMinY() + 1;
         final int maxY = worldCeilingY(world) - PORTAL_INTERIOR_HEIGHT - 1;
         final PortalSite[] best = {null};
         final int[] foundRing = {-1};
@@ -293,7 +293,7 @@ public final class PortalArrivalFallback {
      * @return chosen PortalSite candidate
      */
     private static PortalSite searchVerticalPortalSites(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos target,
             final int x,
             final int startY,
@@ -337,7 +337,7 @@ public final class PortalArrivalFallback {
      * @return chosen PortalSite candidate
      */
     private static PortalSite validatePortalSiteBothAxes(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos target,
             final int lowerX,
             final int lowerY,
@@ -370,7 +370,7 @@ public final class PortalArrivalFallback {
      * @return a scored portal site, or {@code null} if the footprint is unsafe
      */
     private static PortalSite validatePortalSite(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos target,
             final int lowerX,
             final int lowerY,
@@ -420,20 +420,20 @@ public final class PortalArrivalFallback {
      * @return true if footprint blocks can be safely overwritten
      */
     private static boolean isPortalFootprintSafe(
-            final ServerWorld world,
+            final ServerLevel world,
             final int lowerX,
             final int lowerY,
             final int lowerZ,
             final Direction widthDirection
     ) {
-        final BlockPos.Mutable mutable = new BlockPos.Mutable();
+        final BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
         for (int width = -1; width <= PORTAL_INTERIOR_WIDTH; width++) {
             for (int height = -1; height <= PORTAL_INTERIOR_HEIGHT; height++) {
                 mutable.set(
-                        lowerX + widthDirection.getOffsetX() * width,
+                        lowerX + widthDirection.getStepX() * width,
                         lowerY + height,
-                        lowerZ + widthDirection.getOffsetZ() * width
+                        lowerZ + widthDirection.getStepZ() * width
                 );
 
                 if (isUnsafeToReplace(world.getBlockState(mutable), world.getBlockEntity(mutable))) {
@@ -473,21 +473,21 @@ public final class PortalArrivalFallback {
         if (blockEntity != null) {
             return true;
         }
-        if (state.isAir() || state.isReplaceable()) {
+        if (state.isAir() || state.canBeReplaced()) {
             return false;
         }
-        return !(state.isIn(BlockTags.BASE_STONE_OVERWORLD)
-                || state.isIn(BlockTags.BASE_STONE_NETHER)
-                || state.isIn(BlockTags.STONE_ORE_REPLACEABLES)
-                || state.isIn(BlockTags.DEEPSLATE_ORE_REPLACEABLES)
-                || state.isIn(BlockTags.DIRT)
-                || state.isIn(BlockTags.SAND)
-                || state.isIn(BlockTags.NYLIUM)
-                || state.isIn(BlockTags.SOUL_SPEED_BLOCKS)
-                || state.isIn(BlockTags.TERRACOTTA)
-                || state.isIn(BlockTags.ICE)
-                || state.isIn(BlockTags.SNOW)
-                || state.isOf(Blocks.GRAVEL));
+        return !(state.is(BlockTags.BASE_STONE_OVERWORLD)
+                || state.is(BlockTags.BASE_STONE_NETHER)
+                || state.is(BlockTags.STONE_ORE_REPLACEABLES)
+                || state.is(BlockTags.DEEPSLATE_ORE_REPLACEABLES)
+                || state.is(BlockTags.DIRT)
+                || state.is(BlockTags.SAND)
+                || state.is(BlockTags.NYLIUM)
+                || state.is(BlockTags.SOUL_SPEED_BLOCKS)
+                || state.is(BlockTags.TERRACOTTA)
+                || state.is(BlockTags.ICE)
+                || state.is(BlockTags.SNOW)
+                || state.is(Blocks.GRAVEL));
     }
 
     /**
@@ -498,13 +498,13 @@ public final class PortalArrivalFallback {
      * @param target vanilla-scaled arrival position
      * @return a valid standing position, or {@code null} if none was found
      */
-    private static Vec3d findSafeArrival(
-            final ServerWorld world,
+    private static Vec3 findSafeArrival(
+            final ServerLevel world,
             final BlockPos target
     ) {
-        final int minY = world.getBottomY() + 1;
+        final int minY = world.getMinY() + 1;
         final int maxY = worldCeilingY(world) - 2;
-        final Vec3d[] result = {null};
+        final Vec3[] result = {null};
 
         searchColumns(
                 world, target, SAFE_SPOT_SEARCH_RADIUS, minY, maxY, (worldX, worldZ, startY, surfaceY) -> {
@@ -527,26 +527,26 @@ public final class PortalArrivalFallback {
 
     /**
      * Last-resort arrival at the motion-blocking surface above the target column.
-     * Delegates final position refinement to {@link NetherPortal#findOpenPosition}.
+     * Delegates final position refinement to {@link PortalShape#findCollisionFreePosition}.
      *
      * @param world  destination world
      * @param entity teleporting entity
      * @param target arrival coordinates target
      * @return coordinates vector representing emergency target
      */
-    private static Vec3d emergencyArrival(
-            final ServerWorld world,
+    private static Vec3 emergencyArrival(
+            final ServerLevel world,
             final Entity entity,
             final BlockPos target
     ) {
-        final int topY = MathHelper.clamp(
-                world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, target.getX(), target.getZ()),
-                world.getBottomY() + 1,
+        final int topY = Mth.clamp(
+                world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, target.getX(), target.getZ()),
+                world.getMinY() + 1,
                 worldCeilingY(world) - 2
         );
 
-        final Vec3d anchor = new Vec3d(target.getX() + 0.5, topY, target.getZ() + 0.5);
-        return NetherPortal.findOpenPosition(anchor, world, entity, entity.getDimensions(entity.getPose()));
+        final Vec3 anchor = new Vec3(target.getX() + 0.5, topY, target.getZ() + 0.5);
+        return PortalShape.findCollisionFreePosition(anchor, world, entity, entity.getDimensions(entity.getPose()));
     }
 
     /**
@@ -558,22 +558,22 @@ public final class PortalArrivalFallback {
      * @param builtPortal whether a new portal was constructed at the arrival
      * @return teleport target
      */
-    private static TeleportTarget createTeleportTarget(
-            final ServerWorld world,
+    private static TeleportTransition createTeleportTarget(
+            final ServerLevel world,
             final Entity entity,
-            final Vec3d position,
+            final Vec3 position,
             final boolean builtPortal
     ) {
-        final TeleportTarget.PostDimensionTransition cooldown =
+        final TeleportTransition.PostTeleportTransition cooldown =
                 teleported -> teleported.setPortalCooldown(FALLBACK_PORTAL_COOLDOWN_TICKS);
 
-        final TeleportTarget.PostDimensionTransition transition = builtPortal
-                ? TeleportTarget.SEND_TRAVEL_THROUGH_PORTAL_PACKET.then(TeleportTarget.ADD_PORTAL_CHUNK_TICKET)
-                : TeleportTarget.SEND_TRAVEL_THROUGH_PORTAL_PACKET;
+        final TeleportTransition.PostTeleportTransition transition = builtPortal
+                ? TeleportTransition.PLAY_PORTAL_SOUND.then(TeleportTransition.PLACE_PORTAL_TICKET)
+                : TeleportTransition.PLAY_PORTAL_SOUND;
 
-        return new TeleportTarget(
-                world, position, entity.getVelocity(),
-                entity.getYaw(), entity.getPitch(),
+        return new TeleportTransition(
+                world, position, entity.getDeltaMovement(),
+                entity.getYRot(), entity.getXRot(),
                 Set.of(), transition.then(cooldown)
         );
     }
@@ -587,20 +587,20 @@ public final class PortalArrivalFallback {
      * @param axis        portal axis
      * @return arrival vector
      */
-    private static Vec3d findLinkedPortalArrival(
-            final ServerWorld world,
+    private static Vec3 findLinkedPortalArrival(
+            final ServerLevel world,
             final Entity entity,
             final BlockPos lowerCorner,
             final Direction.Axis axis
     ) {
         final Direction widthDirection = widthDirection(axis);
-        final Vec3d center = new Vec3d(
-                lowerCorner.getX() + 0.5 + widthDirection.getOffsetX() * 0.5,
+        final Vec3 center = new Vec3(
+                lowerCorner.getX() + 0.5 + widthDirection.getStepX() * 0.5,
                 lowerCorner.getY(),
-                lowerCorner.getZ() + 0.5 + widthDirection.getOffsetZ() * 0.5
+                lowerCorner.getZ() + 0.5 + widthDirection.getStepZ() * 0.5
         );
 
-        return NetherPortal.findOpenPosition(center, world, entity, entity.getDimensions(entity.getPose()));
+        return PortalShape.findCollisionFreePosition(center, world, entity, entity.getDimensions(entity.getPose()));
     }
 
     /**
@@ -612,14 +612,14 @@ public final class PortalArrivalFallback {
      * @param axis        portal axis alignment
      */
     private static void buildPortal(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos lowerCorner,
             final Direction.Axis axis
     ) {
         final Direction widthDirection = widthDirection(axis);
         final BlockState portalState = Blocks.NETHER_PORTAL
-                .getDefaultState()
-                .with(NetherPortalBlock.AXIS, axis);
+                .defaultBlockState()
+                .setValue(NetherPortalBlock.AXIS, axis);
 
         for (int width = -1; width <= PORTAL_INTERIOR_WIDTH; width++) {
             for (int height = -1; height <= PORTAL_INTERIOR_HEIGHT; height++) {
@@ -627,22 +627,22 @@ public final class PortalArrivalFallback {
                     continue;
                 }
 
-                world.setBlockState(
-                        lowerCorner.offset(widthDirection, width)
-                                .up(height),
+                world.setBlock(
+                        lowerCorner.relative(widthDirection, width)
+                                .above(height),
                         OBSIDIAN_STATE,
-                        Block.NOTIFY_ALL
+                        Block.UPDATE_ALL
                 );
             }
         }
 
         for (int width = 0; width < PORTAL_INTERIOR_WIDTH; width++) {
             for (int height = 0; height < PORTAL_INTERIOR_HEIGHT; height++) {
-                world.setBlockState(
-                        lowerCorner.offset(widthDirection, width)
-                                .up(height),
+                world.setBlock(
+                        lowerCorner.relative(widthDirection, width)
+                                .above(height),
                         portalState,
-                        Block.NOTIFY_ALL
+                        Block.UPDATE_ALL
                 );
             }
         }
@@ -658,20 +658,20 @@ public final class PortalArrivalFallback {
      * @param widthDirection horizontal direction of the portal face
      */
     private static void addPortalPois(
-            final ServerWorld world,
+            final ServerLevel world,
             final BlockPos lowerCorner,
             final Direction widthDirection
     ) {
-        final PointOfInterestStorage poiStorage = world.getPointOfInterestStorage();
-        final RegistryEntry<PointOfInterestType> portalPoiType = world
-                .getRegistryManager()
-                .getOrThrow(RegistryKeys.POINT_OF_INTEREST_TYPE)
-                .getOrThrow(PointOfInterestTypes.NETHER_PORTAL);
+        final PoiManager poiStorage = world.getPoiManager();
+        final Holder<PoiType> portalPoiType = world
+                .registryAccess()
+                .lookupOrThrow(Registries.POINT_OF_INTEREST_TYPE)
+                .getOrThrow(PoiTypes.NETHER_PORTAL);
 
         for (int width = 0; width < PORTAL_INTERIOR_WIDTH; width++) {
             for (int height = 0; height < PORTAL_INTERIOR_HEIGHT; height++) {
-                poiStorage.add(lowerCorner.offset(widthDirection, width)
-                        .up(height), portalPoiType);
+                poiStorage.add(lowerCorner.relative(widthDirection, width)
+                        .above(height), portalPoiType);
             }
         }
     }
@@ -720,24 +720,24 @@ public final class PortalArrivalFallback {
      * @return count of solid blocks in the support row
      */
     private static int countSupportBelowPortal(
-            final ServerWorld world,
+            final ServerLevel world,
             final int lowerX,
             final int lowerY,
             final int lowerZ,
             final Direction widthDirection
     ) {
         int support = 0;
-        final BlockPos.Mutable mutable = new BlockPos.Mutable();
+        final BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
         for (int width = -1; width <= PORTAL_INTERIOR_WIDTH; width++) {
             mutable.set(
-                    lowerX + widthDirection.getOffsetX() * width,
+                    lowerX + widthDirection.getStepX() * width,
                     lowerY - 2,
-                    lowerZ + widthDirection.getOffsetZ() * width
+                    lowerZ + widthDirection.getStepZ() * width
             );
 
             if (world.getBlockState(mutable)
-                    .isSideSolidFullSquare(world, mutable, Direction.UP)) {
+                    .isFaceSturdy(world, mutable, Direction.UP)) {
                 support++;
             }
         }
@@ -778,7 +778,7 @@ public final class PortalArrivalFallback {
      * @param worldX target block coordinate X
      * @param worldZ target block coordinate Z
      */
-    private static void forceLoadColumn(final ServerWorld world, final int worldX, final int worldZ) {
+    private static void forceLoadColumn(final ServerLevel world, final int worldX, final int worldZ) {
         world.getChunk(worldX >> 4, worldZ >> 4);
     }
 
@@ -798,10 +798,10 @@ public final class PortalArrivalFallback {
      * @param world target server world
      * @return ceiling limit height Y coordinate
      */
-    private static int worldCeilingY(final ServerWorld world) {
-        return world.getRegistryKey() == World.NETHER
-                ? Math.min(world.getTopYInclusive(), NETHER_MAX_CREATED_PORTAL_Y)
-                : world.getTopYInclusive();
+    private static int worldCeilingY(final ServerLevel world) {
+        return world.dimension() == Level.NETHER
+                ? Math.min(world.getMaxY(), NETHER_MAX_CREATED_PORTAL_Y)
+                : world.getMaxY();
     }
 
     /**
@@ -832,7 +832,7 @@ public final class PortalArrivalFallback {
      * @param score       composite placement score; lower is better
      * @param axis        portal orientation axis for this site
      */
-    private record PortalSite(BlockPos lowerCorner, Vec3d arrival, long score, Direction.Axis axis) {
+    private record PortalSite(BlockPos lowerCorner, Vec3 arrival, long score, Direction.Axis axis) {
 
     }
 }

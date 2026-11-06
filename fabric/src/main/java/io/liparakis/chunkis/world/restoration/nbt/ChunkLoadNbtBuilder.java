@@ -2,8 +2,8 @@ package io.liparakis.chunkis.world.restoration.nbt;
 
 import io.liparakis.chunkis.core.ChunkDelta;
 import java.util.Objects;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Builds the synthetic chunk NBT that Chunkis feeds into vanilla load paths.
@@ -37,18 +37,18 @@ final class ChunkLoadNbtBuilder {
             final int chunkX,
             final int chunkZ,
             final int dataVersion,
-            final ChunkDelta<?, NbtCompound> delta
+            final ChunkDelta<?, CompoundTag> delta
     ) {
         final Object metadata = delta != null ? delta.getChunkMetadata() : null;
-        final NbtCompound baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
-        final NbtCompound preservedAuxiliaryChunkNbt =
+        final CompoundTag baseChunkNbt = CisNbtUtil.extractPersistedBaseChunkNbt(metadata);
+        final CompoundTag preservedAuxiliaryChunkNbt =
                 CisNbtUtil.extractPreservedAuxiliaryChunkNbt(metadata);
         final boolean usePersistedBaseChunkForBlocks =
                 CisNbtUtil.shouldUsePersistedBaseChunkForBlockBaseline(metadata);
         final boolean migratedAuthoritativeChunk =
                 CisNbtUtil.isMigratedAuthoritativeChunk(metadata);
         final CisNbtUtil.PersistedBaseChunkUsage baseChunkUsage;
-        final NbtCompound root;
+        final CompoundTag root;
 
         if (baseChunkNbt != null && usePersistedBaseChunkForBlocks) {
             root = baseChunkNbt;
@@ -72,11 +72,11 @@ final class ChunkLoadNbtBuilder {
             // chunk; otherwise vanilla lights the restored blocks itself.
             root.putString(CisNbtUtil.STATUS_KEY, STATUS_FULL);
             root.put(CisNbtUtil.SECTIONS_KEY, CisNbtUtil.getStoredSections(metadata));
-            PendingTicksNbt.putInto((NbtCompound) metadata, root);
+            PendingTicksNbt.putInto((CompoundTag) metadata, root);
             // Only for the blocks they were captured from: a dirty delta may hold newer edits, unless it is only
             // waiting for its save. Vanilla rebuilds heightmaps the root lacks.
             if (delta != null && (!delta.isDirty() || delta.hasCurrentHeightmaps())) {
-                ((NbtCompound) metadata).getCompound(CisNbtUtil.STORED_HEIGHTMAPS_KEY)
+                ((CompoundTag) metadata).getCompound(CisNbtUtil.STORED_HEIGHTMAPS_KEY)
                         .ifPresent(heightmaps -> root.put(CisNbtUtil.HEIGHTMAPS_KEY, heightmaps.copy()));
             }
             if (CisNbtUtil.loadsWithStoredLight(metadata)) {
@@ -105,15 +105,15 @@ final class ChunkLoadNbtBuilder {
      * @param delta source block delta
      */
     static void putChunkMetadata(
-            final NbtCompound root,
-            final ChunkDelta<BlockState, NbtCompound> delta
+            final CompoundTag root,
+            final ChunkDelta<BlockState, CompoundTag> delta
     ) {
         Objects.requireNonNull(root, "root");
         if (delta == null) {
             return;
         }
 
-        final NbtCompound structures =
+        final CompoundTag structures =
                 CisNbtUtil.extractPersistedStructureMetadata(delta.getChunkMetadata());
         if (structures != null && !structures.isEmpty()) {
             root.put(CisNbtUtil.STRUCTURES_KEY, structures);
@@ -130,10 +130,10 @@ final class ChunkLoadNbtBuilder {
      * @param preservedAuxiliaryNbt preserved opaque vanilla metadata
      */
     private static void mergePreservedAuxiliaryMetadata(
-            final NbtCompound root,
-            final NbtCompound preservedAuxiliaryNbt
+            final CompoundTag root,
+            final CompoundTag preservedAuxiliaryNbt
     ) {
-        root.copyFrom(preservedAuxiliaryNbt);
+        root.merge(preservedAuxiliaryNbt);
     }
 
     /**
@@ -143,9 +143,9 @@ final class ChunkLoadNbtBuilder {
      * @return casted delta mapping
      */
     @SuppressWarnings("unchecked")
-    private static ChunkDelta<BlockState, NbtCompound> castDelta(
-            final ChunkDelta<?, NbtCompound> delta
+    private static ChunkDelta<BlockState, CompoundTag> castDelta(
+            final ChunkDelta<?, CompoundTag> delta
     ) {
-        return (ChunkDelta<BlockState, NbtCompound>) delta;
+        return (ChunkDelta<BlockState, CompoundTag>) delta;
     }
 }

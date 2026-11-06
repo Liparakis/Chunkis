@@ -11,9 +11,9 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.world.chunk.PalettedContainer;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.PalettedContainer;
 
 /**
  * Keeps the blocks of recently unloaded chunks, as the section containers their unload save wrote, so reloading
@@ -26,7 +26,7 @@ import net.minecraft.world.chunk.PalettedContainer;
  * the stored entry no longer matches it; the containers are the save's own copies, never touched by the world
  * again, so any number of reads may share them.</p>
  */
-public final class RecentChunkBlocks implements CisStorage.BlockPartSource<BlockState, NbtCompound> {
+public final class RecentChunkBlocks implements CisStorage.BlockPartSource<BlockState, CompoundTag> {
 
     /**
      * Memory budget in bytes.
@@ -129,7 +129,7 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
     }
 
     @Override
-    public Consumer<ChunkDelta<BlockState, NbtCompound>> blocksFor(final CisChunkPos pos,
+    public Consumer<ChunkDelta<BlockState, CompoundTag>> blocksFor(final CisChunkPos pos,
             final long[] blockPartHash, final boolean forChunkLoad) {
         Entry entry;
         synchronized (this) {
@@ -177,7 +177,7 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
      * @param bottomY    world bottom Y
      * @param blockCount non-air blocks in them, to size the instructions once, or 0 when unknown
      */
-    public static void appendBlocks(final ChunkDelta<BlockState, NbtCompound> delta,
+    public static void appendBlocks(final ChunkDelta<BlockState, CompoundTag> delta,
             final PalettedContainer<BlockState>[] sections, final int bottomY, final int blockCount) {
         final IdentityHashMap<BlockState, Integer> paletteIds = new IdentityHashMap<>();
         // Reserved once: grown section by section, a full chunk's instructions were half of a reload's garbage.
@@ -210,7 +210,7 @@ public final class RecentChunkBlocks implements CisStorage.BlockPartSource<Block
         for (final PalettedContainer<BlockState> container : sections) {
             if (container != null) {
                 final Object data = PalettedContainerFields.data(container);
-                total += 96 + PalettedContainerFields.storage(data).getData().length * 8L
+                total += 96 + PalettedContainerFields.storage(data).getRaw().length * 8L
                         + PalettedContainerFields.palette(data).getSize() * 16L;
             }
         }

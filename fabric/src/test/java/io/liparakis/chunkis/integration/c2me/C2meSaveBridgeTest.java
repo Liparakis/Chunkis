@@ -3,7 +3,7 @@ package io.liparakis.chunkis.integration.c2me;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -22,7 +22,7 @@ class C2meSaveBridgeTest {
          * @param chunk   chunk to save
          * @return nothing
          */
-        Object asyncSave(final Object context, final Chunk chunk) {
+        Object asyncSave(final Object context, final ChunkAccess chunk) {
             return null;
         }
     }
@@ -38,7 +38,7 @@ class C2meSaveBridgeTest {
          * @param chunk   chunk to save
          * @return nothing
          */
-        Object save(final Object context, final Chunk chunk) {
+        Object save(final Object context, final ChunkAccess chunk) {
             return null;
         }
     }

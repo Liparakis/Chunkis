@@ -10,9 +10,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.state.property.Property;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 
 /**
  * High-performance Fabric implementation of BlockStateAdapter with aggressive caching.
@@ -136,7 +136,7 @@ public final class FabricBlockStateAdapter
             return invokeGetValues(property);
         } catch (final Exception e) {
             // Fallback to direct call if reflection fails (e.g., access restrictions)
-            return property.getValues();
+            return property.getPossibleValues();
         }
     }
 
@@ -153,7 +153,7 @@ public final class FabricBlockStateAdapter
             return (Collection<?>) GET_VALUES_METHOD.invoke(property);
         }
         // Direct call fallback - used when reflection resolution failed entirely
-        return property.getValues();
+        return property.getPossibleValues();
     }
 
     /**
@@ -186,7 +186,7 @@ public final class FabricBlockStateAdapter
             final BlockState state,
             final Property<?> property,
             final Object value) {
-        return state.with((Property) property, (Comparable) value);
+        return state.setValue((Property) property, (Comparable) value);
     }
 
     /**
@@ -264,7 +264,7 @@ public final class FabricBlockStateAdapter
     public int getValueIndex(final BlockState state, final Property<?> property) {
         Objects.requireNonNull(state, "BlockState cannot be null");
         Objects.requireNonNull(property, "Property cannot be null");
-        final Comparable<?> currentValue = state.get(property);
+        final Comparable<?> currentValue = state.getValue(property);
         return getOrCreateIndexMap(property).getOrDefault(currentValue, -1);
     }
 
@@ -280,7 +280,7 @@ public final class FabricBlockStateAdapter
     public Object getPropertyValue(final BlockState state, final Property<?> property) {
         Objects.requireNonNull(state, "BlockState cannot be null");
         Objects.requireNonNull(property, "Property cannot be null");
-        return state.get(property);
+        return state.getValue(property);
     }
 
     /**
@@ -322,7 +322,7 @@ public final class FabricBlockStateAdapter
     @Override
     public BlockState getDefaultState(final Block block) {
         Objects.requireNonNull(block, "Block cannot be null");
-        return block.getDefaultState();
+        return block.defaultBlockState();
     }
 
     /**
@@ -333,7 +333,7 @@ public final class FabricBlockStateAdapter
      * @return immutable list of properties, never null
      */
     private List<Property<?>> resolveProperties(final Block block) {
-        final Collection<Property<?>> properties = block.getStateManager()
+        final Collection<Property<?>> properties = block.getStateDefinition()
                 .getProperties();
         // Fast path for the common case of stateless blocks (e.g., stone)
         return properties.isEmpty() ? EMPTY_PROPERTIES : List.copyOf(properties);

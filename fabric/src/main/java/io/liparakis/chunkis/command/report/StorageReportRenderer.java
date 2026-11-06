@@ -7,9 +7,9 @@ import io.liparakis.chunkis.command.report.StorageReportModels.StorageReport;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringJoiner;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 
 /**
  * Utility for formatting and printing storage report metrics to a Minecraft server command source.
@@ -57,8 +57,8 @@ public final class StorageReportRenderer {
      * @param topRegions the number of top-sized regions to list
      */
     public static void sendReport(
-            final ServerCommandSource source,
-            final ServerWorld world,
+            final CommandSourceStack source,
+            final ServerLevel world,
             final StorageReport report,
             final int topRegions
     ) {
@@ -71,8 +71,8 @@ public final class StorageReportRenderer {
                 : (100.0 * report.liveBytes()) / report.vanillaBytes();
 
         sendLine(source,
-                "[Chunkis] Storage report for " + world.getRegistryKey()
-                        .getValue());
+                "[Chunkis] Storage report for " + world.dimension()
+                        .identifier());
         sendLine(
                 source, "  Chunkis bytes: " + formatBytes(report.chunkisBytes())
                         + " | live: " + formatBytes(report.liveBytes())
@@ -155,7 +155,7 @@ public final class StorageReportRenderer {
      * @param source feedback source receiver
      * @param report source report containing metrics
      */
-    private static void sendDenseSummary(final ServerCommandSource source, final StorageReport report) {
+    private static void sendDenseSummary(final CommandSourceStack source, final StorageReport report) {
         if (report.denseSections() <= 0) {
             return;
         }
@@ -191,7 +191,7 @@ public final class StorageReportRenderer {
      * @param topRegions maximum region count to display
      */
     private static void sendRegionSummary(
-            final ServerCommandSource source,
+            final CommandSourceStack source,
             final StorageReport report,
             final int topRegions
     ) {
@@ -227,7 +227,7 @@ public final class StorageReportRenderer {
      * @param source feedback source receiver
      * @param report source report containing metrics
      */
-    private static void sendLargestChunks(final ServerCommandSource source, final StorageReport report) {
+    private static void sendLargestChunks(final CommandSourceStack source, final StorageReport report) {
         final int chunkLimit = Math.min(TOP_CHUNKS,
                 report.chunks()
                         .size());
@@ -257,7 +257,7 @@ public final class StorageReportRenderer {
      * @param source feedback source receiver
      * @param report source report containing metrics
      */
-    private static void sendLargestDenseSections(final ServerCommandSource source, final StorageReport report) {
+    private static void sendLargestDenseSections(final CommandSourceStack source, final StorageReport report) {
         final int denseLimit = Math.min(TOP_DENSE_SECTIONS,
                 report.denseSectionsList()
                         .size());
@@ -287,8 +287,8 @@ public final class StorageReportRenderer {
      * @param source feedback source receiver
      * @param line   string line message to print
      */
-    private static void sendLine(final ServerCommandSource source, final String line) {
-        source.sendFeedback(() -> Text.literal(line), false);
+    private static void sendLine(final CommandSourceStack source, final String line) {
+        source.sendSuccess(() -> Component.literal(line), false);
     }
 
     /**

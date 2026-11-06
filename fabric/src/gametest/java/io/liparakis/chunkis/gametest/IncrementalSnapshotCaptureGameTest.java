@@ -7,16 +7,16 @@ import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * Verifies that a repeated full-baseline snapshot, which re-reads only changed sections, records the
@@ -32,42 +32,42 @@ public final class IncrementalSnapshotCaptureGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 100)
-    public void repeatedSnapshotMatchesFreshSnapshot(final TestContext context) {
-        final ServerWorld world = context.getWorld();
-        final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-        final ChunkPos target = new ChunkPos(anchor.x + 900, anchor.z);
-        world.setChunkForced(target.x, target.z, true);
-        final WorldChunk chunk = world.getChunk(target.x, target.z);
+    public void repeatedSnapshotMatchesFreshSnapshot(final GameTestHelper context) {
+        final ServerLevel world = context.getLevel();
+        final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+        final ChunkPos target = new ChunkPos(anchor.x() + 900, anchor.z());
+        world.setChunkForced(target.x(), target.z(), true);
+        final LevelChunk chunk = world.getChunk(target.x(), target.z());
         try {
             for (int y = 0; y < 64; y++) {
                 for (int z = 0; z < 16; z++) {
                     for (int x = 0; x < 16; x++) {
                         final BlockState state = ((x + y + z) & 1) == 0
-                                ? Blocks.STONE.getDefaultState()
-                                : Blocks.DIRT.getDefaultState();
-                        world.setBlockState(target.getBlockPos(x, y, z), state, Block.NOTIFY_LISTENERS);
+                                ? Blocks.STONE.defaultBlockState()
+                                : Blocks.DIRT.defaultBlockState();
+                        world.setBlock(target.getBlockAt(x, y, z), state, Block.UPDATE_CLIENTS);
                     }
                 }
             }
 
-            final ChunkDelta<BlockState, NbtCompound> repeated = new ChunkDelta<>(BlockState::isAir);
+            final ChunkDelta<BlockState, CompoundTag> repeated = new ChunkDelta<>(BlockState::isAir);
             repeated.markDirty("IncrementalSnapshotCaptureGameTest");
             final long fullStart = System.nanoTime();
             CisSnapshotCapture.capture(chunk, repeated, null);
             final long fullNanos = System.nanoTime() - fullStart;
 
-            world.setBlockState(target.getBlockPos(3, 5, 7), Blocks.GLASS.getDefaultState(), Block.NOTIFY_LISTENERS);
-            world.setBlockState(target.getBlockPos(4, 20, 4), Blocks.AIR.getDefaultState(), Block.NOTIFY_LISTENERS);
+            world.setBlock(target.getBlockAt(3, 5, 7), Blocks.GLASS.defaultBlockState(), Block.UPDATE_CLIENTS);
+            world.setBlock(target.getBlockAt(4, 20, 4), Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
             // A direct section write never reaches WorldChunk.setBlockState; only the data fingerprint sees it.
             chunk.getSection(chunk.getSectionIndex(40))
-                    .setBlockState(9, 40 & 15, 2, Blocks.GOLD_BLOCK.getDefaultState());
+                    .setBlockState(9, 40 & 15, 2, Blocks.GOLD_BLOCK.defaultBlockState());
 
             repeated.markDirty("IncrementalSnapshotCaptureGameTest");
             final long incrementalStart = System.nanoTime();
             CisSnapshotCapture.capture(chunk, repeated, null);
             final long incrementalNanos = System.nanoTime() - incrementalStart;
 
-            final ChunkDelta<BlockState, NbtCompound> fresh = new ChunkDelta<>(BlockState::isAir);
+            final ChunkDelta<BlockState, CompoundTag> fresh = new ChunkDelta<>(BlockState::isAir);
             fresh.markDirty("IncrementalSnapshotCaptureGameTest");
             CisSnapshotCapture.capture(chunk, fresh, null);
 
@@ -76,20 +76,20 @@ public final class IncrementalSnapshotCaptureGameTest {
             final Long2ObjectMap<BlockState> repeatedBlocks = nonAirBlocks(repeated);
             final Long2ObjectMap<BlockState> freshBlocks = nonAirBlocks(fresh);
             context.assertTrue(repeatedBlocks.equals(freshBlocks),
-                    Text.literal("Repeated snapshot differs from a fresh one: " + repeatedBlocks.size() + " vs "
+                    Component.literal("Repeated snapshot differs from a fresh one: " + repeatedBlocks.size() + " vs "
                             + freshBlocks.size() + " non-air blocks"));
-            context.assertTrue(freshBlocks.get(BlockInstruction.packPos(9, 40, 2)) == Blocks.GOLD_BLOCK.getDefaultState(),
-                    Text.literal("Fresh snapshot is missing the direct section write."));
+            context.assertTrue(freshBlocks.get(BlockInstruction.packPos(9, 40, 2)) == Blocks.GOLD_BLOCK.defaultBlockState(),
+                    Component.literal("Fresh snapshot is missing the direct section write."));
             // A full read appends sections bottom to top. Reused sections stay in place and re-read ones
             // are appended after them, so Y only goes back down when some sections were skipped.
             context.assertTrue(isOrderedByY(fresh),
-                    Text.literal("Fresh snapshot instructions are expected in ascending Y order."));
+                    Component.literal("Fresh snapshot instructions are expected in ascending Y order."));
             context.assertFalse(isOrderedByY(repeated),
-                    Text.literal("Repeated snapshot re-read every section instead of reusing unchanged ones."));
+                    Component.literal("Repeated snapshot re-read every section instead of reusing unchanged ones."));
             logWarmTimings(world, chunk, target, repeated);
-            context.complete();
+            context.succeed();
         } finally {
-            world.setChunkForced(target.x, target.z, false);
+            world.setChunkForced(target.x(), target.z(), false);
         }
     }
 
@@ -99,7 +99,7 @@ public final class IncrementalSnapshotCaptureGameTest {
      * @param delta captured delta
      * @return true when instruction Y values are non-decreasing
      */
-    private static boolean isOrderedByY(final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static boolean isOrderedByY(final ChunkDelta<BlockState, CompoundTag> delta) {
         final int[] previousY = {Integer.MIN_VALUE};
         final boolean[] ordered = {true};
         delta.forEachBlock((x, y, z, state) -> {
@@ -119,21 +119,21 @@ public final class IncrementalSnapshotCaptureGameTest {
      * @param target   chunk position
      * @param repeated delta already captured once
      */
-    private static void logWarmTimings(final ServerWorld world, final WorldChunk chunk, final ChunkPos target,
-            final ChunkDelta<BlockState, NbtCompound> repeated) {
+    private static void logWarmTimings(final ServerLevel world, final LevelChunk chunk, final ChunkPos target,
+            final ChunkDelta<BlockState, CompoundTag> repeated) {
         final int rounds = 30;
         long freshNanos = 0;
         long repeatedNanos = 0;
         for (int i = 0; i < rounds; i++) {
-            final ChunkDelta<BlockState, NbtCompound> fresh = new ChunkDelta<>(BlockState::isAir);
+            final ChunkDelta<BlockState, CompoundTag> fresh = new ChunkDelta<>(BlockState::isAir);
             fresh.markDirty("IncrementalSnapshotCaptureGameTest");
             long start = System.nanoTime();
             CisSnapshotCapture.capture(chunk, fresh, null);
             freshNanos += System.nanoTime() - start;
 
-            world.setBlockState(target.getBlockPos(i % 16, 10, 0), (i & 1) == 0
-                    ? Blocks.GLASS.getDefaultState()
-                    : Blocks.STONE.getDefaultState(), Block.NOTIFY_LISTENERS);
+            world.setBlock(target.getBlockAt(i % 16, 10, 0), (i & 1) == 0
+                    ? Blocks.GLASS.defaultBlockState()
+                    : Blocks.STONE.defaultBlockState(), Block.UPDATE_CLIENTS);
             repeated.markDirty("IncrementalSnapshotCaptureGameTest");
             start = System.nanoTime();
             CisSnapshotCapture.capture(chunk, repeated, null);
@@ -149,7 +149,7 @@ public final class IncrementalSnapshotCaptureGameTest {
      * @param delta captured delta
      * @return non-air blocks
      */
-    private static Long2ObjectMap<BlockState> nonAirBlocks(final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static Long2ObjectMap<BlockState> nonAirBlocks(final ChunkDelta<BlockState, CompoundTag> delta) {
         final Long2ObjectMap<BlockState> blocks = new Long2ObjectOpenHashMap<>();
         delta.forEachBlock((x, y, z, state) -> {
             final long pos = BlockInstruction.packPos(x, y, z);

@@ -7,12 +7,12 @@ import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.debug.watch.ChunkTraceWatchpoints;
 import io.liparakis.chunkis.debug.watch.PayloadWatchSummaries;
 import java.util.Objects;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -39,10 +39,10 @@ public final class RestorePayloadTracer {
      * @param operationId active restore session operation ID
      */
     public static void traceRestoreStarted(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId
     ) {
         if (!ChunkTraceWatchpoints.hasPayloadWatches()) {
@@ -83,7 +83,7 @@ public final class RestorePayloadTracer {
                             expectedState,
                             actualState,
                             null,
-                            chunk.getStatus(),
+                            chunk.getPersistedStatus(),
                             "ChunkRestorer#restore",
                             Thread.currentThread()
                                     .getName(),
@@ -105,7 +105,7 @@ public final class RestorePayloadTracer {
      * @param source        class/method trace source label
      */
     public static void traceRestoreInstructionVisited(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
@@ -136,7 +136,7 @@ public final class RestorePayloadTracer {
      * @param source        class/method trace source label
      */
     public static void traceRestoreApplyAttempt(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
@@ -167,7 +167,7 @@ public final class RestorePayloadTracer {
      * @param source        class/method trace source label
      */
     public static void traceRestoreSetBlockReturned(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
@@ -198,7 +198,7 @@ public final class RestorePayloadTracer {
      * @param source        class/method trace source label
      */
     public static void traceRestoreStateAfterSetBlock(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
@@ -246,9 +246,9 @@ public final class RestorePayloadTracer {
      * @param pos   block position
      * @return block state stored in the section, or {@code null} outside the chunk's sections
      */
-    private static BlockState sectionStateAt(final WorldChunk chunk, final BlockPos pos) {
+    private static BlockState sectionStateAt(final LevelChunk chunk, final BlockPos pos) {
         final int sectionIndex = chunk.getSectionIndex(pos.getY());
-        final net.minecraft.world.chunk.ChunkSection[] sections = chunk.getSectionArray();
+        final net.minecraft.world.level.chunk.LevelChunkSection[] sections = chunk.getSections();
         if (sectionIndex < 0 || sectionIndex >= sections.length) {
             return null;
         }
@@ -267,7 +267,7 @@ public final class RestorePayloadTracer {
      * @param reason        detailed failure classification text
      */
     public static void traceRestoreApplyFailed(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final BlockPos pos,
             @Nullable final BlockState previousState,
             @Nullable final BlockState expectedState,
@@ -297,8 +297,8 @@ public final class RestorePayloadTracer {
      * @param source        class/method trace source label
      */
     public static void traceRestoreSkipped(
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> expectedDelta,
+            final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> expectedDelta,
             final String operationId,
             final String source
     ) {
@@ -339,7 +339,7 @@ public final class RestorePayloadTracer {
                             expectedState,
                             chunk.getBlockState(new BlockPos(target.blockX(), target.blockY(), target.blockZ())),
                             null,
-                            chunk.getStatus(),
+                            chunk.getPersistedStatus(),
                             source,
                             Thread.currentThread()
                                     .getName(),
@@ -359,7 +359,7 @@ public final class RestorePayloadTracer {
      * @param operationId active restore session operation ID
      */
     public static void traceRestoredBlock(
-            final WorldChunk chunk,
+            final LevelChunk chunk,
             final BlockPos pos,
             final BlockState state,
             final String operationId
@@ -403,7 +403,7 @@ public final class RestorePayloadTracer {
                         state,
                         actualState,
                         null,
-                        chunk.getStatus(),
+                        chunk.getPersistedStatus(),
                         "ChunkRestorer.RestorationVisitor#visitBlock",
                         Thread.currentThread()
                                 .getName(),
@@ -423,7 +423,7 @@ public final class RestorePayloadTracer {
      * @param message     description detail text
      */
     public static void traceRestoreBlockFailure(
-            final ServerWorld world,
+            final ServerLevel world,
             final ChunkPos chunkPos,
             final BlockPos pos,
             final String operationId,

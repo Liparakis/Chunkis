@@ -10,8 +10,8 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.WorldSavePath;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Retires stale vanilla entity-region files to {@code .backup} after an authoritative world unload.
@@ -34,14 +34,14 @@ public final class VanillaEntityRegionCleanup {
      *
      * @param world world being unloaded
      */
-    public static void retire(final ServerWorld world) {
-        if (!MigrationStateServiceHolder.isAuthoritative(world.getRegistryKey())) {
+    public static void retire(final ServerLevel world) {
+        if (!MigrationStateServiceHolder.isAuthoritative(world.dimension())) {
             return;
         }
 
         final Path directory = ChunkisStoragePaths.computeVanillaEntitiesDirectory(
-                Objects.requireNonNull(world.getServer()).getSavePath(WorldSavePath.ROOT),
-                world.getRegistryKey());
+                Objects.requireNonNull(world.getServer()).getWorldPath(LevelResource.ROOT),
+                world.dimension());
         PENDING_DIRECTORIES.add(directory);
         retireDirectory(directory);
     }

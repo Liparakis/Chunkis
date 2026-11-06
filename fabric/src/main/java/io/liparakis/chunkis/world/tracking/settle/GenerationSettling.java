@@ -3,7 +3,7 @@ package io.liparakis.chunkis.world.tracking.settle;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import java.util.List;
-import net.minecraft.world.tick.Tick;
+import net.minecraft.world.ticks.SavedTick;
 
 /**
  * Tells world settling that replays from the seed apart from changes a player or an entity caused.
@@ -97,12 +97,12 @@ public final class GenerationSettling {
      * @param scheduler scheduler of the new world chunk
      * @param ticks     its pending ticks
      */
-    public static void tagGenerated(final GenerationTickDuck scheduler, final List<? extends Tick<?>> ticks) {
+    public static void tagGenerated(final GenerationTickDuck scheduler, final List<? extends SavedTick<?>> ticks) {
         if (ticks.isEmpty()) {
             return;
         }
         final LongSet generationTicks = generationTicks(scheduler);
-        for (final Tick<?> tick : ticks) {
+        for (final SavedTick<?> tick : ticks) {
             generationTicks.add(tick.pos().asLong());
         }
     }

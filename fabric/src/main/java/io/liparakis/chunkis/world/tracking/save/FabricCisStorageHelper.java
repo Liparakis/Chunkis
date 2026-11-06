@@ -30,16 +30,16 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.UnaryOperator;
 import java.util.stream.IntStream;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,14 +47,14 @@ import org.slf4j.LoggerFactory;
  * Thread-safe helper for managing {@link CisStorage} instances per world dimension.
  *
  * <p>
- * Storage instances are created lazily and cached by {@link RegistryKey}. Concurrent
+ * Storage instances are created lazily and cached by {@link ResourceKey}. Concurrent
  * access is handled by a combination of {@link ConcurrentHashMap#compute} (for
  * atomic create-or-replace on the storage map) and a per-wrapper
  * {@link ReadWriteLock} (for safe close while reads are in flight).
  *
  * <p>
- * <b>Lifecycle:</b> Call {@link #getStorage(ServerWorld)} to obtain a storage instance.
- * Call {@link #closeStorage(ServerWorld)} when a world unloads to release resources and
+ * <b>Lifecycle:</b> Call {@link #getStorage(ServerLevel)} to obtain a storage instance.
+ * Call {@link #closeStorage(ServerLevel)} when a world unloads to release resources and
  * prevent memory leaks.
  *
  * <p>
@@ -80,26 +80,26 @@ public final class FabricCisStorageHelper {
     /**
      * NbtAdapter instance formatting compounds.
      */
-    private static final NbtAdapter<NbtCompound> NBT_ADAPTER = new FabricNbtAdapter();
+    private static final NbtAdapter<CompoundTag> NBT_ADAPTER = new FabricNbtAdapter();
 
     /**
      * Default fallback block state (Air).
      */
-    private static final BlockState DEFAULT_BLOCK_STATE = Blocks.AIR.getDefaultState();
+    private static final BlockState DEFAULT_BLOCK_STATE = Blocks.AIR.defaultBlockState();
 
     /**
      * Active storage wrappers keyed by dimension registry key.
      * {@link ConcurrentHashMap#compute} is used for atomic create-or-replace,
      * eliminating the need for an outer lock on the map itself.
      */
-    private static final ConcurrentHashMap<RegistryKey<World>, StorageWrapper> storageMap =
+    private static final ConcurrentHashMap<ResourceKey<Level>, StorageWrapper> storageMap =
             new ConcurrentHashMap<>();
 
     /**
      * Resolved storage directory paths, cached to avoid repeated filesystem
      * traversal and string concatenation on the hot path.
      */
-    private static final ConcurrentHashMap<RegistryKey<World>, Path> pathCache =
+    private static final ConcurrentHashMap<ResourceKey<Level>, Path> pathCache =
             new ConcurrentHashMap<>();
 
     /**
@@ -126,10 +126,10 @@ public final class FabricCisStorageHelper {
      * @throws NullPointerException           if world is null
      * @throws StorageInitializationException if storage creation fails
      */
-    public static CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage(final ServerWorld world) {
+    public static CisStorage<Block, BlockState, Property<?>, CompoundTag> getStorage(final ServerLevel world) {
         Objects.requireNonNull(world, "ServerWorld cannot be null");
 
-        final RegistryKey<World> key = world.getRegistryKey();
+        final ResourceKey<Level> key = world.dimension();
 
         // Fast path: wrapper present and open - avoid compute overhead
         final StorageWrapper existing = storageMap.get(key);
@@ -156,8 +156,8 @@ public final class FabricCisStorageHelper {
      * @param world target server world
      * @return {@code true} if an open storage instance exists
      */
-    public static boolean isStorageOpen(final ServerWorld world) {
-        final StorageWrapper wrapper = storageMap.get(world.getRegistryKey());
+    public static boolean isStorageOpen(final ServerLevel world) {
+        final StorageWrapper wrapper = storageMap.get(world.dimension());
         return wrapper != null && wrapper.isOpen();
     }
 
@@ -171,10 +171,10 @@ public final class FabricCisStorageHelper {
      * @param world the server world (must not be null)
      * @throws NullPointerException if world is null
      */
-    public static void closeStorage(final ServerWorld world) {
+    public static void closeStorage(final ServerLevel world) {
         Objects.requireNonNull(world, "ServerWorld cannot be null");
 
-        final RegistryKey<World> key = world.getRegistryKey();
+        final ResourceKey<Level> key = world.dimension();
         final StorageWrapper wrapper = storageMap.remove(key);
         pathCache.remove(key);
         RecentChunkBlocks.of(key).clear();
@@ -185,9 +185,9 @@ public final class FabricCisStorageHelper {
 
         try {
             wrapper.close();
-            LOGGER.info("Closed Chunkis storage for dimension: {}", key.getValue());
+            LOGGER.info("Closed Chunkis storage for dimension: {}", key.identifier());
         } catch (final Exception e) {
-            LOGGER.error("Error closing Chunkis storage for dimension: {}", key.getValue(), e);
+            LOGGER.error("Error closing Chunkis storage for dimension: {}", key.identifier(), e);
         }
     }
 
@@ -207,10 +207,10 @@ public final class FabricCisStorageHelper {
      */
     @SuppressWarnings("UnusedReturnValue")
     public static boolean saveTrackedDelta(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ServerLevel world,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         if (delta != null && delta.isBlockPayloadReleased()) {
             return saveWithStoredBlocks(world, storage, pos, delta, ChunkTraceStore.nextOperationId("save"));
         }
@@ -235,10 +235,10 @@ public final class FabricCisStorageHelper {
      */
     @SuppressWarnings("UnusedReturnValue")
     public static boolean saveTrackedDelta(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ServerLevel world,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId) {
         if (delta != null && delta.isBlockPayloadReleased()) {
             return saveWithStoredBlocks(world, storage, pos, delta, operationId);
@@ -264,10 +264,10 @@ public final class FabricCisStorageHelper {
      * @return {@code true} when the payload was written and the tracker entry was cleared
      */
     private static boolean saveWithStoredBlocks(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ServerLevel world,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId) {
         StoredEntityFingerprints.forget(world, pos);
         if (!writeDelta(world, storage, pos, delta, operationId)) {
@@ -291,10 +291,10 @@ public final class FabricCisStorageHelper {
      * @param deltas  deltas to save, by chunk position
      */
     public static void saveTrackedDeltas(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
-            final Map<ChunkPos, ChunkDelta<BlockState, NbtCompound>> deltas) {
-        final List<Map.Entry<ChunkPos, ChunkDelta<BlockState, NbtCompound>>> entries = new ArrayList<>(
+            final ServerLevel world,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
+            final Map<ChunkPos, ChunkDelta<BlockState, CompoundTag>> deltas) {
+        final List<Map.Entry<ChunkPos, ChunkDelta<BlockState, CompoundTag>>> entries = new ArrayList<>(
                 deltas.entrySet());
         final boolean[] written = new boolean[entries.size()];
         IntStream.range(0, entries.size())
@@ -321,14 +321,14 @@ public final class FabricCisStorageHelper {
      * @return {@code true} when the payload was written
      */
     private static boolean writeDelta(
-            final ServerWorld world,
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            final ServerLevel world,
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta,
+            final ChunkDelta<BlockState, CompoundTag> delta,
             final String operationId) {
         final CisChunkPos cisPos = toStoragePos(pos);
         try {
-            final ChunkDeltaView<BlockState, NbtCompound> payload;
+            final ChunkDeltaView<BlockState, CompoundTag> payload;
             if (delta.isBlockPayloadReleased()) {
                 final StoredBlocksSnapshotView stored = new StoredBlocksSnapshotView(
                         delta.snapshotView(UnaryOperator.identity(), CisNbtUtil::copySharingCapturedState), storage,
@@ -341,7 +341,7 @@ public final class FabricCisStorageHelper {
             return storage.writePrepared(cisPos, storage.prepareSave(cisPos, payload), operationId);
         } catch (final IOException | RuntimeException e) {
             Chunkis.LOGGER.error("Chunkis: Failed to save chunk {} in {}; its stored entry is kept", pos,
-                    world.getRegistryKey().getValue(), e);
+                    world.dimension().identifier(), e);
             return false;
         }
     }
@@ -353,8 +353,8 @@ public final class FabricCisStorageHelper {
      * @param pos   chunk position
      * @param delta written delta
      */
-    private static void markWritten(final ServerWorld world, final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static void markWritten(final ServerLevel world, final ChunkPos pos,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         delta.setSourceVersion(CisConstants.VERSION);
         delta.markSaved();
         GlobalChunkTracker.markSaved(world, pos);
@@ -367,7 +367,7 @@ public final class FabricCisStorageHelper {
      * @return storage coordinate wrapper
      */
     public static CisChunkPos toStoragePos(final ChunkPos pos) {
-        return new CisChunkPos(pos.x, pos.z);
+        return new CisChunkPos(pos.x(), pos.z());
     }
 
     /**
@@ -391,16 +391,16 @@ public final class FabricCisStorageHelper {
      * @throws StorageInitializationException if the underlying storage cannot be created
      */
     private static StorageWrapper openStorageWrapper(
-            final ServerWorld world,
-            final RegistryKey<World> key) {
+            final ServerLevel world,
+            final ResourceKey<Level> key) {
         try {
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage = buildStorage(world);
-            LOGGER.info("Created Chunkis storage for dimension: {}", key.getValue());
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage = buildStorage(world);
+            LOGGER.info("Created Chunkis storage for dimension: {}", key.identifier());
             return new StorageWrapper(storage);
         } catch (final Exception e) {
-            LOGGER.error("Failed to create Chunkis storage for dimension: {}", key.getValue(), e);
+            LOGGER.error("Failed to create Chunkis storage for dimension: {}", key.identifier(), e);
             throw new StorageInitializationException(
-                    "Failed to initialize Chunkis storage for " + key.getValue(), e);
+                    "Failed to initialize Chunkis storage for " + key.identifier(), e);
         }
     }
 
@@ -415,14 +415,14 @@ public final class FabricCisStorageHelper {
      * @return a ready-to-use {@link CisStorage}
      * @throws IOException if directory creation or mapping file initialization fails
      */
-    private static CisStorage<Block, BlockState, Property<?>, NbtCompound> buildStorage(
-            final ServerWorld world) throws IOException {
+    private static CisStorage<Block, BlockState, Property<?>, CompoundTag> buildStorage(
+            final ServerLevel world) throws IOException {
 
         final Path storageDir = resolveAndCreateStorageDir(world);
         final Path mappingFile = ChunkisStoragePaths.computeMappingFile(
                 Objects.requireNonNull(world.getServer())
-                        .getSavePath(WorldSavePath.ROOT),
-                world.getRegistryKey());
+                        .getWorldPath(LevelResource.ROOT),
+                world.dimension());
 
         // PropertyPacker is per-storage (holds dimension-specific packed property state)
         final PropertyPacker<Block, BlockState, Property<?>> packer = new PropertyPacker<>(STATE_ADAPTER);
@@ -430,9 +430,9 @@ public final class FabricCisStorageHelper {
         final CisMapping<Block, BlockState, Property<?>> mapping =
                 new CisMapping<>(mappingFile, REGISTRY_ADAPTER, STATE_ADAPTER, packer);
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage =
                 new CisStorage<>(storageDir, mapping, NBT_ADAPTER, DEFAULT_BLOCK_STATE);
-        storage.setBlockPartSource(RecentChunkBlocks.of(world.getRegistryKey()));
+        storage.setBlockPartSource(RecentChunkBlocks.of(world.dimension()));
         return storage;
     }
 
@@ -445,8 +445,8 @@ public final class FabricCisStorageHelper {
      * @return the resolved and created storage directory path
      * @throws IOException if directory creation fails
      */
-    private static Path resolveAndCreateStorageDir(final ServerWorld world) throws IOException {
-        final RegistryKey<World> key = world.getRegistryKey();
+    private static Path resolveAndCreateStorageDir(final ServerLevel world) throws IOException {
+        final ResourceKey<Level> key = world.dimension();
 
         final Path cached = pathCache.get(key);
         if (cached != null) {
@@ -455,7 +455,7 @@ public final class FabricCisStorageHelper {
 
         final Path storageDir = ChunkisStoragePaths.computeRegionsDirectory(
                 Objects.requireNonNull(world.getServer())
-                        .getSavePath(WorldSavePath.ROOT),
+                        .getWorldPath(LevelResource.ROOT),
                 key);
         Files.createDirectories(storageDir);
         pathCache.put(key, storageDir);
@@ -497,7 +497,7 @@ public final class FabricCisStorageHelper {
         /**
          * Backing driver storage interface.
          */
-        private final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage;
+        private final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage;
 
         /**
          * Synchronization lock coordinates wrappers.
@@ -515,7 +515,7 @@ public final class FabricCisStorageHelper {
          *
          * @param storage underlying driver instance
          */
-        StorageWrapper(final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage) {
+        StorageWrapper(final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage) {
             this.storage = Objects.requireNonNull(storage, "Storage cannot be null");
         }
 
@@ -526,7 +526,7 @@ public final class FabricCisStorageHelper {
          * @return the active storage instance
          * @throws IllegalStateException if the storage has been closed
          */
-        CisStorage<Block, BlockState, Property<?>, NbtCompound> getStorage() {
+        CisStorage<Block, BlockState, Property<?>, CompoundTag> getStorage() {
             lock.readLock()
                     .lock();
             try {

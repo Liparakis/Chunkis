@@ -10,10 +10,10 @@ import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.model.ChunkTraceReason;
 import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import java.util.List;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -40,9 +40,9 @@ class PendingChunkMutationSuppressionTest {
      */
     @Test
     void tracesSuppressionContextBeginAndEndWithCallerSource() {
-        final RegistryKey<World> overworld = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.ofVanilla("overworld")
+        final ResourceKey<Level> overworld = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.withDefaultNamespace("overworld")
         );
         ChunkisDebugConfig.setLevel(ChunkisDebugLevel.LIFECYCLE);
 

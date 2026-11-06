@@ -8,18 +8,18 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
  * Verifies that a full-baseline chunk, whose sections Chunkis builds in vanilla's serialized form when it
@@ -40,20 +40,20 @@ public final class PreloadedSectionsReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 400)
-    public void reloadedFullBaselineMatchesEveryBlockAndHeightmap(final TestContext context) {
-        final ServerWorld world = context.getWorld();
-        final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-        final ChunkPos target = new ChunkPos(anchor.x - 1300, anchor.z + 1300);
-        world.setChunkForced(target.x, target.z, true);
-        final WorldChunk chunk = world.getChunk(target.x, target.z);
-        final int baseY = (chunk.sampleHeightmap(Heightmap.Type.WORLD_SURFACE, 8, 8) + 20) & ~15;
+    public void reloadedFullBaselineMatchesEveryBlockAndHeightmap(final GameTestHelper context) {
+        final ServerLevel world = context.getLevel();
+        final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+        final ChunkPos target = new ChunkPos(anchor.x() - 1300, anchor.z() + 1300);
+        world.setChunkForced(target.x(), target.z(), true);
+        final LevelChunk chunk = world.getChunk(target.x(), target.z());
+        final int baseY = (chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 20) & ~15;
         final List<BlockState> states = simpleStates();
         for (int i = 0; i < 16 * 16 * 16; i++) {
-            final BlockPos pos = target.getBlockPos(i & 15, baseY + (i >> 8), (i >> 4) & 15);
-            world.setBlockState(pos, states.get(i % states.size()), Block.NOTIFY_LISTENERS);
+            final BlockPos pos = target.getBlockAt(i & 15, baseY + (i >> 8), (i >> 4) & 15);
+            world.setBlock(pos, states.get(i % states.size()), Block.UPDATE_CLIENTS);
         }
         final List<PalettedContainer<BlockState>> stored = copySections(chunk);
-        final Map<Heightmap.Type, long[]> storedHeightmaps = heightmaps(chunk);
+        final Map<Heightmap.Types, long[]> storedHeightmaps = heightmaps(chunk);
         final AtomicBoolean unloaded = new AtomicBoolean();
         ServerChunkEvents.CHUNK_UNLOAD.register((unloadWorld, unloadChunk) -> {
             if (unloadWorld == world && unloadChunk.getPos().equals(target)) {
@@ -61,40 +61,40 @@ public final class PreloadedSectionsReloadGameTest {
             }
         });
 
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
-                    chunk.markNeedsSaving();
-                    world.getChunkManager().save(false);
+        context.startSequence()
+                .thenWaitUntil(() -> {
+                    chunk.markUnsaved();
+                    world.getChunkSource().save(false);
                     AsyncCisSaveManager.flushAndClose(world);
-                    world.setChunkForced(target.x, target.z, false);
+                    world.setChunkForced(target.x(), target.z(), false);
                 })
-                .createAndAdd(() -> context.assertTrue(unloaded.get(),
-                        Text.literal("Waiting for chunk " + target + " to unload.")))
-                .createAndAdd(() -> {
-                    world.setChunkForced(target.x, target.z, true);
-                    world.getChunk(target.x, target.z);
+                .thenWaitUntil(() -> context.assertTrue(unloaded.get(),
+                        Component.literal("Waiting for chunk " + target + " to unload.")))
+                .thenWaitUntil(() -> {
+                    world.setChunkForced(target.x(), target.z(), true);
+                    world.getChunk(target.x(), target.z());
                 })
-                .createAndAdd(() -> {
-                    final WorldChunk reloaded = world.getChunk(target.x, target.z);
-                    context.assertTrue(reloaded != chunk, Text.literal("Chunk " + target + " was not reloaded."));
+                .thenWaitUntil(() -> {
+                    final LevelChunk reloaded = world.getChunk(target.x(), target.z());
+                    context.assertTrue(reloaded != chunk, Component.literal("Chunk " + target + " was not reloaded."));
                     final List<PalettedContainer<BlockState>> restored = copySections(reloaded);
                     for (int section = 0; section < stored.size(); section++) {
                         for (int i = 0; i < 16 * 16 * 16; i++) {
                             final BlockState expected = stored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
                             final BlockState actual = restored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
                             if (expected != actual) {
-                                throw context.createError(Text.literal("Section " + section + " position " + i
+                                throw context.assertionException(Component.literal("Section " + section + " position " + i
                                         + " reloaded as " + actual + ", stored as " + expected + "."));
                             }
                         }
                     }
-                    final Map<Heightmap.Type, long[]> restoredHeightmaps = heightmaps(reloaded);
+                    final Map<Heightmap.Types, long[]> restoredHeightmaps = heightmaps(reloaded);
                     storedHeightmaps.forEach((type, values) -> context.assertTrue(
                             java.util.Arrays.equals(values, restoredHeightmaps.get(type)),
-                            Text.literal("Heightmap " + type + " differs after reload.")));
+                            Component.literal("Heightmap " + type + " differs after reload.")));
                 })
-                .createAndAdd(() -> world.setChunkForced(target.x, target.z, false))
-                .completeIfSuccessful();
+                .thenWaitUntil(() -> world.setChunkForced(target.x(), target.z(), false))
+                .thenSucceed();
     }
 
     /**
@@ -104,19 +104,19 @@ public final class PreloadedSectionsReloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 500)
-    public void editAfterReleasedReloadKeepsEveryBlock(final TestContext context) {
-        final ServerWorld world = context.getWorld();
-        final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-        final ChunkPos target = new ChunkPos(anchor.x - 1500, anchor.z + 1500);
-        world.setChunkForced(target.x, target.z, true);
-        final WorldChunk chunk = world.getChunk(target.x, target.z);
-        final int baseY = (chunk.sampleHeightmap(Heightmap.Type.WORLD_SURFACE, 8, 8) + 20) & ~15;
+    public void editAfterReleasedReloadKeepsEveryBlock(final GameTestHelper context) {
+        final ServerLevel world = context.getLevel();
+        final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+        final ChunkPos target = new ChunkPos(anchor.x() - 1500, anchor.z() + 1500);
+        world.setChunkForced(target.x(), target.z(), true);
+        final LevelChunk chunk = world.getChunk(target.x(), target.z());
+        final int baseY = (chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) + 20) & ~15;
         final List<BlockState> states = simpleStates();
         for (int i = 0; i < 16 * 16 * 16; i++) {
-            final BlockPos pos = target.getBlockPos(i & 15, baseY + (i >> 8), (i >> 4) & 15);
-            world.setBlockState(pos, states.get(i % states.size()), Block.NOTIFY_LISTENERS);
+            final BlockPos pos = target.getBlockAt(i & 15, baseY + (i >> 8), (i >> 4) & 15);
+            world.setBlock(pos, states.get(i % states.size()), Block.UPDATE_CLIENTS);
         }
-        final BlockPos edited = target.getBlockPos(3, baseY + 5, 7);
+        final BlockPos edited = target.getBlockAt(3, baseY + 5, 7);
         final List<List<PalettedContainer<BlockState>>> expected = new ArrayList<>();
         final int[] unloads = {0};
         ServerChunkEvents.CHUNK_UNLOAD.register((unloadWorld, unloadChunk) -> {
@@ -125,53 +125,53 @@ public final class PreloadedSectionsReloadGameTest {
             }
         });
 
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
-                    chunk.markNeedsSaving();
-                    world.getChunkManager().save(false);
+        context.startSequence()
+                .thenWaitUntil(() -> {
+                    chunk.markUnsaved();
+                    world.getChunkSource().save(false);
                     AsyncCisSaveManager.flushAndClose(world);
-                    world.setChunkForced(target.x, target.z, false);
+                    world.setChunkForced(target.x(), target.z(), false);
                 })
-                .createAndAdd(() -> context.assertTrue(unloads[0] >= 1,
-                        Text.literal("Waiting for chunk " + target + " to unload.")))
-                .createAndAdd(() -> {
-                    world.setChunkForced(target.x, target.z, true);
-                    world.getChunk(target.x, target.z);
+                .thenWaitUntil(() -> context.assertTrue(unloads[0] >= 1,
+                        Component.literal("Waiting for chunk " + target + " to unload.")))
+                .thenWaitUntil(() -> {
+                    world.setChunkForced(target.x(), target.z(), true);
+                    world.getChunk(target.x(), target.z());
                 })
-                .createAndAdd(() -> {
-                    final WorldChunk reloaded = world.getChunk(target.x, target.z);
+                .thenWaitUntil(() -> {
+                    final LevelChunk reloaded = world.getChunk(target.x(), target.z());
                     final var delta = ((io.liparakis.chunkis.api.ChunkisDeltaDuck) reloaded).chunkis$getDelta();
                     context.assertTrue(delta != null && delta.isBlockPayloadReleased(),
-                            Text.literal("Reloaded chunk " + target + " kept a copy of its block instructions."));
-                    world.setBlockState(edited, net.minecraft.block.Blocks.GOLD_BLOCK.getDefaultState());
+                            Component.literal("Reloaded chunk " + target + " kept a copy of its block instructions."));
+                    world.setBlockAndUpdate(edited, net.minecraft.world.level.block.Blocks.GOLD_BLOCK.defaultBlockState());
                     expected.add(copySections(reloaded));
-                    world.getChunkManager().save(false);
+                    world.getChunkSource().save(false);
                     AsyncCisSaveManager.flushAndClose(world);
-                    world.setChunkForced(target.x, target.z, false);
+                    world.setChunkForced(target.x(), target.z(), false);
                 })
-                .createAndAdd(() -> context.assertTrue(unloads[0] >= 2,
-                        Text.literal("Waiting for chunk " + target + " to unload again.")))
-                .createAndAdd(() -> {
-                    world.setChunkForced(target.x, target.z, true);
-                    world.getChunk(target.x, target.z);
+                .thenWaitUntil(() -> context.assertTrue(unloads[0] >= 2,
+                        Component.literal("Waiting for chunk " + target + " to unload again.")))
+                .thenWaitUntil(() -> {
+                    world.setChunkForced(target.x(), target.z(), true);
+                    world.getChunk(target.x(), target.z());
                 })
-                .createAndAdd(() -> {
-                    final List<PalettedContainer<BlockState>> restored = copySections(world.getChunk(target.x,
-                            target.z));
+                .thenWaitUntil(() -> {
+                    final List<PalettedContainer<BlockState>> restored = copySections(world.getChunk(target.x(),
+                            target.z()));
                     final List<PalettedContainer<BlockState>> stored = expected.get(0);
                     for (int section = 0; section < stored.size(); section++) {
                         for (int i = 0; i < 16 * 16 * 16; i++) {
                             final BlockState want = stored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
                             final BlockState got = restored.get(section).get(i & 15, i >> 8, (i >> 4) & 15);
                             if (want != got) {
-                                throw context.createError(Text.literal("Section " + section + " position " + i
+                                throw context.assertionException(Component.literal("Section " + section + " position " + i
                                         + " reloaded as " + got + ", saved as " + want + "."));
                             }
                         }
                     }
                 })
-                .createAndAdd(() -> world.setChunkForced(target.x, target.z, false))
-                .completeIfSuccessful();
+                .thenWaitUntil(() -> world.setChunkForced(target.x(), target.z(), false))
+                .thenSucceed();
     }
 
     /**
@@ -181,8 +181,8 @@ public final class PreloadedSectionsReloadGameTest {
      */
     private static List<BlockState> simpleStates() {
         final List<BlockState> states = new ArrayList<>();
-        for (final Block block : Registries.BLOCK) {
-            for (final BlockState state : block.getStateManager().getStates()) {
+        for (final Block block : BuiltInRegistries.BLOCK) {
+            for (final BlockState state : block.getStateDefinition().getPossibleStates()) {
                 if (!state.isAir() && !state.hasBlockEntity() && state.getFluidState().isEmpty()) {
                     states.add(state);
                     if (states.size() == DISTINCT_STATES) {
@@ -200,10 +200,10 @@ public final class PreloadedSectionsReloadGameTest {
      * @param chunk chunk
      * @return per-section copies
      */
-    private static List<PalettedContainer<BlockState>> copySections(final WorldChunk chunk) {
+    private static List<PalettedContainer<BlockState>> copySections(final LevelChunk chunk) {
         final List<PalettedContainer<BlockState>> copies = new ArrayList<>();
-        for (final ChunkSection section : chunk.getSectionArray()) {
-            copies.add(section.getBlockStateContainer().copy());
+        for (final LevelChunkSection section : chunk.getSections()) {
+            copies.add(section.getStates().copy());
         }
         return copies;
     }
@@ -214,10 +214,10 @@ public final class PreloadedSectionsReloadGameTest {
      * @param chunk chunk
      * @return heightmap data by type
      */
-    private static Map<Heightmap.Type, long[]> heightmaps(final WorldChunk chunk) {
-        final Map<Heightmap.Type, long[]> heightmaps = new EnumMap<>(Heightmap.Type.class);
-        for (final Map.Entry<Heightmap.Type, Heightmap> entry : chunk.getHeightmaps()) {
-            heightmaps.put(entry.getKey(), entry.getValue().asLongArray().clone());
+    private static Map<Heightmap.Types, long[]> heightmaps(final LevelChunk chunk) {
+        final Map<Heightmap.Types, long[]> heightmaps = new EnumMap<>(Heightmap.Types.class);
+        for (final Map.Entry<Heightmap.Types, Heightmap> entry : chunk.getHeightmaps()) {
+            heightmaps.put(entry.getKey(), entry.getValue().getRawData().clone());
         }
         return heightmaps;
     }

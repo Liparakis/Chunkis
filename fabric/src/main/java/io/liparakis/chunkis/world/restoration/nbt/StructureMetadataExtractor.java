@@ -2,16 +2,16 @@ package io.liparakis.chunkis.world.restoration.nbt;
 
 import it.unimi.dsi.fastutil.longs.LongSet;
 import java.util.Map;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.structure.StructureContext;
-import net.minecraft.structure.StructureStart;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.gen.structure.Structure;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext;
 
 /**
  * Direct serializer for the vanilla {@code structures} chunk payload.
@@ -39,21 +39,21 @@ public final class StructureMetadataExtractor {
      * @return serialized {@code structures} payload, or {@code null} if the chunk
      *         has no starts or references worth persisting
      */
-    public static NbtCompound extract(final ServerWorld world, final Chunk chunk) {
-        final Map<Structure, StructureStart> starts = chunk.getStructureStarts();
-        final Map<Structure, LongSet> references = chunk.getStructureReferences();
+    public static CompoundTag extract(final ServerLevel world, final ChunkAccess chunk) {
+        final Map<Structure, StructureStart> starts = chunk.getAllStarts();
+        final Map<Structure, LongSet> references = chunk.getAllReferences();
 
-        if (starts.isEmpty() && !chunk.hasStructureReferences()) {
+        if (starts.isEmpty() && !chunk.hasAnyStructureReferences()) {
             return null;
         }
 
-        final StructureContext context = StructureContext.from(world);
-        final Registry<Structure> structureRegistry = context.registryManager()
-                .getOrThrow(RegistryKeys.STRUCTURE);
+        final StructurePieceSerializationContext context = StructurePieceSerializationContext.fromLevel(world);
+        final Registry<Structure> structureRegistry = context.registryAccess()
+                .lookupOrThrow(Registries.STRUCTURE);
         final ChunkPos chunkPos = chunk.getPos();
 
-        final NbtCompound structures = new NbtCompound();
-        final NbtCompound startsNbt = new NbtCompound();
+        final CompoundTag structures = new CompoundTag();
+        final CompoundTag startsNbt = new CompoundTag();
 
         for (Map.Entry<Structure, StructureStart> entry : starts.entrySet()) {
             final Structure structure = entry.getKey();
@@ -62,22 +62,22 @@ public final class StructureMetadataExtractor {
                 continue;
             }
 
-            final Identifier id = structureRegistry.getId(structure);
+            final Identifier id = structureRegistry.getKey(structure);
             if (id != null) {
-                startsNbt.put(id.toString(), start.toNbt(context, chunkPos));
+                startsNbt.put(id.toString(), start.createTag(context, chunkPos));
             }
         }
 
         structures.put(CisNbtUtil.STRUCTURE_STARTS_KEY, startsNbt);
 
-        final NbtCompound referencesNbt = new NbtCompound();
+        final CompoundTag referencesNbt = new CompoundTag();
         for (Map.Entry<Structure, LongSet> entry : references.entrySet()) {
             final LongSet refs = entry.getValue();
             if (refs == null || refs.isEmpty()) {
                 continue;
             }
 
-            final Identifier id = structureRegistry.getId(entry.getKey());
+            final Identifier id = structureRegistry.getKey(entry.getKey());
             if (id != null) {
                 referencesNbt.putLongArray(id.toString(), refs.toLongArray());
             }

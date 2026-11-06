@@ -1,8 +1,5 @@
 package io.liparakis.chunkis.world.tracking.save;
 
-import net.minecraft.world.chunk.IdListPalette;
-import net.minecraft.state.property.Property;
-import net.minecraft.block.Block;
 import java.io.IOException;
 import io.liparakis.chunkis.storage.io.CisStorage;
 import io.liparakis.chunkis.core.codec.CisBlockPart;
@@ -14,11 +11,14 @@ import io.liparakis.chunkis.core.SectionStatesSource;
 import io.liparakis.chunkis.world.restoration.core.PalettedContainerFields;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import java.util.function.Consumer;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.util.collection.PaletteStorage;
-import net.minecraft.world.chunk.Palette;
-import net.minecraft.world.chunk.PalettedContainer;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.util.BitStorage;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.GlobalPalette;
+import net.minecraft.world.level.chunk.Palette;
+import net.minecraft.world.level.chunk.PalettedContainer;
 
 /**
  * Async-save snapshot of a chunk whose blocks were copied as section containers instead of captured as
@@ -30,7 +30,7 @@ import net.minecraft.world.chunk.PalettedContainer;
  * y, z, x order. Each section is unpacked once, on first use, on the save worker, into its 4096 states (air
  * left {@code null}), which the encoder also takes a whole section at a time ({@link SectionStatesSource}).</p>
  */
-public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockState, NbtCompound>,
+public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockState, CompoundTag>,
         SectionStatesSource<BlockState> {
 
     /**
@@ -46,7 +46,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
     /**
      * Snapshot of the delta, for everything but blocks.
      */
-    private final ChunkDeltaView<BlockState, NbtCompound> rest;
+    private final ChunkDeltaView<BlockState, CompoundTag> rest;
 
     /**
      * Copied block containers by section index; {@code null} for sections holding only air.
@@ -106,7 +106,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
      * @param sections copied block containers by section index
      * @param bottomY  bottom block Y of the chunk
      */
-    DeferredBlocksSnapshotView(final ChunkDeltaView<BlockState, NbtCompound> rest,
+    DeferredBlocksSnapshotView(final ChunkDeltaView<BlockState, CompoundTag> rest,
             final PalettedContainer<BlockState>[] sections, final int bottomY, final long[] previousPrint,
             final boolean unloading) {
         this.rest = rest;
@@ -129,7 +129,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
      * @return the prepared save, or {@code null} when the blocks must be encoded
      */
     CisStorage.PreparedSave prepareReusingStoredBlocks(
-            final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage, final CisChunkPos pos) {
+            final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage, final CisChunkPos pos) {
         scan();
         if (previousPrint == null || previousPrint[0] != sectionsHash[0] || previousPrint[1] != sectionsHash[1]) {
             return null;
@@ -226,17 +226,17 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
             }
             final Object data = PalettedContainerFields.data(container);
             final Palette<BlockState> palette = PalettedContainerFields.palette(data);
-            final PaletteStorage storage = PalettedContainerFields.storage(data);
-            final boolean global = palette instanceof IdListPalette<?>;
+            final BitStorage storage = PalettedContainerFields.storage(data);
+            final boolean global = palette instanceof GlobalPalette<?>;
             final int paletteSize = global ? 0 : palette.getSize();
             final int[] paletteIds = new int[paletteSize];
             for (int i = 0; i < paletteSize; i++) {
-                paletteIds[i] = ContentPrint.idOf(palette.get(i));
+                paletteIds[i] = ContentPrint.idOf(palette.valueFor(i));
             }
-            storage.writePaletteIndices(indices);
+            storage.unpack(indices);
             int count = 0;
             for (int index = 0; index < SECTION_VOLUME; index++) {
-                final int id = global ? ContentPrint.idOf(palette.get(indices[index])) : paletteIds[indices[index]];
+                final int id = global ? ContentPrint.idOf(palette.valueFor(indices[index])) : paletteIds[indices[index]];
                 ids[index] = id;
                 if (id >= 0) {
                     count++;
@@ -278,7 +278,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
          * @return raw id or -1
          */
         public static int idOf(final BlockState state) {
-            return state == null || state.isAir() ? -1 : Block.STATE_IDS.getRawId(state);
+            return state == null || state.isAir() ? -1 : Block.BLOCK_STATE_REGISTRY.getId(state);
         }
 
         /**
@@ -326,13 +326,13 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
             }
             final Object data = PalettedContainerFields.data(container);
             final Palette<BlockState> palette = PalettedContainerFields.palette(data);
-            final PaletteStorage storage = PalettedContainerFields.storage(data);
+            final BitStorage storage = PalettedContainerFields.storage(data);
             final BlockState[] byIndex = new BlockState[palette.getSize()];
             for (int i = 0; i < byIndex.length; i++) {
-                final BlockState state = palette.get(i);
+                final BlockState state = palette.valueFor(i);
                 byIndex[i] = state == null || state.isAir() ? null : state;
             }
-            storage.writePaletteIndices(indices);
+            storage.unpack(indices);
             final Object[] sectionStates = new Object[SECTION_VOLUME];
             for (int index = 0; index < SECTION_VOLUME; index++) {
                 sectionStates[index] = byIndex[indices[index]];
@@ -379,7 +379,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
      * {@inheritDoc}
      */
     @Override
-    public Long2ObjectMap<NbtCompound> getBlockEntities() {
+    public Long2ObjectMap<CompoundTag> getBlockEntities() {
         return rest.getBlockEntities();
     }
 
@@ -387,7 +387,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
      * {@inheritDoc}
      */
     @Override
-    public void forEachEntity(final Consumer<? super NbtCompound> consumer) {
+    public void forEachEntity(final Consumer<? super CompoundTag> consumer) {
         rest.forEachEntity(consumer);
     }
 
@@ -421,7 +421,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
      * {@inheritDoc}
      */
     @Override
-    public NbtCompound getChunkMetadata() {
+    public CompoundTag getChunkMetadata() {
         return rest.getChunkMetadata();
     }
 
@@ -486,7 +486,7 @@ public final class DeferredBlocksSnapshotView implements ChunkDeltaView<BlockSta
      *
      * @return the wrapped snapshot
      */
-    ChunkDeltaView<BlockState, NbtCompound> rest() {
+    ChunkDeltaView<BlockState, CompoundTag> rest() {
         return rest;
     }
 }

@@ -2,9 +2,9 @@ package io.liparakis.chunkis.integration.migration.offline;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -20,7 +20,7 @@ class OfflineWorldMigrationReportTest {
     @Test
     void jsonLineIncludesHandledChunkSummary() {
         final OfflineWorldMigrationReport report = new OfflineWorldMigrationReport(
-                RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla("overworld")),
+                ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("overworld")),
                 3,
                 512,
                 2,

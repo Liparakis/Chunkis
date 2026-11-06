@@ -11,16 +11,16 @@ import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.BlockState;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Covers chunks nobody changed in an authoritative world: a finished one is stored as a Chunkis entry and an
@@ -37,13 +37,13 @@ public final class SettledChunkBaselineGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 600)
-    public void untouchedSettledChunkReloadsFromStorage(final TestContext context) {
-        final ServerWorld end = context.getWorld().getServer().getWorld(World.END);
-        MigrationStateServiceHolder.markAuthoritative(end.getRegistryKey());
+    public void untouchedSettledChunkReloadsFromStorage(final GameTestHelper context) {
+        final ServerLevel end = context.getLevel().getServer().getLevel(Level.END);
+        MigrationStateServiceHolder.markAuthoritative(end.dimension());
         // Far out in the End (outer islands or void, nothing that ticks), distinct for every run like the other
         // tests' chunks, so a kept world never has it stored already.
-        final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-        final ChunkPos target = new ChunkPos(anchor.x + 3700, anchor.z - 3700);
+        final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+        final ChunkPos target = new ChunkPos(anchor.x() + 3700, anchor.z() - 3700);
         final AtomicInteger unloads = new AtomicInteger();
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> {
             if (world == end && chunk.getPos().equals(target)) {
@@ -52,41 +52,41 @@ public final class SettledChunkBaselineGameTest {
         });
         final BlockState[] before = new BlockState[16 * 16 * 128];
         context.assertFalse(FabricCisStorageHelper.getStorage(end).contains(FabricCisStorageHelper.toStoragePos(target)),
-                Text.literal("End chunk " + target + " is already stored before the test."));
-        end.setChunkForced(target.x, target.z, true);
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
-                    final WorldChunk chunk = end.getChunk(target.x, target.z);
+                Component.literal("End chunk " + target + " is already stored before the test."));
+        end.setChunkForced(target.x(), target.z(), true);
+        context.startSequence()
+                .thenWaitUntil(() -> {
+                    final LevelChunk chunk = end.getChunk(target.x(), target.z());
                     context.assertFalse(ChunkDeltaOwnership.hasChunkisOwnedState(
                                     ((ChunkisDeltaDuck) chunk).chunkis$getDelta()),
-                            Text.literal("Untouched End chunk " + target + " is already owned."));
+                            Component.literal("Untouched End chunk " + target + " is already owned."));
                     for (int i = 0; i < before.length; i++) {
                         before[i] = chunk.getBlockState(at(target, i));
                     }
-                    end.setChunkForced(target.x, target.z, false);
+                    end.setChunkForced(target.x(), target.z(), false);
                 })
-                .createAndAdd(() -> context.assertTrue(unloads.get() > 0,
-                        Text.literal("Waiting for End chunk " + target + " to unload.")))
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> context.assertTrue(unloads.get() > 0,
+                        Component.literal("Waiting for End chunk " + target + " to unload.")))
+                .thenWaitUntil(() -> {
                     AsyncCisSaveManager.flushAndClose(end);
                     context.assertTrue(FabricCisStorageHelper.getStorage(end)
                                     .contains(FabricCisStorageHelper.toStoragePos(target)),
-                            Text.literal("The save of settled End chunk " + target + " stored nothing."));
-                    end.setChunkForced(target.x, target.z, true);
+                            Component.literal("The save of settled End chunk " + target + " stored nothing."));
+                    end.setChunkForced(target.x(), target.z(), true);
                 })
-                .createAndAdd(() -> {
-                    final WorldChunk chunk = end.getChunk(target.x, target.z);
+                .thenWaitUntil(() -> {
+                    final LevelChunk chunk = end.getChunk(target.x(), target.z());
                     context.assertTrue(ChunkDeltaOwnership.hasChunkisOwnedState(
                                     ((ChunkisDeltaDuck) chunk).chunkis$getDelta()),
-                            Text.literal("End chunk " + target + " did not reload from Chunkis storage."));
+                            Component.literal("End chunk " + target + " did not reload from Chunkis storage."));
                     for (int i = 0; i < before.length; i++) {
                         final BlockState now = chunk.getBlockState(at(target, i));
-                        context.assertTrue(now == before[i], Text.literal("Block at " + at(target, i)
+                        context.assertTrue(now == before[i], Component.literal("Block at " + at(target, i)
                                 + " came back as " + now + " instead of " + before[i] + "."));
                     }
-                    end.setChunkForced(target.x, target.z, false);
+                    end.setChunkForced(target.x(), target.z(), false);
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -96,13 +96,13 @@ public final class SettledChunkBaselineGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 6000)
-    public void partlyGeneratedChunkIsKeptUnfinished(final TestContext context) {
-        final ServerWorld end = context.getWorld().getServer().getWorld(World.END);
-        MigrationStateServiceHolder.markAuthoritative(end.getRegistryKey());
-        final ChunkPos anchor = new ChunkPos(context.getAbsolutePos(BlockPos.ORIGIN));
-        final ChunkPos target = new ChunkPos(anchor.x + 4100, anchor.z - 4100);
+    public void partlyGeneratedChunkIsKeptUnfinished(final GameTestHelper context) {
+        final ServerLevel end = context.getLevel().getServer().getLevel(Level.END);
+        MigrationStateServiceHolder.markAuthoritative(end.dimension());
+        final ChunkPos anchor = ChunkPos.containing(context.absolutePos(BlockPos.ZERO));
+        final ChunkPos target = new ChunkPos(anchor.x() + 4100, anchor.z() - 4100);
         final Path region = ChunkisStoragePaths.computeUnfinishedChunksDirectory(
-                        end.getServer().getSavePath(WorldSavePath.ROOT), end.getRegistryKey())
+                        end.getServer().getWorldPath(LevelResource.ROOT), end.dimension())
                 .resolve("r." + target.getRegionX() + "." + target.getRegionZ() + ".cis");
         final AtomicInteger unloads = new AtomicInteger();
         ServerChunkEvents.CHUNK_UNLOAD.register((world, chunk) -> {
@@ -110,19 +110,19 @@ public final class SettledChunkBaselineGameTest {
                 unloads.incrementAndGet();
             }
         });
-        context.assertFalse(Files.exists(region), Text.literal("Unfinished region " + region + " exists already."));
+        context.assertFalse(Files.exists(region), Component.literal("Unfinished region " + region + " exists already."));
         // No ticket: the chunk drops back out once generated this far, unfinished.
-        end.getChunk(target.x, target.z, ChunkStatus.FEATURES, true);
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> context.assertTrue(waitForSave(end, region),
-                        Text.literal("Waiting for unfinished chunk " + target + " to be kept in " + region + ".")))
-                .createAndAdd(() -> {
-                    end.setChunkForced(target.x, target.z, true);
-                    context.assertTrue(end.getChunk(target.x, target.z).getStatus() == ChunkStatus.FULL,
-                            Text.literal("Unfinished chunk " + target + " did not load back and finish."));
-                    end.setChunkForced(target.x, target.z, false);
+        end.getChunk(target.x(), target.z(), ChunkStatus.FEATURES, true);
+        context.startSequence()
+                .thenWaitUntil(() -> context.assertTrue(waitForSave(end, region),
+                        Component.literal("Waiting for unfinished chunk " + target + " to be kept in " + region + ".")))
+                .thenWaitUntil(() -> {
+                    end.setChunkForced(target.x(), target.z(), true);
+                    context.assertTrue(end.getChunk(target.x(), target.z()).getPersistedStatus() == ChunkStatus.FULL,
+                            Component.literal("Unfinished chunk " + target + " did not load back and finish."));
+                    end.setChunkForced(target.x(), target.z(), false);
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 
     /**
@@ -132,8 +132,8 @@ public final class SettledChunkBaselineGameTest {
      * @param region region file
      * @return {@code true} once the file exists and is not empty
      */
-    private static boolean waitForSave(final ServerWorld world, final Path region) {
-        world.getChunkManager().save(false);
+    private static boolean waitForSave(final ServerLevel world, final Path region) {
+        world.getChunkSource().save(false);
         try {
             return Files.exists(region) && Files.size(region) > 0;
         } catch (final java.io.IOException e) {
@@ -149,6 +149,6 @@ public final class SettledChunkBaselineGameTest {
      * @return block position
      */
     private static BlockPos at(final ChunkPos target, final int i) {
-        return target.getBlockPos(i & 15, i >> 8, (i >> 4) & 15);
+        return target.getBlockAt(i & 15, i >> 8, (i >> 4) & 15);
     }
 }

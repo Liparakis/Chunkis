@@ -2,13 +2,13 @@ package io.liparakis.chunkis.portal;
 
 import java.util.ArrayDeque;
 import java.util.HashSet;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -61,7 +61,7 @@ final class PortalArrivalSpots {
      * @return the better natural egress result, or {@code null} if neither side qualifies
      */
     static @Nullable EgressResult findBestEgressPosition(
-            final ServerWorld world,
+            final ServerLevel world,
             final int lowerX,
             final int lowerY,
             final int lowerZ,
@@ -113,10 +113,10 @@ final class PortalArrivalSpots {
             final BlockPos target
     ) {
         final Direction normal = choosePreferredArrivalSide(axis, target, lowerX, lowerZ);
-        final double centerX = lowerX + 0.5 + (axis == Direction.Axis.Z ? 0.5 : 0.0) + normal.getOffsetX();
-        final double centerZ = lowerZ + 0.5 + (axis == Direction.Axis.X ? 0.5 : 0.0) + normal.getOffsetZ();
-        final Vec3d arrival = new Vec3d(centerX, lowerY, centerZ);
-        final BlockPos arrivalPos = BlockPos.ofFloored(arrival);
+        final double centerX = lowerX + 0.5 + (axis == Direction.Axis.Z ? 0.5 : 0.0) + normal.getStepX();
+        final double centerZ = lowerZ + 0.5 + (axis == Direction.Axis.X ? 0.5 : 0.0) + normal.getStepZ();
+        final Vec3 arrival = new Vec3(centerX, lowerY, centerZ);
+        final BlockPos arrivalPos = BlockPos.containing(arrival);
         final long distanceScore = egressDistanceScore(
                 target,
                 arrivalPos.getX(),
@@ -135,13 +135,13 @@ final class PortalArrivalSpots {
      * @param z     Z coordinate
      * @return safe standing spot coordinates vector, or null
      */
-    static @Nullable Vec3d findStandingSpot(
-            final ServerWorld world,
+    static @Nullable Vec3 findStandingSpot(
+            final ServerLevel world,
             final int x,
             final int y,
             final int z
     ) {
-        final BlockPos.Mutable mutable = new BlockPos.Mutable();
+        final BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
         mutable.set(x, y, z);
         if (isImpassable(world.getBlockState(mutable), world.getBlockEntity(mutable))
@@ -159,11 +159,11 @@ final class PortalArrivalSpots {
 
         mutable.set(x, y - 1, z);
         if (!world.getBlockState(mutable)
-                .isSideSolidFullSquare(world, mutable, Direction.UP)) {
+                .isFaceSturdy(world, mutable, Direction.UP)) {
             return null;
         }
 
-        final Vec3d arrival = new Vec3d(x + 0.5, y, z + 0.5);
+        final Vec3 arrival = new Vec3(x + 0.5, y, z + 0.5);
         return isSafeArrivalPosition(world, arrival) ? arrival : null;
     }
 
@@ -180,7 +180,7 @@ final class PortalArrivalSpots {
      * @return constructed EgressResult, or null
      */
     private static @Nullable EgressResult findBestEgressSide(
-            final ServerWorld world,
+            final ServerLevel world,
             final int lowerX,
             final int lowerY,
             final int lowerZ,
@@ -190,16 +190,16 @@ final class PortalArrivalSpots {
     ) {
         final Direction widthDirection = widthDirection(axis);
 
-        Vec3d bestArrival = null;
+        Vec3 bestArrival = null;
         long bestDistanceScore = Long.MAX_VALUE;
         int bestBfs = 0;
         int walkableCount = 0;
 
         for (int step = 1; step <= EGRESS_SEARCH_RADIUS; step++) {
             for (int width = 0; width < PORTAL_INTERIOR_WIDTH; width++) {
-                final int x = lowerX + widthDirection.getOffsetX() * width + normal.getOffsetX() * step;
-                final int z = lowerZ + widthDirection.getOffsetZ() * width + normal.getOffsetZ() * step;
-                final Vec3d arrival = findStandingSpot(world, x, lowerY, z);
+                final int x = lowerX + widthDirection.getStepX() * width + normal.getStepX() * step;
+                final int z = lowerZ + widthDirection.getStepZ() * width + normal.getStepZ() * step;
+                final Vec3 arrival = findStandingSpot(world, x, lowerY, z);
                 if (arrival == null) {
                     continue;
                 }
@@ -242,15 +242,15 @@ final class PortalArrivalSpots {
 
         final long forwardScore = egressDistanceScore(
                 target,
-                lowerX + forward.getOffsetX(),
+                lowerX + forward.getStepX(),
                 target.getY(),
-                lowerZ + forward.getOffsetZ()
+                lowerZ + forward.getStepZ()
         );
         final long backwardScore = egressDistanceScore(
                 target,
-                lowerX + backward.getOffsetX(),
+                lowerX + backward.getStepX(),
                 target.getY(),
-                lowerZ + backward.getOffsetZ()
+                lowerZ + backward.getStepZ()
         );
 
         return forwardScore <= backwardScore ? forward : backward;
@@ -286,17 +286,17 @@ final class PortalArrivalSpots {
      * @param pos   feet coordinates position
      * @return true if position is safe
      */
-    private static boolean isSafeArrivalPosition(final ServerWorld world, final Vec3d pos) {
-        final BlockPos feet = BlockPos.ofFloored(pos);
-        final BlockPos head = feet.up();
+    private static boolean isSafeArrivalPosition(final ServerLevel world, final Vec3 pos) {
+        final BlockPos feet = BlockPos.containing(pos);
+        final BlockPos head = feet.above();
         return world.getFluidState(feet)
                 .isEmpty()
                 && world.getFluidState(head)
                 .isEmpty()
                 && !world.getBlockState(feet)
-                .isOf(Blocks.LAVA)
+                .is(Blocks.LAVA)
                 && !world.getBlockState(head)
-                .isOf(Blocks.LAVA);
+                .is(Blocks.LAVA);
     }
 
     /**
@@ -309,9 +309,9 @@ final class PortalArrivalSpots {
     private static boolean isImpassable(final BlockState state, final BlockEntity blockEntity) {
         return blockEntity != null
                 || (!state.isAir()
-                && !state.isReplaceable()
-                && !state.isOf(Blocks.FIRE)
-                && !state.isOf(Blocks.NETHER_PORTAL));
+                && !state.canBeReplaced()
+                && !state.is(Blocks.FIRE)
+                && !state.is(Blocks.NETHER_PORTAL));
     }
 
     /**
@@ -340,7 +340,7 @@ final class PortalArrivalSpots {
      * @return count of connected walkable tiles
      */
     private static int countConnectedWalkableTiles(
-            final ServerWorld world,
+            final ServerLevel world,
             final int startX,
             final int startY,
             final int startZ
@@ -356,13 +356,13 @@ final class PortalArrivalSpots {
         int count = 0;
         while (!queue.isEmpty()) {
             final long key = queue.poll();
-            final int x = BlockPos.unpackLongX(key);
-            final int z = BlockPos.unpackLongZ(key);
+            final int x = BlockPos.getX(key);
+            final int z = BlockPos.getZ(key);
             count++;
 
-            for (final Direction direction : Direction.Type.HORIZONTAL) {
-                final int nextX = x + direction.getOffsetX();
-                final int nextZ = z + direction.getOffsetZ();
+            for (final Direction direction : Direction.Plane.HORIZONTAL) {
+                final int nextX = x + direction.getStepX();
+                final int nextZ = z + direction.getStepZ();
                 if (Math.abs(nextX - startX) > EGRESS_BFS_RADIUS
                         || Math.abs(nextZ - startZ) > EGRESS_BFS_RADIUS) {
                     continue;
@@ -409,7 +409,7 @@ final class PortalArrivalSpots {
      * @param distanceScore calculated distance score
      * @param bfsCount      BFS evaluation count
      */
-    record EgressResult(Vec3d arrival, int walkableCount, long distanceScore, int bfsCount) {
+    record EgressResult(Vec3 arrival, int walkableCount, long distanceScore, int bfsCount) {
 
     }
 }

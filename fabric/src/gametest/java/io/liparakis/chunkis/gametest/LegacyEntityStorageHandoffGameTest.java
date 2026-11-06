@@ -11,23 +11,23 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.storage.NbtWriteView;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.ErrorReporter;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.phys.AABB;
 
 /**
  * Verifies the one-time handoff from legacy Chunkis-owned entity payloads to
@@ -49,22 +49,22 @@ public final class LegacyEntityStorageHandoffGameTest {
      * @return a {@link SerializedEntity} container holding the entity's UUID and its serialized NBT payload
      * @throws NullPointerException if the cow entity cannot be created
      */
-    private static SerializedEntity createLegacyEntityPayload(final ServerWorld world, final BlockPos pos) {
+    private static SerializedEntity createLegacyEntityPayload(final ServerLevel world, final BlockPos pos) {
         final Entity entity = Objects.requireNonNull(
-                EntityType.COW.create(world, SpawnReason.COMMAND),
+                EntityType.COW.create(world, EntitySpawnReason.COMMAND),
                 "Failed to create test cow entity");
-        entity.refreshPositionAndAngles(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
+        entity.snapTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
 
-        try (ErrorReporter.Logging logging = new ErrorReporter.Logging(
-                entity.getErrorReporterContext(),
+        try (ProblemReporter.ScopedCollector logging = new ProblemReporter.ScopedCollector(
+                entity.problemPath(),
                 io.liparakis.chunkis.Chunkis.LOGGER)) {
 
-            final NbtWriteView writeView = NbtWriteView.create(logging, entity.getRegistryManager());
-            entity.saveSelfData(writeView);
+            final TagValueOutput writeView = TagValueOutput.createWithContext(logging, entity.registryAccess());
+            entity.saveAsPassenger(writeView);
 
-            final NbtCompound nbt = writeView.getNbt();
+            final CompoundTag nbt = writeView.buildResult();
             EntityPayloadNbt.ensureEntityIdPresent(nbt, entity);
-            return new SerializedEntity(entity.getUuid(), nbt);
+            return new SerializedEntity(entity.getUUID(), nbt);
         }
     }
 
@@ -74,9 +74,9 @@ public final class LegacyEntityStorageHandoffGameTest {
      * @param world    the server world
      * @param chunkPos the position of the chunk to clear
      */
-    private static void clearNonPlayerEntities(final ServerWorld world, final ChunkPos chunkPos) {
+    private static void clearNonPlayerEntities(final ServerLevel world, final ChunkPos chunkPos) {
         for (final Entity entity : getChunkEntities(world, chunkPos)) {
-            if (!(entity instanceof PlayerEntity)) {
+            if (!(entity instanceof Player)) {
                 entity.discard();
             }
         }
@@ -90,10 +90,10 @@ public final class LegacyEntityStorageHandoffGameTest {
      * @param uuid     the target entity UUID to match
      * @return the number of matching entities found in the chunk
      */
-    private static int countEntitiesWithUuid(final ServerWorld world, final ChunkPos chunkPos, final UUID uuid) {
+    private static int countEntitiesWithUuid(final ServerLevel world, final ChunkPos chunkPos, final UUID uuid) {
         int count = 0;
         for (final Entity entity : getChunkEntities(world, chunkPos)) {
-            if (uuid.equals(entity.getUuid())) {
+            if (uuid.equals(entity.getUUID())) {
                 count++;
             }
         }
@@ -107,16 +107,16 @@ public final class LegacyEntityStorageHandoffGameTest {
      * @param chunkPos the position of the chunk
      * @return a list of entities in the chunk
      */
-    private static List<Entity> getChunkEntities(final ServerWorld world, final ChunkPos chunkPos) {
-        return world.getOtherEntities(
+    private static List<Entity> getChunkEntities(final ServerLevel world, final ChunkPos chunkPos) {
+        return world.getEntities(
                 null,
-                new Box(
-                        chunkPos.getStartX(),
-                        world.getBottomY(),
-                        chunkPos.getStartZ(),
-                        chunkPos.getEndX() + 1,
-                        world.getBottomY() + world.getHeight(),
-                        chunkPos.getEndZ() + 1));
+                new AABB(
+                        chunkPos.getMinBlockX(),
+                        world.getMinY(),
+                        chunkPos.getMinBlockZ(),
+                        chunkPos.getMaxBlockX() + 1,
+                        world.getMinY() + world.getHeight(),
+                        chunkPos.getMaxBlockZ() + 1));
     }
 
     /**
@@ -126,42 +126,42 @@ public final class LegacyEntityStorageHandoffGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 200)
-    public void rewritesLegacyEntityPayloadsOutOfCisAfterFirstReplay(final TestContext context) {
-        final ServerWorld world = context.getWorld();
-        final BlockPos anchor = context.getAbsolutePos(new BlockPos(1, 2, 1));
-        final ChunkPos chunkPos = new ChunkPos(anchor);
-        final CisChunkPos cisChunkPos = new CisChunkPos(chunkPos.x, chunkPos.z);
+    public void rewritesLegacyEntityPayloadsOutOfCisAfterFirstReplay(final GameTestHelper context) {
+        final ServerLevel world = context.getLevel();
+        final BlockPos anchor = context.absolutePos(new BlockPos(1, 2, 1));
+        final ChunkPos chunkPos = ChunkPos.containing(anchor);
+        final CisChunkPos cisChunkPos = new CisChunkPos(chunkPos.x(), chunkPos.z());
 
         clearNonPlayerEntities(world, chunkPos);
         FabricCisStorageHelper.closeStorage(world);
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage =
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage =
                 FabricCisStorageHelper.getStorage(world);
 
         storage.save(cisChunkPos, new ChunkDelta<>());
 
         final SerializedEntity legacyEntity = createLegacyEntityPayload(world, anchor);
-        final ChunkDelta<BlockState, NbtCompound> legacyDelta = new ChunkDelta<>();
+        final ChunkDelta<BlockState, CompoundTag> legacyDelta = new ChunkDelta<>();
         legacyDelta.setSuppressInitialRepopulation(true);
         legacyDelta.setChunkMetadata(CisNbtUtil.createChunkMetadata(null, true), false);
         legacyDelta.addPendingEntity(legacyEntity.nbt());
         storage.save(cisChunkPos, legacyDelta);
 
-        final ChunkDelta<BlockState, NbtCompound> persistedLegacyDelta = storage.load(cisChunkPos);
+        final ChunkDelta<BlockState, CompoundTag> persistedLegacyDelta = storage.load(cisChunkPos);
         persistedLegacyDelta.setSuppressInitialRepopulation(
                 CisNbtUtil.shouldSuppressInitialRepopulation(persistedLegacyDelta));
         context.assertTrue(
                 persistedLegacyDelta.getEntitiesList()
                         .size() == 1,
-                Text.literal("Expected one legacy entity payload before replay."));
+                Component.literal("Expected one legacy entity payload before replay."));
 
-        world.loadChunks(chunkPos, 1);
+        world.waitForEntities(chunkPos, 1);
         context.assertTrue(
-                world.canSpawnEntitiesAt(chunkPos),
-                Text.literal("Expected legacy handoff chunk to be entity-ready before synchronous replay."));
+                world.canSpawnEntitiesInChunk(chunkPos),
+                Component.literal("Expected legacy handoff chunk to be entity-ready before synchronous replay."));
 
-        final WorldChunk chunk = world.getWorldChunk(anchor);
-        final ChunkDelta<BlockState, NbtCompound> runtimeDelta = new ChunkDelta<>();
+        final LevelChunk chunk = world.getChunkAt(anchor);
+        final ChunkDelta<BlockState, CompoundTag> runtimeDelta = new ChunkDelta<>();
         ChunkRestorer.restore(
                 world,
                 chunk,
@@ -170,22 +170,22 @@ public final class LegacyEntityStorageHandoffGameTest {
 
         context.assertTrue(
                 countEntitiesWithUuid(world, chunkPos, legacyEntity.uuid()) == 1,
-                Text.literal("Expected exactly one spawned legacy entity after first replay."));
+                Component.literal("Expected exactly one spawned legacy entity after first replay."));
         context.assertTrue(
                 runtimeDelta.countPendingEntities() == 0,
-                Text.literal("Expected runtime delta to drop legacy entity payloads after replay."));
+                Component.literal("Expected runtime delta to drop legacy entity payloads after replay."));
 
         storage.save(cisChunkPos, runtimeDelta);
         FabricCisStorageHelper.closeStorage(world);
 
-        final CisStorage<Block, BlockState, Property<?>, NbtCompound> reopenedStorage =
+        final CisStorage<Block, BlockState, Property<?>, CompoundTag> reopenedStorage =
                 FabricCisStorageHelper.getStorage(world);
-        final ChunkDelta<BlockState, NbtCompound> rewrittenDelta = reopenedStorage.load(cisChunkPos);
+        final ChunkDelta<BlockState, CompoundTag> rewrittenDelta = reopenedStorage.load(cisChunkPos);
 
         context.assertTrue(
                 rewrittenDelta.getEntitiesList()
                         .isEmpty(),
-                Text.literal("Expected rewritten CIS delta to contain no entity payloads after handoff."));
+                Component.literal("Expected rewritten CIS delta to contain no entity payloads after handoff."));
 
         final int entitiesBeforeSecondRestore = countEntitiesWithUuid(world, chunkPos, legacyEntity.uuid());
         ChunkRestorer.restore(
@@ -196,9 +196,9 @@ public final class LegacyEntityStorageHandoffGameTest {
 
         context.assertTrue(
                 countEntitiesWithUuid(world, chunkPos, legacyEntity.uuid()) == entitiesBeforeSecondRestore,
-                Text.literal("Expected no duplicate entity replay after CIS handoff."));
+                Component.literal("Expected no duplicate entity replay after CIS handoff."));
 
-        context.complete();
+        context.succeed();
     }
 
     /**
@@ -207,7 +207,7 @@ public final class LegacyEntityStorageHandoffGameTest {
      * @param uuid the unique ID of the entity
      * @param nbt  the serialized NBT compound of the entity
      */
-    private record SerializedEntity(UUID uuid, NbtCompound nbt) {
+    private record SerializedEntity(UUID uuid, CompoundTag nbt) {
 
     }
 }

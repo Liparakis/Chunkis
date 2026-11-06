@@ -24,16 +24,16 @@ import io.liparakis.chunkis.world.restoration.capture.SnapshotSafetyChecker;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.mixin.accessor.WorldChunkAccessor;
-import net.minecraft.world.chunk.WorldChunk;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * Background worker that drains one world's coalesced async save queue.
@@ -48,7 +48,7 @@ final class AsyncCisSaveWorker implements Runnable {
     /**
      * ServerWorld instance context representing target dimension.
      */
-    private final ServerWorld world;
+    private final ServerLevel world;
 
     /**
      * Queue tracking scheduled pending save actions.
@@ -66,7 +66,8 @@ final class AsyncCisSaveWorker implements Runnable {
      * Encoding threads. Saves of different chunks encode in parallel (encoder state is per thread and region
      * writes are synchronized); the queue never hands one chunk to two threads at once.
      */
-    private static final int THREADS = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 3));
+    private static final int THREADS = Math.clamp(Runtime.getRuntime()
+            .availableProcessors() / 3, 1, 4);
 
     /**
      * Active threads executing background worker tasks.
@@ -78,11 +79,11 @@ final class AsyncCisSaveWorker implements Runnable {
      *
      * @param world target server world
      */
-    AsyncCisSaveWorker(final ServerWorld world) {
+    AsyncCisSaveWorker(final ServerLevel world) {
         this.world = world;
         for (int i = 0; i < threads.length; i++) {
-            threads[i] = new Thread(this, "Chunkis-AsyncSave-" + world.getRegistryKey()
-                    .getValue() + "-" + i);
+            threads[i] = new Thread(this, "Chunkis-AsyncSave-" + world.dimension()
+                    .identifier() + "-" + i);
             threads[i].setDaemon(true);
             // Saves can wait; a tick cannot. They compete with the server thread for the same cores.
             threads[i].setPriority(Thread.NORM_PRIORITY - 1);
@@ -93,13 +94,13 @@ final class AsyncCisSaveWorker implements Runnable {
     /**
      * Performs cache encoded chunk metadata.
      */
-    private static void cacheEncodedChunkMetadata(final ChunkDeltaView<BlockState, NbtCompound> snapshot)
+    private static void cacheEncodedChunkMetadata(final ChunkDeltaView<BlockState, CompoundTag> snapshot)
             throws IOException {
         if (snapshot.getEncodedChunkMetadata() != null) {
             return;
         }
 
-        final NbtCompound metadata = snapshot.getChunkMetadata();
+        final CompoundTag metadata = snapshot.getChunkMetadata();
         if (metadata == null) {
             return;
         }
@@ -130,8 +131,8 @@ final class AsyncCisSaveWorker implements Runnable {
                     .interrupt();
             Chunkis.LOGGER.warn(
                     "Chunkis: Interrupted while closing async save worker for {}",
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
             );
         }
     }
@@ -198,10 +199,13 @@ final class AsyncCisSaveWorker implements Runnable {
                             PROCESS_SOURCE,
                             "attempted to persist sparse block-entity payload without persisted base chunk NBT: "
                                     + DeltaPersistenceGuard.describeDeltaShape(save.snapshot()),
-                            world.getRegistryKey()
-                                    .getValue()
+                            world.dimension()
+                                    .identifier()
                                     .toString(),
-                            new DebugChunkKey(save.pos().x, save.pos().z),
+                            new DebugChunkKey(save.pos()
+                                    .x(),
+                                    save.pos()
+                                            .z()),
                             null,
                             save.operationId(),
                             save.liveDelta()
@@ -243,8 +247,8 @@ final class AsyncCisSaveWorker implements Runnable {
                 return;
             }
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     save.pos(),
                     save.snapshot(),
@@ -256,8 +260,8 @@ final class AsyncCisSaveWorker implements Runnable {
                     preparedSave.clearChunk() ? 0 : preparedSave.rawData().length
             );
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     save.pos(),
                     save.snapshot(),
@@ -277,8 +281,8 @@ final class AsyncCisSaveWorker implements Runnable {
                 deferred.recordWritten(preparedSave.rawData());
             }
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     save.pos(),
                     save.snapshot(),
@@ -315,10 +319,11 @@ final class AsyncCisSaveWorker implements Runnable {
      * @param save completed save
      */
     private void releaseSavedLoadedBaseline(final PendingSave save) {
-        final ChunkDelta<BlockState, NbtCompound> liveDelta = save.liveDelta();
+        final ChunkDelta<BlockState, CompoundTag> liveDelta = save.liveDelta();
         // During shutdown the completion runs inline on this worker while the server thread waits for it to
         // finish; a chunk lookup from here would wait on the server thread and deadlock the shutdown.
-        if (world.getServer() == null || !world.getServer().isOnThread()) {
+        if (!world.getServer()
+                .isSameThread()) {
             return;
         }
         if (!CisNbtUtil.hasFullBlockBaseline(liveDelta.getChunkMetadata())) {
@@ -328,7 +333,11 @@ final class AsyncCisSaveWorker implements Runnable {
             liveDelta.releaseBlocksSavedAt(save.blockStamp());
             return;
         }
-        final WorldChunk chunk = LoadedChunks.getIfAccessible(world, save.pos().x, save.pos().z);
+        final LevelChunk chunk = LoadedChunks.getIfAccessible(world,
+                save.pos()
+                        .x(),
+                save.pos()
+                        .z());
         // Only a chunk staying in the world: an unloading chunk's delta may be handed to its reload.
         if (chunk instanceof ChunkisDeltaDuck duck && duck.chunkis$getDelta() == liveDelta
                 && chunk instanceof WorldChunkAccessor accessor && accessor.chunkis$isLoadedToWorld()
@@ -342,11 +351,8 @@ final class AsyncCisSaveWorker implements Runnable {
      */
     private void completeOnServerThread(final PendingSave save) {
         final var server = world.getServer();
-        if (server == null) {
-            return;
-        }
         // Fingerprint off the server thread; the snapshot is an immutable copy of what was written.
-        final ChunkDeltaView<BlockState, NbtCompound> ownSnapshot;
+        final ChunkDeltaView<BlockState, CompoundTag> ownSnapshot;
         if (save.snapshot() instanceof DeferredBlocksSnapshotView deferred) {
             ownSnapshot = deferred.rest();
         } else if (save.snapshot() instanceof StoredBlocksSnapshotView stored) {
@@ -356,7 +362,8 @@ final class AsyncCisSaveWorker implements Runnable {
         }
         final long[] entityFingerprint = ownSnapshot instanceof ChunkDeltaSnapshotView<?, ?> snapshotView
                 && snapshotView.countPendingEntities() == 0
-                ? StoredEntityFingerprints.of(sink -> save.snapshot().forEachEntity(sink))
+                ? StoredEntityFingerprints.of(sink -> save.snapshot()
+                .forEachEntity(sink))
                 : null;
         // The completion waits for the server thread; holding the snapshot (a full copy of the chunk's blocks)
         // until then kept every written chunk's copy alive.
@@ -372,25 +379,30 @@ final class AsyncCisSaveWorker implements Runnable {
         // Counted here, from the scan the write already did, not on the server thread.
         final int writtenBlockCount = writtenSections != null ? writtenSections.getBlockChangesCount() : 0;
         final Runnable completion = () -> {
-            written.liveDelta().setWrittenBlocksPrint(writtenBlocksPrint);
+            written.liveDelta()
+                    .setWrittenBlocksPrint(writtenBlocksPrint);
             if (writtenSections != null && writtenSections.unloading()) {
-                RecentChunkBlocks.of(world.getRegistryKey()).put(written.cisPos(),
-                        new long[]{writtenBlocksPrint[2], writtenBlocksPrint[3]},
-                        new long[]{writtenBlocksPrint[0], writtenBlocksPrint[1]}, writtenSections.sections(),
-                        writtenSections.bottomY(), writtenBlockCount);
+                RecentChunkBlocks.of(world.dimension())
+                        .put(written.cisPos(),
+                                new long[]{writtenBlocksPrint[2], writtenBlocksPrint[3]},
+                                new long[]{writtenBlocksPrint[0], writtenBlocksPrint[1]}, writtenSections.sections(),
+                                writtenSections.bottomY(), writtenBlockCount);
             }
             if (entityFingerprint != null) {
                 StoredEntityFingerprints.record(world, written.pos(), entityFingerprint);
             }
-            if (GlobalChunkTracker.isCurrentDirtyDelta(world, written.pos(), written.liveDelta(), written.generation())) {
+            if (GlobalChunkTracker.isCurrentDirtyDelta(world,
+                    written.pos(),
+                    written.liveDelta(),
+                    written.generation())) {
                 written.liveDelta()
                         .setSourceVersion(CisConstants.VERSION);
             }
             GlobalChunkTracker.markSavedIfUnchanged(world, written.pos(), written.liveDelta(), written.generation());
             releaseSavedLoadedBaseline(written);
             PayloadWatchTracer.traceDeltaStage(
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     written.pos(),
                     written.liveDelta(),
@@ -437,10 +449,8 @@ final class AsyncCisSaveWorker implements Runnable {
      * @param save failed save
      */
     private void forgetStoredEntitiesOnServerThread(final PendingSave save) {
-        final var server = world.getServer();
-        if (server != null) {
-            server.execute(() -> StoredEntityFingerprints.forget(world, save.pos()));
-        }
+        world.getServer()
+                .execute(() -> StoredEntityFingerprints.forget(world, save.pos()));
     }
 
     /**
@@ -457,10 +467,13 @@ final class AsyncCisSaveWorker implements Runnable {
                 ChunkTraceReason.IO_EXCEPTION,
                 PROCESS_SOURCE,
                 message,
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
-                new DebugChunkKey(save.pos().x, save.pos().z),
+                new DebugChunkKey(save.pos()
+                        .x(),
+                        save.pos()
+                                .z()),
                 null,
                 save.operationId(),
                 save.liveDelta()
@@ -483,11 +496,11 @@ final class AsyncCisSaveWorker implements Runnable {
      * @param posKey      coordinate long key mapping
      */
     record PendingSave(
-            CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+            CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
             ChunkPos pos,
             CisChunkPos cisPos,
-            ChunkDelta<BlockState, NbtCompound> liveDelta,
-            ChunkDeltaView<BlockState, NbtCompound> snapshot,
+            ChunkDelta<BlockState, CompoundTag> liveDelta,
+            ChunkDeltaView<BlockState, CompoundTag> snapshot,
             long generation,
             long blockStamp,
             String operationId,
@@ -507,16 +520,16 @@ final class AsyncCisSaveWorker implements Runnable {
          * @param operationId execution/operation ID tag
          */
         PendingSave(
-                final CisStorage<Block, BlockState, Property<?>, NbtCompound> storage,
+                final CisStorage<Block, BlockState, Property<?>, CompoundTag> storage,
                 final ChunkPos pos,
                 final CisChunkPos cisPos,
-                final ChunkDelta<BlockState, NbtCompound> liveDelta,
-                final ChunkDeltaView<BlockState, NbtCompound> snapshot,
+                final ChunkDelta<BlockState, CompoundTag> liveDelta,
+                final ChunkDeltaView<BlockState, CompoundTag> snapshot,
                 final long generation,
                 final long blockStamp,
                 final String operationId
         ) {
-            this(storage, pos, cisPos, liveDelta, snapshot, generation, blockStamp, operationId, pos.toLong());
+            this(storage, pos, cisPos, liveDelta, snapshot, generation, blockStamp, operationId, pos.pack());
         }
 
         /**

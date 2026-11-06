@@ -16,18 +16,18 @@ import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.zip.DeflaterOutputStream;
 import net.minecraft.SharedConstants;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtIntArray;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.IntArrayTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.SerializedChunk;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.storage.SerializableChunkData;
+import net.minecraft.world.phys.AABB;
 
 /**
  * Compares, for the same loaded chunks, the bytes Chunkis writes per chunk with what vanilla would write:
@@ -65,7 +65,7 @@ final class ChunkSizeComparison {
      * @return mean bytes per chunk for Chunkis, vanilla and vanilla on disk, plus ratios
      */
     @SuppressWarnings("unchecked")
-    static JsonObject measure(final ServerWorld world, final List<ChunkPos> chunks) {
+    static JsonObject measure(final ServerLevel world, final List<ChunkPos> chunks) {
         long chunkisBytes = 0;
         long chunkisRawBytes = 0;
         long vanillaBytes = 0;
@@ -76,9 +76,9 @@ final class ChunkSizeComparison {
         int withFullBaseline = 0;
         long metadataBytes = 0;
         for (final ChunkPos pos : chunks) {
-            final WorldChunk chunk = world.getChunk(pos.x, pos.z);
-            final int chunkRecord = deflatedSize(SerializedChunk.fromChunk(world, chunk).serialize());
-            final NbtCompound entities = entityRecord(world, pos);
+            final LevelChunk chunk = world.getChunk(pos.x(), pos.z());
+            final int chunkRecord = deflatedSize(SerializableChunkData.copyOf(world, chunk).write());
+            final CompoundTag entities = entityRecord(world, pos);
             final int entityRecord = entities == null ? 0 : deflatedSize(entities);
             vanillaBytes += chunkRecord + entityRecord;
             vanillaSectorBytes += sectorRounded(chunkRecord) + (entityRecord == 0 ? 0 : sectorRounded(entityRecord));
@@ -88,7 +88,7 @@ final class ChunkSizeComparison {
                 continue;
             }
             // The stored entry, not the live delta: a loaded chunk's delta may have released its block instructions.
-            final ChunkDelta<BlockState, NbtCompound> delta = FabricCisStorageHelper.getStorage(world)
+            final ChunkDelta<BlockState, CompoundTag> delta = FabricCisStorageHelper.getStorage(world)
                     .load(FabricCisStorageHelper.toStoragePos(pos));
             final byte[] chunkisRaw = chunkisPayload(world, pos, delta);
             chunkisRawBytes += chunkisRaw.length;
@@ -129,11 +129,11 @@ final class ChunkSizeComparison {
      * @param delta chunk delta
      * @return encoded payload
      */
-    private static byte[] chunkisPayload(final ServerWorld world, final ChunkPos pos,
-            final ChunkDelta<BlockState, NbtCompound> delta) {
+    private static byte[] chunkisPayload(final ServerLevel world, final ChunkPos pos,
+            final ChunkDelta<BlockState, CompoundTag> delta) {
         try {
             final var prepared = FabricCisStorageHelper.getStorage(world)
-                    .prepareSave(FabricCisStorageHelper.toStoragePos(pos), delta.snapshotView(NbtCompound::copy));
+                    .prepareSave(FabricCisStorageHelper.toStoragePos(pos), delta.snapshotView(CompoundTag::copy));
             // An empty delta clears the chunk's entry: nothing is stored for it.
             return prepared.clearChunk() ? new byte[0] : prepared.rawData();
         } catch (final IOException e) {
@@ -147,7 +147,7 @@ final class ChunkSizeComparison {
      * @param metadata chunk metadata, possibly {@code null}
      * @return raw bytes
      */
-    private static int metadataSize(final NbtCompound metadata) {
+    private static int metadataSize(final CompoundTag metadata) {
         if (metadata == null) {
             return 0;
         }
@@ -165,15 +165,15 @@ final class ChunkSizeComparison {
      * @param pos   chunk position
      * @return entity chunk record, or {@code null} when vanilla would write none (no entities)
      */
-    private static NbtCompound entityRecord(final ServerWorld world, final ChunkPos pos) {
-        final NbtList entities = new NbtList();
-        final Box column = new Box(pos.getStartX(), world.getBottomY(), pos.getStartZ(),
-                pos.getEndX() + 1, world.getTopYInclusive() + 1, pos.getEndZ() + 1);
-        for (final Entity entity : world.getOtherEntities(null, column)) {
-            if (entity instanceof PlayerEntity || !entity.getChunkPos().equals(pos)) {
+    private static CompoundTag entityRecord(final ServerLevel world, final ChunkPos pos) {
+        final ListTag entities = new ListTag();
+        final AABB column = new AABB(pos.getMinBlockX(), world.getMinY(), pos.getMinBlockZ(),
+                pos.getMaxBlockX() + 1, world.getMaxY() + 1, pos.getMaxBlockZ() + 1);
+        for (final Entity entity : world.getEntities(null, column)) {
+            if (entity instanceof Player || !entity.chunkPosition().equals(pos)) {
                 continue;
             }
-            final NbtCompound nbt = ChunkEntityNbtCapture.serializeEntityNbt(entity);
+            final CompoundTag nbt = ChunkEntityNbtCapture.serializeEntityNbt(entity);
             if (nbt != null) {
                 entities.add(nbt);
             }
@@ -181,9 +181,9 @@ final class ChunkSizeComparison {
         if (entities.isEmpty()) {
             return null;
         }
-        final NbtCompound record = new NbtCompound();
-        record.putInt("DataVersion", SharedConstants.getGameVersion().dataVersion().id());
-        record.put("Position", new NbtIntArray(new int[] {pos.x, pos.z}));
+        final CompoundTag record = new CompoundTag();
+        record.putInt("DataVersion", SharedConstants.getCurrentVersion().dataVersion().version());
+        record.put("Position", new IntArrayTag(new int[] {pos.x(), pos.z()}));
         record.put("Entities", entities);
         return record;
     }
@@ -194,10 +194,10 @@ final class ChunkSizeComparison {
      * @param nbt compound
      * @return compressed bytes
      */
-    private static int deflatedSize(final NbtCompound nbt) {
+    private static int deflatedSize(final CompoundTag nbt) {
         final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(new DeflaterOutputStream(bytes))) {
-            NbtIo.writeCompound(nbt, out);
+            NbtIo.write(nbt, out);
         } catch (final IOException e) {
             throw new UncheckedIOException("Failed compressing NBT", e);
         }

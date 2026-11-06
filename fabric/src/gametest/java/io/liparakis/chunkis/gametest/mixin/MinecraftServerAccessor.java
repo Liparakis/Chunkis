@@ -13,7 +13,7 @@ public interface MinecraftServerAccessor {
      *
      * @return true while the server may keep working before the next tick
      */
-    @Invoker("shouldKeepTicking")
+    @Invoker("haveTime")
     boolean chunkis$shouldKeepTicking();
 
     /**
@@ -29,6 +29,6 @@ public interface MinecraftServerAccessor {
      *
      * @param nanos due time, on {@code Util.getMeasuringTimeNano()}'s clock
      */
-    @Accessor("tickStartTimeNanos")
+    @Accessor("nextTickTimeNanos")
     void chunkis$setTickStartTimeNanos(long nanos);
 }

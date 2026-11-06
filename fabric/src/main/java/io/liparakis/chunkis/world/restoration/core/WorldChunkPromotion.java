@@ -15,21 +15,21 @@ import io.liparakis.chunkis.debug.util.DebugChunkKeys;
 import io.liparakis.chunkis.world.tracking.ownership.OwnedDeltaAccess;
 import io.liparakis.chunkis.world.tracking.save.FabricCisStorageHelper;
 import java.util.function.Predicate;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.chunk.ProtoChunk;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.poi.PointOfInterestStorage;
-import net.minecraft.world.poi.PointOfInterestType;
-import net.minecraft.world.poi.PointOfInterestTypes;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.ProtoChunk;
 
 /**
  * Applies a proto chunk's CIS snapshot when vanilla promotes it to a live
- * {@link WorldChunk}, then resyncs portal POIs and the portal index.
+ * {@link LevelChunk}, then resyncs portal POIs and the portal index.
  *
  * <p>Plain logic extracted from the world-chunk mixin, whose constructor hook only
  * delegates here inside its restore tracking scope.</p>
@@ -44,14 +44,14 @@ public final class WorldChunkPromotion {
     /**
      * Matches Nether portal POI entries already known to vanilla's POI storage.
      */
-    private static final Predicate<RegistryEntry<PointOfInterestType>> PORTAL_POI_PREDICATE =
-            type -> type.matchesKey(PointOfInterestTypes.NETHER_PORTAL);
+    private static final Predicate<Holder<PoiType>> PORTAL_POI_PREDICATE =
+            type -> type.is(PoiTypes.NETHER_PORTAL);
 
     /**
      * Matches Nether portal blocks inside restored chunk sections.
      */
     private static final Predicate<BlockState> NETHER_PORTAL_BLOCK_PREDICATE =
-            state -> state.isOf(Blocks.NETHER_PORTAL);
+            state -> state.is(Blocks.NETHER_PORTAL);
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -69,9 +69,9 @@ public final class WorldChunkPromotion {
      * @return resolved block delta, or null
      */
     @SuppressWarnings("unchecked")
-    public static ChunkDelta<BlockState, NbtCompound> resolveProtoDelta(final ProtoChunk proto) {
+    public static ChunkDelta<BlockState, CompoundTag> resolveProtoDelta(final ProtoChunk proto) {
         return proto instanceof ChunkisDeltaDuck duck ?
-                (ChunkDelta<BlockState, NbtCompound>) duck.chunkis$getDelta() : null;
+                (ChunkDelta<BlockState, CompoundTag>) duck.chunkis$getDelta() : null;
     }
 
     /**
@@ -132,10 +132,10 @@ public final class WorldChunkPromotion {
      * @param protoDelta source proto delta containing snapshot NBT
      */
     public static void restoreChunkFromDelta(
-            final ServerWorld world, final WorldChunk chunk,
+            final ServerLevel world, final LevelChunk chunk,
             final ProtoChunk proto,
-            final ChunkDelta<BlockState, NbtCompound> protoDelta) {
-        final ChunkDelta<BlockState, NbtCompound> selfDelta =
+            final ChunkDelta<BlockState, CompoundTag> protoDelta) {
+        final ChunkDelta<BlockState, CompoundTag> selfDelta =
                 OwnedDeltaAccess.getOrClaim(
                         chunk, ChunkTraceReason.RESTORE_OF_EXISTING_CHUNKIS_STORAGE,
                         RESTORE_SOURCE
@@ -160,8 +160,8 @@ public final class WorldChunkPromotion {
                     ChunkTraceReason.NONE,
                     RESTORE_SOURCE,
                     "world chunk before sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     DebugChunkKeys.of(chunk.getPos()),
                     null,
@@ -203,8 +203,8 @@ public final class WorldChunkPromotion {
         } catch (final Exception e) {
             if (coreRestoreCompleted) {
                 tracePostRestoreFailure(
-                        world.getRegistryKey()
-                                .getValue()
+                        world.dimension()
+                                .identifier()
                                 .toString(),
                         DebugChunkKeys.of(chunk.getPos()), operationId, failedStage
                 );
@@ -229,8 +229,8 @@ public final class WorldChunkPromotion {
                     finalSections > 0 ? ChunkTraceReason.NONE : ChunkTraceReason.BASE_SNAPSHOT_NOT_APPLIED,
                     RESTORE_SOURCE,
                     "world chunk after sparse replay: " + ChunkSectionDebugUtil.summarize(chunk),
-                    world.getRegistryKey()
-                            .getValue()
+                    world.dimension()
+                            .identifier()
                             .toString(),
                     DebugChunkKeys.of(chunk.getPos()),
                     null,
@@ -246,8 +246,8 @@ public final class WorldChunkPromotion {
                         ChunkTraceReason.BASE_SNAPSHOT_NOT_APPLIED,
                         RESTORE_SOURCE,
                         "persisted base NBT existed but final server chunk had zero non-empty sections",
-                        world.getRegistryKey()
-                                .getValue()
+                        world.dimension()
+                                .identifier()
                                 .toString(),
                         DebugChunkKeys.of(chunk.getPos()),
                         null,
@@ -273,10 +273,10 @@ public final class WorldChunkPromotion {
      * @param operationId active load/save operation ID
      */
     private static void traceLiveDeltaMetadata(
-            final ServerWorld world,
-            final WorldChunk chunk,
-            final ChunkDelta<BlockState, NbtCompound> protoDelta,
-            final ChunkDelta<BlockState, NbtCompound> liveDelta,
+            final ServerLevel world,
+            final LevelChunk chunk,
+            final ChunkDelta<BlockState, CompoundTag> protoDelta,
+            final ChunkDelta<BlockState, CompoundTag> liveDelta,
             final String operationId
     ) {
         final boolean protoHasBase =
@@ -305,8 +305,8 @@ public final class WorldChunkPromotion {
                         liveDelta)
                         + ", protoHasBase=" + protoHasBase
                         + ", liveHasBase=" + liveHasBase,
-                world.getRegistryKey()
-                        .getValue()
+                world.dimension()
+                        .identifier()
                         .toString(),
                 DebugChunkKeys.of(chunk.getPos()),
                 null,
@@ -326,12 +326,12 @@ public final class WorldChunkPromotion {
      * @param world server world context
      * @param chunk target world chunk reference
      */
-    private static void resyncPortalPointOfInterestStorage(final ServerWorld world, final WorldChunk chunk) {
-        final PointOfInterestStorage poiStorage = world.getPointOfInterestStorage();
-        final RegistryEntry<PointOfInterestType> portalType =
-                world.getRegistryManager()
-                        .getOrThrow(RegistryKeys.POINT_OF_INTEREST_TYPE)
-                        .getOrThrow(PointOfInterestTypes.NETHER_PORTAL);
+    private static void resyncPortalPointOfInterestStorage(final ServerLevel world, final LevelChunk chunk) {
+        final PoiManager poiStorage = world.getPoiManager();
+        final Holder<PoiType> portalType =
+                world.registryAccess()
+                        .lookupOrThrow(Registries.POINT_OF_INTEREST_TYPE)
+                        .getOrThrow(PoiTypes.NETHER_PORTAL);
 
         final int blockCount = addPortalPois(chunk, poiStorage, portalType);
         if (blockCount == 0) {
@@ -340,7 +340,7 @@ public final class WorldChunkPromotion {
 
         final long poiCount = poiStorage.getInChunk(
                         PORTAL_POI_PREDICATE, chunk.getPos(),
-                        PointOfInterestStorage.OccupationStatus.ANY
+                        PoiManager.Occupancy.ANY
                 )
                 .count();
 
@@ -349,8 +349,8 @@ public final class WorldChunkPromotion {
                     "Chunkis [PORTAL]: Restored chunk {} in {} has {} portal block(s) but no portal POIs " +
                             "after resync",
                     chunk.getPos(),
-                    world.getRegistryKey()
-                            .getValue(),
+                    world.dimension()
+                            .identifier(),
                     blockCount
             );
         }
@@ -365,10 +365,10 @@ public final class WorldChunkPromotion {
      * @return count of portal blocks matched
      */
     private static int addPortalPois(
-            final WorldChunk chunk, final PointOfInterestStorage poiStorage,
-            final RegistryEntry<PointOfInterestType> portalType) {
+            final LevelChunk chunk, final PoiManager poiStorage,
+            final Holder<PoiType> portalType) {
         final int[] count = {0};
-        chunk.forEachBlockMatchingPredicate(
+        chunk.findBlocks(
                 NETHER_PORTAL_BLOCK_PREDICATE, (pos, state) -> {
                     count[0]++;
                     poiStorage.add(pos, portalType);

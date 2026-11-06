@@ -5,10 +5,10 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.TestContext;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
 
 /**
  * Chunk unloads on a server with no tick time left.
@@ -52,12 +52,12 @@ public final class OverloadedUnloadGameTest {
      * @param context the game test context
      */
     @GameTest(maxTicks = 400)
-    public void unloadsDrainWithNoTickBudget(final TestContext context) {
+    public void unloadsDrainWithNoTickBudget(final GameTestHelper context) {
         // The End, which Chunkis owns in game tests: the Overworld test world is not authoritative, and there
         // vanilla's own unload limits apply.
-        final ServerWorld world = context.getWorld().getServer().getWorld(net.minecraft.world.World.END);
+        final ServerLevel world = context.getLevel().getServer().getLevel(net.minecraft.world.level.Level.END);
         io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder
-                .markAuthoritative(world.getRegistryKey());
+                .markAuthoritative(world.dimension());
         final List<ChunkPos> chunks = new ArrayList<>();
         for (int i = 0; i < SIDE * SIDE; i++) {
             chunks.add(new ChunkPos(-6100 + i % SIDE, 6100 + i / SIDE));
@@ -68,30 +68,30 @@ public final class OverloadedUnloadGameTest {
         ServerChunkEvents.CHUNK_UNLOAD.register((unloadWorld, chunk) -> {
             if (unloadWorld == world && chunks.contains(chunk.getPos())) {
                 unloaded.incrementAndGet();
-                unloadTicks.add(world.getServer().getTicks() - startTick[0]);
+                unloadTicks.add(world.getServer().getTickCount() - startTick[0]);
             }
         });
-        chunks.forEach(pos -> world.setChunkForced(pos.x, pos.z, true));
-        chunks.forEach(pos -> world.getChunk(pos.x, pos.z));
-        context.createTimedTaskRunner()
-                .createAndAdd(() -> {
-                    currentTick = world.getServer().getTicks();
+        chunks.forEach(pos -> world.setChunkForced(pos.x(), pos.z(), true));
+        chunks.forEach(pos -> world.getChunk(pos.x(), pos.z()));
+        context.startSequence()
+                .thenWaitUntil(() -> {
+                    currentTick = world.getServer().getTickCount();
                     startTick[0] = currentTick;
                     noBudgetUntil = currentTick + NO_BUDGET_TICKS;
-                    chunks.forEach(pos -> world.setChunkForced(pos.x, pos.z, false));
+                    chunks.forEach(pos -> world.setChunkForced(pos.x(), pos.z(), false));
                 })
-                .createAndAdd(() -> {
+                .thenWaitUntil(() -> {
                     final int seen = unloaded.get();
-                    currentTick = world.getServer().getTicks();
+                    currentTick = world.getServer().getTickCount();
                     if (!noBudget()) {
-                        throw context.createError(Text.literal("Only " + seen + " of " + chunks.size()
+                        throw context.assertionException(Component.literal("Only " + seen + " of " + chunks.size()
                                 + " chunks unloaded in " + NO_BUDGET_TICKS + " ticks with no tick budget; unload ticks "
                                 + unloadTicks));
                     }
-                    context.assertTrue(unloaded.get() >= chunks.size(), Text.literal("Waiting for "
+                    context.assertTrue(unloaded.get() >= chunks.size(), Component.literal("Waiting for "
                             + (chunks.size() - unloaded.get()) + " chunks to unload with no tick budget."));
                     noBudgetUntil = 0;
                 })
-                .completeIfSuccessful();
+                .thenSucceed();
     }
 }

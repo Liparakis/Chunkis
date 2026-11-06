@@ -5,10 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.file.Path;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -19,10 +19,10 @@ class PreLaunchMigrationCoordinatorTest {
     /**
      * Utility method to create a registry key representing the vanilla overworld.
      *
-     * @return the {@link RegistryKey} for the overworld
+     * @return the {@link ResourceKey} for the overworld
      */
-    private static RegistryKey<World> overworldKey() {
-        return RegistryKey.of(RegistryKeys.WORLD, Identifier.ofVanilla("overworld"));
+    private static ResourceKey<Level> overworldKey() {
+        return ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("overworld"));
     }
 
     /**

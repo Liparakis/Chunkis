@@ -1,7 +1,7 @@
 package io.liparakis.chunkis.debug.util;
 
 import io.liparakis.chunkis.debug.model.key.DebugChunkKey;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.level.ChunkPos;
 
 /**
  * Small adapter helpers for the Fabric-side debug key call sites.
@@ -24,7 +24,7 @@ public final class DebugChunkKeys {
      * @return a new DebugChunkKey container mapping the coordinates
      */
     public static DebugChunkKey of(final ChunkPos pos) {
-        return new DebugChunkKey(pos.x, pos.z);
+        return new DebugChunkKey(pos.x(), pos.z());
     }
 
     /**
