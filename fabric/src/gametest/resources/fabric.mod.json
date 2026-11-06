@@ -6,6 +6,7 @@
     "environment": "*",
     "entrypoints": {
         "fabric-gametest": [
+            "io.liparakis.chunkis.gametest.C2mePromotionGameTest",
             "io.liparakis.chunkis.gametest.AsyncSaveDataLossGameTest",
             "io.liparakis.chunkis.gametest.BlockEntityRetentionGameTest",
             "io.liparakis.chunkis.gametest.IncrementalSnapshotCaptureGameTest",

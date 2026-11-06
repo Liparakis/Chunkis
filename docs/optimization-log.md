@@ -176,6 +176,30 @@ Not changed: containers taken by the clean-unload branch from a chunk vanilla ha
 
 C2ME `0.4.0-alpha.0.28` for 1.21.11: all 42 game tests pass with it loaded (Java 25, loader 0.18.3), and the startup check finds its save method.
 
+## C2ME exploration freeze (6 November 2026)
+
+Two live thread dumps with C2ME `0.4.0-alpha.0.28+1.21.11` showed workers constructing chunks in
+`ServerAccessible.toFullChunk` blocked in Chunkis's restoration resend check. The lookup waited
+for the same chunk's unfinished promotion; the server then waited for chunk futures too.
+
+`C2meServerAccessibleMixin` now wraps C2ME's original `toFullChunk` call with a thread-local scope
+identifying the world and coordinates under construction. Chunkis skips the resend check only
+for that unpublished target. Normal C2ME publication sends the initial restored chunk packet.
+The original constructor, worker scheduling, restoration, lighting and storage behavior remain
+in place. There is no queued resend or new restoration API.
+
+The scope restores its previous value in `finally`, including nested calls and exceptions. Unit
+tests cover world/coordinate matching, thread isolation, nesting, result identity and exception
+propagation. `C2mePromotionGameTest` checks the hook against C2ME's actual conversion method when
+C2ME is installed. The hook requires its target method; renamed C2ME internals must be retested.
+
+Validation: the full build passed, including 43 game tests; all 43 passed again with C2ME `.28`
+on Java 25, including the actual-hook test. One quick stress pair (576 chunks, one measured round
+per side) completed with C2ME loaded. There was no saved quick baseline, so it provides no
+before/after regression verdict. It also showed worse total lateness for Chunkis than vanilla
+(192 ms versus 27 ms); this single pair cannot attribute that difference to the hook. The reporter's
+subsequent IntelliJ exploration retest appeared successful.
+
 ## Open
 
 - Tick p50 and p90 are partly the price of spreading. In the save phase the mean tick is lower than vanilla's (42-45.5 against 45-48.7 ms) and the p50 higher (34-36 against 27-32 ms): vanilla does its saves in a few large ticks, Chunkis spreads them. The dirty capture costs about 36 us a chunk (copy 4-5 us of it) against vanilla's serialize at about 78 us, so the zero-copy idea would win about 5 us a chunk. Save completions cost 0.8 ms a save tick, about 8 us each. Chunkis also spends less on GC: 538-656 against 834-904 ms a run.

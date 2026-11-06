@@ -3,7 +3,8 @@
     "package": "io.liparakis.chunkis.mixin.compat",
     "compatibilityLevel": "JAVA_21",
     "mixins": [
-        "C2meReadFromDiskMixin"
+        "C2meReadFromDiskMixin",
+        "C2meServerAccessibleMixin"
     ],
     "injectors": {
         "defaultRequire": 0

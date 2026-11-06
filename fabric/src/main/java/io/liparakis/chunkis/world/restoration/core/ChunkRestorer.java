@@ -13,6 +13,7 @@ import io.liparakis.chunkis.debug.trace.ChunkTraceStore;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.debug.util.ChunkSectionDebugUtil;
 import io.liparakis.chunkis.debug.util.DebugChunkKeys;
+import io.liparakis.chunkis.integration.c2me.C2meChunkPromotion;
 import io.liparakis.chunkis.world.entity.replay.EntityReplayCoordinator;
 import io.liparakis.chunkis.world.restoration.capture.CisSnapshotCapture;
 import io.liparakis.chunkis.world.restoration.nbt.CisNbtUtil;
@@ -961,8 +962,14 @@ public final class ChunkRestorer {
     private static void resendFullChunkToWatchingPlayers(final ServerWorld world,
             final WorldChunk chunk,
             final ServerLightingProvider lightingProvider) {
+        final ChunkPos pos = chunk.getPos();
+        if (C2meChunkPromotion.isConstructing(world, pos.x, pos.z)) {
+            // C2ME has not published this chunk yet. Its initial packet will contain the restored blocks.
+            // Looking it up here would wait on the promotion that is executing this restoration.
+            return;
+        }
         final List<ServerPlayerEntity> players = world.getChunkManager().chunkLoadingManager.getPlayersWatchingChunk(
-                chunk.getPos(),
+                pos,
                 false);
         if (players.isEmpty()) {
             return;
