@@ -2,7 +2,16 @@ package io.liparakis.chunkis.mixin.storage;
 
 import io.liparakis.chunkis.Chunkis;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder;
+import io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.StreamTagVisitor;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.storage.RegionFileStorage;
 import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
 import org.spongepowered.asm.mixin.Mixin;
@@ -10,10 +19,11 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * CIS_AUTHORITATIVE guard for vanilla chunk RegionBasedStorage.
- * Uses filesystem path instead of worldKey because RegionBasedStorage has no dimension context.
+ * Uses the constructor's dimension key; the path selects which storage roles are guarded.
  */
 @Mixin(RegionFileStorage.class)
 public abstract class RegionBasedStorageMixin {
@@ -29,7 +39,7 @@ public abstract class RegionBasedStorageMixin {
      * when it is some other region storage (POI, etc.) that Chunkis never blocks.
      */
     @Unique
-    private net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> chunkis$guardedDimension;
+    private ResourceKey<Level> chunkis$guardedDimension;
 
     /**
      * Derives the owning MCA filename for a chunk position.
@@ -38,13 +48,12 @@ public abstract class RegionBasedStorageMixin {
      * @return region filename in {@code r.<x>.<z>.mca} form
      */
     @Unique
-    private static String chunkis$regionFileName(final net.minecraft.world.level.ChunkPos pos) {
+    private static String chunkis$regionFileName(final ChunkPos pos) {
         return "r." + (pos.x() >> 5) + "." + (pos.z() >> 5) + ".mca";
     }
 
     /**
-     * Captures the storage directory so later read/write guards can infer which dimension
-     * the vanilla storage instance belongs to.
+     * Captures the storage directory and its explicit owning dimension for later read/write guards.
      *
      * @param storageKey vanilla storage key
      * @param directory  backing storage directory
@@ -57,18 +66,12 @@ public abstract class RegionBasedStorageMixin {
             final boolean sync,
             final CallbackInfo ci) {
         this.chunkis$directory = directory;
-        final var cls = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.classify(directory);
-        final var dimOpt = io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.resolveDimension(
-                directory);
+        final var cls = VanillaRegionPathResolver.classify(directory);
+        final var dimOpt = VanillaRegionPathResolver.resolveDimension(storageKey, directory);
         // The directory never changes, so classify once instead of on every region read/write/scan.
-        this.chunkis$guardedDimension = cls
-                == io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification.VANILLA_CHUNK_REGION
-                || cls
-                == io.liparakis.chunkis.integration.migration.state.VanillaRegionPathResolver.Classification.VANILLA_ENTITY_REGION
-                ? dimOpt.orElse(null)
-                : null;
+        this.chunkis$guardedDimension = dimOpt.orElse(null);
         final boolean auth = dimOpt.isPresent()
-                && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
+                && MigrationStateServiceHolder.isAuthoritative(dimOpt.get());
         Chunkis.LOGGER.info(
                 "REGION_BASED_STORAGE_INIT path={} classifiedAs={} resolvedDimension={} state={} authoritative={}",
                 directory, cls,
@@ -76,7 +79,7 @@ public abstract class RegionBasedStorageMixin {
                                 .toString())
                         .orElse("unknown"),
                 dimOpt.map(k ->
-                                io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(k)
+                                MigrationStateServiceHolder.isAuthoritative(k)
                                         ? "CIS_AUTHORITATIVE" : "NOT")
                         .orElse("unknown"),
                 auth
@@ -95,8 +98,8 @@ public abstract class RegionBasedStorageMixin {
     @Inject(method = "write(Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/nbt/CompoundTag;)V",
             at = @At("HEAD"), cancellable = true)
     private void chunkis$blockCisAuthoritativeWrite(
-            final net.minecraft.world.level.ChunkPos pos,
-            final net.minecraft.nbt.CompoundTag nbt,
+            final ChunkPos pos,
+            final CompoundTag nbt,
             final CallbackInfo ci
     ) throws IOException {
         if (chunkis$shouldBlockVanillaStorage()) {
@@ -105,8 +108,8 @@ public abstract class RegionBasedStorageMixin {
                 Chunkis.LOGGER.debug(
                         "POST_CIS_ANVIL_ACCESS path={} pos={} sizeBefore={} operation=RegionBasedStorage.write stack={}",
                         chunkis$directory, pos,
-                        java.nio.file.Files.exists(regionFile) ? java.nio.file.Files.size(regionFile) : -1,
-                        java.util.Arrays.toString(Thread.currentThread()
+                        Files.exists(regionFile) ? Files.size(regionFile) : -1,
+                        Arrays.toString(Thread.currentThread()
                                 .getStackTrace())
                 );
             }
@@ -123,8 +126,8 @@ public abstract class RegionBasedStorageMixin {
     @Inject(method = "read(Lnet/minecraft/world/level/ChunkPos;)Lnet/minecraft/nbt/CompoundTag;",
             at = @At("HEAD"), cancellable = true)
     private void chunkis$blockCisAuthoritativeRead(
-            final net.minecraft.world.level.ChunkPos pos,
-            final org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable<net.minecraft.nbt.CompoundTag> cir
+            final ChunkPos pos,
+            final CallbackInfoReturnable<CompoundTag> cir
     ) {
         if (chunkis$shouldBlockVanillaStorage()) {
             Chunkis.LOGGER.debug("CIS read redirection active for {} pos={}", chunkis$directory, pos);
@@ -142,8 +145,8 @@ public abstract class RegionBasedStorageMixin {
     @Inject(method = "scanChunk(Lnet/minecraft/world/level/ChunkPos;Lnet/minecraft/nbt/StreamTagVisitor;)V",
             at = @At("HEAD"), cancellable = true)
     private void chunkis$blockCisAuthoritativeScan(
-            final net.minecraft.world.level.ChunkPos pos,
-            final net.minecraft.nbt.StreamTagVisitor scanner,
+            final ChunkPos pos,
+            final StreamTagVisitor scanner,
             final CallbackInfo ci
     ) {
         if (chunkis$shouldBlockVanillaStorage()) {
@@ -161,8 +164,7 @@ public abstract class RegionBasedStorageMixin {
     @Unique
     private boolean chunkis$shouldBlockVanillaStorage() {
         // Authority can change after construction (migration finishes), so only it is re-checked.
-        return chunkis$guardedDimension != null
-                && io.liparakis.chunkis.integration.migration.state.MigrationStateServiceHolder.isAuthoritative(
+        return MigrationStateServiceHolder.isAuthoritative(
                 chunkis$guardedDimension);
     }
 }

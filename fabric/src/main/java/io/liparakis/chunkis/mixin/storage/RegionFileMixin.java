@@ -53,11 +53,7 @@ public abstract class RegionFileMixin {
     @Inject(method = "<init>(Lnet/minecraft/world/level/chunk/storage/RegionStorageInfo;Ljava/nio/file/Path;Ljava/nio/file/Path;Lnet/minecraft/world/level/chunk/storage/RegionFileVersion;Z)V", at = @At("TAIL"))
     private void chunkis$classify(final RegionStorageInfo storageKey, final Path path, final Path directory,
             final RegionFileVersion compressionFormat, final boolean dsync, final CallbackInfo ci) {
-        final VanillaRegionPathResolver.Classification type = VanillaRegionPathResolver.classify(directory);
-        if (type == VanillaRegionPathResolver.Classification.VANILLA_CHUNK_REGION
-                || type == VanillaRegionPathResolver.Classification.VANILLA_ENTITY_REGION) {
-            chunkis$guardedDimension = VanillaRegionPathResolver.resolveDimension(directory).orElse(null);
-        }
+        chunkis$guardedDimension = VanillaRegionPathResolver.resolveDimension(storageKey, directory).orElse(null);
     }
 
     /**
@@ -94,8 +90,7 @@ public abstract class RegionFileMixin {
      */
     @Unique
     private boolean chunkis$blocked() {
-        return chunkis$guardedDimension != null
-                && MigrationStateServiceHolder.isAuthoritative(chunkis$guardedDimension)
+        return MigrationStateServiceHolder.isAuthoritative(chunkis$guardedDimension)
                 && !C2meSaveBridge.isUnavailable();
     }
 }

@@ -2,31 +2,15 @@ package io.liparakis.chunkis.integration.migration.state;
 
 import java.nio.file.Path;
 import java.util.Optional;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
 
 /**
- * Resolves vanilla chunk and external-entity region directories to dimension keys.
- * Used by low-level storage guards that have no world context.
+ * Classifies storage directories and uses Minecraft's supplied dimension key for region guards.
+ * Dimension identity must not be inferred from paths: dimension identifiers can contain slashes.
  */
 public final class VanillaRegionPathResolver {
-
-    /**
-     * Directory name used by vanilla chunk region storage.
-     */
-    private static final String REGION_DIR = "region";
-
-    /**
-     * Directory name used by vanilla external entity region storage.
-     */
-    private static final String ENTITIES_DIR = "entities";
-
-    /**
-     * Root directory name used by vanilla for non-overworld dimensions.
-     */
-    private static final String DIMENSIONS_DIR = "dimensions";
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -64,54 +48,21 @@ public final class VanillaRegionPathResolver {
     }
 
     /**
-     * Resolves the dimension key from a vanilla chunk or entity region directory path.
-     * Supports overworld, nether, end, and custom dimensions.
+     * Resolves the owning dimension only for chunk and external-entity region storage.
      *
-     * @param regionDirectory vanilla region or entity directory path
-     * @return resolved dimension key, or empty when the path is not a supported storage directory
+     * <p>The constructor's storage info is authoritative even for nested dimension names or nonstandard
+     * directory layouts. POI and Chunkis internal stores must never acquire the vanilla write guard.</p>
+     *
+     * @param storageInfo Minecraft's owning world and dimension
+     * @param directory backing storage directory
+     * @return owning dimension, or empty for storage that Chunkis does not guard
      */
-    public static Optional<ResourceKey<Level>> resolveDimension(final Path regionDirectory) {
-        if (regionDirectory == null) {
-            return Optional.empty();
-        }
-        final Path normalized = regionDirectory.toAbsolutePath()
-                .normalize();
-        final Path fileName = normalized.getFileName();
-        if (fileName == null
-                || (!REGION_DIR.equals(fileName.toString())
-                && !ENTITIES_DIR.equals(fileName.toString()))) {
-            return Optional.empty();
-        }
-        final Path dimensionPath = normalized.getParent();
-        if (dimensionPath == null) {
-            return Optional.empty();
-        }
-        final Path dimensionName = dimensionPath.getFileName();
-        if (dimensionName == null) {
-            return Optional.empty();
-        }
-        final String dimensionSegment = dimensionName.toString();
-        if ("DIM-1".equals(dimensionSegment)) {
-            return Optional.of(ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_nether")));
-        }
-        if ("DIM1".equals(dimensionSegment)) {
-            return Optional.of(ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("the_end")));
-        }
-
-        final Path namespacePath = dimensionPath.getParent();
-        final Path dimensionsRoot = namespacePath == null ? null : namespacePath.getParent();
-        if (namespacePath != null
-                && dimensionsRoot != null
-                && DIMENSIONS_DIR.equals(dimensionsRoot.getFileName()
-                .toString())) {
-            return Optional.of(ResourceKey.create(
-                    Registries.DIMENSION,
-                    Identifier.fromNamespaceAndPath(namespacePath.getFileName()
-                            .toString(), dimensionSegment)
-            ));
-        }
-
-        return Optional.of(ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("overworld")));
+    public static Optional<ResourceKey<Level>> resolveDimension(final RegionStorageInfo storageInfo,
+            final Path directory) {
+        final Classification classification = classify(directory);
+        return classification == Classification.VANILLA_CHUNK_REGION
+                || classification == Classification.VANILLA_ENTITY_REGION
+                ? Optional.of(storageInfo.dimension()) : Optional.empty();
     }
 
     /**

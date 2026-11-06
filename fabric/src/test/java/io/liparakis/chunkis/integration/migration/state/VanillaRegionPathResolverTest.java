@@ -1,80 +1,65 @@
 package io.liparakis.chunkis.integration.migration.state;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import org.junit.jupiter.api.Test;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * Test class for {@link VanillaRegionPathResolver}.
+ * Storage guards must follow the supplied dimension, regardless of directory naming.
  */
 class VanillaRegionPathResolverTest {
 
     /**
-     * The root path simulating the world save directory.
+     * Exercises normalized, legacy and nested layouts, including names that fool path heuristics.
+     *
+     * @param dimension actual owning dimension
+     * @param directory storage directory relative to the fixture root
      */
-    private static final Path SAVE_ROOT = Path.of("world");
-
-    /**
-     * Tests that the overworld region directory path is successfully resolved
-     * to the corresponding {@link ResourceKey} for the overworld.
-     */
-    @Test
-    void resolvesOverworldRegionDirectory() {
-        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "overworld")),
-                VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("region"))
-                        .orElseThrow());
+    @ParameterizedTest
+    @CsvSource({
+        "minecraft:overworld, world/region",
+        "minecraft:overworld, world/entities",
+        "minecraft:the_nether, world/DIM-1/region",
+        "minecraft:the_end, world/DIM1/entities",
+        "minecraft:overworld, world/dimensions/minecraft/overworld/region",
+        "minecraft:the_nether, world/dimensions/minecraft/the_nether/entities",
+        "example:caves, world/dimensions/example/caves/region",
+        "example:world/caves, world/dimensions/example/world/caves/region",
+        "example:world/caves, world/dimensions/example/world/caves/entities",
+        "example:world/caves, world/dimensions/example/world/DIM-1/region",
+        "example:world/caves, world/dimensions/example/world/DIM1/entities",
+        "example:world/dimensions/nested, world/dimensions/example/world/dimensions/nested/region",
+        "example:world/caves, dimensions/saves/world/dimensions/example/world/caves/region",
+        "example:world/caves, alternate-layout/region"
+    })
+    void resolvesExplicitOwningDimension(final String dimension, final String directory) {
+        final ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, Identifier.parse(dimension));
+        final RegionStorageInfo info = new RegionStorageInfo("test-world", key, "chunk");
+        assertEquals(key, VanillaRegionPathResolver.resolveDimension(info, Path.of(directory)).orElseThrow());
     }
 
     /**
-     * Verifies that the overworld entity directory resolves to the overworld.
+     * Internal and POI stores must remain outside chunk/entity authority guards.
+     *
+     * @param directory unguarded directory, or null
      */
-    @Test
-    void resolvesOverworldEntityDirectory() {
-        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "overworld")),
-                VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("entities"))
-                        .orElseThrow());
-    }
-
-    /**
-     * Tests that a dimension-scoped region directory (specifically within the minecraft namespace,
-     * e.g., the nether) is successfully resolved to its corresponding {@link ResourceKey}.
-     */
-    @Test
-    void resolvesDimensionScopedRegionDirectory() {
-        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "the_nether")),
-                VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("dimensions")
-                                .resolve("minecraft")
-                                .resolve("the_nether")
-                                .resolve("region"))
-                        .orElseThrow());
-    }
-
-    /**
-     * Tests that a custom dimension-scoped region directory under a non-minecraft namespace
-     * (e.g., example namespace) is successfully resolved to its corresponding {@link ResourceKey}.
-     */
-    @Test
-    void resolvesCustomDimensionScopedRegionDirectory() {
-        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("example", "overworld")),
-                VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("dimensions")
-                                .resolve("example")
-                                .resolve("overworld")
-                                .resolve("region"))
-                        .orElseThrow());
-    }
-
-    /**
-     * Verifies that a dimension-scoped entity directory resolves to its dimension.
-     */
-    @Test
-    void resolvesDimensionScopedEntityDirectory() {
-        assertEquals(ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("minecraft", "the_nether")),
-                VanillaRegionPathResolver.resolveDimension(SAVE_ROOT.resolve("DIM-1")
-                                .resolve("entities"))
-                        .orElseThrow());
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"world/poi", "world/chunkis/unfinished", "world/chunkis/regions", "world/quarantine"})
+    void doesNotGuardOtherStorage(final String directory) {
+        final ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, Identifier.parse("example:world/caves"));
+        final RegionStorageInfo info = new RegionStorageInfo("test-world", key, "poi");
+        assertTrue(VanillaRegionPathResolver.resolveDimension(info, directory == null ? null : Path.of(directory))
+                .isEmpty());
     }
 }
