@@ -64,10 +64,6 @@ No configuration is required. Optional JVM flags:
 
 ## Development
 
-```bash
-./gradlew build    # Windows: gradlew.bat build
-```
-
-Builds, runs unit tests, Checkstyle, and Fabric game tests, and writes the jar to `fabric/build/libs/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, repeat-test cleanup, benchmarks, and review requirements; [AGENTS.md](AGENTS.md) covers agent-written changes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, benchmarks, and review requirements. [AGENTS.md](AGENTS.md) covers agent-written changes.
 
 Chunkis is developed with AI assistance. A human reviews, tests, and takes responsibility for every change.
