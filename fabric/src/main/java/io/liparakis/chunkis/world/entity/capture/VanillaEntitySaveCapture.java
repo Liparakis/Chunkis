@@ -31,7 +31,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * Mirrors vanilla's per-chunk entity save into the Chunkis delta.
  *
  * <p>Authoritative worlds block vanilla {@code entities/} region writes, so the
- * delta is the only entity store. Vanilla saves entities independently of the
+ * delta or independent entity fallback must retain the save. Vanilla saves entities independently of the
  * chunk's dirty flag (autosave, shutdown flush, entity-section unload), and the
  * chunk-save hook alone misses those: mob positions and container/item-frame/
  * armor-stand contents changed after the last chunk save were lost. This class
@@ -65,8 +65,8 @@ public final class VanillaEntitySaveCapture {
      * and an unclaimed chunk has no other state to take them. When the chunk has
      * already unloaded, the tracked delta or, failing that, the stored
      * CIS entry is updated instead. A chunk with no Chunkis state at all cannot be
-     * written safely without its blocks, so its entities are skipped with a
-     * warning in authoritative worlds.</p>
+     * written safely without its blocks, so its complete entity list is saved
+     * independently in authoritative worlds.</p>
      *
      * @param world    world owning the chunk
      * @param chunkPos chunk whose entities vanilla is saving
@@ -74,6 +74,10 @@ public final class VanillaEntitySaveCapture {
      */
     public static void capture(final ServerLevel world, final ChunkPos chunkPos,
             final List<? extends Entity> entities) {
+        if (EntityFallbackStore.owns(world, chunkPos)) {
+            EntityFallbackStore.save(world, chunkPos, entities);
+            return;
+        }
         final LevelChunk chunk = LoadedChunks.getHeld(world, chunkPos.x(), chunkPos.z());
         if (chunk instanceof ChunkisDeltaDuck deltaDuck) {
             captureLoaded(world, chunk, deltaDuck, entities);
@@ -104,9 +108,15 @@ public final class VanillaEntitySaveCapture {
             return;
         }
         if (SnapshotSafetyChecker.isSnapshotUnsafe(chunk)) {
+            if (isVanillaWriteBlocked(world)) {
+                EntityFallbackStore.save(world, chunk.getPos(), entities);
+            }
             return;
         }
         if (!owned && LiveEntitySnapshotCapture.countSavableLiveEntities(world, chunk) == 0) {
+            if (!entities.isEmpty() && isVanillaWriteBlocked(world)) {
+                EntityFallbackStore.save(world, chunk.getPos(), entities);
+            }
             return;
         }
         final ChunkDelta<BlockState, CompoundTag> delta = OwnedDeltaAccess.getOrClaim(chunk,
@@ -144,11 +154,8 @@ public final class VanillaEntitySaveCapture {
             delta = loadStoredDelta(world, chunkPos, entities.size());
         }
         if (delta == null) {
-            if (!entities.isEmpty() && MigrationStateServiceHolder.isAuthoritative(world.dimension())) {
-                Chunkis.LOGGER.warn("Chunkis: Skipped saving {} entity/entities for unloaded chunk {} in {}: "
-                                + "chunk has no Chunkis state to attach them to", entities.size(), chunkPos,
-                        world.dimension()
-                                .identifier());
+            if (!entities.isEmpty() && isVanillaWriteBlocked(world)) {
+                EntityFallbackStore.save(world, chunkPos, entities);
             }
             return;
         }
@@ -189,7 +196,7 @@ public final class VanillaEntitySaveCapture {
             return delta;
         } catch (final IOException e) {
             Chunkis.LOGGER.warn("Chunkis: Failed to read CIS chunk {} in {} while saving {} entity/entities; "
-                            + "entity changes since the last chunk save were not persisted", chunkPos,
+                            + "cannot attach the entity snapshot to this terrain entry", chunkPos,
                     world.dimension()
                             .identifier(), entityCount, e);
             return null;

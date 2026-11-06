@@ -1,6 +1,10 @@
+<!--suppress HtmlDeprecatedAttribute -->
 <div align="center">
 
-<h1><img src="common/src/main/resources/assets/logo.png" width="160" alt="Chunkis"></h1>
+<h1>
+<!--suppress CheckImageSize -->
+<img src="fabric/src/main/resources/assets/logo.png" width="160" alt="Chunkis">
+</h1>
 
 ### Compact chunk storage for Minecraft.
 
@@ -12,7 +16,7 @@ A Fabric mod that saves worlds in **CIS**, a versioned alternative to vanilla re
 
 </div>
 
-> This branch targets Minecraft 26.1.2. The latest published 1.21.11 release remains [v4.1.1](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.1).
+> **Chunkis 4.2.0 targets Minecraft 26.1.2 and Java 25.** For Minecraft 1.21.11, use [v4.1.1](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.1).
 
 ## Performance
 
@@ -48,7 +52,7 @@ Mods and tools that access `.mca` files directly, migrate chunks, or edit them a
 <details>
 <summary>Format and storage layout</summary>
 
-Chunkis takes over saves only for chunks it has claimed; unclaimed chunks remain with vanilla. CIS stores blocks, block entities, entities, structures, biomes, light, heightmaps, and pending ticks. Partly generated chunks are kept under `unfinished/`.
+Chunkis takes over saves only for chunks it has claimed; unclaimed chunks remain with vanilla. CIS stores blocks, block entities, entities, structures, biomes, light, heightmaps, and pending ticks. Partly generated chunks are kept under `unfinished/`. Entity saves without a safe terrain record are kept independently under `entity-fallback/`.
 
 The current format is **CIS v12**. Older versions are upgraded by the migration module. Data lives in `<world>/chunkis/`; other dimensions use `<world>/dimensions/<namespace>/<path>/chunkis/`.
 

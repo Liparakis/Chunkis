@@ -6,6 +6,7 @@ import io.liparakis.chunkis.debug.model.ChunkTraceEventType;
 import io.liparakis.chunkis.debug.trace.PayloadWatchTracer;
 import io.liparakis.chunkis.world.entity.capture.ChunkEntityQueries;
 import io.liparakis.chunkis.world.entity.capture.EntityPayloadNbt;
+import io.liparakis.chunkis.world.entity.capture.EntityFallbackStore;
 import io.liparakis.chunkis.world.restoration.core.ChunkRestorer;
 import io.liparakis.chunkis.world.tracking.state.LoadedChunks;
 import java.util.HashSet;
@@ -77,6 +78,9 @@ public final class EntityReplayCoordinator {
     ) {
         if (world == null || chunk == null) {
             return;
+        }
+        if (EntityFallbackStore.owns(world, chunk.getPos())) {
+            return; // Native entity loading owns the complete list at this position.
         }
         if (runtimeDelta == null) {
             PayloadWatchTracer.traceEntityReplayState(
@@ -236,6 +240,10 @@ public final class EntityReplayCoordinator {
                     ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
                     "missing world/chunk/entity uuid"
             );
+        }
+        if (EntityFallbackStore.owns(world, chunk.getPos())) {
+            return new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
+                    "entity fallback supersedes queued CIS payload");
         }
         if ((runtimeDelta == null || runtimeDelta.countPendingEntities() == 0) && fallbackEntityNbt == null) {
             PayloadWatchTracer.traceRestoreEntitySkipped(
