@@ -245,7 +245,7 @@ public final class PersistedBaseChunkReloadGameTest {
         );
         pig.setNoAi(true);
         pig.setNoGravity(true);
-        pig.setInvulnerable(true);
+        pig.setPermanentlyInvulnerable(true);
         return pig;
     }
 

@@ -50,7 +50,7 @@ for i in $(seq 1 "$runs"); do
   for mode in chunkis vanilla; do
     extra=()
     [ "$mode" = vanilla ] && extra=(-PchunkisStressVanilla=true)
-    rm -rf fabric/build/run/gameTest-26.2/world
+    rm -rf fabric/build/run/gameTest-26.3/world
     log="$out/$mode$i.log"
     echo "run $i/$runs: $mode"
     timeout 900 "$gradle" :fabric:runGameTest -PchunkisStress=true -PchunkisStressNatural=true \

@@ -67,16 +67,16 @@ loom {
     runs {
         configureEach {
             if (name.toLowerCase().contains('gametest')) {
-                runDir 'build/run/gameTest-26.2'
+                runDir 'build/run/gameTest-26.3'
             }
         }
         client {
-            runDir 'run-26.2'
+            runDir 'run-26.3'
             vmArg "-Xmx8G"
         }
 
         server {
-            runDir 'run-server-26.2'
+            runDir 'run-server-26.3'
             vmArg "-Xmx8G"
         }
     }

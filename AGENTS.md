@@ -4,7 +4,7 @@ Guidance for AI coding agents, and a quick orientation for human contributors. T
 
 ## Project
 
-Chunkis is a Fabric mod (Minecraft 26.2, Java 25) that replaces vanilla chunk persistence with its own compact format, CIS. Keep the project focused on safe, predictable chunk storage: saving, loading, encoding, migration and the data handling around them. Don't expand it into unrelated tooling, UI, backups or general world editing unless asked.
+Chunkis is a Fabric mod (Minecraft 26.3, Java 25) that replaces vanilla chunk persistence with its own compact format, CIS. Keep the project focused on safe, predictable chunk storage: saving, loading, encoding, migration and the data handling around them. Don't expand it into unrelated tooling, UI, backups or general world editing unless asked.
 
 ## Priorities
 
@@ -63,7 +63,7 @@ Use the Gradle wrapper (`./gradlew` on Linux/macOS, `gradlew.bat` on Windows):
 ./gradlew build    # compiles, runs unit tests, checkstyle and the Fabric game tests
 ```
 
-Delete `fabric/build/run/gameTest-26.2/world` before running game tests again, or tests that create chunks fail on the leftover world.
+Delete `fabric/build/run/gameTest-26.3/world` before running game tests again, or tests that create chunks fail on the leftover world.
 
 For changes to saving, loading, the codec or storage, also run the regression check (`tools/stress/bench.sh`). It takes about 20 minutes and needs an otherwise idle machine.
 

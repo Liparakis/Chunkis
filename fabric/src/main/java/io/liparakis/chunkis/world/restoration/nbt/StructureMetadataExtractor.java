@@ -43,7 +43,7 @@ public final class StructureMetadataExtractor {
         final Map<Structure, StructureStart> starts = chunk.getAllStarts();
         final Map<Structure, LongSet> references = chunk.getAllReferences();
 
-        if (starts.isEmpty() && !chunk.hasAnyStructureReferences()) {
+        if (starts.isEmpty() && references.isEmpty()) {
             return null;
         }
 

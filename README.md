@@ -10,14 +10,14 @@
 
 A Fabric mod that saves worlds in **CIS**, a versioned alternative to vanilla region storage.
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-26.2-3fb950?style=flat-square)](https://fabricmc.net/use/) ![Java](https://img.shields.io/badge/Java-25%2B-59636e?style=flat-square) [![Build](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml/badge.svg)](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/License-MIT-59636e?style=flat-square)](LICENSE)
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.3-3fb950?style=flat-square)](https://fabricmc.net/use/) ![Java](https://img.shields.io/badge/Java-25%2B-59636e?style=flat-square) [![Build](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml/badge.svg)](https://github.com/Liparakis/Chunkis/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/License-MIT-59636e?style=flat-square)](LICENSE)
 
 **[Download](https://github.com/Liparakis/Chunkis/releases)** &nbsp; · &nbsp; **[Install](#install)** &nbsp; · &nbsp; **[Wiki](https://github.com/Liparakis/Chunkis/wiki)** &nbsp; · &nbsp; **[Report an issue](https://github.com/Liparakis/Chunkis/issues)**
 
 </div>
 
-> **Development port: Minecraft 26.2, Java 25 (`4.2.0`).** For Minecraft 26.1.2, use [v4.2.0](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.0); for 1.21.11, use [v4.1.1](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.1).
-> Port changes and validation: [26.2 port notes](docs/port-26.2.md).
+> **Development port: Minecraft 26.3, Java 25 (`4.2.0`).** For Minecraft 26.1.2, use [v4.2.0](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.0); for 1.21.11, use [v4.1.1](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.1).
+> Port changes and validation: [26.3 port notes](docs/port-26.3.md).
 
 ## Performance
 

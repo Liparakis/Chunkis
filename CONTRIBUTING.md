@@ -106,7 +106,7 @@ running world gets a game test under `fabric/src/gametest`.
 ./gradlew :storage:test                # one module's unit tests
 ```
 
-Before running the game tests again, delete `fabric/build/run/gameTest/world`. A leftover world makes tests that create
+Before running the game tests again, delete `fabric/build/run/gameTest-26.3/world`. A leftover world makes tests that create
 chunks fail.
 
 For changes to the save or load path, also test a real world by hand: create it, edit it, save, restart, reload, and

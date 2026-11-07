@@ -28,7 +28,7 @@ public abstract class ChunkGeneratingProfileMixin {
      *
      * @param cir callback
      */
-    @Inject(method = "generateNoise", at = @At("HEAD"))
+    @Inject(method = "buildTerrain", at = @At("HEAD"))
     private static void chunkis$noise(final CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
         StageProfiler.generated(Generation.NOISE);
     }

@@ -3,12 +3,11 @@ package io.liparakis.chunkis.mixin.world;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
 import io.liparakis.chunkis.core.ChunkDelta;
-import net.minecraft.core.Holder;
+import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.NaturalSpawner;
 import net.minecraft.world.level.ServerLevelAccessor;
-import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -50,7 +49,7 @@ public class SpawnHelperMixin {
      * </p>
      *
      * @param world      the world access context (often ChunkRegion during generation)
-     * @param biomeEntry the biome for spawn logic
+     * @param sourcePos  the position used to resolve spawning attributes
      * @param chunkPos   the chunk position being populated
      * @param random     the random generator for spawning
      * @param ci         callback info to cancel population
@@ -58,7 +57,7 @@ public class SpawnHelperMixin {
     @Inject(method = "spawnMobsForChunkGeneration", at = @At("HEAD"), cancellable = true)
     private static void chunkis$onPopulateEntities(
             final ServerLevelAccessor world,
-            final Holder<Biome> biomeEntry,
+            final BlockPos sourcePos,
             final ChunkPos chunkPos,
             final RandomSource random,
             final CallbackInfo ci) {

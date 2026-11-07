@@ -102,6 +102,15 @@ public final class StructureMetadataExtractorGameTest {
                 Objects.equals(direct, vanilla),
                 Component.literal("Direct structure extractor output did not match SerializedChunk structureData()."));
 
+        chunk.setAllStarts(Map.of());
+        context.assertTrue(
+                Objects.equals(StructureMetadataExtractor.extract(world, chunk),
+                        SerializableChunkData.copyOf(world, chunk).structureData()),
+                Component.literal("Reference-only structure metadata did not match vanilla."));
+        chunk.setAllReferences(Map.of());
+        context.assertTrue(StructureMetadataExtractor.extract(world, chunk) == null,
+                Component.literal("Empty structure metadata should not be persisted."));
+
         context.succeed();
     }
 }
