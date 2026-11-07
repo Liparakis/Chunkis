@@ -19,7 +19,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
@@ -51,7 +51,7 @@ public final class LegacyEntityStorageHandoffGameTest {
      */
     private static SerializedEntity createLegacyEntityPayload(final ServerLevel world, final BlockPos pos) {
         final Entity entity = Objects.requireNonNull(
-                EntityType.COW.create(world, EntitySpawnReason.COMMAND),
+                EntityTypes.COW.create(world, EntitySpawnReason.COMMAND),
                 "Failed to create test cow entity");
         entity.snapTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
 

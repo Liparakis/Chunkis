@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.portal;
 
+import io.liparakis.chunkis.world.tracking.save.ServerWorldPaths;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -16,7 +17,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Dimension-local index of chunks that currently contain nether portal blocks.
@@ -150,8 +150,7 @@ public final class PortalChunkIndexManager {
      */
     private static Path resolveIndexPath(final ServerLevel world) {
         return ChunkisStoragePaths.computePortalIndexFile(
-                Objects.requireNonNull(world.getServer())
-                        .getWorldPath(LevelResource.ROOT),
+                ServerWorldPaths.root(Objects.requireNonNull(world.getServer())),
                 world.dimension()
         );
     }

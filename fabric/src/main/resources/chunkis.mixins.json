@@ -11,6 +11,7 @@
         "accessor.ServerChunkLoadingManagerAccessor",
         "accessor.ServerEntityManagerAccessor",
         "accessor.ServerWorldAccessor",
+        "accessor.MinecraftServerAccessor",
         "network.ChunkHolderMixin",
         "storage.ChunkSerializerMixin",
         "storage.EntityChunkDataAccessMixin",

@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.portal;
 
+import io.liparakis.chunkis.world.tracking.save.ServerWorldPaths;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import java.io.IOException;
@@ -23,7 +24,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.NetherPortalBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
-import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Persistent bidirectional portal pairing table.
@@ -281,7 +281,7 @@ public final class PortalLinkManager {
      * @return the path to the portal links NBT file
      */
     private static Path resolvePath(final MinecraftServer server) {
-        return ChunkisStoragePaths.computePortalLinksFile(server.getWorldPath(LevelResource.ROOT));
+        return ChunkisStoragePaths.computePortalLinksFile(ServerWorldPaths.root(server));
     }
 
     /**

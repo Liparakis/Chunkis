@@ -11,7 +11,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Retires stale vanilla entity-region files to {@code .backup} after an authoritative world unload.
@@ -40,7 +39,7 @@ public final class VanillaEntityRegionCleanup {
         }
 
         final Path directory = ChunkisStoragePaths.computeVanillaEntitiesDirectory(
-                Objects.requireNonNull(world.getServer()).getWorldPath(LevelResource.ROOT),
+                ServerWorldPaths.root(Objects.requireNonNull(world.getServer())),
                 world.dimension());
         PENDING_DIRECTORIES.add(directory);
         retireDirectory(directory);

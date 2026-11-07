@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.command;
 
+import io.liparakis.chunkis.world.tracking.save.ServerWorldPaths;
 import io.liparakis.chunkis.integration.migration.offline.ChunkSnapshotBuilder;
 import io.liparakis.chunkis.Chunkis;
 import io.liparakis.chunkis.api.ChunkisDeltaDuck;
@@ -45,7 +46,6 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.PalettedContainerFactory;
 import net.minecraft.world.level.chunk.storage.RegionFile;
 import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
-import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Execution actions backing the Chunkis debug and trace commands.
@@ -750,8 +750,7 @@ public final class ChunkDebugActions {
      * @return target export Path
      */
     static Path resolveExportPath(final CommandSourceStack source, final String scope) {
-        final Path saveRoot = source.getServer()
-                .getWorldPath(LevelResource.ROOT);
+        final Path saveRoot = ServerWorldPaths.root(source.getServer());
         return saveRoot.resolve("chunkis/debug")
                 .resolve("trace-" + scope + '-' + FILE_TIME_FORMAT.format(Instant.now()) + ".jsonl");
     }
@@ -871,8 +870,7 @@ public final class ChunkDebugActions {
      */
     private static CompoundTag loadMcaChunkNbt(final CommandSourceStack source, final ChunkPos pos)
             throws IOException {
-        final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(source.getServer()
-                        .getWorldPath(LevelResource.ROOT),
+        final Path regionDir = ChunkisStoragePaths.computeVanillaRegionDirectory(ServerWorldPaths.root(source.getServer()),
                 source.getLevel()
                         .dimension());
         final String baseName = "r." + pos.getRegionX() + "." + pos.getRegionZ() + ".mca";

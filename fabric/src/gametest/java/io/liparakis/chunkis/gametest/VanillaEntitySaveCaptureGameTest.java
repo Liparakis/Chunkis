@@ -16,7 +16,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.decoration.ArmorStand;
@@ -101,12 +101,12 @@ public final class VanillaEntitySaveCaptureGameTest {
                 spawnPos.getY(),
                 chunk.getMinBlockZ() + ((spawnPos.getZ() - chunk.getMinBlockZ() + 8) & 15));
 
-        final Entity cow = Objects.requireNonNull(EntityType.COW.create(world, EntitySpawnReason.COMMAND));
+        final Entity cow = Objects.requireNonNull(EntityTypes.COW.create(world, EntitySpawnReason.COMMAND));
         cow.snapTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F, 0.0F);
         cow.setNoGravity(true);
         world.addFreshEntity(cow);
 
-        final ArmorStand armorStand = Objects.requireNonNull(EntityType.ARMOR_STAND.create(world,
+        final ArmorStand armorStand = Objects.requireNonNull(EntityTypes.ARMOR_STAND.create(world,
                 EntitySpawnReason.COMMAND));
         armorStand.snapTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F,
                 0.0F);
@@ -156,7 +156,7 @@ public final class VanillaEntitySaveCaptureGameTest {
         final BlockPos pos = context.absolutePos(new BlockPos(1, 2, 1));
 
         // Spawning claims the chunk's delta, like a real player edit.
-        final Entity anchor = Objects.requireNonNull(EntityType.COW.create(world, EntitySpawnReason.COMMAND));
+        final Entity anchor = Objects.requireNonNull(EntityTypes.COW.create(world, EntitySpawnReason.COMMAND));
         anchor.snapTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
         anchor.setNoGravity(true);
         world.addFreshEntity(anchor);
@@ -201,7 +201,7 @@ public final class VanillaEntitySaveCaptureGameTest {
         world.setChunkForced(target.x(), target.z(), true);
         final LevelChunk chunk = world.getChunk(target.x(), target.z());
         final BlockPos pos = world.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, target.getBlockAt(8, 0, 8));
-        final Mob cow = Objects.requireNonNull(EntityType.COW.create(world, EntitySpawnReason.COMMAND));
+        final Mob cow = Objects.requireNonNull(EntityTypes.COW.create(world, EntitySpawnReason.COMMAND));
         cow.snapTo(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D, 0.0F, 0.0F);
         cow.setNoAi(true);
         cow.setNoGravity(true);

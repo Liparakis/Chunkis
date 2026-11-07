@@ -18,7 +18,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.animal.pig.Pig;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.item.ItemStack;
@@ -524,12 +524,12 @@ final class StressScenario implements StressRun {
         world.setBlock(pos.getBlockAt(4, topY, 10), Blocks.FURNACE.defaultBlockState(), Block.UPDATE_CLIENTS);
         world.setBlock(pos.getBlockAt(10, topY, 10), Blocks.FURNACE.defaultBlockState(), Block.UPDATE_CLIENTS);
         for (int i = 0; i < 2; i++) {
-            final ArmorStand stand = EntityType.ARMOR_STAND.create(world, EntitySpawnReason.COMMAND);
+            final ArmorStand stand = EntityTypes.ARMOR_STAND.create(world, EntitySpawnReason.COMMAND);
             if (stand != null) {
                 stand.snapTo(pos.getMinBlockX() + 4.5 + i * 6, topY + 1, pos.getMinBlockZ() + 13.5, 0, 0);
                 world.addFreshEntity(stand);
             }
-            final Pig pig = EntityType.PIG.create(world, EntitySpawnReason.COMMAND);
+            final Pig pig = EntityTypes.PIG.create(world, EntitySpawnReason.COMMAND);
             if (pig != null) {
                 pig.snapTo(pos.getMinBlockX() + 7.5 + i * 2, topY + 1, pos.getMinBlockZ() + 7.5, 0, 0);
                 pig.setNoAi(true);

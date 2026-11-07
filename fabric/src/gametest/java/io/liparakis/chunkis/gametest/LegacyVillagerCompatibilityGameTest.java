@@ -9,6 +9,7 @@ import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.util.datafix.DataFixers;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntitySpawnRequest;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.villager.VillagerDataHolder;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -73,9 +74,9 @@ public final class LegacyVillagerCompatibilityGameTest {
                         && upgraded.getBooleanOr("VillagerDataFinalized", false),
                 Component.literal("Expected the real 26.1 fixer to add VillagerDataFinalized for " + id));
 
-        final Entity direct = EntityType.loadEntityRecursive(legacy, context.getLevel(), EntitySpawnReason.LOAD,
+        final Entity direct = EntityType.loadEntityRecursive(legacy, context.getLevel(), new EntitySpawnRequest(EntitySpawnReason.LOAD, false),
                 entity -> entity);
-        final Entity fixed = EntityType.loadEntityRecursive(upgraded, context.getLevel(), EntitySpawnReason.LOAD,
+        final Entity fixed = EntityType.loadEntityRecursive(upgraded, context.getLevel(), new EntitySpawnRequest(EntitySpawnReason.LOAD, false),
                 entity -> entity);
         context.assertTrue(direct instanceof VillagerDataHolder && fixed instanceof VillagerDataHolder,
                 Component.literal("Legacy fixture failed to decode: " + id));

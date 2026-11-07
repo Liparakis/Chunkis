@@ -39,7 +39,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
-import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -393,8 +392,7 @@ public final class FabricCisStorageHelper {
 
         final Path storageDir = resolveAndCreateStorageDir(world);
         final Path mappingFile = ChunkisStoragePaths.computeMappingFile(
-                Objects.requireNonNull(world.getServer())
-                        .getWorldPath(LevelResource.ROOT),
+                ServerWorldPaths.root(Objects.requireNonNull(world.getServer())),
                 world.dimension());
 
         // PropertyPacker is per-storage (holds dimension-specific packed property state)
@@ -427,8 +425,7 @@ public final class FabricCisStorageHelper {
         }
 
         final Path storageDir = ChunkisStoragePaths.computeRegionsDirectory(
-                Objects.requireNonNull(world.getServer())
-                        .getWorldPath(LevelResource.ROOT),
+                ServerWorldPaths.root(Objects.requireNonNull(world.getServer())),
                 key);
         Files.createDirectories(storageDir);
         pathCache.put(key, storageDir);

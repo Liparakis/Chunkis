@@ -32,7 +32,6 @@ import net.minecraft.world.level.chunk.storage.IOWorker;
 import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
 import net.minecraft.world.level.chunk.storage.SerializableChunkData;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
-import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Keeps the chunks of an authoritative world that are not stored as Chunkis entries (still generating, or
@@ -111,7 +110,7 @@ public final class UnfinishedChunkStore {
         this.storageKey = new RegionStorageInfo(world.getServer().getWorldData().getLevelName(),
                 world.dimension(), "chunkis_unfinished");
         final Path directory = ChunkisStoragePaths.computeUnfinishedChunksDirectory(
-                world.getServer().getWorldPath(LevelResource.ROOT), world.dimension());
+                ServerWorldPaths.root(world.getServer()), world.dimension());
         try {
             this.store = new CompressedRegionStore(directory);
         } catch (final IOException e) {

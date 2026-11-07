@@ -27,7 +27,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.animal.pig.Pig;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -101,7 +101,7 @@ public final class StoredBlocksUnloadGameTest {
                     fixture.recordEdit(tracked);
                     GlobalChunkTracker.addDelta(fixture.world, fixture.target, tracked, "gametest");
 
-                    final Pig entity = java.util.Objects.requireNonNull(EntityType.PIG.create(fixture.world, EntitySpawnReason.LOAD), "Pig fixture could not be created");
+                    final Pig entity = java.util.Objects.requireNonNull(EntityTypes.PIG.create(fixture.world, EntitySpawnReason.LOAD), "Pig fixture could not be created");
                     final BlockPos at = fixture.target.getBlockAt(8, fixture.baseY + 20, 8);
                     entity.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
                     pig[0] = entity.getUUID();
@@ -399,7 +399,7 @@ public final class StoredBlocksUnloadGameTest {
                     context.assertTrue(entity.position().distanceToSqr(moved[0]) < 0.01,
                             Component.literal("Pig " + pig[0] + " came back at " + entity.position() + ", moved to "
                                     + moved[0] + "."));
-                    final int pigs = fixture.world.getEntities(EntityType.PIG,
+                    final int pigs = fixture.world.getEntities(EntityTypes.PIG,
                             new net.minecraft.world.phys.AABB(fixture.target.getMinBlockX(), fixture.world.getMinY(),
                                     fixture.target.getMinBlockZ(), fixture.target.getMaxBlockX() + 1,
                                     fixture.world.getMaxY() + 1, fixture.target.getMaxBlockZ() + 1),
@@ -727,7 +727,7 @@ public final class StoredBlocksUnloadGameTest {
          * @return its UUID
          */
         UUID spawnPig() {
-            final Pig entity = Objects.requireNonNull(EntityType.PIG.create(world, EntitySpawnReason.COMMAND), "Pig fixture could not be created");
+            final Pig entity = Objects.requireNonNull(EntityTypes.PIG.create(world, EntitySpawnReason.COMMAND), "Pig fixture could not be created");
             final BlockPos at = target.getBlockAt(8, baseY + 20, 8);
             entity.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
             world.addFreshEntity(entity);

@@ -16,6 +16,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntitySpawnRequest;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
@@ -70,12 +71,10 @@ public final class EntityReplayCoordinator {
      * @param runtimeDelta delta containing pending entity payloads; may be {@code null}
      * @param operationId  save-operation correlation ID for tracing; may be {@code null}
      */
-    public static void replayPendingEntitiesIfNeeded(
-            final ServerLevel world,
+    public static void replayPendingEntitiesIfNeeded(final ServerLevel world,
             final LevelChunk chunk,
             final ChunkDelta<BlockState, CompoundTag> runtimeDelta,
-            @Nullable final String operationId
-    ) {
+            @Nullable final String operationId) {
         if (world == null || chunk == null) {
             return;
         }
@@ -83,29 +82,25 @@ public final class EntityReplayCoordinator {
             return; // Native entity loading owns the complete list at this position.
         }
         if (runtimeDelta == null) {
-            PayloadWatchTracer.traceEntityReplayState(
-                    world,
+            PayloadWatchTracer.traceEntityReplayState(world,
                     chunk,
                     null,
                     operationId,
                     ChunkTraceEventType.WATCH_SKIPPED,
                     "entity-replay-no-runtime-delta",
                     SOURCE_BULK,
-                    "entity replay skipped: runtime delta missing"
-            );
+                    "entity replay skipped: runtime delta missing");
             return;
         }
         if (runtimeDelta.countPendingEntities() == 0) {
-            PayloadWatchTracer.traceEntityReplayState(
-                    world,
+            PayloadWatchTracer.traceEntityReplayState(world,
                     chunk,
                     runtimeDelta,
                     operationId,
                     ChunkTraceEventType.WATCH_SKIPPED,
                     "entity-replay-no-pending-entities",
                     SOURCE_BULK,
-                    "entity replay skipped: runtime delta has no pending entity payloads"
-            );
+                    "entity replay skipped: runtime delta has no pending entity payloads");
             return;
         }
 
@@ -113,57 +108,55 @@ public final class EntityReplayCoordinator {
         final AABB searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
         final int[] stats = {0, 0};
 
-        PayloadWatchTracer.traceEntityReplayState(
-                world,
+        PayloadWatchTracer.traceEntityReplayState(world,
                 chunk,
                 runtimeDelta,
                 operationId,
                 ChunkTraceEventType.WATCH_CAPTURED,
                 "entity-replay-started",
                 SOURCE_BULK,
-                "entity replay started from runtime delta"
-        );
+                "entity replay started from runtime delta");
 
         if (!world.canSpawnEntitiesInChunk(chunkPosition)) {
             runtimeDelta.forEachPendingEntity(nbt -> EntityPayloadNbt.findUuidString(nbt)
                     .ifPresent(uuid -> ScheduledEntityReplayQueue.schedule(world, chunkPosition, uuid, nbt)));
-            PayloadWatchTracer.traceEntityReplayState(
-                    world,
+            PayloadWatchTracer.traceEntityReplayState(world,
                     chunk,
                     runtimeDelta,
                     operationId,
                     ChunkTraceEventType.WATCH_SKIPPED,
                     "entity-replay-retained-pending",
                     SOURCE_BULK,
-                    "entity replay retained pending payloads because chunk is not entity-ready"
-            );
+                    "entity replay retained pending payloads because chunk is not entity-ready");
             return;
         }
 
         final Set<String> staleDuplicateUuids = new HashSet<>();
-        runtimeDelta.forEachPendingEntity(nbt -> {
+        runtimeDelta.forEachPendingEntity(nbt ->
+        {
             if (nbt == null) {
                 return;
             }
+
             final Entity live = findLiveCopy(world, chunkPosition, nbt);
+
             if (live != null) {
                 stats[0]++;
                 ScheduledEntityReplayQueue.acknowledge(live.getStringUUID());
                 return;
             }
+
             PayloadWatchTracer.traceRestoreEntityApplyAttempt(world, chunkPosition, nbt, operationId, SOURCE_BULK);
-            EntityType.loadEntityRecursive(
-                    nbt,
+            EntityType.loadEntityRecursive(nbt,
                     world,
-                    EntitySpawnReason.LOAD,
+                    new EntitySpawnRequest(EntitySpawnReason.LOAD, false),
                     entity -> {
-                        final EntityReplaySpawnResolver.SpawnOutcome outcome =
-                                EntityReplaySpawnResolver.attempt(world,
-                                        chunkPosition,
-                                        searchBox,
-                                        entity,
-                                        nbt,
-                                        operationId);
+                        final EntityReplaySpawnResolver.SpawnOutcome outcome = EntityReplaySpawnResolver.attempt(world,
+                                chunkPosition,
+                                searchBox,
+                                entity,
+                                nbt,
+                                operationId);
                         if (outcome.succeeded() || outcome.status() == ChunkRestorer.ReplayStatus.ALREADY_PRESENT) {
                             stats[0]++;
                             ScheduledEntityReplayQueue.acknowledge(entity.getStringUUID());
@@ -175,16 +168,13 @@ public final class EntityReplayCoordinator {
                         } else {
                             stats[1]++;
                             if (outcome.shouldSchedule()) {
-                                ScheduledEntityReplayQueue.schedule(world,
-                                        chunkPosition,
-                                        entity.getStringUUID(),
-                                        nbt);
+                                ScheduledEntityReplayQueue.schedule(world, chunkPosition, entity.getStringUUID(), nbt);
                             }
                         }
                         return entity;
-                    }
-            );
+                    });
         });
+
         if (!staleDuplicateUuids.isEmpty()) {
             runtimeDelta.removePendingEntitiesMatching(nbt -> EntityPayloadNbt.findUuidString(nbt)
                     .map(staleDuplicateUuids::contains)
@@ -198,16 +188,14 @@ public final class EntityReplayCoordinator {
             return;
         }
 
-        PayloadWatchTracer.traceEntityReplayState(
-                world,
+        PayloadWatchTracer.traceEntityReplayState(world,
                 chunk,
                 runtimeDelta,
                 operationId,
                 ChunkTraceEventType.WATCH_SKIPPED,
                 "entity-replay-retained-pending",
                 SOURCE_BULK,
-                "entity replay retained pending payloads after failures=" + stats[1]
-        );
+                "entity replay retained pending payloads after failures=" + stats[1]);
     }
 
     /**
@@ -227,149 +215,116 @@ public final class EntityReplayCoordinator {
      *                          {@code runtimeDelta}; may be {@code null}
      * @return replay result describing outcome and whether to retry
      */
-    public static ChunkRestorer.ReplayResult replayPendingEntityIfNeeded(
-            final ServerLevel world,
+    public static ChunkRestorer.ReplayResult replayPendingEntityIfNeeded(final ServerLevel world,
             final LevelChunk chunk,
             final ChunkDelta<BlockState, CompoundTag> runtimeDelta,
             @Nullable final String operationId,
             final String entityUuid,
-            @Nullable final CompoundTag fallbackEntityNbt
-    ) {
+            @Nullable final CompoundTag fallbackEntityNbt) {
         if (world == null || chunk == null || entityUuid == null || entityUuid.isBlank()) {
-            return new ChunkRestorer.ReplayResult(
-                    ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
-                    "missing world/chunk/entity uuid"
-            );
+            return new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
+                    "missing world/chunk/entity uuid");
         }
         if (EntityFallbackStore.owns(world, chunk.getPos())) {
             return new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
                     "entity fallback supersedes queued CIS payload");
         }
         if ((runtimeDelta == null || runtimeDelta.countPendingEntities() == 0) && fallbackEntityNbt == null) {
-            PayloadWatchTracer.traceRestoreEntitySkipped(
-                    world,
+            PayloadWatchTracer.traceRestoreEntitySkipped(world,
                     chunk.getPos(),
                     entityUuid,
                     operationId,
-                    "entity replay skipped: runtime delta missing queued entity payloads"
-            );
-            EntityReplayDiagnostics.traceReplayDecision(
-                    world,
+                    "entity replay skipped: runtime delta missing queued entity payloads");
+            EntityReplayDiagnostics.traceReplayDecision(world,
                     chunk,
                     null,
                     entityUuid,
                     null,
                     false,
                     "payload-missing",
-                    ChunkEntityQueries.chunkColumnBox(world, chunk.getPos())
-            );
-            return new ChunkRestorer.ReplayResult(
-                    ChunkRestorer.ReplayStatus.PAYLOAD_MISSING,
-                    "runtime delta missing queued entity payloads"
-            );
+                    ChunkEntityQueries.chunkColumnBox(world, chunk.getPos()));
+            return new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.PAYLOAD_MISSING,
+                    "runtime delta missing queued entity payloads");
         }
 
-        CompoundTag entityNbt = runtimeDelta == null
-                ? null
-                : ChunkEntityQueries.findPendingEntityNbt(runtimeDelta, entityUuid);
+        CompoundTag entityNbt =
+                runtimeDelta == null ? null : ChunkEntityQueries.findPendingEntityNbt(runtimeDelta, entityUuid);
         if (entityNbt == null) {
             entityNbt = fallbackEntityNbt;
         }
         if (entityNbt == null) {
-            PayloadWatchTracer.traceRestoreEntitySkipped(
-                    world,
+            PayloadWatchTracer.traceRestoreEntitySkipped(world,
                     chunk.getPos(),
                     entityUuid,
                     operationId,
-                    "entity replay skipped: queued entity payload missing from runtime delta"
-            );
-            EntityReplayDiagnostics.traceReplayDecision(
-                    world,
+                    "entity replay skipped: queued entity payload missing from runtime delta");
+            EntityReplayDiagnostics.traceReplayDecision(world,
                     chunk,
                     runtimeDelta,
                     entityUuid,
                     null,
                     false,
                     "payload-missing-for-uuid",
-                    ChunkEntityQueries.chunkColumnBox(world, chunk.getPos())
-            );
-            return new ChunkRestorer.ReplayResult(
-                    ChunkRestorer.ReplayStatus.PAYLOAD_MISSING,
-                    "queued entity payload missing from runtime delta"
-            );
+                    ChunkEntityQueries.chunkColumnBox(world, chunk.getPos()));
+            return new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.PAYLOAD_MISSING,
+                    "queued entity payload missing from runtime delta");
         }
 
         final UUID queuedUuid;
         try {
             queuedUuid = UUID.fromString(entityUuid);
         } catch (final IllegalArgumentException ignored) {
-            PayloadWatchTracer.traceRestoreEntitySkipped(
-                    world,
+            PayloadWatchTracer.traceRestoreEntitySkipped(world,
                     chunk.getPos(),
                     entityUuid,
                     operationId,
-                    "entity replay skipped: queued entity UUID was invalid"
-            );
-            EntityReplayDiagnostics.traceReplayDecision(
-                    world,
+                    "entity replay skipped: queued entity UUID was invalid");
+            EntityReplayDiagnostics.traceReplayDecision(world,
                     chunk,
                     runtimeDelta,
                     entityUuid,
                     entityNbt,
                     false,
                     "invalid-uuid",
-                    ChunkEntityQueries.chunkColumnBox(world, chunk.getPos())
-            );
-            return new ChunkRestorer.ReplayResult(
-                    ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
-                    "queued entity UUID was invalid"
-            );
+                    ChunkEntityQueries.chunkColumnBox(world, chunk.getPos()));
+            return new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.PERMANENT_FAILURE,
+                    "queued entity UUID was invalid");
         }
 
         final ChunkPos chunkPosition = chunk.getPos();
         if (LoadedChunks.getIfAccessible(world, chunkPosition.x(), chunkPosition.z()) == null) {
-            EntityReplayDiagnostics.traceReplayDecision(
-                    world,
+            EntityReplayDiagnostics.traceReplayDecision(world,
                     chunk,
                     runtimeDelta,
                     entityUuid,
                     entityNbt,
                     false,
                     "chunk-not-loaded",
-                    ChunkEntityQueries.chunkColumnBox(world, chunkPosition)
-            );
-            return new ChunkRestorer.ReplayResult(
-                    ChunkRestorer.ReplayStatus.CHUNK_NOT_READY,
-                    "target chunk is not loaded"
-            );
+                    ChunkEntityQueries.chunkColumnBox(world, chunkPosition));
+            return new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.CHUNK_NOT_READY,
+                    "target chunk is not loaded");
         }
         if (!world.canSpawnEntitiesInChunk(chunkPosition)) {
-            EntityReplayDiagnostics.traceReplayDecision(
-                    world,
+            EntityReplayDiagnostics.traceReplayDecision(world,
                     chunk,
                     runtimeDelta,
                     entityUuid,
                     entityNbt,
                     false,
                     "chunk-not-entity-ready",
-                    ChunkEntityQueries.chunkColumnBox(world, chunkPosition)
-            );
-            return new ChunkRestorer.ReplayResult(
-                    ChunkRestorer.ReplayStatus.CHUNK_NOT_READY,
-                    "target chunk is not entity-ready"
-            );
+                    ChunkEntityQueries.chunkColumnBox(world, chunkPosition));
+            return new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.CHUNK_NOT_READY,
+                    "target chunk is not entity-ready");
         }
 
-        PayloadWatchTracer.traceEntityReplayState(
-                world,
+        PayloadWatchTracer.traceEntityReplayState(world,
                 chunk,
                 runtimeDelta,
                 operationId,
                 ChunkTraceEventType.WATCH_CAPTURED,
                 "entity-replay-started",
                 SOURCE_SINGLE,
-                "entity replay started from runtime delta"
-        );
+                "entity replay started from runtime delta");
         PayloadWatchTracer.traceRestoreEntityApplyAttempt(world, chunkPosition, entityNbt, operationId, SOURCE_SINGLE);
 
         final AABB searchBox = ChunkEntityQueries.chunkColumnBox(world, chunkPosition);
@@ -379,82 +334,66 @@ public final class EntityReplayCoordinator {
         if (findLiveCopy(world, chunkPosition, replayNbt) != null) {
             callbackStatus[0] = ChunkRestorer.ReplayStatus.ALREADY_PRESENT;
         } else {
-            EntityType.loadEntityRecursive(
-                    replayNbt,
+            EntityType.loadEntityRecursive(replayNbt,
                     world,
-                    EntitySpawnReason.LOAD,
+                    new EntitySpawnRequest(EntitySpawnReason.LOAD, false),
                     entity -> {
-                        final EntityReplaySpawnResolver.SpawnOutcome outcome =
-                                EntityReplaySpawnResolver.attempt(world,
-                                        chunkPosition,
-                                        searchBox,
-                                        entity,
-                                        replayNbt,
-                                        operationId);
+                        final EntityReplaySpawnResolver.SpawnOutcome outcome = EntityReplaySpawnResolver.attempt(world,
+                                chunkPosition,
+                                searchBox,
+                                entity,
+                                replayNbt,
+                                operationId);
                         callbackStatus[0] = outcome.status();
                         if (outcome.shouldSchedule()) {
-                            ScheduledEntityReplayQueue.schedule(world, chunkPosition, entity.getStringUUID(),
+                            ScheduledEntityReplayQueue.schedule(world,
+                                    chunkPosition,
+                                    entity.getStringUUID(),
                                     replayNbt);
                         }
                         return entity;
-                    }
-            );
+                    });
         }
 
         final Entity afterReplay = world.getEntity(queuedUuid);
-        final boolean materialized = afterReplay != null
-                && ChunkEntityQueries.isMatchingLiveEntity(
-                afterReplay,
+        final boolean materialized = afterReplay != null && ChunkEntityQueries.isMatchingLiveEntity(afterReplay,
                 EntityPayloadNbt.findEntityType(replayNbt)
                         .orElse(null),
-                chunkPosition
-        );
+                chunkPosition);
         final boolean visibleAfterReplay = ChunkEntityQueries.isVisibleFromWorldQuery(world, queuedUuid, searchBox);
         final boolean confirmed = materialized && visibleAfterReplay;
 
-        PayloadWatchTracer.traceEntityReplayState(
-                world,
+        PayloadWatchTracer.traceEntityReplayState(world,
                 chunk,
                 runtimeDelta,
                 operationId,
                 confirmed ? ChunkTraceEventType.WATCH_CAPTURED : ChunkTraceEventType.WATCH_SKIPPED,
                 "entity-replay-retained-pending",
                 SOURCE_SINGLE,
-                confirmed
-                        ? "entity replay resolved queued entity payload"
+                confirmed ? "entity replay resolved queued entity payload"
                         : callbackStatus[0] == ChunkRestorer.ReplayStatus.ALREADY_PRESENT
-                          ? "entity replay callback resolved but queued UUID was still absent from live world"
-                                : "entity replay retained queued entity payload after unresolved spawn"
-        );
-        EntityReplayDiagnostics.traceReplayDecision(
-                world,
+                                ? "entity replay callback resolved but queued UUID was still absent from live world"
+                                : "entity replay retained queued entity payload after unresolved spawn");
+        EntityReplayDiagnostics.traceReplayDecision(world,
                 chunk,
                 runtimeDelta,
                 entityUuid,
                 replayNbt,
                 confirmed,
                 "after-spawn materialized=" + materialized + " visible=" + visibleAfterReplay,
-                searchBox
-        );
+                searchBox);
 
         if (confirmed) {
-            return callbackStatus[0] == ChunkRestorer.ReplayStatus.ALREADY_PRESENT
-                    ? new ChunkRestorer.ReplayResult(
+            return callbackStatus[0] == ChunkRestorer.ReplayStatus.ALREADY_PRESENT ? new ChunkRestorer.ReplayResult(
                     ChunkRestorer.ReplayStatus.ALREADY_PRESENT,
-                    "matching live entity already present"
-            )
-                    : new ChunkRestorer.ReplayResult(
-                            ChunkRestorer.ReplayStatus.SPAWNED,
-                            "spawned and visible from world query"
-                    );
+                    "matching live entity already present")
+                    : new ChunkRestorer.ReplayResult(ChunkRestorer.ReplayStatus.SPAWNED,
+                            "spawned and visible from world query");
         }
 
-        return new ChunkRestorer.ReplayResult(
-                callbackStatus[0] == ChunkRestorer.ReplayStatus.ALREADY_PRESENT
-                        ? ChunkRestorer.ReplayStatus.SPAWN_REJECTED_TRANSIENT
-                        : callbackStatus[0],
-                "entity was not visible after replay attempt"
-        );
+        return new ChunkRestorer.ReplayResult(callbackStatus[0] == ChunkRestorer.ReplayStatus.ALREADY_PRESENT
+                ? ChunkRestorer.ReplayStatus.SPAWN_REJECTED_TRANSIENT : callbackStatus[0],
+                "entity was not visible after replay attempt");
     }
 
     /**
@@ -470,11 +409,9 @@ public final class EntityReplayCoordinator {
      * @param runtimeDelta  delta whose pending entities are checked
      * @return {@code true} if all pending entities are visible, or if there are none
      */
-    public static boolean allPendingEntitiesVisible(
-            final ServerLevel world,
+    public static boolean allPendingEntitiesVisible(final ServerLevel world,
             final ChunkPos chunkPosition,
-            final ChunkDelta<BlockState, CompoundTag> runtimeDelta
-    ) {
+            final ChunkDelta<BlockState, CompoundTag> runtimeDelta) {
         if (runtimeDelta.countPendingEntities() == 0) {
             return true;
         }
@@ -509,8 +446,10 @@ public final class EntityReplayCoordinator {
             return null;
         }
         final Entity live = world.getEntity(uuid);
-        return ChunkEntityQueries.isMatchingLiveEntity(live, EntityPayloadNbt.findEntityType(nbt)
-                .orElse(null), chunkPosition) ? live : null;
+        return ChunkEntityQueries.isMatchingLiveEntity(live,
+                EntityPayloadNbt.findEntityType(nbt)
+                        .orElse(null),
+                chunkPosition) ? live : null;
     }
 
     /**
@@ -522,27 +461,22 @@ public final class EntityReplayCoordinator {
      * @param runtimeDelta replayed runtime delta
      * @param operationId  save-operation correlation ID; may be {@code null}
      */
-    private static void finishFailureFreeBulkReplay(
-            final ServerLevel world,
+    private static void finishFailureFreeBulkReplay(final ServerLevel world,
             final LevelChunk chunk,
             final ChunkDelta<BlockState, CompoundTag> runtimeDelta,
-            @Nullable final String operationId
-    ) {
+            @Nullable final String operationId) {
         final boolean suppressRepopulation = runtimeDelta.shouldSuppressInitialRepopulation();
         if (suppressRepopulation) {
             runtimeDelta.clearPendingEntities();
         }
-        PayloadWatchTracer.traceEntityReplayState(
-                world,
+        PayloadWatchTracer.traceEntityReplayState(world,
                 chunk,
                 runtimeDelta,
                 operationId,
                 ChunkTraceEventType.WATCH_CAPTURED,
                 "entity-replay-retained-pending",
                 SOURCE_BULK,
-                suppressRepopulation
-                        ? "entity replay completed without failures; cleared legacy pending payloads"
-                        : "entity replay completed without failures; retained durable entity payloads"
-        );
+                suppressRepopulation ? "entity replay completed without failures; cleared legacy pending payloads"
+                        : "entity replay completed without failures; retained durable entity payloads");
     }
 }

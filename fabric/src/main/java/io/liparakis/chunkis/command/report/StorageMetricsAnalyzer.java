@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.command.report;
 
+import io.liparakis.chunkis.world.tracking.save.ServerWorldPaths;
 import io.liparakis.chunkis.command.report.StorageReportModels.ChunkPayloadDiagnostics;
 import io.liparakis.chunkis.command.report.StorageReportModels.ChunkReport;
 import io.liparakis.chunkis.command.report.StorageReportModels.DefaultSparseReport;
@@ -41,7 +42,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
-import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * Analyzer that scans and collects storage metrics for both Vanilla region MCA files and Chunkis CIS files.
@@ -125,8 +125,7 @@ public final class StorageMetricsAnalyzer {
      * @throws IOException if directory or file reads fail
      */
     public static StorageReport inspectWorld(final ServerLevel world, final int topRegions) throws IOException {
-        final Path saveRoot = Objects.requireNonNull(world.getServer())
-                .getWorldPath(LevelResource.ROOT);
+        final Path saveRoot = ServerWorldPaths.root(Objects.requireNonNull(world.getServer()));
         final Path chunkisDir = ChunkisStoragePaths.computeRegionsDirectory(saveRoot, world.dimension());
         final Path vanillaDir = ChunkisStoragePaths.computeVanillaRegionDirectory(saveRoot, world.dimension());
 

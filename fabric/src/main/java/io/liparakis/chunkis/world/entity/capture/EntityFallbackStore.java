@@ -1,5 +1,6 @@
 package io.liparakis.chunkis.world.entity.capture;
 
+import io.liparakis.chunkis.world.tracking.save.ServerWorldPaths;
 import io.liparakis.chunkis.adapter.FabricNbtAdapter;
 import io.liparakis.chunkis.world.tracking.save.ChunkisStoragePaths;
 import java.io.IOException;
@@ -22,7 +23,6 @@ import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.TagValueOutput;
 import io.liparakis.chunkis.Chunkis;
 
@@ -43,7 +43,7 @@ public final class EntityFallbackStore {
 
     /** Resolves an entity snapshot without creating any directory. */
     public static Path path(final ServerLevel world, final ChunkPos pos) {
-        return ChunkisStoragePaths.computeRegionsDirectory(world.getServer().getWorldPath(LevelResource.ROOT),
+        return ChunkisStoragePaths.computeRegionsDirectory(ServerWorldPaths.root(world.getServer()),
                 world.dimension()).getParent().resolve("entity-fallback")
                 .resolve("c." + pos.x() + "." + pos.z() + ".nbt");
     }

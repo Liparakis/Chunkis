@@ -21,7 +21,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.entity.ChunkEntities;
@@ -44,13 +44,13 @@ public final class EntitySaveWithoutChunkGameTest {
         context.assertTrue(GlobalChunkTracker.getDelta(world, pos) == null
                         && terrain.loadReleasedWithoutClearing(FabricCisStorageHelper.toStoragePos(pos)) == null,
                 Component.literal("Target must not have prior CIS state"));
-        final var cow = Objects.requireNonNull(EntityType.COW.create(world, EntitySpawnReason.COMMAND));
+        final var cow = Objects.requireNonNull(EntityTypes.COW.create(world, EntitySpawnReason.COMMAND));
         cow.setNoAi(true);
         cow.setPersistenceRequired();
         cow.setNoGravity(true);
         cow.setCustomName(Component.literal("Persistent entity-only save sentinel"));
         cow.snapTo(pos.getMinBlockX() + 8.5, 80, pos.getMinBlockZ() + 8.5, 0, 0);
-        final var passenger = Objects.requireNonNull(EntityType.CHICKEN.create(world, EntitySpawnReason.COMMAND));
+        final var passenger = Objects.requireNonNull(EntityTypes.CHICKEN.create(world, EntitySpawnReason.COMMAND));
         passenger.snapTo(cow.getX(), cow.getY(), cow.getZ(), 0, 0);
         context.assertTrue(passenger.startRiding(cow, true, false), Component.literal("Passenger must mount"));
         final EntityPersistentStorage<Entity> access = entityStorage(world);

@@ -37,6 +37,8 @@ run/
 **/run/
 /fabric/run-26.1.2/
 /fabric/run-server-26.1.2/
+/fabric/run-26.2/
+/fabric/run-server-26.2/
 logs/
 crash-reports/
 debug.log
