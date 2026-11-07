@@ -16,7 +16,7 @@ A Fabric mod that saves worlds in **CIS**, a versioned alternative to vanilla re
 
 </div>
 
-> **Development port: Minecraft 26.2, Java 25 (`4.2.0`).** For Minecraft 26.1.2, use [v4.2.0](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.0); for 1.21.11, use [v4.1.1](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.1).
+> **Minecraft 26.2, Java 25 · [Chunkis 4.2.0](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.0-mc26.2).** For Minecraft 26.1.2, use [v4.2.0](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.0); for 1.21.11, use [v4.1.1](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.1).
 > Port changes and validation: [26.2 port notes](docs/port-26.2.md).
 
 ## Performance
