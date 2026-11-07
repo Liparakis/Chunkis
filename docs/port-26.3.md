@@ -1,8 +1,10 @@
 # Minecraft 26.3 port
 
-Development branch: `26.3`, based on the completed [26.2 port](port-26.2.md) (`b42a871`).
+Release branch: `26.3`, based on the completed [26.2 port](port-26.2.md) (`b42a871`).
 The mod version remains **4.2.0**. The Minecraft dependency distinguishes this build from the
-26.1.2 release and 26.2 port. No new release has been published.
+26.1.2 and 26.2 releases.
+Release: [4.2.0 for Minecraft 26.3](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.0-mc26.3).
+Release asset filenames include `mc26.3`.
 
 ## Runtime and tooling
 
