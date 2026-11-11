@@ -60,9 +60,10 @@ public final class ScheduledEntityReplayQueue {
     private static final long DRAIN_BUDGET_NANOS = 2_000_000L;
 
     /**
-     * Packed chunk where the next drain starts, so entries past a budget cut get their turn first.
+     * Next entry for each dimension, so another dimension's tick cannot reset its progress.
+     * Accessed only on the server thread.
      */
-    private static long drainCursor = Long.MIN_VALUE;
+    private static final EntityReplayProgress<ReplayKey> PROGRESS = new EntityReplayProgress<>();
 
     /**
      * Private constructor to prevent utility class instantiation.
@@ -179,7 +180,7 @@ public final class ScheduledEntityReplayQueue {
         // order makes every entity miss the server's small chunk cache and leave its neighbours' memory behind.
         final List<Map.Entry<ReplayKey, ScheduledEntityReplay>> entries = new ArrayList<>(QUEUE.entrySet());
         final int size = entries.size();
-        final int start = drainStart(entries);
+        final int start = PROGRESS.start(worldId, entries);
         final long deadline = System.nanoTime() + DRAIN_BUDGET_NANOS;
         boolean finished = true;
         for (int step = 0; step < size; step++) {
@@ -240,7 +241,7 @@ public final class ScheduledEntityReplayQueue {
             }
 
             if (System.nanoTime() > deadline) {
-                drainCursor = packedChunk(replay);
+                PROGRESS.pause(worldId, entry.getKey());
                 finished = false;
                 break;
             }
@@ -262,7 +263,7 @@ public final class ScheduledEntityReplayQueue {
         }
 
         if (finished) {
-            drainCursor = Long.MIN_VALUE;
+            PROGRESS.complete(worldId);
         }
 
         if (visited != 0 && tracing) {
@@ -303,31 +304,6 @@ public final class ScheduledEntityReplayQueue {
     }
 
     /**
-     * Returns the entry's chunk as a sort key.
-     *
-     * @param replay queue entry
-     * @return packed chunk position
-     */
-    private static long packedChunk(final ScheduledEntityReplay replay) {
-        return ChunkPos.toLong(replay.chunkX, replay.chunkZ);
-    }
-
-    /**
-     * Finds where a drain resumes in the sorted entries.
-     *
-     * @param entries entries sorted by chunk
-     * @return index of the first entry at or past {@link #drainCursor}, or 0 when none is
-     */
-    private static int drainStart(final List<Map.Entry<ReplayKey, ScheduledEntityReplay>> entries) {
-        for (int i = 0; i < entries.size(); i++) {
-            if (packedChunk(entries.get(i).getValue()) >= drainCursor) {
-                return i;
-            }
-        }
-        return 0;
-    }
-
-    /**
      * Removes all queue entries matching {@code entityUuid}, regardless of world
      * or chunk.
      *
@@ -351,6 +327,7 @@ public final class ScheduledEntityReplayQueue {
      */
     public static void clear() {
         QUEUE.clear();
+        PROGRESS.clear();
     }
 
     /**
