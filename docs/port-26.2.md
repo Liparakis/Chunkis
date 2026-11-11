@@ -1,8 +1,8 @@
 # Minecraft 26.2 port
 
 Release branch: `26.2`, based on released Chunkis 4.2.0 (`ed630c33`).
-The mod version stays **4.2.0** for this port and the 26.3 port.
-Release: [4.2.0 for Minecraft 26.2](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.0-mc26.2).
+The mod version is **4.2.1** after the entity replay repair.
+Release: [4.2.1 for Minecraft 26.2](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.1-mc26.2).
 The release assets include `mc26.2` in their filenames; the mod metadata targets Minecraft `~26.2`.
 Minecraft's official version manifest lists **26.2** as the sole stable release in the 26.2 line.
 

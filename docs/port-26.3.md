@@ -1,9 +1,9 @@
 # Minecraft 26.3 port
 
 Release branch: `26.3`, based on the completed [26.2 port](port-26.2.md) (`b42a871`).
-The mod version remains **4.2.0**. The Minecraft dependency distinguishes this build from the
+The mod version is **4.2.1** after the entity replay repair. The Minecraft dependency distinguishes this build from the
 26.1.2 and 26.2 releases.
-Release: [4.2.0 for Minecraft 26.3](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.0-mc26.3).
+Release: [4.2.1 for Minecraft 26.3](https://github.com/Liparakis/Chunkis/releases/tag/v4.2.1-mc26.3).
 Release asset filenames include `mc26.3`.
 
 ## Runtime and tooling
@@ -71,3 +71,5 @@ Raw logs and isolated probes are local under the ignored `.gradle/chunkis-port26
 - [Mojang version manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)
 - [Fabric for Minecraft 26.3](https://fabricmc.net/2026/09/15/263.html)
 - [Fabric porting guide](https://docs.fabricmc.net/develop/porting/)
+
+The [entity replay repair report](entity-replay-recovery.md) records the subsequent patch and validation.
