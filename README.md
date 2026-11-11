@@ -16,7 +16,7 @@ A Fabric mod that saves worlds in **CIS**, a versioned alternative to vanilla re
 
 </div>
 
-> **Chunkis 4.2.0 targets Minecraft 26.1.2 and Java 25.** For Minecraft 1.21.11, use [v4.1.1](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.1).
+> **Chunkis 4.2.1 targets Minecraft 26.1.2 and Java 25.** For Minecraft 1.21.11, use [v4.1.2](https://github.com/Liparakis/Chunkis/releases/tag/v4.1.2).
 
 ## Performance
 
